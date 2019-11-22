@@ -4,11 +4,12 @@ import { assertExists, hexzero } from "../util";
 import { LiveActor, ZoneAndLayer, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, bindColorChangeAnimation, bindTexChangeAnimation, emitEffect, createModelObjMapObj, MiniRoutePoint, MiniRoutePart, MiniRouteGalaxy } from "./Actors";
 import { ViewerRenderInput } from "../viewer";
 import { RARC } from "../j3d/rarc";
 import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom } from "./ActorUtil";
+import { bindColorChangeAnimation, bindTexChangeAnimation, emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./Actors";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -69,7 +70,7 @@ export class NoclipLegacyActor extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, arcName: string, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, tag: SceneGraphTag, public objinfo: ObjInfo) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, arcName);
 
         if (isExistIndirectTexture(this))

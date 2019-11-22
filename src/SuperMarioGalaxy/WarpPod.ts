@@ -11,7 +11,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { RARC } from "../j3d/rarc";
 import { assertExists, fallback } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
-import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } from "./Actors";
+import { calcUpVec, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } from "./Actors";
 import { MathConstants, lerp, normToLength } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
@@ -20,7 +20,7 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { Camera } from "../Camera";
 import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { setLoopMode } from "./ActorUtil";
+import { setLoopMode, initDefaultPos, loadBTIData, connectToScene } from "./ActorUtil";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 
 const warpPodColorTable = [
@@ -218,7 +218,7 @@ export class WarpPod extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
 
         this.visible = fallback(getJMapInfoArg1(infoIter), 1) !== 0;

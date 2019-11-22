@@ -13,7 +13,6 @@ import { BTK, BRK, LoopMode, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
-import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
@@ -21,7 +20,7 @@ import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist,
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight } from './ActorUtil';
 import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
 
 // Scratchpad
@@ -29,102 +28,6 @@ const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
-
-export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
-}
-
-export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, -1, -1, -1);
-}
-
-export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC, -1);
-}
-
-export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.INDIRECT_NPC, -1);
-}
-
-export function connectToSceneItem(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -1);
-}
-
-export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneCollisionMapObjWeakLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_WEAK_LIGHT, -1);
-}
-
-export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ, -1);
-}
-
-export function connectToSceneMapObjNoCalcAnim(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, -1, DrawBufferType.MAP_OBJ, -1);
-}
-
-export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
-}
-
-export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
-}
-
-export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneSky(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x24, 0x05, DrawBufferType.SKY, -1);
-}
-
-export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x24, 0x05, DrawBufferType.AIR, -1);
-}
-
-export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.CRYSTAL, -1);
-}
-
-export function connectToSceneBloom(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    // TODO(jstpierre): Verify
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.BLOOM_MODEL, -1);
-}
-
-export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    if (isExistIndirectTexture(actor))
-        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1D, 0x01, DrawBufferType.INDIRECT_PLANET, -1);
-    else 
-        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1D, 0x01, DrawBufferType.PLANET, -1);
-}
-
-export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 0x04, DrawBufferType.ENVIRONMENT, -1);
-}
-
-export function connectToSceneEnvironmentStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 0x04, DrawBufferType.ENVIRONMENT_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2A, -1, -1, -1);
-}
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
@@ -339,13 +242,6 @@ export function scaleMatrixScalar(m: mat4, s: number): void {
     m[10] *= s;
 }
 
-export function isExistIndirectTexture(actor: LiveActor): boolean {
-    const modelInstance = assertExists(actor.modelInstance);
-    if (modelInstance.getTextureMappingReference('IndDummy') !== null)
-        return true;
-    return false;
-}
-
 export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
     const m = vec3.dot(a, b);
     dst[0] = a[0] - b[0]*m;
@@ -477,15 +373,6 @@ export function bindTexChangeAnimation(actor: LiveActor, frame: number, baseName
 
 export function isEqualStageName(sceneObjHolder: SceneObjHolder, stageName: string): boolean {
     return sceneObjHolder.scenarioData.getMasterZoneFilename() === stageName;
-}
-
-export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, filename: string): BTIData {
-    const device = sceneObjHolder.modelCache.device;
-    const cache = sceneObjHolder.modelCache.cache;
-
-    const buffer = arc.findFileData(filename);
-    const btiData = new BTIData(device, cache, BTI.parse(buffer!, filename).texture);
-    return btiData;
 }
 
 export function getRandomFloat(min: number, max: number): number {
@@ -661,7 +548,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.objName = initInfo.modelName;
 
         if (initInfo.setDefaultPos)
-            this.initDefaultPos(sceneObjHolder, infoIter);
+            initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.objName);
         if (initInfo.connectToScene)
             this.connectToScene(sceneObjHolder, initInfo);
@@ -931,7 +818,7 @@ export class PlanetMap extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModel(sceneObjHolder, this.name, infoIter);
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -1087,7 +974,7 @@ export class StarPiece extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
@@ -1119,7 +1006,7 @@ export class EarthenPipe extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
 
         const colorFrame = fallback(getJMapInfoArg7(infoIter), 0);
@@ -1185,7 +1072,7 @@ export class BlackHole extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
@@ -1259,7 +1146,7 @@ export class HatchWaterPlanet extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'HatchWaterPlanet');
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -1273,7 +1160,7 @@ export class Kinopio extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.set(this.scale, 1.2, 1.2, 1.2);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
@@ -1348,7 +1235,7 @@ export class Peach extends NPCActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -1375,7 +1262,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -1443,7 +1330,7 @@ export class PenguinRacer extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -1470,7 +1357,7 @@ export class TicoComet extends NPCActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -1508,7 +1395,7 @@ class Coin extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.isPurpleCoin ? 'PurpleCoin' : 'Coin');
         connectToSceneItemStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -1595,7 +1482,7 @@ abstract class CoinGroup extends LiveActor {
 
 class RailCoin extends CoinGroup {
     protected initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initRailRider(sceneObjHolder, infoIter);
     }
 
@@ -1650,7 +1537,7 @@ class CircleCoinGroup extends CoinGroup {
 
     protected initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.radius = fallback(getJMapInfoArg2(infoIter), 200);
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
     }
 
     protected placementCoin(): void {
@@ -1779,7 +1666,7 @@ export class SimpleEffectObj extends LiveActor {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
 
         if (sceneObjHolder.effectSystem === null)
             return;
@@ -1938,7 +1825,7 @@ export class RandomEffectObj extends SimpleEffectObj {
 export class GCaptureTarget extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "GCaptureTarget");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -1958,7 +1845,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "FountainBig");
         connectToSceneMapObj(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -2038,7 +1925,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
 export class Fountain extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
         emitEffect(sceneObjHolder, this, getObjectName(infoIter));
@@ -2052,7 +1939,7 @@ export class Fountain extends LiveActor {
 export class PhantomTorch extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
         emitEffect(sceneObjHolder, this, getObjectName(infoIter));
@@ -2072,7 +1959,7 @@ export class AstroCountDownPlate extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "AstroCountDownPlate");
         connectToSceneMapObj(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -2086,7 +1973,7 @@ export class Butler extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Butler');
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -2102,7 +1989,7 @@ export class Rosetta extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Rosetta');
         connectToSceneIndirectNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -2116,7 +2003,7 @@ export class Tico extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Tico');
         connectToSceneIndirectNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -2145,7 +2032,7 @@ export class Sky extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneSky(sceneObjHolder, this);
 
@@ -2168,7 +2055,7 @@ export class Air extends LiveActor<AirNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneAir(sceneObjHolder, this);
 
@@ -2222,7 +2109,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
 
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneMapObj(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.copy(this.initialTranslation, this.translation);
 
         const numStarBits = fallback(getJMapInfoArg0(infoIter), 5);
@@ -2386,7 +2273,7 @@ class ChipBase extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, modelName: string) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -2427,7 +2314,7 @@ export class CrystalCage extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
 
         if (this.name === 'CrystalCageS')
             this.size = CrystalCageSize.S;
@@ -2453,7 +2340,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'LavaSteam');
         this.initEffectKeeper(sceneObjHolder, null);
         setEffectHostSRT(this, 'Sign', this.translation, this.rotation, this.effectScale);
@@ -2503,7 +2390,7 @@ export class SignBoard extends NPCActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
     }
@@ -2513,7 +2400,7 @@ export class WoodBox extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
@@ -2525,7 +2412,7 @@ export class SurprisedGalaxy extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "MiniSurprisedGalaxy");
         connectToSceneMapObj(sceneObjHolder, this);
         this.startAction('MiniSurprisedGalaxy');
@@ -2540,7 +2427,7 @@ abstract class SuperSpinDriver extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
@@ -2775,7 +2662,7 @@ export class FishGroup extends LiveActor {
 
         const fishCount = fallback(getJMapInfoArg0(infoIter), 10);
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         calcActorAxis(null, this.upVec, null, this);
         this.initRailRider(sceneObjHolder, infoIter);
         moveCoordAndTransToNearestRailPos(this);
@@ -2840,7 +2727,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private seaGullGroup: SeaGullGroup, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
         vec3.copy(this.upVec, this.axisY);
 
@@ -3102,7 +2989,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'CoconutTreeLeaf');
         connectToSceneMapObjNoCalcAnim(sceneObjHolder, this);
 
@@ -3147,7 +3034,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
         super(zoneAndLayer, sceneObjHolder, `AirBubble`);
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.copy(this.spawnLocation, this.translation);
         this.initModelManagerWithAnm(sceneObjHolder, 'AirBubble');
         connectToSceneItem(sceneObjHolder, this);
@@ -3240,7 +3127,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
 
         createSceneObj(sceneObjHolder, SceneObj.AIR_BUBBLE_HOLDER);
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'AirBubbleGenerator');
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -3289,7 +3176,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
 
         this.type = TreasureBoxCracked.getBoxType(infoIter);
 
@@ -3359,7 +3246,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, `Tico`);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);

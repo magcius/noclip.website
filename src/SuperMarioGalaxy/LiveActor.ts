@@ -353,15 +353,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
     }
 
-    // TODO(jstpierre): This is actually an MR helper, not an instance method.
-    public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
-        if (infoIter !== null) {
-            getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
-            getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
-            getJMapInfoScale(this.scale, infoIter);
-        }
-    }
-
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
         this.actorLightCtrl.init(sceneObjHolder);

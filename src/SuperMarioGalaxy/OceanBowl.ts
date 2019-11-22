@@ -1,7 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { SceneObjHolder, getObjectName } from "./Main";
-import { connectToScene, loadBTIData } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
@@ -22,6 +21,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
+import { initDefaultPos, connectToScene, loadBTIData } from "./ActorUtil";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -88,7 +88,7 @@ export class OceanBowl extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_BOWL);
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        initDefaultPos(sceneObjHolder, this, infoIter);
 
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
