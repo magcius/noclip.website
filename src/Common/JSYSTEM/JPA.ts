@@ -3428,10 +3428,10 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const logicOp = view.getUint8(tableIdx + 0x38);
 
             const alphaCmp0 = view.getUint8(tableIdx + 0x39);
-            const alphaRef0 = view.getUint8(tableIdx + 0x3A) / 0xFF;
+            const alphaRef0 = view.getUint8(tableIdx + 0x3A);
             const alphaOp = view.getUint8(tableIdx + 0x3B);
             const alphaCmp1 = view.getUint8(tableIdx + 0x3C);
-            const alphaRef1 = view.getUint8(tableIdx + 0x3D) / 0xFF;
+            const alphaRef1 = view.getUint8(tableIdx + 0x3D);
 
             // 0x3E is ZCompLoc
             const zTest = view.getUint8(tableIdx + 0x3F);
@@ -3909,8 +3909,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const blendModeFlags = view.getUint16(dataBegin + 0x12);
             const alphaCompareFlags = view.getUint8(dataBegin + 0x14);
-            const alphaRef0 = view.getUint8(dataBegin + 0x15) / 0xFF;
-            const alphaRef1 = view.getUint8(dataBegin + 0x16) / 0xFF;
+            const alphaRef0 = view.getUint8(dataBegin + 0x15);
+            const alphaRef1 = view.getUint8(dataBegin + 0x16);
             const zModeFlags = view.getUint8(dataBegin + 0x17);
             const texFlags = view.getUint8(dataBegin + 0x18);
             const texIdxAnimCount = view.getUint8(dataBegin + 0x19);
@@ -4351,8 +4351,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             const blendModeFlags = view.getUint16(tableIdx + 0x18);
             const alphaCompareFlags = view.getUint8(tableIdx + 0x1A);
-            const alphaRef0 = view.getUint8(tableIdx + 0x1B) / 0xFF;
-            const alphaRef1 = view.getUint8(tableIdx + 0x1C) / 0xFF;
+            const alphaRef0 = view.getUint8(tableIdx + 0x1B);
+            const alphaRef1 = view.getUint8(tableIdx + 0x1C);
             const zModeFlags = view.getUint8(tableIdx + 0x1D);
             const texFlags = view.getUint8(tableIdx + 0x1E);
             const texIdxAnimCount = view.getUint8(tableIdx + 0x1F);

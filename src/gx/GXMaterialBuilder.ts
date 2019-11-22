@@ -202,10 +202,10 @@ export class GXMaterialBuilder {
 
     public setAlphaCompare(compareA: GX.CompareType, referenceA: number, op: GX.AlphaOp, compareB: GX.CompareType, referenceB: number): void {
         this.alphaTest.compareA = compareA;
-        this.alphaTest.referenceA = referenceA;
+        this.alphaTest.referenceA = referenceA / 0xFF;
         this.alphaTest.op = op;
         this.alphaTest.compareB = compareB;
-        this.alphaTest.referenceB = referenceB;
+        this.alphaTest.referenceB = referenceB / 0xFF;
     }
 
     public setBlendMode(blendMode: GX.BlendMode, srcFactor: GX.BlendFactor, dstFactor: GX.BlendFactor, logicOp: GX.LogicOp = GX.LogicOp.CLEAR): void {
