@@ -2,21 +2,18 @@
 import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
-import { ResourceSystem, NameData } from './resource';
+import { ResourceSystem } from './resource';
 import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, ModelCache } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert, assertExists } from '../util';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { FPSCameraController } from '../Camera';
-import { DataFetcherFlags } from '../DataFetcher';
 import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
@@ -153,55 +150,50 @@ class RetroSceneDesc implements Viewer.SceneDesc {
         this.id = worldName ? worldName : filename;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const levelPakP = dataFetcher.fetchData(`metroid_prime/${this.filename}`);
-        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
+        const levelPak = PAK.parse(await dataFetcher.fetchData(`metroid_prime/${this.filename}`));
+        const resourceSystem = new ResourceSystem([levelPak]);
 
-        return Promise.all([levelPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
-            const levelPak = PAK.parse(datas[0]);
-            const nameData = (datas[1] != null ? BYML.parse<NameData>(datas[1], BYML.FileType.CRG1) : null);
-            const resourceSystem = new ResourceSystem([levelPak], nameData);
+        for (const mlvlEntry of levelPak.namedResourceTable.values()) {
+            assert(mlvlEntry.fourCC === 'MLVL');
 
-            for (const mlvlEntry of levelPak.namedResourceTable.values()) {
-                assert(mlvlEntry.fourCC === 'MLVL');
-                if (this.worldName !== "" && this.worldName !== mlvlEntry.name) {
-                    continue;
-                }
-
-                const mlvl: MLVL.MLVL = assertExists(resourceSystem.loadAssetByID<MLVL.MLVL>(mlvlEntry.fileID, mlvlEntry.fourCC));
-
-                const renderer = new RetroSceneRenderer(device, mlvl);
-                const cache = renderer.renderHelper.getCache();
-
-                const areas = mlvl.areaTable;
-                const defaultSkyboxCMDL = resourceSystem.loadAssetByID<CMDL>(mlvl.defaultSkyboxID, 'CMDL');
-                if (defaultSkyboxCMDL) {
-                    const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    const defaultSkyboxCMDLData = renderer.modelCache.getCMDLData(device, renderer.textureHolder, cache, defaultSkyboxCMDL);
-                    const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
-                    defaultSkyboxRenderer.isSkybox = true;
-                    renderer.defaultSkyRenderer = defaultSkyboxRenderer;
-                }
-
-                for (let i = 0; i < areas.length; i++) {
-                    const mreaEntry = areas[i];
-                    const mrea = resourceSystem.loadAssetByID<MREA.MREA>(mreaEntry.areaMREAID, 'MREA');
-
-                    if (mrea !== null && mreaEntry.areaName.indexOf("worldarea") === -1) {
-                        const areaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, mreaEntry.areaName, mrea);
-                        renderer.areaRenderers.push(areaRenderer);
-
-                        // By default, set only the first area renderer is visible, so as to not "crash my browser please".
-                        areaRenderer.visible = (renderer.areaRenderers.length === 1);
-                    }
-                }
-
-                return renderer;
+            if (this.worldName !== "" && this.worldName !== mlvlEntry.name) {
+                continue;
             }
 
-            throw "whoops";
-        });
+            const mlvl: MLVL.MLVL = assertExists(resourceSystem.loadAssetByID<MLVL.MLVL>(mlvlEntry.fileID, mlvlEntry.fourCC));
+
+            const renderer = new RetroSceneRenderer(device, mlvl);
+            const cache = renderer.renderHelper.getCache();
+
+            const areas = mlvl.areaTable;
+            const defaultSkyboxCMDL = resourceSystem.loadAssetByID<CMDL>(mlvl.defaultSkyboxID, 'CMDL');
+            if (defaultSkyboxCMDL) {
+                const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
+                const defaultSkyboxCMDLData = renderer.modelCache.getCMDLData(device, renderer.textureHolder, cache, defaultSkyboxCMDL);
+                const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
+                defaultSkyboxRenderer.isSkybox = true;
+                renderer.defaultSkyRenderer = defaultSkyboxRenderer;
+            }
+
+            for (let i = 0; i < areas.length; i++) {
+                const mreaEntry = areas[i];
+                const mrea = resourceSystem.loadAssetByID<MREA.MREA>(mreaEntry.areaMREAID, 'MREA');
+
+                if (mrea !== null && mreaEntry.areaName.indexOf("worldarea") === -1) {
+                    const areaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, mreaEntry.areaName, mrea);
+                    renderer.areaRenderers.push(areaRenderer);
+
+                    // By default, set only the first area renderer is visible, so as to not "crash my browser please".
+                    areaRenderer.visible = (renderer.areaRenderers.length === 1);
+                }
+            }
+
+            return renderer;
+        }
+
+        throw "whoops";
     }
 }
 
