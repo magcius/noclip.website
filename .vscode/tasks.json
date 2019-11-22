@@ -11,19 +11,6 @@
                 "kind": "build",
                 "isDefault": true
             }
-        },
-        {
-            "type": "npm",
-            "script": "typecheck",
-            "isBackground": true,
-            "problemMatcher": {
-                "base": "$tsc-watch",
-                "applyTo": "allDocuments",
-                "owner": "typecheck",
-            },
-            "runOptions": {
-                "runOn": "folderOpen"
-            }
         }
     ]
 }
