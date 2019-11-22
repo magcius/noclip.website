@@ -237,7 +237,7 @@ export class WarpPod extends LiveActor {
 
         if (this.visible) {
             startBck(this, 'Active');
-            startBrkIfExist(this.modelInstance!, this.arc, 'Active');
+            startBrkIfExist(this, 'Active');
             // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
             setLoopMode(this, LoopMode.ONCE);
         }
@@ -249,7 +249,7 @@ export class WarpPod extends LiveActor {
 
         if (inactive) {
             startBck(this, 'Wait');
-            startBrkIfExist(this.modelInstance!, this.arc, 'Wait');
+            startBrkIfExist(this, 'Wait');
         } else {
             this.glowEffect(sceneObjHolder);
         }
@@ -334,7 +334,7 @@ export class WarpPod extends LiveActor {
             this.warpPathPoints.push(v);
         }
 
-        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.arc, this.warpPathPoints, this.color);
+        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.resourceHolder.arc, this.warpPathPoints, this.color);
     }
 
     private lookForPair(sceneObjHolder: SceneObjHolder): WarpPod | null {

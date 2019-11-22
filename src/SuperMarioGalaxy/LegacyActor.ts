@@ -144,33 +144,33 @@ export class NoclipLegacyActorSpawner {
                     if (animOptions.bck !== undefined)
                         startBck(actor, animOptions.bck.slice(0, -4));
                     if (animOptions.brk !== undefined)
-                        startBrkIfExist(actor.modelInstance!, actor.arc, animOptions.brk.slice(0, -4));
+                        startBrkIfExist(actor, animOptions.brk.slice(0, -4));
                     if (animOptions.btk !== undefined)
-                        startBtkIfExist(actor.modelInstance!, actor.arc, animOptions.btk.slice(0, -4));
+                        startBtkIfExist(actor, animOptions.btk.slice(0, -4));
                 } else {
                     // Look for "Wait" animation first, then fall back to the first animation.
                     let hasAnim = false;
                     hasAnim = startBck(actor, 'Wait') || hasAnim;
-                    hasAnim = startBrkIfExist(actor.modelInstance!, actor.arc, 'Wait') || hasAnim;
-                    hasAnim = startBtkIfExist(actor.modelInstance!, actor.arc, 'Wait') || hasAnim;
+                    hasAnim = startBrkIfExist(actor, 'Wait') || hasAnim;
+                    hasAnim = startBtkIfExist(actor, 'Wait') || hasAnim;
                     if (!hasAnim) {
                         // If there's no "Wait" animation, then play the first animations that we can...
-                        const bckFile = actor.arc.files.find((file) => file.name.endsWith('.bck')) || null;
+                        const bckFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.bck')) || null;
                         if (bckFile !== null) {
                             const bckFilename = bckFile.name.slice(0, -4);
                             startBck(actor, bckFilename);
                         }
 
-                        const brkFile = actor.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
+                        const brkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
                         if (brkFile !== null) {
                             const brkFilename = brkFile.name.slice(0, -4);
-                            startBckIfExist(actor.modelInstance!, actor.arc, brkFilename);
+                            startBckIfExist(actor, brkFilename);
                         }
 
-                        const btkFile = actor.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
+                        const btkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
                         if (btkFile !== null) {
                             const btkFilename = btkFile.name.slice(0, -4);
-                            startBtkIfExist(actor.modelInstance!, actor.arc, btkFilename);
+                            startBtkIfExist(actor, btkFilename);
                         }            
                     }
                 }
@@ -183,8 +183,8 @@ export class NoclipLegacyActorSpawner {
         }
 
         const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {
-            bindColorChangeAnimation(actor.modelInstance!, rarc, frame);
-            bindTexChangeAnimation(actor.modelInstance!, rarc, frame);
+            bindColorChangeAnimation(actor, frame);
+            bindTexChangeAnimation(actor, frame);
         };
 
         const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, RARC] | null> => {
@@ -198,7 +198,7 @@ export class NoclipLegacyActorSpawner {
 
             actor.scenarioChanged(this.sceneObjHolder);
 
-            return [actor, actor.arc];
+            return [actor, actor.resourceHolder.arc];
         };
 
         const spawnGraph = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
@@ -313,7 +313,7 @@ export class NoclipLegacyActorSpawner {
                 break;
             case 'TicoShop':
                 spawnGraph(`TicoShop`).then(([node, rarc]) => {
-                    startBvaIfExist(node.modelInstance!, rarc, 'Small0');
+                    startBvaIfExist(node, 'Small0');
                 });
                 break;
 
@@ -623,10 +623,10 @@ export class NoclipLegacyActorSpawner {
         modelMatrix[10] = f[2]*2;
 
         const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `MiniRouteLine`, 'MiniRouteLine', modelMatrix);
-        startBvaIfExist(obj.modelInstance!, obj.arc, 'Open');
+        startBvaIfExist(obj, 'Open');
         if (isPink)
-            startBrkIfExist(obj.modelInstance!, obj.arc, 'TicoBuild');
+            startBrkIfExist(obj, 'TicoBuild');
         else
-            startBrkIfExist(obj.modelInstance!, obj.arc, 'Normal');
+            startBrkIfExist(obj, 'Normal');
     }
 }

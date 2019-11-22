@@ -8,6 +8,17 @@ export function assert(b: boolean, message: string = ""): void {
     }
 }
 
+export function assertExists<T>(v: T | null | undefined): T {
+    if (v !== undefined && v !== null)
+        return v;
+    else
+        throw new Error("Missing object");
+}
+
+export function nullify<T>(v: T | undefined | null): T | null {
+    return v === undefined ? null : v;
+}
+
 function makeTextDecoder(encoding: string): TextDecoder | null {
     if ((window as any).TextDecoder)
         return new TextDecoder(encoding);
@@ -20,13 +31,6 @@ export function getTextDecoder(encoding: string): TextDecoder | null {
     if (!textDecoderCache.has(encoding))
         textDecoderCache.set(encoding, makeTextDecoder(encoding));
     return textDecoderCache.get(encoding)!;
-}
-
-export function assertExists<T>(v: T | null | undefined): T {
-    if (v !== undefined && v !== null)
-        return v;
-    else
-        throw new Error("Missing object");
 }
 
 export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true): string {

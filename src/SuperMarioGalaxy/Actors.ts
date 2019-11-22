@@ -446,32 +446,32 @@ function setClippingFar(f: number): number {
     throw "whoops";
 }
 
-export function bindColorChangeAnimation(modelInstance: J3DModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
+export function bindColorChangeAnimation(actor: LiveActor, frame: number, baseName: string = 'ColorChange'): void {
     const brkName = `${baseName}.brk`;
-    if (arc.findFile(brkName) !== null) {
+    if (actor.resourceHolder.arc.findFile(brkName) !== null) {
         const animationController = new AnimationController();
         animationController.setTimeInFrames(frame);
 
-        const brk = BRK.parse(assertExists(arc.findFileData(brkName)));
-        modelInstance.bindTRK1(brk, animationController);
+        const brk = BRK.parse(assertExists(actor.resourceHolder.arc.findFileData(brkName)));
+        actor.modelInstance!.bindTRK1(brk, animationController);
     }
 }
 
-export function bindTexChangeAnimation(modelInstance: J3DModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
+export function bindTexChangeAnimation(actor: LiveActor, frame: number, baseName: string = 'TexChange'): void {
     const btpName = `${baseName}.btp`;
     const btkName = `${baseName}.btk`;
 
     const animationController = new AnimationController();
     animationController.setTimeInFrames(frame);
 
-    if (arc.findFile(btpName) !== null) {
-        const btp = BTP.parse(assertExists(arc.findFileData(btpName)));
-        modelInstance.bindTPT1(btp, animationController);
+    if (actor.resourceHolder.arc.findFile(btpName) !== null) {
+        const btp = BTP.parse(assertExists(actor.resourceHolder.arc.findFileData(btpName)));
+        actor.modelInstance!.bindTPT1(btp, animationController);
     }
 
-    if (arc.findFile(btkName) !== null) {
-        const btk = BTK.parse(assertExists(arc.findFileData(btkName)));
-        modelInstance.bindTTK1(btk, animationController);
+    if (actor.resourceHolder.arc.findFile(btkName) !== null) {
+        const btk = BTK.parse(assertExists(actor.resourceHolder.arc.findFileData(btkName)));
+        actor.modelInstance!.bindTTK1(btk, animationController);
     }
 }
 
@@ -681,10 +681,10 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
         this.tryStartAllAnim(this.objName);
         if (initInfo.colorChangeFrame !== -1)
-            bindColorChangeAnimation(this.modelInstance!, this.arc, initInfo.colorChangeFrame);
+            bindColorChangeAnimation(this, initInfo.colorChangeFrame);
 
         if (initInfo.texChangeFrame !== -1)
-            bindTexChangeAnimation(this.modelInstance!, this.arc, initInfo.texChangeFrame);
+            bindTexChangeAnimation(this, initInfo.texChangeFrame);
 
         const bloomObjName = `${this.objName}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
@@ -1099,7 +1099,7 @@ export class StarPiece extends LiveActor {
 
         const animationController = new AnimationController();
         animationController.setTimeInFrames(5);
-        this.modelInstance!.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)!), animationController);
+        this.modelInstance!.bindTTK1(BTK.parse(this.resourceHolder.arc.findFileData(`Gift.btk`)!), animationController);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -1125,7 +1125,7 @@ export class EarthenPipe extends LiveActor {
         const colorFrame = fallback(getJMapInfoArg7(infoIter), 0);
         const animationController = new AnimationController();
         animationController.setTimeInFrames(colorFrame);
-        this.modelInstance!.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)!), animationController);
+        this.modelInstance!.bindTRK1(BRK.parse(this.resourceHolder.arc.findFileData(`EarthenPipe.brk`)!), animationController);
 
         connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
 
@@ -1193,8 +1193,8 @@ export class BlackHole extends LiveActor {
         setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
 
         startBck(this, `BlackHoleRange`);
-        startBtkIfExist(this.modelInstance!, this.arc, `BlackHoleRange`);
-        startBtkIfExist(this.blackHoleModel.modelInstance!, this.blackHoleModel.arc, `BlackHole`);
+        startBtkIfExist(this, `BlackHoleRange`);
+        startBtkIfExist(this.blackHoleModel, `BlackHole`);
 
         let rangeScale: number;
         const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
@@ -1324,7 +1324,7 @@ export class Kinopio extends NPCActor {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.modelInstance!, this.arc, fallback(getJMapInfoArg1(infoIter), 0));
+        bindColorChangeAnimation(this, fallback(getJMapInfoArg1(infoIter), 0));
 
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (fallback(infoIter.getValueNumber('SW_APPEAR'), -1) !== -1)
@@ -1407,7 +1407,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.modelInstance!, this.arc, fallback(getJMapInfoArg7(infoIter), 0));
+        bindColorChangeAnimation(this, fallback(getJMapInfoArg7(infoIter), 0));
 
         this.initNerve(PenguinNrv.Wait);
     }
@@ -1455,7 +1455,7 @@ export class PenguinRacer extends NPCActor {
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg7 = fallback(getJMapInfoArg7(infoIter), 0);
-        bindColorChangeAnimation(this.modelInstance!, this.arc, arg7);
+        bindColorChangeAnimation(this, arg7);
         this.startAction('RacerWait');
     }
 
@@ -1485,11 +1485,11 @@ export class TicoComet extends NPCActor {
         this.goods0!.startAction('LeftRotate');
         this.goods1!.startAction('RightRotate');
 
-        startBtkIfExist(this.modelInstance!, this.arc, "TicoComet");
-        startBvaIfExist(this.modelInstance!, this.arc, "Small0");
+        startBtkIfExist(this, "TicoComet");
+        startBvaIfExist(this, "Small0");
 
         // TODO(jstpierre): setBrkFrameAndStop
-        bindColorChangeAnimation(this.modelInstance!, this.arc, 0, "Normal");
+        bindColorChangeAnimation(this, 0, "Normal");
 
         this.startAction('Wait');
     }
@@ -1686,9 +1686,9 @@ export class MiniRoutePoint extends LiveActor {
 
         this.tryStartAllAnim('Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this.modelInstance!, this.arc, 'TicoBuild');
+            startBrkIfExist(this, 'TicoBuild');
         else
-            startBrkIfExist(this.modelInstance!, this.arc, 'Normal');
+            startBrkIfExist(this, 'Normal');
 
         if (pointInfo.isSmall)
             vec3.set(this.scale, 0.5, 1, 0.5);
@@ -1764,9 +1764,9 @@ export class MiniRoutePart extends LiveActor {
 
         this.tryStartAllAnim('Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this.modelInstance!, this.arc, 'TicoBuild');
+            startBrkIfExist(this, 'TicoBuild');
         else
-            startBrkIfExist(this.modelInstance!, this.arc, 'Normal');
+            startBrkIfExist(this, 'Normal');
 
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -1943,7 +1943,7 @@ export class GCaptureTarget extends LiveActor {
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         startBck(this, 'Wait');
-        bindColorChangeAnimation(this.modelInstance!, this.arc, 1, 'Switch');
+        bindColorChangeAnimation(this, 1, 'Switch');
 
         emitEffect(sceneObjHolder, this, 'TargetLight');
         emitEffect(sceneObjHolder, this, 'TouchAble');
@@ -1967,7 +1967,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         vec3.scaleAndAdd(this.upVec, this.translation, this.upVec, 300);
 
         hideModel(this);
-        startBtkIfExist(this.modelInstance!, this.arc, "FountainBig");
+        startBtkIfExist(this, "FountainBig");
 
         // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
         this.randomPhase = (Math.random() * 300) | 0;
@@ -2078,7 +2078,7 @@ export class AstroCountDownPlate extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
         emitEffect(sceneObjHolder, this, "Light");
 
-        startBrkIfExist(this.modelInstance!, this.arc, "Green");
+        startBrkIfExist(this, "Green");
     }
 }
 
@@ -2124,7 +2124,7 @@ export class Tico extends NPCActor {
 
         const color = fallback(getJMapInfoArg0(infoIter), -1);
         if (color !== -1)
-            bindColorChangeAnimation(this.modelInstance!, this.arc, color);
+            bindColorChangeAnimation(this, color);
 
         this.startAction('Wait');
     }
@@ -2234,7 +2234,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
 
-        startBpkIfExist(this.modelInstance!, this.arc, 'ShootingStar');
+        startBpkIfExist(this, 'ShootingStar');
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2557,22 +2557,22 @@ abstract class SuperSpinDriver extends LiveActor {
 
 export class SuperSpinDriverYellow extends SuperSpinDriver {
     protected initColor(): void {
-        bindTexChangeAnimation(this.modelInstance!, this.arc, 0, 'SuperSpinDriver');
-        startBrkIfExist(this.modelInstance!, this.arc, 'Yellow');
+        bindTexChangeAnimation(this, 0, 'SuperSpinDriver');
+        startBrkIfExist(this, 'Yellow');
     }
 }
 
 export class SuperSpinDriverGreen extends SuperSpinDriver {
     protected initColor(): void {
-        bindTexChangeAnimation(this.modelInstance!, this.arc, 1, 'SuperSpinDriver');
-        startBrkIfExist(this.modelInstance!, this.arc, 'Green');
+        bindTexChangeAnimation(this, 1, 'SuperSpinDriver');
+        startBrkIfExist(this, 'Green');
     }
 }
 
 export class SuperSpinDriverPink extends SuperSpinDriver {
     protected initColor(): void {
-        bindTexChangeAnimation(this.modelInstance!, this.arc, 2, 'SuperSpinDriver');
-        startBrkIfExist(this.modelInstance!, this.arc, 'Pink');
+        bindTexChangeAnimation(this, 2, 'SuperSpinDriver');
+        startBrkIfExist(this, 'Pink');
     }
 }
 
@@ -3318,7 +3318,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
         const currentNerve = this.getCurrentNerve();
         if (currentNerve === TreasureBoxNrv.Wait) {
             if (this.type === TreasureBoxType.Cracked) {
-                startBrkIfExist(this.modelInstance!, this.arc, `Wait`);
+                startBrkIfExist(this, `Wait`);
                 emitEffect(sceneObjHolder, this, `Light`);
             } else if (this.type === TreasureBoxType.Gold) {
                 emitEffect(sceneObjHolder, this, `Gold`);
@@ -3368,7 +3368,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         moveCoordAndTransToNearestRailPos(this);
         getRailDirection(this.direction, this);
         const colorChangeFrame = fallback(getJMapInfoArg0(infoIter), 0);
-        bindColorChangeAnimation(this.modelInstance!, this.arc, colorChangeFrame);
+        bindColorChangeAnimation(this, colorChangeFrame);
 
         const rnd = getRandomInt(0, 2);
         if (rnd === 0)

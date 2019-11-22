@@ -4,7 +4,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames } from "./Main";
+import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder } from "./Main";
 import { GfxTexture } from "../gfx/platform/GfxPlatform";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
@@ -14,8 +14,7 @@ import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
 
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../j3d/rarc';
+import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
@@ -72,54 +71,53 @@ class ActorAnimKeeperInfo {
     }
 }
 
-export function startBckIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bck`);
-    if (data !== null) {
-        const bck = BCK.parse(data);
+export function startBckIfExist(actor: LiveActor, animationName: string): boolean {
+    const bck = actor.resourceHolder.getRes(actor.resourceHolder.motionTable, animationName);
+    if (bck !== null) {
         if (animationName.toLowerCase() === 'wait')
             bck.loopMode = LoopMode.REPEAT;
-        modelInstance.bindANK1(bck);
+        actor.modelInstance!.bindANK1(bck);
     }
-    return data !== null;
+    return bck !== null;
 }
 
-export function startBtkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.btk`);
-    if (data !== null)
-        modelInstance.bindTTK1(BTK.parse(data));
-    return data !== null;
+export function startBtkIfExist(actor: LiveActor, animationName: string): boolean {
+    const btk = actor.resourceHolder.getRes(actor.resourceHolder.btkTable, animationName);
+    if (btk !== null)
+        actor.modelInstance!.bindTTK1(btk);
+    return btk !== null;
 }
 
-export function startBrkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.brk`);
-    if (data !== null)
-        modelInstance.bindTRK1(BRK.parse(data));
-    return data !== null;
+export function startBrkIfExist(actor: LiveActor, animationName: string): boolean {
+    const brk = actor.resourceHolder.getRes(actor.resourceHolder.brkTable, animationName);
+    if (brk !== null)
+        actor.modelInstance!.bindTRK1(brk);
+    return brk !== null;
 }
 
-export function startBpkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bpk`);
-    if (data !== null)
-        modelInstance.bindTRK1(BPK.parse(data));
-    return data !== null;
+export function startBpkIfExist(actor: LiveActor, animationName: string): boolean {
+    const bpk = actor.resourceHolder.getRes(actor.resourceHolder.bpkTable, animationName);
+    if (bpk !== null)
+        actor.modelInstance!.bindTRK1(bpk);
+    return bpk !== null;
 }
 
-export function startBtpIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.btp`);
-    if (data !== null)
-        modelInstance.bindTPT1(BTP.parse(data));
-    return data !== null;
+export function startBtpIfExist(actor: LiveActor, animationName: string): boolean {
+    const btp = actor.resourceHolder.getRes(actor.resourceHolder.btpTable, animationName);
+    if (btp !== null)
+        actor.modelInstance!.bindTPT1(btp);
+    return btp !== null;
 }
 
-export function startBvaIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bva`);
-    if (data !== null)
-        modelInstance.bindVAF1(BVA.parse(data));
-    return data !== null;
+export function startBvaIfExist(actor: LiveActor, animationName: string): boolean {
+    const bva = actor.resourceHolder.getRes(actor.resourceHolder.bvaTable, animationName);
+    if (bva !== null)
+        actor.modelInstance!.bindVAF1(bva);
+    return bva !== null;
 }
 
 export function startBck(actor: LiveActor, animName: string): boolean {
-    const played = startBckIfExist(actor.modelInstance!, actor.arc, animName);
+    const played = startBckIfExist(actor, animName);
     if (played && actor.effectKeeper !== null)
         actor.effectKeeper.changeBck(animName);
     return played;
@@ -136,11 +134,11 @@ class ActorAnimKeeper {
     }
 
     public static tryCreate(actor: LiveActor): ActorAnimKeeper | null {
-        let bcsv = actor.arc.findFileData('ActorAnimCtrl.bcsv');
+        let bcsv = actor.resourceHolder.arc.findFileData('ActorAnimCtrl.bcsv');
 
         // Super Mario Galaxy 2 puts these assets in a subfolder.
         if (bcsv === null)
-            bcsv = actor.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
+            bcsv = actor.resourceHolder.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
 
         if (bcsv === null)
             return null;
@@ -170,23 +168,23 @@ class ActorAnimKeeper {
     }
 
     private setBtkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBtkIfExist(actor, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBrkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBrkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBrkIfExist(actor, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBpkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBpkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBpkIfExist(actor, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBtpAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtpIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBtpIfExist(actor, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBvaAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBvaIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBvaIfExist(actor, getAnimName(keeperInfo, dataInfo));
     }
 }
 
@@ -254,6 +252,21 @@ export const enum MessageType {
     MapPartsRailMover_Vanish = 0xCF,
 }
 
+export class ModelManager {
+    public resourceHolder: ResourceHolder;
+    public modelInstance: J3DModelInstance;
+
+    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
+        this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
+
+        const bmdModel = this.resourceHolder.getModel(objName);
+        this.modelInstance = new J3DModelInstance(bmdModel);
+        this.modelInstance.name = objName;
+        this.modelInstance.animationController.fps = FPS;
+        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
+    }
+}
+
 export class LiveActor<TNerve extends number = number> extends NameObj {
     protected visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
@@ -266,9 +279,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public spine: Spine<TNerve> | null = null;
     public railRider: RailRider | null = null;
 
-    // Technically part of ModelManager.
-    public arc: RARC.RARC; // ResourceHolder
-    public modelInstance: J3DModelInstance | null = null; // J3DModel
+    public modelManager: ModelManager | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -277,6 +288,15 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
+    }
+
+    // TODO(jstpierre): Remove these accessors.
+    public get resourceHolder(): ResourceHolder {
+        return this.modelManager!.resourceHolder;
+    }
+
+    public get modelInstance(): J3DModelInstance | null {
+        return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
 
     public receiveMessage(msgType: MessageType): boolean {
@@ -319,46 +339,27 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         modelCache.requestObjectData(objName);
     }
 
-    private calcBaseMtxInit(): void {
-        if (this.modelInstance !== null) {
-            computeModelMatrixSRT(this.modelInstance.modelMatrix,
-                1, 1, 1,
-                this.rotation[0], this.rotation[1], this.rotation[2],
-                this.translation[0], this.translation[1], this.translation[2]);
-
-            vec3.copy(this.modelInstance.baseScale, this.scale);
-        }
-    }
-
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
-        const modelCache = sceneObjHolder.modelCache;
+        this.modelManager = new ModelManager(sceneObjHolder, objName);
 
-        this.arc = modelCache.getObjectData(objName)!;
-
-        const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`)!;
-        this.modelInstance = new J3DModelInstance(bmdModel);
-        this.modelInstance.name = objName;
-        this.modelInstance.animationController.fps = FPS;
-        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
-
-        this.calcBaseMtxInit();
+        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+        this.calcAndSetBaseMtxTR();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelInstance.calcJointToWorld();
+        this.modelManager.modelInstance.calcJointToWorld();
 
         // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
         // Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
     }
 
+    // TODO(jstpierre): This is actually an MR helper, not an instance method.
     public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
         if (infoIter !== null) {
             getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
             getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
             getJMapInfoScale(this.scale, infoIter);
         }
-
-        this.calcBaseMtxInit();
     }
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
@@ -400,19 +401,23 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.tryStartAllAnim(animationName);
     }
 
+    private calcAndSetBaseMtxTR(): void {
+        makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
+    }
+
     public tryStartAllAnim(animationName: string): boolean {
         let anyPlayed = false;
         anyPlayed = startBck(this, animationName) || anyPlayed;
-        anyPlayed = startBtkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBrkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBpkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBtpIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBvaIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBtkIfExist(this, animationName) || anyPlayed;
+        anyPlayed = startBrkIfExist(this, animationName) || anyPlayed;
+        anyPlayed = startBpkIfExist(this, animationName) || anyPlayed;
+        anyPlayed = startBtpIfExist(this, animationName) || anyPlayed;
+        anyPlayed = startBvaIfExist(this, animationName) || anyPlayed;
         return anyPlayed;
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
+        this.calcAndSetBaseMtxTR();
     }
 
     protected getActorVisible(camera: Camera): boolean {

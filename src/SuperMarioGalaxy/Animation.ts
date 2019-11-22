@@ -1,16 +1,17 @@
 
-import { JMapInfoIter } from "./JMapInfo";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists } from "../util";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 interface XanimePlayer {
 }
 
-class BckCtrlData {
+export class BckCtrlData {
     public Name: string = '';
     public PlayFrame = -1;
     public StartFrame = -1;
     public EndFrame = -1;
-    public Interpolate = -1;
+    public Interpole = -1;
     public Attribute = -1;
 
     public setFromAnmt(infoIter: JMapInfoIter): void {
@@ -18,14 +19,20 @@ class BckCtrlData {
         this.PlayFrame = assertExists(infoIter.getValueNumber('play_frame'));
         this.StartFrame = assertExists(infoIter.getValueNumber('start_frame'));
         this.EndFrame = assertExists(infoIter.getValueNumber('end_frame'));
-        this.Interpolate = assertExists(infoIter.getValueNumber('interpolate'));
+        this.Interpole = assertExists(infoIter.getValueNumber('interpole'));
         this.Attribute = assertExists(infoIter.getValueNumber('attribute'));
     }
 }
 
-class BckCtrl {
+export class BckCtrl {
     private defaultBckCtrlData = new BckCtrlData();
     private bckCtrlDatas: BckCtrlData[] = [];
+
+    public static parse(buffer: ArrayBufferSlice): BckCtrl {
+        const ctrl = new BckCtrl();
+        ctrl.setFromAnmt(createCsvParser(buffer));
+        return ctrl;
+    }
 
     public setFromAnmt(infoIter: JMapInfoIter): void {
         infoIter.mapRecords((jmp, i) => {

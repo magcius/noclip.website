@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, align, nArray, fallback } from '../util';
+import { assert, assertExists, align, nArray, fallback, nullify } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, computeNormalMatrix } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
@@ -23,7 +23,7 @@ import * as RARC from '../j3d/rarc';
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
@@ -35,6 +35,7 @@ import { NPCDirector, AirBubbleHolder } from './Actors';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner, Path } from './LegacyActor';
+import { BckCtrl } from './Animation';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -581,11 +582,75 @@ function patchBMDModel(bmdModel: J3DModelData): void {
     }
 }
 
+export class ResourceHolder {
+    public modelTable = new Map<string, J3DModelData>();
+    public motionTable = new Map<string, ANK1>();
+    public btkTable = new Map<string, TTK1>();
+    public bpkTable = new Map<string, TRK1>();
+    public btpTable = new Map<string, TPT1>();
+    public brkTable = new Map<string, TRK1>();
+    public bvaTable = new Map<string, VAF1>();
+    public banmtTable = new Map<string, BckCtrl>();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.RARC) {
+        this.initEachResTable(device, this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
+            const bmd = BMD.parse(file.buffer);
+            patchBMD(bmd);
+            const bmdModel = new J3DModelData(device, cache, bmd);
+            patchBMDModel(bmdModel);
+            return bmdModel;
+        });
+
+        this.initEachResTable(device, this.motionTable, ['.bck', '.bca'], (ext, file) => {
+            if (ext === '.bca')
+                debugger;
+
+            return BCK.parse(file.buffer);
+        });
+
+        // .blk
+        this.initEachResTable(device, this.btkTable, ['.btk'], (ext, file) => BTK.parse(file.buffer));
+        this.initEachResTable(device, this.bpkTable, ['.bpk'], (ext, file) => BPK.parse(file.buffer));
+        this.initEachResTable(device, this.btpTable, ['.btp'], (ext, file) => BTP.parse(file.buffer));
+        this.initEachResTable(device, this.brkTable, ['.brk'], (ext, file) => BRK.parse(file.buffer));
+        // .bas
+        // .bmt
+        this.initEachResTable(device, this.bvaTable, ['.bva'], (ext, file) => BVA.parse(file.buffer));
+        this.initEachResTable(device, this.banmtTable, ['.banmt'], (ext, file) => BckCtrl.parse(file.buffer));
+    }
+
+    public getModel(name: string): J3DModelData {
+        return assertExists(this.modelTable.get(name.toLowerCase()));
+    }
+
+    public getRes<T>(table: Map<string, T>, name: string): T | null {
+        return nullify(table.get(name.toLowerCase()));
+    }
+
+    private initEachResTable<T>(device: GfxDevice, table: Map<string, T>, extensions: string[], constructor: (ext: string, file: RARC.RARCFile) => T): void {
+        for (let i = 0; i < this.arc.files.length; i++) {
+            const file = this.arc.files[i];
+
+            for (let j = 0; j < extensions.length; j++) {
+                const ext = extensions[j];
+                if (file.name.endsWith(ext)) {
+                    const filenameWithoutExtension = file.name.slice(0, -ext.length);
+                    table.set(filenameWithoutExtension, constructor(ext, file));
+                }
+            }
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const [, v] of this.modelTable)
+            v.destroy(device);
+    }
+}
+
 export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
-    public modelCache = new Map<string, J3DModelData | null>();
-    private models: J3DModelData[] = [];
+    public archiveResourceHolder = new Map<string, ResourceHolder>();
     public cache = new GfxRenderCache(true);
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
@@ -594,19 +659,6 @@ export class ModelCache {
     public waitForLoad(): Promise<void> {
         const v: Promise<any>[] = [... this.archivePromiseCache.values()];
         return Promise.all(v) as Promise<any>;
-    }
-
-    public getModel(rarc: RARC.RARC, modelFilename: string): J3DModelData | null {
-        if (this.modelCache.has(modelFilename))
-            return this.modelCache.get(modelFilename)!;
-
-        const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
-        patchBMD(bmd);
-        const bmdModel = new J3DModelData(this.device, this.cache, bmd);
-        patchBMDModel(bmdModel);
-        this.models.push(bmdModel);
-        this.modelCache.set(modelFilename, bmdModel);
-        return bmdModel;
     }
 
     private async requestArchiveDataInternal(archivePath: string, abortedCallback: AbortedCallback): Promise<RARC.RARC | null> {
@@ -650,13 +702,23 @@ export class ModelCache {
         return this.isArchiveExist(`ObjectData/${objectName}.arc`);
     }
 
-    public getObjectData(objectName: string): RARC.RARC | null {
-        return this.getArchive(`ObjectData/${objectName}.arc`);
+    public getResourceHolder(objectName: string): ResourceHolder {
+        if (this.archiveResourceHolder.has(objectName))
+            return this.archiveResourceHolder.get(objectName)!;
+
+        const arc = this.getObjectData(objectName);
+        const resourceHolder = new ResourceHolder(this.device, this.cache, arc);
+        this.archiveResourceHolder.set(objectName, resourceHolder);
+        return resourceHolder;
+    }
+
+    public getObjectData(objectName: string): RARC.RARC {
+        return assertExists(this.getArchive(`ObjectData/${objectName}.arc`));
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].destroy(device);
+        for (const resourceHolder of this.archiveResourceHolder.values())
+            resourceHolder.destroy(device);
     }
 }
 
