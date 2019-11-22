@@ -17,7 +17,6 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as BCSV from '../luigis_mansion/bcsv';
 import * as RARC from '../j3d/rarc';
 
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -34,7 +33,7 @@ import { EffectSystem } from './EffectSystem';
 import { NPCDirector, AirBubbleHolder } from './Actors';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
-import { ObjInfo, NoclipLegacyActorSpawner, Path } from './LegacyActor';
+import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 
 // Galaxy ticks at 60fps.
@@ -136,6 +135,9 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private findBloomArea(): ObjInfo | null {
+        // TODO(jstpierre): Replace with proper bloom code.
+
+        /*
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zone = this.spawner.zones[i];
             if (zone === undefined)
@@ -147,6 +149,7 @@ class SMGRenderer implements Viewer.SceneGfx {
                     return area;
             }
         }
+        */
 
         return null;
     }
@@ -825,14 +828,8 @@ class ZoneNode {
     public layerVisible: boolean = true;
     public subzones: ZoneNode[] = [];
 
-    public areaObjInfo: ObjInfo[] = [];
-
     constructor(public stageDataHolder: StageDataHolder) {
         this.name = stageDataHolder.zoneName;
-
-        stageDataHolder.iterAreas((infoIter, layerId) => {
-            this.areaObjInfo.push(stageDataHolder.legacyCreateObjinfo(infoIter, []));
-        });
     }
 
     public computeZoneVisibility(): void {
@@ -868,8 +865,6 @@ class SMGSpawner {
         assert(this.zones[stageDataHolder.zoneId] === undefined);
         this.zones[stageDataHolder.zoneId] = zoneNode;
 
-        const legacyPaths = stageDataHolder.legacyParsePaths();
-
         stageDataHolder.iterPlacement((infoIter, layerId) => {
             const actorTableEntry = this.getActorTableEntry(getObjectName(infoIter));
 
@@ -882,7 +877,7 @@ class SMGSpawner {
                 actorTableEntry.factoryFunc(zoneAndLayer, this.sceneObjHolder, infoIter);
             } else {
                 // Spawn legacy.
-                const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths);
+                const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter);
                 const infoIterCopy = copyInfoIter(infoIter);
                 this.legacySpawner.spawnObjectLegacy(zoneAndLayer, infoIterCopy, objInfoLegacy);
             }
@@ -989,15 +984,13 @@ class StageDataHolder {
         return [commonPathInfo, pointInfo];
     }
 
-    public legacyCreateObjinfo(infoIter: JMapInfoIter, paths: Path[]): ObjInfo {
+    public legacyCreateObjinfo(infoIter: JMapInfoIter): ObjInfo {
         const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
         const objName = fallback(infoIter.getValueString('name'), 'Unknown');
         const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
         const objArg1 = fallback(infoIter.getValueNumberNoInit('Obj_arg1'), -1);
         const objArg2 = fallback(infoIter.getValueNumberNoInit('Obj_arg2'), -1);
         const objArg3 = fallback(infoIter.getValueNumberNoInit('Obj_arg3'), -1);
-        const pathId: number = fallback(infoIter.getValueNumberNoInit('CommonPath_ID'), -1);
-        const path = paths.find((path) => path.l_id === pathId) || null;
         const modelMatrix = mat4.create();
 
         const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
@@ -1009,40 +1002,7 @@ class StageDataHolder {
             rotation[0], rotation[1], rotation[2],
             translation[0], translation[1], translation[2]);
 
-        return { objId, objName, objArg0, objArg1, objArg2, objArg3, modelMatrix, path };
-    }
-
-    public legacyParsePaths(): Path[] {
-        const pathDir = assertExists(this.zoneArchive.findDir('jmp/path'));
-
-        const commonPathInfo = BCSV.parse(RARC.findFileDataInDir(pathDir, 'commonpathinfo')!);
-        return commonPathInfo.records.map((record, i): Path => {
-            const l_id = assertExists(BCSV.getField<number>(commonPathInfo, record, 'l_id'));
-            const no = assertExists(BCSV.getField<number>(commonPathInfo, record, 'no'));
-            assert(no === i);
-            const name = assertExists(BCSV.getField<string>(commonPathInfo, record, 'name'));
-            const type = assertExists(BCSV.getField<string>(commonPathInfo, record, 'type'));
-            const closed = BCSV.getField<string>(commonPathInfo, record, 'closed', 'OPEN');
-            const pointinfo = BCSV.parse(RARC.findFileDataInDir(pathDir, `commonpathpointinfo.${i}`)!);
-            const points = pointinfo.records.map((record, i) => {
-                const id = BCSV.getField<number>(pointinfo, record, 'id');
-                assert(id === i);
-                const pnt0_x = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt0_x'));
-                const pnt0_y = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt0_y'));
-                const pnt0_z = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt0_z'));
-                const pnt1_x = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt1_x'));
-                const pnt1_y = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt1_y'));
-                const pnt1_z = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt1_z'));
-                const pnt2_x = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt2_x'));
-                const pnt2_y = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt2_y'));
-                const pnt2_z = assertExists(BCSV.getField<number>(pointinfo, record, 'pnt2_z'));
-                const p0 = vec3.fromValues(pnt0_x, pnt0_y, pnt0_z);
-                const p1 = vec3.fromValues(pnt1_x, pnt1_y, pnt1_z);
-                const p2 = vec3.fromValues(pnt2_x, pnt2_y, pnt2_z);
-                return { p0, p1, p2 };
-            });
-            return { l_id, name, type, closed, points };
-        });
+        return { objId, objName, objArg0, objArg1, objArg2, objArg3, modelMatrix };
     }
 
     private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
@@ -1070,16 +1030,6 @@ class StageDataHolder {
             const mapPartsDir = this.zoneArchive.findDir(`jmp/MapPartsDir/${layerDirName}`);
             if (mapPartsDir !== null)
                 this.iterPlacementDir(i, callback, mapPartsDir);
-        }
-    }
-
-    public iterAreas(callback: LayerObjInfoCallback): void {
-        for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
-            const layerDirName = getLayerDirName(i);
-
-            const areaObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/AreaObjInfo`);
-            if (areaObjInfo !== null)
-                this.iterLayer(i, callback, areaObjInfo);
         }
     }
 
