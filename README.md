@@ -21,7 +21,6 @@ If you would like contribute, there is a Getting Started guide in the [Official 
 	- Numpad 9: Export textures
 	- Number key: Load save state
 	- Period: Freeze/unfreeze time
-	- Comma: Reset time to zero
 - WASD mode
 	- B: Reset camera position
 	- WASD/Arrow Keys: Move camera

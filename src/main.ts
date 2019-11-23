@@ -168,6 +168,8 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
+    public sceneTimeScale = 1.0;
+
     constructor() {
         this.init();
     }
@@ -306,8 +308,6 @@ class Main {
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
             this.ui.togglePlayPause();
-        if (inputManager.isKeyDownEventTriggered('Comma'))
-            this.viewer.sceneTime = 0;
     }
 
     public setPaused(v: boolean): void {
@@ -327,6 +327,7 @@ class Main {
         // Needs to be called before this.viewer.update
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
+        this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
         this.viewer.update(time);
 
         if (shouldTakeScreenshot)

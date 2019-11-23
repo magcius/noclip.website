@@ -2474,7 +2474,8 @@ export class UI {
 
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
-    private isPlaying: boolean = true;
+
+    public isPlaying: boolean = true;
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
@@ -2540,7 +2541,7 @@ export class UI {
         this.toplevel.appendChild(this.faqPanel.elem);
 
         this.playPauseButton.onplaypause = (shouldBePlaying) => {
-            this.isPlaying = shouldBePlaying;
+            this.togglePlayPause(shouldBePlaying);
         };
         this.playPauseButton.setIsPlaying(this.isPlaying);
 
@@ -2558,8 +2559,8 @@ export class UI {
         this.elem = this.toplevel;
     }
 
-    public togglePlayPause(): void {
-        this.isPlaying = !this.isPlaying;
+    public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
+        this.isPlaying = shouldBePlaying;
         this.playPauseButton.setIsPlaying(this.isPlaying);
     }
 
