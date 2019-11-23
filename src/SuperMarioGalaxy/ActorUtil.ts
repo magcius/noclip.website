@@ -9,7 +9,7 @@ import { DrawType, DrawBufferType, CalcAnimType, MovementType, NameObj } from ".
 import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { RARC } from "../j3d/rarc";
-import { getRes } from "./Animation";
+import { getRes, XanimePlayer } from "./Animation";
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
@@ -298,8 +298,13 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
+    // TODO(jstpierre): Support stopped flag?
+    return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
+}
+
 export function isBckPlaying(actor: LiveActor, name: string): boolean {
-    return actor.modelManager!.isBckPlaying(name);
+    return isBckPlayingXanimePlayer(actor.modelManager!.xanimePlayer!, name);
 }
 
 export function isBtkPlaying(actor: LiveActor, name: string): boolean {

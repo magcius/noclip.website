@@ -1266,6 +1266,8 @@ export class Penguin extends NPCActor<PenguinNrv> {
             startAction(this, `Wait`);
         }
 
+        setBckFrameAtRandom(this);
+
         startBrk(this, 'ColorChange');
         setBrkFrameAndStop(this, fallback(getJMapInfoArg7(infoIter), 0));
 

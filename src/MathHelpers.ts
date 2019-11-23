@@ -1,10 +1,11 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, quat } from "gl-matrix";
 
 // Misc bits of 3D math.
 
 export const enum MathConstants {
     DEG_TO_RAD = 0.01745, // Math.PI / 180,
+    RAD_TO_DEG = 57.2947, // 180 / Math.PI,
     TAU = 6.283, // Math.PI * 2
     EPSILON = 0.000001,
 }
@@ -398,4 +399,14 @@ export function isNearZeroVec3(v: vec3, min: number): boolean {
         v[1] > -min && v[1] < min &&
         v[2] > -min && v[2] < min
     );
+}
+
+export function quatFromEulerRadians(dst: quat, x: number, y: number, z: number): void {
+    const sx = Math.sin(0.5 * x), cx = Math.cos(0.5 * x);
+    const sy = Math.sin(0.5 * y), cy = Math.cos(0.5 * y);
+    const sz = Math.sin(0.5 * z), cz = Math.cos(0.5 * z);
+    dst[0] = sx * cy * cz - cx * sy * sz;
+    dst[1] = cx * sy * cz + sx * cy * sz;
+    dst[2] = cx * cy * sz - sx * sy * cz;
+    dst[3] = cx * cy * cz + sx * sy * sz;
 }

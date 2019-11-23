@@ -1,12 +1,12 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3, quat } from "gl-matrix";
 
-import { assertExists, nullify } from "../util";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { assertExists, nullify, assert, nArray } from "../util";
+import { quatFromEulerRadians } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode, JNT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DFrameCtrl, VAF1_getVisibility, entryTexRegAnimator, removeTexRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
@@ -158,38 +158,199 @@ export abstract class AnmPlayerBase<T extends AnimationBase> {
     }
 }
 
-export class XanimeCore {
-    constructor(public frameCtrl: J3DFrameCtrl, public ank1: ANK1) {
-    }
+class XjointTransform {
+    public scale = vec3.create();
+    public translation = vec3.create();
+    public rotation = quat.create();
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        const animFrame = this.frameCtrl.currentTimeInFrames;
-        const entry = this.ank1.jointAnimationEntries[i];
-
-        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-        const translationX = sampleAnimationData(entry.translationX, animFrame);
-        const translationY = sampleAnimationData(entry.translationY, animFrame);
-        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    public copy(other: XjointTransform): void {
+        vec3.copy(this.scale, other.scale);
+        vec3.copy(this.translation, other.translation);
+        quat.copy(this.rotation, other.rotation);
     }
 }
 
-export class XanimePlayer extends AnmPlayerBase<ANK1> {
+class XjointInfo {
+    public xformFrozen = new XjointTransform();
+    public xformAnm = new XjointTransform();
+}
+
+export class XanimeFrameCtrl extends J3DFrameCtrl {
+    public interpoleFrame: number = 0.0;
+}
+
+// We only emulate simple mode, which contains one track.
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchQuat = quat.create();
+export class XanimeCore {
+    public curAnmTime = 0.0;
+    public interpoleRatio = 0.0;
+    public freeze: boolean = false;
+    public resetJointXform: boolean = false;
+    private ank1: ANK1 | null = null;
+    private joints: XjointInfo[];
+
+    constructor(jointCount: number) {
+        this.joints = nArray(jointCount, () => new XjointInfo());
+    }
+
+    public initT(modelData: J3DModelData): void {
+        const jnt1 = modelData.bmd.jnt1.joints;
+
+        for (let i = 0; i < jnt1.length; i++) {
+            const src = jnt1[i];
+            const dst = this.joints[i];
+
+            vec3.set(dst.xformFrozen.translation, src.translationX, src.translationY, src.translationZ);
+            vec3.set(dst.xformFrozen.scale, src.scaleX, src.scaleY, src.scaleZ);
+            quatFromEulerRadians(dst.xformFrozen.rotation, src.rotationX, src.rotationY, src.rotationZ);
+
+            dst.xformAnm.copy(dst.xformFrozen);
+        }
+    }
+
+    public doFreeze(): void {
+        this.freeze = true;
+    }
+
+    public updateFrame(): void {
+        if (this.freeze) {
+            this.resetJointXform = true;
+            this.freeze = false;
+        } else {
+            this.resetJointXform = false;
+        }
+    }
+
+    public setBck(track: number, ank1: ANK1): void {
+        assert(track === 0);
+        this.ank1 = ank1;
+    }
+
+    public calcSingle(i: number): void {
+        const xj = this.joints[i];
+
+        if (this.ank1 !== null) {
+            const entry = this.ank1.jointAnimationEntries[i];
+            const animFrame = this.curAnmTime * this.ank1.duration;
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame);
+            const translationY = sampleAnimationData(entry.translationY, animFrame);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+
+            const anmScale = scratchVec3a;
+            const anmTrans = scratchVec3b;
+            const anmRot = scratchQuat;
+            vec3.set(anmScale, scaleX, scaleY, scaleZ);
+            vec3.set(anmTrans, translationX, translationY, translationZ);
+            quatFromEulerRadians(anmRot, rotationX, rotationY, rotationZ);
+
+            if (this.resetJointXform)
+                xj.xformFrozen.copy(xj.xformAnm);
+
+            if (this.interpoleRatio < 1.0) {
+                vec3.lerp(anmScale, xj.xformFrozen.scale, anmScale, this.interpoleRatio);
+                vec3.lerp(anmTrans, xj.xformFrozen.translation, anmTrans, this.interpoleRatio);
+                quat.lerp(anmRot, xj.xformFrozen.rotation, scratchQuat, this.interpoleRatio);
+            }
+
+            vec3.copy(xj.xformAnm.scale, anmScale);
+            vec3.copy(xj.xformAnm.translation, anmTrans);
+            quat.copy(xj.xformAnm.rotation, anmRot);
+        }
+    }
+
+    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+        this.calcSingle(i);
+
+        const xj = this.joints[i];
+        mat4.fromRotationTranslationScale(dst, xj.xformAnm.rotation, xj.xformAnm.translation, xj.xformAnm.scale);
+    }
+}
+
+export class XanimePlayer {
+    public frameCtrl = new XanimeFrameCtrl(0);
+    public currentRes: ANK1 | null = null;
+    private currentResName: string | null = null;
+    private core: XanimeCore;
+    private interpoleRatio: number = 0.0;
+
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
-        super(resTable);
+        this.core = new XanimeCore(this.modelInstance.modelData.bmd.jnt1.joints.length);
+        this.core.initT(this.modelInstance.modelData);
     }
 
-    public startAnimation(): void {
-        this.modelInstance.jointMatrixCalc = new XanimeCore(this.frameCtrl, this.currentRes!);
+    public isRun(name: string): boolean {
+        return this.currentResName === name;
     }
 
-    public stopAnimation(): void {
-        // this.modelInstance.jointMatrixCalc = new XanimeCore(this.frameCtrl, this.currentRes!);
+    public changeAnimationBck(name: string): void {
+        const res = getRes(this.resTable, name);
+        if (res !== null) {
+            this.changeAnimationSimple(res);
+            this.currentRes = res;
+            this.currentResName = name;
+        } else {
+            this.currentResName = null;
+        }
+    }
+
+    private changeAnimationSimple(res: ANK1): void {
+        this.core.doFreeze();
+        this.core.setBck(0, res);
+
+        this.frameCtrl.init(res.duration);
+        this.frameCtrl.loopMode = res.loopMode;
+        this.frameCtrl.interpoleFrame = 1;
+        this.interpoleRatio = 0.0;
+    }
+
+    public calcAnm(): void {
+        if (this.currentRes !== null) {
+            const duration = this.currentRes.duration !== 0 ? this.currentRes.duration : 1;
+            this.core.curAnmTime = this.frameCtrl.currentTimeInFrames / duration;
+        }
+
+        this.core.updateFrame();
+        this.modelInstance.jointMatrixCalc = this.core;
+    }
+
+    public clearAnm(): void {
+        // We should only temporarily insert the mtx calc on the joint, but we would
+        // have to separate out the matrix calc systems per-joint, and I don't see a
+        // reason to do that, so I just don't...
+    }
+
+    public stop(): void {
+        this.frameCtrl.speedInFrames = 0;
+    }
+
+    private updateInterpoleRatio(deltaTimeFrames: number = 1): void {
+        const frameCtrl = this.frameCtrl;
+        if (frameCtrl.speedInFrames === 0.0 && frameCtrl.loopMode !== LoopMode.ONCE_AND_RESET) {
+            this.interpoleRatio = 1.0;
+            frameCtrl.interpoleFrame = 0;
+        } else if (frameCtrl.interpoleFrame <= 0) {
+            this.interpoleRatio = 1.0;
+        } else {
+            this.interpoleRatio += (1.0 - this.interpoleRatio) / frameCtrl.interpoleFrame;
+            frameCtrl.interpoleFrame = Math.max(frameCtrl.interpoleFrame - deltaTimeFrames, 0);
+        }
+    }
+
+    public update(deltaTimeFrames: number): void {
+        if (this.currentRes !== null) {
+            const frameCtrl = this.frameCtrl;
+            frameCtrl.update(deltaTimeFrames);
+            this.updateInterpoleRatio(deltaTimeFrames);
+            this.core.interpoleRatio = this.interpoleRatio;
+        }
     }
 
     public changeSpeed(v: number): void {
@@ -197,12 +358,21 @@ export class XanimePlayer extends AnmPlayerBase<ANK1> {
     }
 
     public changeInterpoleFrame(v: number): void {
-        // this.frameCtrl.interpole = v;
+        this.frameCtrl.interpoleFrame = v;
+
+        if (v === 0) {
+            this.interpoleRatio = 1.0;
+            this.core.interpoleRatio = 1.0;
+        } else {
+            this.interpoleRatio = 0.0;
+            this.core.interpoleRatio = 0.0;
+            this.updateInterpoleRatio(1.0);
+        }
     }
 }
 
 export class BtkPlayer extends AnmPlayerBase<TTK1> {
-    constructor(public resTable: ResTable<TTK1>, private modelInstance: J3DModelInstance) {
+    constructor(resTable: ResTable<TTK1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 
@@ -216,7 +386,7 @@ export class BtkPlayer extends AnmPlayerBase<TTK1> {
 }
 
 export class BrkPlayer extends AnmPlayerBase<TRK1> {
-    constructor(public resTable: ResTable<TRK1>, private modelInstance: J3DModelInstance) {
+    constructor(resTable: ResTable<TRK1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 
@@ -230,7 +400,7 @@ export class BrkPlayer extends AnmPlayerBase<TRK1> {
 }
 
 export class BtpPlayer extends AnmPlayerBase<TPT1> {
-    constructor(public resTable: ResTable<TPT1>, private modelInstance: J3DModelInstance) {
+    constructor(resTable: ResTable<TPT1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 
@@ -244,7 +414,7 @@ export class BtpPlayer extends AnmPlayerBase<TPT1> {
 }
 
 export class BvaPlayer extends AnmPlayerBase<VAF1> {
-    constructor(public resTable: ResTable<VAF1>, private modelInstance: J3DModelInstance) {
+    constructor(resTable: ResTable<VAF1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 

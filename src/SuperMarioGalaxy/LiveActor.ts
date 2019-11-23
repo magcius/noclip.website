@@ -172,6 +172,9 @@ export class ModelManager {
     }
 
     public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.xanimePlayer !== null)
+            this.xanimePlayer.calcAnm();
+
         if (this.bvaPlayer !== null)
             this.bvaPlayer.calc();
 
@@ -199,12 +202,15 @@ export class ModelManager {
     }
 
     public startBck(name: string): void {
-        this.xanimePlayer!.start(name);
+        this.xanimePlayer!.changeAnimationBck(name);
+        this.xanimePlayer!.changeInterpoleFrame(0);
         this.bckCtrl!.changeBckSetting(name, this.xanimePlayer!);
     }
 
-    public isBckPlaying(name: string): boolean {
-        return this.xanimePlayer!.isPlaying(name);
+    public startBckWithInterpole(name: string, interpole: number): void {
+        this.xanimePlayer!.changeAnimationBck(name);
+        this.xanimePlayer!.changeInterpoleFrame(0);
+        this.xanimePlayer!.changeInterpoleFrame(interpole);
     }
 
     public getBtkCtrl(): J3DFrameCtrl {
