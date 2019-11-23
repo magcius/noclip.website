@@ -345,6 +345,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public rotation = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
     public velocity = vec3.create();
+    public gravityVector = vec3.create();
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);

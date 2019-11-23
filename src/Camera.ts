@@ -798,7 +798,7 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
         texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipYScale: number = -1): void {
+export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipYScale: number): void {
     // Map from -1 to 1, to viewport coords.
 
     // Map from -1 to 1 to 0 to 1.

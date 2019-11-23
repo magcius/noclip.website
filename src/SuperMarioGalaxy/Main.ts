@@ -182,7 +182,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             let texPrjMtx: mat4 | null = null;
             if (drawType === DrawType.EFFECT_DRAW_INDIRECT) {
                 texPrjMtx = scratchMatrix;
-                texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport);
+                texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
             }
 
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);

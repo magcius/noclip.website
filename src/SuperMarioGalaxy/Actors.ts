@@ -2469,7 +2469,6 @@ class WaveFloatingForce {
 
 export class OceanWaveFloater extends MapObjActor {
     private waveForce: WaveFloatingForce;
-    private gravityVec: vec3;
     private upVec: vec3;
     private isRippling: boolean;
     private rippleStopThreshold: number;
@@ -2505,8 +2504,7 @@ export class OceanWaveFloater extends MapObjActor {
         calcUpVec(this.upVec, this);
 
         // For now.
-        this.gravityVec = vec3.create();
-        vec3.negate(this.gravityVec, this.upVec);
+        vec3.negate(this.gravityVector, this.upVec);
 
         this.isRippling = false;
     }
@@ -2514,13 +2512,13 @@ export class OceanWaveFloater extends MapObjActor {
     private getCurrentSinkDepth(): number {
         mat4.getTranslation(scratchVec3, this.getBaseMtx()!);
         vec3.subtract(scratchVec3, this.translation, scratchVec3);
-        return vec3.length(scratchVec3) * Math.sign(vec3.dot(scratchVec3, this.gravityVec));
+        return vec3.length(scratchVec3) * Math.sign(vec3.dot(scratchVec3, this.gravityVector));
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(viewerInput);
 
-        vec3.scale(scratchVec3, this.gravityVec, this.waveForce.getCurrentValue());
+        vec3.scale(scratchVec3, this.gravityVector, this.waveForce.getCurrentValue());
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3);
     }
 
@@ -3015,7 +3013,6 @@ const enum AirBubbleNrv { Wait, Move, KillWait }
 
 export class AirBubble extends LiveActor<AirBubbleNrv> {
     private lifetime: number = 180;
-    private gravityVec = vec3.create();
     private spawnLocation = vec3.create();
     private accel = vec3.create();
 
@@ -3053,21 +3050,21 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         } else if (currentNerve === AirBubbleNrv.Move) {
             if (isFirstStep(this)) {
                 // Calc gravity.
-                vec3.set(this.gravityVec, 0, -1, 0);
+                vec3.set(this.gravityVector, 0, -1, 0);
 
-                vec3.negate(scratchVec3, this.gravityVec);
+                vec3.negate(scratchVec3, this.gravityVector);
                 vec3.scale(this.velocity, scratchVec3, 7.0);
             }
 
-            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * 1.5, this.gravityVec);
+            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * 1.5, this.gravityVector);
             vec3.transformMat4(this.accel, this.accel, scratchMatrix);
-            vec3.scaleAndAdd(this.accel, this.accel, this.gravityVec, -vec3.dot(this.gravityVec, this.accel));
+            vec3.scaleAndAdd(this.accel, this.accel, this.gravityVector, -vec3.dot(this.gravityVector, this.accel));
             if (isNearZeroVec3(this.accel, 0.001))
                 getRandomVector(this.accel, 1.0);
             vec3.normalize(this.accel, this.accel);
 
             vec3.scaleAndAdd(this.velocity, this.velocity, this.accel, 0.1);
-            vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVec, -0.3);
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -0.3);
 
             vec3.scale(this.velocity, this.velocity, 0.85);
             if (isGreaterStep(this, this.lifetime)) {
@@ -3255,8 +3252,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         // Gravity vector
-        vec3.set(scratchVec3, 0, -1, 0);
-        calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, scratchVec3, this.direction);
+        vec3.set(this.gravityVector, 0, -1, 0);
+        calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
 
     private isGreaterEqualStepAndRandom(v: number): boolean {
@@ -3371,5 +3368,48 @@ export class SubmarineSteam extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}
+
+const enum PalmIslandNrv { Wait, Float }
+
+export class PalmIsland extends LiveActor<PalmIslandNrv> {
+    private floatDelay: number;
+    private rippleTranslation = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'PalmIsland');
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        this.floatDelay = getRandomInt(0, 60);
+
+        this.initNerve(PalmIslandNrv.Wait);
+
+        calcUpVec(this.gravityVector, this);
+        vec3.negate(this.gravityVector, this.gravityVector);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === PalmIslandNrv.Wait) {
+            if (isGreaterStep(this, this.floatDelay))
+                this.setNerve(PalmIslandNrv.Float);
+        } else if (currentNerve === PalmIslandNrv.Float) {
+            if (isFirstStep(this)) {
+                vec3.copy(this.rippleTranslation, this.translation);
+                emitEffect(sceneObjHolder, this, 'Ripple');
+                setEffectHostSRT(this, 'Ripple', this.rippleTranslation, null, null);
+            }
+
+            const theta = MathConstants.DEG_TO_RAD * (90 + 1.44 * this.getNerveStep());
+            const waveAmpl = Math.sin(theta) * 1.44;
+            vec3.scale(this.velocity, this.gravityVector, waveAmpl);
+        }
     }
 }
