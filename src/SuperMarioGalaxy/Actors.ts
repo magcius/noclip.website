@@ -3358,3 +3358,18 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
+
+export class SubmarineSteam extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
+
+        emitEffect(sceneObjHolder, this, 'Steam');
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}
