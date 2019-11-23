@@ -305,7 +305,7 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.ui.timePanel.togglePausePlay();
+            this.ui.togglePlayPause();
         if (inputManager.isKeyDownEventTriggered('Comma'))
             this.viewer.sceneTime = 0;
     }
@@ -327,15 +327,11 @@ class Main {
         // Needs to be called before this.viewer.update
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
-        let sceneTimeScale = this.ui.timePanel.getTimeScale();
-
-        this.viewer.sceneTimeScale = sceneTimeScale;
         this.viewer.update(time);
 
         if (shouldTakeScreenshot)
             this._takeScreenshot();
 
-        this.ui.timePanel.update(this.viewer.sceneTime, 1.0);
         this.ui.update();
 
         window.requestAnimationFrame(this._updateLoop);
@@ -652,12 +648,6 @@ class Main {
         this.ui = new UI(this.viewer);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
-        this.ui.timePanel.ontimescrub = (adj: number) => {
-            this.viewer.setSceneTime(Math.max(this.viewer.sceneTime + adj, 0));
-        };
-        this.ui.timePanel.onrewind = () => {
-            this.viewer.setSceneTime(0);
-        };
     }
 
     private _toggleUI() {

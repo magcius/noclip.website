@@ -2077,217 +2077,6 @@ export class LayerPanel extends Panel {
     }
 }
 
-declare global {
-    interface CSSStyleDeclaration {
-        imageRendering: string;
-    }
-}
-
-class TimeScrubber implements Widget {
-    private pixelsPerSecond: number = 16;
-    private toplevel: HTMLElement;
-    private track: HTMLCanvasElement;
-    private marker: HTMLElement;
-
-    public elem: HTMLElement;
-    public ontimescrub: ((adj: number) => void) | null = null;
-
-    constructor() {
-        this.toplevel = document.createElement('div');
-        this.toplevel.style.display = 'block';
-        this.toplevel.style.height = '2em';
-        this.toplevel.style.cursor = 'grab';
-        this.toplevel.style.position = 'relative';
-        this.toplevel.addEventListener('mousedown', (e) => {
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: true, useGrabbingCursor: true, releaseOnMouseUp: true });
-        });
-
-        this.track = document.createElement('canvas');
-        this.track.style.position = 'absolute';
-        this.track.style.left = '0';
-        this.track.style.top = '0';
-        this.track.style.right = '0';
-        this.track.style.bottom = '0';
-        this.track.style.imageRendering = 'crisp-edges';
-        this.toplevel.appendChild(this.track);
-
-        this.marker = document.createElement('div');
-        this.marker.style.position = 'absolute';
-        this.marker.style.left = '50%';
-        this.marker.style.top = '0';
-        this.marker.style.bottom = '0';
-        this.marker.style.marginLeft = '-5px';
-        this.marker.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
-        this.marker.style.width = '10px';
-        this.marker.style.clipPath = `polygon(0% 0%, 50% 15%, 50% 85%, 0% 100%, 100% 100%, 50% 85%, 50% 15%, 100% 0%)`;
-        this.toplevel.append(this.marker);
-
-        this.elem = this.toplevel;
-    }
-
-    public onMotion(dx: number, dy: number): void {
-        const timeAdjustSeconds = -dx / this.pixelsPerSecond;
-        const timeAdjust = timeAdjustSeconds * 1000;
-
-        if (this.ontimescrub !== null)
-            this.ontimescrub(timeAdjust);
-    }
-
-    public onGrabReleased(): void {
-        // No need to do much.
-    }
-
-    public isScrubbing(): boolean {
-        return GlobalGrabManager.hasGrabListener(this);
-    }
-
-    public update(sceneTime: number, timeScale: number): void {
-        this.drawTrack(sceneTime);
-    }
-
-    protected drawTrack(sceneTime: number): void {
-        Viewer.resizeCanvas(this.track, this.toplevel.offsetWidth, this.toplevel.offsetHeight, window.devicePixelRatio);
-
-        const w = this.track.width;
-        const h = this.track.height;
-
-        const ctx = this.track.getContext('2d')!;
-
-        // sceneTime is in milliseconds.
-        const sceneTimeSeconds = sceneTime / 1000;
-
-        const rad = (w / this.pixelsPerSecond) / 2;
-        // Iterate over all the seconds in this track.
-        const windowTimeLeft = Math.max(sceneTimeSeconds - rad, 0);
-        const windowTimeRight = sceneTimeSeconds + rad;
-
-        for (let t = (windowTimeLeft | 0); t < ((windowTimeRight + 1) | 0); t++) {
-            // Draw notch at time t.
-            const notchX = w/2 + (t - sceneTimeSeconds) * this.pixelsPerSecond;
-
-            if ((t % 5) === 0) {
-                const notchH = 6;
-                ctx.beginPath();
-                ctx.moveTo(notchX, 0);
-                ctx.lineTo(notchX, notchH);
-                ctx.moveTo(notchX, h-notchH);
-                ctx.lineTo(notchX, h);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = HIGHLIGHT_COLOR;
-                ctx.stroke();
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const label = '' + (t % 1000);
-                ctx.font = '10pt monospace';
-                ctx.fillStyle = '#aaa';
-                ctx.fillText(label, notchX, h/2);
-            } else {
-                const notchH = 2;
-                ctx.beginPath();
-                ctx.moveTo(notchX, 0);
-                ctx.lineTo(notchX, notchH);
-                ctx.moveTo(notchX, h-notchH);
-                ctx.lineTo(notchX, h);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = 'rgb(210, 30, 30, 0.8)';
-                ctx.stroke();
-            }
-        }
-    }
-}
-
-export class TimePanel extends Panel {
-    private scrubber: TimeScrubber;
-    private rewindButton: HTMLElement;
-    private pausePlayButton: HTMLElement;
-    private normalSceneTimeScale = 1;
-    public isPlaying: boolean = true;
-
-    public onplaypause: ((isPlaying: boolean) => void) | null = null;
-    public ontimescrub: ((adj: number) => void) | null = null;
-    public onrewind: (() => void) | null = null;
-
-    constructor() {
-        super();
-        this.setTitle(SAND_CLOCK_ICON, 'Time');
-
-        this.scrubber = new TimeScrubber();
-        this.scrubber.ontimescrub = (adj: number) => {
-            if (this.ontimescrub !== null)
-                this.ontimescrub(adj);
-        };
-        this.contents.appendChild(this.scrubber.elem);
-
-        const h = document.createElement('div');
-        h.style.display = 'grid';
-        h.style.gridAutoFlow = 'column';
-        h.style.gridGap = '8px';
-
-        this.rewindButton = document.createElement('div');
-        this.rewindButton.style.textAlign = 'center';
-        this.rewindButton.style.lineHeight = '1.5em';
-        this.rewindButton.style.userSelect = 'none';
-        this.rewindButton.style.cursor = 'pointer';
-        this.rewindButton.style.fontWeight = 'bold';
-        this.rewindButton.style.backgroundColor = COOL_BLUE_COLOR;
-        this.rewindButton.textContent = 'Rewind';
-        this.rewindButton.onclick = () => {
-            if (this.onrewind !== null)
-                this.onrewind();
-        };
-        h.appendChild(this.rewindButton);
-
-        this.pausePlayButton = document.createElement('div');
-        this.pausePlayButton.style.textAlign = 'center';
-        this.pausePlayButton.style.lineHeight = '1.5em';
-        this.pausePlayButton.style.userSelect = 'none';
-        this.pausePlayButton.style.cursor = 'pointer';
-        this.pausePlayButton.style.fontWeight = 'bold';
-        this.pausePlayButton.style.backgroundColor = COOL_BLUE_COLOR;
-        this.pausePlayButton.onclick = () => {
-            this.togglePausePlay();
-        };
-        h.appendChild(this.pausePlayButton);
-
-        this.sync();
-
-        this.contents.appendChild(h);
-    }
-
-    private sync(): void {
-        if (this.isPlaying) {
-            this.pausePlayButton.textContent = 'Pause';
-        } else {
-            this.pausePlayButton.textContent = 'Play';
-        }
-    }
-
-    public getTimeScale(): number {
-        if (this.scrubber.isScrubbing())
-            return 0;
-
-        if (!this.isPlaying)
-            return 0;
-
-        return this.normalSceneTimeScale;
-    }
-
-    public togglePausePlay(shouldBePlaying: boolean = !this.isPlaying): void {
-        this.isPlaying = shouldBePlaying;
-        if (this.onplaypause !== null)
-            this.onplaypause(this.isPlaying);
-        this.sync();
-    }
-
-    public update(sceneTime: number, timeScale: number): void {
-        // Expensive, so prevent it if we can help it...
-        if (!this.expanded)
-            return;
-
-        this.scrubber.update(sceneTime, timeScale);
-    }
-}
-
 class CameraSpeedIndicator implements BottomBarWidget {
     public elem: HTMLElement;
 
@@ -2634,21 +2423,6 @@ class FullscreenButton extends SingleIconButton {
     }
 }
 
-class RewindButton extends SingleIconButton {
-    public onrewind: (() => void) | null = null;
-
-    constructor() {
-        super();
-        setFontelloIcon(this.icon, FontelloIcon.fast_backward);
-        this.tooltipElem.textContent = 'Rewind';
-    }
-
-    public onClick() {
-        if (this.onrewind !== null)
-            this.onrewind();
-    }
-}
-
 class PlayPauseButton extends SingleIconButton {
     public onplaypause: ((shouldBePlaying: boolean) => void) | null = null;
     public isPlaying: boolean;
@@ -2688,20 +2462,19 @@ export class UI {
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
     public statisticsPanel: StatisticsPanel;
-    public timePanel: TimePanel;
     public panels: Panel[];
     private about: About;
     private faqPanel: FAQPanel;
 
     public cameraSpeedIndicator = new CameraSpeedIndicator();
     private bottomBar = new BottomBar();
-    private rewindButton = new RewindButton();
     private playPauseButton = new PlayPauseButton();
     private shareButton = new ShareButton();
     private fullscreenButton = new FullscreenButton();
 
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
+    private isPlaying: boolean = true;
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
@@ -2752,7 +2525,6 @@ export class UI {
 
         this.toplevel.appendChild(this.bottomBar.elem);
         this.bottomBar.addWidgets(BottomBarArea.Left, this.cameraSpeedIndicator);
-        this.bottomBar.addWidgets(BottomBarArea.Center, this.rewindButton);
         this.bottomBar.addWidgets(BottomBarArea.Center, this.playPauseButton);
         this.bottomBar.addWidgets(BottomBarArea.Right, this.shareButton);
         this.bottomBar.addWidgets(BottomBarArea.Right, this.fullscreenButton);
@@ -2761,24 +2533,16 @@ export class UI {
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
-        this.timePanel = new TimePanel();
         this.about = new About();
 
         this.faqPanel = new FAQPanel();
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
-        this.rewindButton.onrewind = () => {
-            // Trigger the same callback as the time panel.
-            this.timePanel.onrewind!();
-        };
         this.playPauseButton.onplaypause = (shouldBePlaying) => {
-            this.timePanel.togglePausePlay(shouldBePlaying);
+            this.isPlaying = shouldBePlaying;
         };
-        this.timePanel.onplaypause = (isPlaying) => {
-            this.playPauseButton.setIsPlaying(isPlaying);
-        };
-        this.playPauseButton.setIsPlaying(this.timePanel.isPlaying);
+        this.playPauseButton.setIsPlaying(this.isPlaying);
 
         this.about.onfaq = () => {
             this.faqPanel.elem.style.display = 'block';
@@ -2792,6 +2556,11 @@ export class UI {
         this.setScenePanels(null);
 
         this.elem = this.toplevel;
+    }
+
+    public togglePlayPause(): void {
+        this.isPlaying = !this.isPlaying;
+        this.playPauseButton.setIsPlaying(this.isPlaying);
     }
 
     public setMouseActive(): void {
@@ -2838,7 +2607,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null)
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.timePanel, this.viewerSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
         else
             this.setPanels([this.sceneSelect, this.about]);
     }
