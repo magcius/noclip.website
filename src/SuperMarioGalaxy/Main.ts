@@ -640,7 +640,7 @@ export class ResourceHolder {
             for (let j = 0; j < extensions.length; j++) {
                 const ext = extensions[j];
                 if (file.name.endsWith(ext)) {
-                    const filenameWithoutExtension = file.name.slice(0, -ext.length);
+                    const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
                     table.set(filenameWithoutExtension, constructor(ext, file));
                 }
             }
@@ -1025,7 +1025,7 @@ class StageDataHolder {
         for (let i = 0; i < dir.files.length; i++) {
             // The game skips any actors it doesn't recognize, and includes the sub-zones in the list.
             // We can't easily do that because we have legacy actors, so just skip StageObjInfo for now...
-            if (dir.files[i].name === 'stageobjinfo')
+            if (dir.files[i].name.toLowerCase() === 'stageobjinfo')
                 continue;
 
             this.iterLayer(layerId, callback, dir.files[i].buffer);
