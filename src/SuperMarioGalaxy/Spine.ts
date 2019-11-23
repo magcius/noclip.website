@@ -31,22 +31,11 @@ export function getStep(host: SpineHost): number {
 }
 
 export class Spine<Nerve extends number = number> {
-    private nerveStack: Nerve[] = [];
+    private currentNerve: Nerve;
     private tick: number = 0;
 
-    public pushNerve(nerve: Nerve): void {
-        this.nerveStack.unshift(nerve);
-        this.tick = -1;
-    }
-
-    public popNerve(nerve: Nerve): void {
-        this.nerveStack.shift();
-        this.tick = -1;
-    }
-
     public setNerve(nerve: Nerve): void {
-        this.nerveStack.length = 0;
-        this.nerveStack.push(nerve);
+        this.currentNerve = nerve;
         this.tick = -1;
     }
 
@@ -63,6 +52,6 @@ export class Spine<Nerve extends number = number> {
     }
 
     public getCurrentNerve(): Nerve {
-        return this.nerveStack[0];
+        return this.currentNerve;
     }
 }
