@@ -33,6 +33,7 @@ export enum ColorKind {
 
 export class SceneParams {
     public u_Projection: mat4 = mat4.create();
+    // TODO(jstpierre): Remove this in favor of putting it on the texture itself.
     // u_Misc0[0]
     public u_SceneTextureLODBias: number = 0;
 }
@@ -118,13 +119,18 @@ export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParam
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewportWidth: number, viewportHeight: number): void {
+export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewportWidth: number, viewportHeight: number, useLODBias: boolean= true): void {
     mat4.copy(sceneParams.u_Projection, camera.projectionMatrix);
-    // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
-    // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
-    // make sure textures are sampled correctly...
-    const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
-    sceneParams.u_SceneTextureLODBias = textureLODBias;
+
+    if (useLODBias) {
+        // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
+        // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
+        // make sure textures are sampled correctly...
+        const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
+        sceneParams.u_SceneTextureLODBias = textureLODBias;
+    } else {
+        sceneParams.u_SceneTextureLODBias = 0;
+    }
 }
 
 export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescerCombo {
@@ -464,8 +470,8 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const sceneParams = new SceneParams();
-export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, sceneParamsScratch = sceneParams): void {
-    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, useLODBias: boolean = true, sceneParamsScratch = sceneParams): void {
+    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight, useLODBias);
 
     let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
     const d = renderInst.mapUniformBufferF32(ub_SceneParams);
