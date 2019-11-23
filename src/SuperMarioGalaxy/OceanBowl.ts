@@ -54,7 +54,7 @@ function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void {
 }
 
 function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
-    texProjCameraSceneTex(m, camera, viewport);
+    texProjCameraSceneTex(m, camera, viewport, -1);
     mat4.mul(m, m, camera.viewMatrix);
 }
 
