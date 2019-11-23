@@ -189,7 +189,7 @@ export class SceneNameObjListExecutor {
     }
 
     // NameObjExecuteHolder::registerActor
-    public registerActor(actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
+    public registerActor(actor: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
         const info = new NameObjExecuteInfo();
         info.setConnectInfo(this, actor, movementType, calcAnimType, drawBufferType, drawType);
         actor.nameObjExecuteInfoIndex = this.nameObjExecuteInfos.length;

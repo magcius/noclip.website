@@ -1,13 +1,12 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
 import { computeModelMatrixR } from "../MathHelpers";
 import { AABB } from "../Geometry";
-import { vecKillElement } from "./Actors";
+import { vecKillElement } from "./MiscActor";
 import { NameObj } from "./NameObj";
-import { fallback } from "../util";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx

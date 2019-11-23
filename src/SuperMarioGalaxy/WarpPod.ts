@@ -11,7 +11,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { RARC } from "../j3d/rarc";
 import { assertExists, fallback } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
-import { calcUpVec, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } from "./Actors";
+import { calcUpVec, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } from "./MiscActor";
 import { MathConstants, lerp, normToLength } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";

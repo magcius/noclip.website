@@ -1286,13 +1286,11 @@ export class Penguin extends NPCActor<PenguinNrv> {
         } else if (currentNerve === PenguinNrv.Dive) {
             if (isFirstStep(this)) {
                 startBck(this, `SwimDive`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
             }
 
             if (isBckStopped(this)) {
                 // TODO(jstpierre): TalkCtrl
                 startAction(this, `SwimWaitSurface`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
                 this.setNerve(PenguinNrv.Wait);
             }
         }
@@ -2059,11 +2057,9 @@ export class Air extends LiveActor<AirNrv> {
 
         if (currentNerve === AirNrv.Out && distanceToPlayer < this.distInThresholdSq) {
             if (tryStartAllAnim(this, 'Appear'))
-                this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.In);
         } else if (currentNerve === AirNrv.In && distanceToPlayer > this.distOutThresholdSq) {
             if (tryStartAllAnim(this, 'Disappear'))
-                this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.Out);
         }
     }
@@ -3275,7 +3271,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         if (currentNerve === TicoRailNrv.Wait) {
             if (isFirstStep(this)) {
                 startBck(this, `Turn`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
             }
 
             if (this.isGreaterEqualStepAndRandom(60))
@@ -3283,7 +3278,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         } else if (currentNerve === TicoRailNrv.LookAround) {
             if (isFirstStep(this)) {
                 startBck(this, `Turn`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
             }
 
             calcUpVec(scratchVec3, this);
@@ -3310,7 +3304,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         } else if (currentNerve === TicoRailNrv.MoveSign || currentNerve === TicoRailNrv.MoveSignAndTurn) {
             if (isFirstStep(this)) {
                 startBck(this, `Spin`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
 
                 if (currentNerve === TicoRailNrv.MoveSignAndTurn)
                     reverseRailDirection(this);
@@ -3328,7 +3321,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         } else if (currentNerve === TicoRailNrv.Move) {
             if (isFirstStep(this)) {
                 startBck(this, `Wait`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
             }
 
             const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, 0, 200, 15);
@@ -3340,7 +3332,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         } else if (currentNerve === TicoRailNrv.Stop) {
             if (isFirstStep(this)) {
                 startBck(this, `Spin`);
-                this.modelInstance!.animationController.setPhaseToCurrent();
             }
 
             const duration = getBckFrameMax(this);

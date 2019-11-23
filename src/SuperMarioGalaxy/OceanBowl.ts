@@ -16,12 +16,13 @@ import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketPar
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType } from "./NameObj";
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
+import { LiveActor, ZoneAndLayer, makeMtxTRFromActor } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { initDefaultPos, connectToScene, loadBTIData } from "./ActorUtil";
+import { calcActorAxis } from "./MiscActor";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -58,7 +59,7 @@ function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewp
     mat4.mul(m, m, camera.viewMatrix);
 }
 
-const scratchMatrix = mat4.create();
+const scratchVec3 = vec3.create();
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 export class OceanBowl extends LiveActor {
@@ -83,12 +84,16 @@ export class OceanBowl extends LiveActor {
     private tex1Trans = vec2.create();
     private tex2Trans = vec2.create();
     private tex4Scale = 0.04;
+    private axisX = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_BOWL);
         initDefaultPos(sceneObjHolder, this, infoIter);
+        calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
 
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
@@ -100,17 +105,22 @@ export class OceanBowl extends LiveActor {
         this.mask = loadBTIData(sceneObjHolder, waterWaveArc, `Mask.bti`);
     }
 
-    public initPoints(device: GfxDevice, cache: GfxRenderCache): void {
-        const m = scratchMatrix;
+    public isInWater(v: vec3): boolean {
+        vec3.sub(scratchVec3, this.translation, v);
 
-        computeModelMatrixSRT(m,
-            1, 1, 1,
-            this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2]);
+        const mag = vec3.squaredLength(scratchVec3);
+        const radius = this.scale[0] * 100;
+        const radiusSq = radius * radius;
+        if (mag < radiusSq) {
+            const dot = vec3.dot(scratchVec3, this.axisY);
+            if (dot < 0.0)
+                return true;
+        }
 
-        const axisX = vec3.fromValues(m[0], m[4], m[8]);
-        const axisZ = vec3.fromValues(m[2], m[6], m[10]);
+        return false;
+    }
 
+    private initPoints(device: GfxDevice, cache: GfxRenderCache): void {
         // The original code uses a grid of 25x25 surrounding the player camera, spaced 200 units apart.
         // We use a grid big enough to cover scaleX * 100 units.
         const gridRadius = Math.ceil(this.scale[0]) * 100;
@@ -128,8 +138,8 @@ export class OceanBowl extends LiveActor {
 
                 const point = new OceanBowlPoint();
                 vec3.copy(point.gridPosition, this.translation);
-                vec3.scaleAndAdd(point.gridPosition, point.gridPosition, axisX, scaleX);
-                vec3.scaleAndAdd(point.gridPosition, point.gridPosition, axisZ, scaleZ);
+                vec3.scaleAndAdd(point.gridPosition, point.gridPosition, this.axisX, scaleX);
+                vec3.scaleAndAdd(point.gridPosition, point.gridPosition, this.axisZ, scaleZ);
                 const dist = clamp((gridRadius - vec3.distance(point.gridPosition, this.translation)) / 500, 0, 1);
                 point.heightScale = dist;
                 this.points.push(point);

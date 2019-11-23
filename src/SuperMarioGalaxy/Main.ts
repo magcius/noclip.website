@@ -30,11 +30,12 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder } from './Actors';
+import { NPCDirector, AirBubbleHolder } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
+import { WaterAreaHolder } from './MiscMap';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -756,6 +757,7 @@ class CaptureSceneDirector {
 
 export const enum SceneObj {
     AIR_BUBBLE_HOLDER = 0x39,
+    WATER_AREA_HOLDER = 0x62,
 }
 
 export class SceneObjHolder {
@@ -771,6 +773,7 @@ export class SceneObjHolder {
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
+    public waterAreaHolder: WaterAreaHolder | null = null;
     public captureSceneDirector = new CaptureSceneDirector();
 
     // This is technically stored outside the SceneObjHolder, separately
@@ -786,12 +789,16 @@ export class SceneObjHolder {
     public getObj(sceneObj: SceneObj): any | null {
         if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             return this.airBubbleHolder;
+        else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
+            return this.waterAreaHolder;
         return null;
     }
 
     public newEachObj(sceneObj: SceneObj): void {
         if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
+        else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
+            this.waterAreaHolder = new WaterAreaHolder(this);
     }
 
     public destroy(device: GfxDevice): void {

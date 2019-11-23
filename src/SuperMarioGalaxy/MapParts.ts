@@ -8,7 +8,7 @@ import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, isRailGoingToEnd, reverseRailDirection, moveCoordAndFollowTrans, getRailCoordSpeed, getCurrentRailPointNo, getRailPartLength, setRailCoordSpeed, moveCoordToStartPos } from './Actors';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, isRailGoingToEnd, reverseRailDirection, moveCoordAndFollowTrans, getRailCoordSpeed, getCurrentRailPointNo, getRailPartLength, setRailCoordSpeed, moveCoordToStartPos } from './MiscActor';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 
