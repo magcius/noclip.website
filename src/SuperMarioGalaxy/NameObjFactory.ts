@@ -567,6 +567,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("RunawayRabbitCollect"),
     N("GroupSwitchWatcher"),
     N("BlueChipGroup"),
+    N("RockCreator"),
 
     // Cutscenes
     N("OpeningDemoObj"),
@@ -577,6 +578,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("SimpleDemoExecutor"),
     N("DemoGroup"),
     N("DemoSubGroup"),
+
+    // Need full impl
+    N("GhostPlayer"),
 
     // Ugly actors, hide for now until we have a full impl.
     N("ElectricRail"),
@@ -607,6 +611,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("SwitchSphere"),
     N("SwitchCylinder"),
 
+    N("ClipAreaSphere"),
     N("CameraArea"),
     N("CubeCameraBowl"),
     N("CubeCameraBox"),
@@ -623,6 +628,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("SoundEmitter"),
     N("SoundEmitterCube"),
     N("SoundEmitterSphere"),
+    N("PlayerSeCylinder"),
     N("ViewGroupCtrlArea"),
     N("ViewGroupCtrlCube"),
     N("PullBackArea"),
@@ -660,10 +666,17 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("StoryBookAreaText"),
     N("StoryBookAreaWarp"),
     N("SlopeRunningCancelArea"),
+    N("BeeWallShortDistAreaCube"),
+    N("EffectCylinder"),
+    N("ExtraWallCheckCylinder"),
+    N("DodoryuClosedCylinder"),
 
     // Areas
     E("LightCtrlCube",              createLightCtrlCube),
     E("LightCtrlCylinder",          createLightCtrlCylinder),
+
+    // Points
+    N("IronCannonLauncherPoint"),
 ];
 
 export function getNameObjFactoryTableEntry(objName: string, table: NameObjFactoryTableEntry[] = ActorTable): NameObjFactoryTableEntry | null {

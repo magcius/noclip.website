@@ -1040,7 +1040,7 @@ class StageDataHolder {
             if (placementDir !== null)
                 this.iterPlacementDir(i, callback, placementDir);
 
-            const mapPartsDir = this.zoneArchive.findDir(`jmp/MapPartsDir/${layerDirName}`);
+            const mapPartsDir = this.zoneArchive.findDir(`jmp/MapParts/${layerDirName}`);
             if (mapPartsDir !== null)
                 this.iterPlacementDir(i, callback, mapPartsDir);
         }

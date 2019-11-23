@@ -61,7 +61,7 @@ export class BckCtrl {
 
     private find(bckName: string): BckCtrlData | null {
         for (let i = 0; i < this.bckCtrlDatas.length; i++)
-            if (this.bckCtrlDatas[i].Name === bckName)
+            if (this.bckCtrlDatas[i].Name.toLowerCase() === bckName.toLowerCase())
                 return this.bckCtrlDatas[i];
         return null;
     }
@@ -215,12 +215,8 @@ export class XanimeCore {
     }
 
     public updateFrame(): void {
-        if (this.freeze) {
-            this.resetJointXform = true;
-            this.freeze = false;
-        } else {
-            this.resetJointXform = false;
-        }
+        this.resetJointXform = this.freeze;
+        this.freeze = false;
     }
 
     public setBck(track: number, ank1: ANK1): void {
@@ -280,6 +276,7 @@ export class XanimePlayer {
     private currentResName: string | null = null;
     private core: XanimeCore;
     private interpoleRatio: number = 0.0;
+    private interpoleFrameCounter: number = 0.0;
 
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
         this.core = new XanimeCore(this.modelInstance.modelData.bmd.jnt1.joints.length);
@@ -336,11 +333,18 @@ export class XanimePlayer {
         if (frameCtrl.speedInFrames === 0.0 && frameCtrl.loopMode !== LoopMode.ONCE_AND_RESET) {
             this.interpoleRatio = 1.0;
             frameCtrl.interpoleFrame = 0;
-        } else if (frameCtrl.interpoleFrame <= 0) {
+        } else if (this.interpoleFrameCounter >= frameCtrl.interpoleFrame) {
             this.interpoleRatio = 1.0;
+            frameCtrl.interpoleFrame = 0;
         } else {
-            this.interpoleRatio += (1.0 - this.interpoleRatio) / frameCtrl.interpoleFrame;
-            frameCtrl.interpoleFrame = Math.max(frameCtrl.interpoleFrame - deltaTimeFrames, 0);
+            // The actual game code does this, which is an exponential slide but with a decreasing k factor.
+            // We use a lerp instead since it works better with deltaTimeFrames-style.
+
+            // this.interpoleRatio += (1.0 - this.interpoleRatio) / frameCtrl.interpoleFrame;
+            // frameCtrl.interpoleFrame = Math.max(frameCtrl.interpoleFrame - deltaTimeFrames, 0);
+
+            this.interpoleFrameCounter += deltaTimeFrames;
+            this.interpoleRatio = this.interpoleFrameCounter / Math.max(frameCtrl.interpoleFrame, 1);
         }
     }
 
@@ -359,6 +363,7 @@ export class XanimePlayer {
 
     public changeInterpoleFrame(v: number): void {
         this.frameCtrl.interpoleFrame = v;
+        this.interpoleFrameCounter = 0;
 
         if (v === 0) {
             this.interpoleRatio = 1.0;
