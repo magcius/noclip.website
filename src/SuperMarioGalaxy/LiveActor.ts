@@ -14,11 +14,10 @@ import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
 
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
-import { assertExists, fallback } from "../util";
+import { assertExists, fallback, assert } from "../util";
 import { RailRider } from "./RailRider";
-import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer } from "./Animation";
+import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck } from "./ActorUtil";
 
@@ -114,7 +113,7 @@ class ActorAnimKeeper {
 
         const brkAnimName = getAnimName(animInfo, animInfo.Brk);
         if (isBrkExist(actor, brkAnimName) && (!animInfo.Brk.IsKeepAnim || !isBrkPlaying(actor, brkAnimName)))
-            startBrk(actor, btkAnimName);
+            startBrk(actor, brkAnimName);
 
         const bpkAnimName = getAnimName(animInfo, animInfo.Bpk);
         if (isBpkExist(actor, bpkAnimName) && (!animInfo.Bpk.IsKeepAnim || !isBpkPlaying(actor, bpkAnimName)))
@@ -122,17 +121,13 @@ class ActorAnimKeeper {
 
         const btpAnimName = getAnimName(animInfo, animInfo.Btp);
         if (isBtpExist(actor, btpAnimName) && (!animInfo.Btp.IsKeepAnim || !isBtpPlaying(actor, btpAnimName)))
-            startBtp(actor, btkAnimName);
+            startBtp(actor, btpAnimName);
 
         const bvaAnimName = getAnimName(animInfo, animInfo.Bva);
         if (isBvaExist(actor, bvaAnimName) && (!animInfo.Bva.IsKeepAnim || !isBvaPlaying(actor, bvaAnimName)))
             startBva(actor, bvaAnimName);
 
         return true;
-    }
-
-    private setBckAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBck(actor, getAnimName(keeperInfo, dataInfo));
     }
 }
 
@@ -145,6 +140,7 @@ export class ModelManager {
     public btpPlayer: BtpPlayer | null = null;
     public bpkPlayer: BrkPlayer | null = null;
     public bvaPlayer: BvaPlayer | null = null;
+    public bckCtrl: BckCtrl | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, objName: string) {
         this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
@@ -167,6 +163,12 @@ export class ModelManager {
             this.bpkPlayer = new BrkPlayer(this.resourceHolder.bpkTable, this.modelInstance);
         if (this.resourceHolder.bvaTable.size > 0)
             this.bvaPlayer = new BvaPlayer(this.resourceHolder.bvaTable, this.modelInstance);
+
+        if (this.resourceHolder.motionTable.size > 0) {
+            this.bckCtrl = this.resourceHolder.getRes(this.resourceHolder.banmtTable, objName);
+            if (this.bckCtrl === null)
+                this.bckCtrl = new BckCtrl();
+        }
     }
 
     public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
@@ -198,6 +200,7 @@ export class ModelManager {
 
     public startBck(name: string): void {
         this.xanimePlayer!.start(name);
+        this.bckCtrl!.changeBckSetting(name, this.xanimePlayer!);
     }
 
     public isBckPlaying(name: string): boolean {

@@ -8,7 +8,7 @@ import { ViewerRenderInput } from "../viewer";
 import { RARC } from "../j3d/rarc";
 import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist } from "./ActorUtil";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./Actors";
 
 // The old actor code, before we started emulating things natively.
@@ -177,9 +177,8 @@ export class NoclipLegacyActorSpawner {
             }
 
             // Apply a random phase to the animation.
-            const ank1Animator = actor.modelInstance!.ank1Animator;
-            if (ank1Animator !== null && ank1Animator.ank1.loopMode === LoopMode.REPEAT)
-                ank1Animator.animationController.phaseFrames += Math.random() * ank1Animator.ank1.duration;
+            if (actor.modelManager!.xanimePlayer !== null)
+                setBckFrameAtRandom(actor);
         }
 
         const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {

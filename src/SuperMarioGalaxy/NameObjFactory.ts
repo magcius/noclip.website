@@ -564,6 +564,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("PurpleCoinCompleteWatcher"),
     N("RunawayRabbitCollect"),
     N("GroupSwitchWatcher"),
+    N("BlueChipGroup"),
 
     // Cutscenes
     N("OpeningDemoObj"),
@@ -577,23 +578,72 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("ElectricRail"),
     N("ElectricRailMoving"),
 
-    // Stuff we don't care about (yet?)
+    // Points
+    N("PowerStarAppearPoint"),
+
+    // Gravity
+    N("GlobalConeGravity"),
+    N("GlobalCubeGravity"),
+    N("GlobalDiskGravity"),
+    N("GlobalDiskTorusGravity"),
+    N("GlobalPointGravity"),
+    N("GlobalPlaneGravity"),
+    N("GlobalPlaneGravityInBox"),
+    N("GlobalPlaneGravityInCylinder"),
+    N("GlobalSegmentGravity"),
+    N("GlobalWireGravity"),
+
+    // Other Areas
+    N("WaterCube"),
+    N("WaterCylinder"),
+    N("WaterSphere"),
+
+    N("SwitchCube"),
+    N("SwitchSphere"),
+    N("SwitchCylinder"),
+
+    N("CubeCameraBowl"),
     N("CubeCameraBox"),
     N("CubeCameraCylinder"),
+    N("CubeCameraSphere"),
+    N("BloomCube"),
+    N("SimpleBloomCube"),
+    N("MessageAreaCube"),
+    N("MessageAreaCylinder"),
+    N("AudioEffectCube"),
+    N("SoundEmitter"),
+    N("SoundEmitterCube"),
+    N("SoundEmitterSphere"),
     N("DemoGroup"),
     N("DemoSubGroup"),
-    N("SoundEmitter"),
-    N("LensFlare"),
     N("CelestrialSphere"),
     N("AstroOverlookAreaCylinder"),
     N("ViewGroupCtrlCube"),
     N("PullBackCube"),
     N("PullBackCylinder"),
     N("AstroChangeStageCube"),
-
-    // Gravity
-    N("GlobalPointGravity"),
-    N("GlobalPlaneGravityInBox"),
+    N("RasterScrollCube"),
+    N("ChangeBgmCube"),
+    N("DeathCube"),
+    N("CollisionArea"),
+    N("ForbidTriangleJumpCube"),
+    N("MirrorAreaCube"),
+    N("FallsCube"),
+    N("RestartCube"),
+    N("NonSleepCube"),
+    N("DepthOfFieldCube"),
+    N("ShootingStarArea"),
+    N("GlaringLightAreaCylinder"),
+    N("LensFlareArea"),
+    N("BigBubbleCameraBox"),
+    N("BigBubbleCameraCylinder"),
+    N("BigBubbleMoveLimitterPlane"),
+    N("BigBubbleMoveLimitterCylinder"),
+    N("PlaneCollisionCube"),
+    N("PlaneModeCube"),
+    N("HazeCube"),
+    N("HipDropGuidanceCube"),
+    N("SpinGuidanceCube"),
 
     // Areas
     E("LightCtrlCube",              createLightCtrlCube),

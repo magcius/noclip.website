@@ -70,6 +70,8 @@ const nameTable = [
     'PlanetLight0PosX', 'PlanetLight0PosY', 'PlanetLight0PosZ', 'PlanetLight0ColorR', 'PlanetLight0ColorG', 'PlanetLight0ColorB', 'PlanetLight0ColorA', 'PlanetLight0FollowCamera',
     'PlanetLight1PosX', 'PlanetLight1PosY', 'PlanetLight1PosZ', 'PlanetLight1ColorR', 'PlanetLight1ColorG', 'PlanetLight1ColorB', 'PlanetLight1ColorA', 'PlanetLight1FollowCamera',
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
+
+    'attribute',
 ];
 
 const hashLookup = new Map<number, string>();
@@ -203,11 +205,9 @@ export function getEntriesWithField<T extends BcsvValue>(bcsv: Bcsv, name: strin
     return { fields, records };
 }
 
-export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string): T | null;
-export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T): T;
-export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T | null = null): T | null {
+export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string): T | null {
     const index = getFieldIndexFromName(bcsv, name);
     if (index === -1)
-        return fallback;
+        return null;
     return record[index] as T;
 }

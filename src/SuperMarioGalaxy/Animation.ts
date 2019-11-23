@@ -1,19 +1,25 @@
 
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
+import { mat4 } from "gl-matrix";
+
 import { assertExists, nullify } from "../util";
+import { computeModelMatrixSRT } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { J3DFrameCtrl, VAF1_getVisibility, entryTexRegAnimator, removeTexRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, ANK1Animator } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { ResTable } from "./Main";
+
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { J3DFrameCtrl, VAF1_getVisibility, entryTexRegAnimator, removeTexRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+
+import { JMapInfoIter, createCsvParser } from "./JMapInfo";
+import { ResTable } from "./Main";
 
 export class BckCtrlData {
     public Name: string = '';
     public PlayFrame = -1;
     public StartFrame = -1;
     public EndFrame = -1;
+    public RepeatFrame = -1;
     public Interpole = -1;
-    public Attribute = -1;
+    public Attribute = 0xFF;
 
     public setFromAnmt(infoIter: JMapInfoIter): void {
         this.Name = assertExists(infoIter.getValueString(`name`));
@@ -21,7 +27,9 @@ export class BckCtrlData {
         this.StartFrame = assertExists(infoIter.getValueNumber('start_frame'));
         this.EndFrame = assertExists(infoIter.getValueNumber('end_frame'));
         this.Interpole = assertExists(infoIter.getValueNumber('interpole'));
-        this.Attribute = assertExists(infoIter.getValueNumber('attribute'));
+        const attribute = assertExists(infoIter.getValueNumber('attribute'));
+        if (attribute > -1)
+            this.Attribute = attribute;
     }
 }
 
@@ -60,14 +68,47 @@ export class BckCtrl {
 
     public changeBckSetting(bckName: string, xanimePlayer: XanimePlayer): void {
         const bckCtrlData = this.find(bckName);
-        if (bckCtrlData !== null)
-            reflectBckCtrlData(bckCtrlData, xanimePlayer);
-        else
-            reflectBckCtrlData(this.defaultBckCtrlData, xanimePlayer);
+        if (bckCtrlData !== null) {
+            if (bckCtrlData.Interpole > -1 || bckCtrlData.PlayFrame > -1 || bckCtrlData.StartFrame > -1 ||
+                bckCtrlData.EndFrame > -1 || bckCtrlData.RepeatFrame > -1 || bckCtrlData.Attribute !== 0xFF) {
+                reflectBckCtrlData(bckCtrlData, xanimePlayer);
+                return;
+            }
+        }
+
+        reflectBckCtrlData(this.defaultBckCtrlData, xanimePlayer);
     }
 }
 
 function reflectBckCtrlData(bckCtrlData: BckCtrlData, xanimePlayer: XanimePlayer): void {
+    const frameCtrl = xanimePlayer.frameCtrl;
+
+    if (bckCtrlData.StartFrame > -1 && bckCtrlData.StartFrame < frameCtrl.endFrame) {
+        frameCtrl.startFrame = bckCtrlData.StartFrame;
+        frameCtrl.currentTimeInFrames = bckCtrlData.StartFrame;
+        frameCtrl.repeatStartFrame = bckCtrlData.StartFrame;
+    }
+
+    if (bckCtrlData.EndFrame > -1 && bckCtrlData.EndFrame < frameCtrl.endFrame) {
+        frameCtrl.endFrame = bckCtrlData.EndFrame;
+    }
+
+    if (bckCtrlData.RepeatFrame > -1 && bckCtrlData.RepeatFrame < frameCtrl.endFrame) {
+        frameCtrl.repeatStartFrame = bckCtrlData.RepeatFrame;
+    }
+
+    if (bckCtrlData.PlayFrame > -1) {
+        const speed = bckCtrlData.PlayFrame !== 0 ? (frameCtrl.endFrame - frameCtrl.startFrame) / bckCtrlData.PlayFrame : 0;
+        xanimePlayer.changeSpeed(speed);
+    }
+
+    if (bckCtrlData.Interpole > -1) {
+        xanimePlayer.changeInterpoleFrame(bckCtrlData.Interpole);
+    }
+
+    if (bckCtrlData.Attribute !== 0xFF) {
+        frameCtrl.loopMode = bckCtrlData.Attribute;
+    }
 }
 
 export function getRes<T>(table: ResTable<T>, name: string): T | null {
@@ -117,17 +158,46 @@ export abstract class AnmPlayerBase<T extends AnimationBase> {
     }
 }
 
+export class XanimeCore {
+    constructor(public frameCtrl: J3DFrameCtrl, public ank1: ANK1) {
+    }
+
+    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+        const animFrame = this.frameCtrl.currentTimeInFrames;
+        const entry = this.ank1.jointAnimationEntries[i];
+
+        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+        const translationX = sampleAnimationData(entry.translationX, animFrame);
+        const translationY = sampleAnimationData(entry.translationY, animFrame);
+        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
+}
+
 export class XanimePlayer extends AnmPlayerBase<ANK1> {
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 
     public startAnimation(): void {
-        this.modelInstance.bindANK1(this.currentRes!);
+        this.modelInstance.jointMatrixCalc = new XanimeCore(this.frameCtrl, this.currentRes!);
     }
 
     public stopAnimation(): void {
-        this.modelInstance.bindANK1(null);
+        // this.modelInstance.jointMatrixCalc = new XanimeCore(this.frameCtrl, this.currentRes!);
+    }
+
+    public changeSpeed(v: number): void {
+        this.frameCtrl.speedInFrames = v;
+    }
+
+    public changeInterpoleFrame(v: number): void {
+        // this.frameCtrl.interpole = v;
     }
 }
 

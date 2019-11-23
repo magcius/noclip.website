@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt } from './ActorUtil';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -342,14 +342,6 @@ function setClippingFar(f: number): number {
 
 export function isEqualStageName(sceneObjHolder: SceneObjHolder, stageName: string): boolean {
     return sceneObjHolder.scenarioData.getMasterZoneFilename() === stageName;
-}
-
-export function getRandomFloat(min: number, max: number): number {
-    return ((Math.random() * (max - min)) + min);
-}
-
-export function getRandomInt(min: number, max: number): number {
-    return getRandomFloat(min, max) | 0;
 }
 
 function isHalfProbability(): boolean {
@@ -1188,6 +1180,8 @@ export class Kinopio extends NPCActor {
             }
         }
 
+        setBckFrameAtRandom(this);
+
         // Bind the color change animation.
         startBrk(this, 'ColorChange');
         setBrkFrameAndStop(this, fallback(getJMapInfoArg1(infoIter), 0));
@@ -1998,6 +1992,7 @@ export class Tico extends NPCActor {
         }
 
         startAction(this, 'Wait');
+        setBckFrameAtRandom(this);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -2620,9 +2615,10 @@ class Fish extends LiveActor<FishNrv> {
                 this.setNerve(FishNrv.Approach);
         }
 
-        // TODO(jstpierre): setBckRate
-
         vec3.scale(this.velocity, this.velocity, 0.95);
+
+        setBckRate(this, 0.2 * vec3.length(this.velocity));
+
         if (isNearZeroVec3(this.direction, 0.001)) {
             if (isNearZeroVec3(this.velocity, 0.001)) {
                 vec3.set(this.direction, 1, 0, 0);

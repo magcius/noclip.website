@@ -1015,8 +1015,14 @@ class StageDataHolder {
     }
 
     private iterPlacementDir(layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
-        for (let i = 0; i < dir.files.length; i++)
+        for (let i = 0; i < dir.files.length; i++) {
+            // The game skips any actors it doesn't recognize, and includes the sub-zones in the list.
+            // We can't easily do that because we have legacy actors, so just skip StageObjInfo for now...
+            if (dir.files[i].name === 'stageobjinfo')
+                continue;
+
             this.iterLayer(layerId, callback, dir.files[i].buffer);
+        }
     }
 
     public iterPlacement(callback: LayerObjInfoCallback): void {
@@ -1036,7 +1042,7 @@ class StageDataHolder {
     public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
-            const stageObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/StageObjInfo`);
+            const stageObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/StageObjInfo`);
 
             if (stageObjInfo === null)
                 continue;

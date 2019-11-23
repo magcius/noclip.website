@@ -974,8 +974,6 @@ export class J3DModelInstance {
 
     // Animations.
     public animationController = new AnimationController();
-    // TODO(jstpierre): Remove the old Animator interfaces.
-    public ank1Animator: ANK1Animator | null = null;
     public vaf1Animator: VAF1Animator | null = null;
     public jointMatrixCalc: JointMatrixCalc;
 
@@ -1227,8 +1225,6 @@ export class J3DModelInstance {
      * By default, this will default to this instance's own {@member animationController}.
      */
     public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
-        // For public API reasons.
-        this.ank1Animator = ank1 !== null ? bindANK1Animator(animationController, ank1) : null;
         this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
     }
 
