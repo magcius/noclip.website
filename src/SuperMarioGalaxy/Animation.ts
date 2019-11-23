@@ -3,12 +3,9 @@ import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { assertExists, nullify } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { J3DFrameCtrl, VAF1_getVisibility, entryTexRegAnimator, removeTexRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, ANK1Animator } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { ResTable } from "./Main";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-
-interface XanimePlayer {
-}
 
 export class BckCtrlData {
     public Name: string = '';
@@ -80,6 +77,7 @@ export function getRes<T>(table: ResTable<T>, name: string): T | null {
 export abstract class AnmPlayerBase<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
     public currentRes: T | null = null;
+    private currentResName: string | null = null;
 
     constructor(public resTable: ResTable<T>) {
     }
@@ -96,6 +94,7 @@ export abstract class AnmPlayerBase<T extends AnimationBase> {
         const res = assertExists(getRes(this.resTable, name));
         if (this.currentRes !== res) {
             this.currentRes = res;
+            this.currentResName = name.toLowerCase();
             this.startAnimation();
         }
 
@@ -112,38 +111,23 @@ export abstract class AnmPlayerBase<T extends AnimationBase> {
         if (this.currentRes !== null)
             this.frameCtrl.update(deltaTimeFrame);
     }
+
+    public isPlaying(name: string): boolean {
+        return this.currentResName === name;
+    }
 }
 
-export class BckPlayer extends AnmPlayerBase<ANK1> {
+export class XanimePlayer extends AnmPlayerBase<ANK1> {
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
-        super(resTable);
-    }
-}
-
-export class BvaPlayer extends AnmPlayerBase<VAF1> {
-    constructor(public resTable: ResTable<VAF1>, private modelInstance: J3DModelInstance) {
-        super(resTable);
-    }
-
-    public calc(): void {
-        if (this.currentRes !== null) {
-            for (let i = 0; i < this.modelInstance.shapeInstances.length; i++)
-                this.modelInstance.shapeInstances[i].visible = VAF1_getVisibility(this.currentRes, i, this.frameCtrl.currentTimeInFrames);
-        }
-    }
-}
-
-export class BrkPlayer extends AnmPlayerBase<TRK1> {
-    constructor(public resTable: ResTable<TRK1>, private modelInstance: J3DModelInstance) {
         super(resTable);
     }
 
     public startAnimation(): void {
-        entryTexRegAnimator(this.modelInstance, this.currentRes!, this.frameCtrl);
+        this.modelInstance.bindANK1(this.currentRes!);
     }
 
     public stopAnimation(): void {
-        removeTexRegAnimator(this.modelInstance, this.currentRes!);
+        this.modelInstance.bindANK1(null);
     }
 }
 
@@ -161,6 +145,20 @@ export class BtkPlayer extends AnmPlayerBase<TTK1> {
     }
 }
 
+export class BrkPlayer extends AnmPlayerBase<TRK1> {
+    constructor(public resTable: ResTable<TRK1>, private modelInstance: J3DModelInstance) {
+        super(resTable);
+    }
+
+    public startAnimation(): void {
+        entryTexRegAnimator(this.modelInstance, this.currentRes!, this.frameCtrl);
+    }
+
+    public stopAnimation(): void {
+        removeTexRegAnimator(this.modelInstance, this.currentRes!);
+    }
+}
+
 export class BtpPlayer extends AnmPlayerBase<TPT1> {
     constructor(public resTable: ResTable<TPT1>, private modelInstance: J3DModelInstance) {
         super(resTable);
@@ -172,5 +170,18 @@ export class BtpPlayer extends AnmPlayerBase<TPT1> {
 
     public stopAnimation(): void {
         removeTexNoAnimator(this.modelInstance, this.currentRes!);
+    }
+}
+
+export class BvaPlayer extends AnmPlayerBase<VAF1> {
+    constructor(public resTable: ResTable<VAF1>, private modelInstance: J3DModelInstance) {
+        super(resTable);
+    }
+
+    public calc(): void {
+        if (this.currentRes !== null) {
+            for (let i = 0; i < this.modelInstance.shapeInstances.length; i++)
+                this.modelInstance.shapeInstances[i].visible = VAF1_getVisibility(this.currentRes, i, this.frameCtrl.currentTimeInFrames);
+        }
     }
 }

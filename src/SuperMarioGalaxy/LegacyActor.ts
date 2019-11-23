@@ -1,14 +1,14 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import { assertExists, hexzero } from "../util";
-import { LiveActor, ZoneAndLayer, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist, dynamicSpawnZoneAndLayer } from "./LiveActor";
+import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
 import { RARC } from "../j3d/rarc";
 import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isExistBrk, startBrk, setBrkFrameAndStop, isExistBtk, startBtk, setBtkFrameAndStop, isExistBtp, startBtp, setBtpFrameAndStop } from "./ActorUtil";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./Actors";
 
 // The old actor code, before we started emulating things natively.
@@ -144,13 +144,13 @@ export class NoclipLegacyActorSpawner {
                     if (animOptions.bck !== undefined)
                         startBck(actor, animOptions.bck.slice(0, -4));
                     if (animOptions.brk !== undefined)
-                        startBrkIfExist(actor, animOptions.brk.slice(0, -4));
+                        startBrk(actor, animOptions.brk.slice(0, -4));
                     if (animOptions.btk !== undefined)
-                        startBtkIfExist(actor, animOptions.btk.slice(0, -4));
+                        startBtk(actor, animOptions.btk.slice(0, -4));
                 } else {
                     // Look for "Wait" animation first, then fall back to the first animation.
                     let hasAnim = false;
-                    hasAnim = startBck(actor, 'Wait') || hasAnim;
+                    hasAnim = startBckIfExist(actor, 'Wait') || hasAnim;
                     hasAnim = startBrkIfExist(actor, 'Wait') || hasAnim;
                     hasAnim = startBtkIfExist(actor, 'Wait') || hasAnim;
                     if (!hasAnim) {
@@ -164,14 +164,14 @@ export class NoclipLegacyActorSpawner {
                         const brkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
                         if (brkFile !== null) {
                             const brkFilename = brkFile.name.slice(0, -4);
-                            startBckIfExist(actor, brkFilename);
+                            startBrkIfExist(actor, brkFilename);
                         }
 
                         const btkFile = actor.resourceHolder.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
                         if (btkFile !== null) {
                             const btkFilename = btkFile.name.slice(0, -4);
                             startBtkIfExist(actor, btkFilename);
-                        }            
+                        }
                     }
                 }
             }
@@ -183,17 +183,17 @@ export class NoclipLegacyActorSpawner {
         }
 
         const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {
-            if (isExistBrk(actor, 'ColorChange')) {
+            if (isBrkExist(actor, 'ColorChange')) {
                 startBrk(actor, 'ColorChange');
                 setBrkFrameAndStop(actor, frame);
             }
 
-            if (isExistBtk(actor, 'TexChange')) {
+            if (isBtkExist(actor, 'TexChange')) {
                 startBtk(actor, 'TexChange');
                 setBtkFrameAndStop(actor, frame);
             }
 
-            if (isExistBtp(actor, 'TexChange')) {
+            if (isBtpExist(actor, 'TexChange')) {
                 startBtp(actor, 'TexChange');
                 setBtpFrameAndStop(actor, frame);
             }
@@ -325,7 +325,7 @@ export class NoclipLegacyActorSpawner {
                 break;
             case 'TicoShop':
                 spawnGraph(`TicoShop`).then(([node, rarc]) => {
-                    startBvaIfExist(node, 'Small0');
+                    startBva(node, 'Small0');
                 });
                 break;
 
@@ -635,10 +635,10 @@ export class NoclipLegacyActorSpawner {
         modelMatrix[10] = f[2]*2;
 
         const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `MiniRouteLine`, 'MiniRouteLine', modelMatrix);
-        startBvaIfExist(obj, 'Open');
+        startBva(obj, 'Open');
         if (isPink)
-            startBrkIfExist(obj, 'TicoBuild');
+            startBrk(obj, 'TicoBuild');
         else
-            startBrkIfExist(obj, 'Normal');
+            startBrk(obj, 'Normal');
     }
 }

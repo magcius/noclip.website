@@ -4,7 +4,7 @@ import { colorNewFromRGBA8, colorCopy, Color } from "../Color";
 import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { getVertexAttribLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
-import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
+import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, getJMapInfoArg1, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoGroupId, getJMapInfoBool } from "./JMapInfo";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
@@ -20,7 +20,7 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { Camera } from "../Camera";
 import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { setLoopMode, initDefaultPos, loadBTIData, connectToScene } from "./ActorUtil";
+import { setLoopMode, initDefaultPos, loadBTIData, connectToScene, startBrk, startBck } from "./ActorUtil";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 
 const warpPodColorTable = [
@@ -237,7 +237,7 @@ export class WarpPod extends LiveActor {
 
         if (this.visible) {
             startBck(this, 'Active');
-            startBrkIfExist(this, 'Active');
+            startBrk(this, 'Active');
             // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
             setLoopMode(this, LoopMode.ONCE);
         }
@@ -249,7 +249,7 @@ export class WarpPod extends LiveActor {
 
         if (inactive) {
             startBck(this, 'Wait');
-            startBrkIfExist(this, 'Wait');
+            startBrk(this, 'Wait');
         } else {
             this.glowEffect(sceneObjHolder);
         }

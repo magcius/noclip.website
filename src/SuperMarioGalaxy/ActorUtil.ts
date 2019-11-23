@@ -2,7 +2,7 @@
 // Utilities for various actor implementations.
 
 import { LiveActor, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
-import { LoopMode, ANK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { DrawType, DrawBufferType, CalcAnimType, MovementType } from "./NameObj";
@@ -151,24 +151,32 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, acto
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2A, -1, -1, -1);
 }
 
-export function isExistBtk(actor: LiveActor, name: string): boolean {
+export function isBckExist(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.motionTable, name) !== null;
+}
+
+export function isBtkExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.btkTable, name) !== null;
 }
 
-export function isExistBrk(actor: LiveActor, name: string): boolean {
+export function isBrkExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.brkTable, name) !== null;
 }
 
-export function isExistBtp(actor: LiveActor, name: string): boolean {
+export function isBtpExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.btpTable, name) !== null;
 }
 
-export function isExistBpk(actor: LiveActor, name: string): boolean {
+export function isBpkExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.bpkTable, name) !== null;
 }
 
-export function isExistBva(actor: LiveActor, name: string): boolean {
+export function isBvaExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.bvaTable, name) !== null;
+}
+
+export function startBck(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBck(name);
 }
 
 export function startBtk(actor: LiveActor, name: string): void {
@@ -189,6 +197,54 @@ export function startBpk(actor: LiveActor, name: string): void {
 
 export function startBva(actor: LiveActor, name: string): void {
     actor.modelManager!.startBva(name);
+}
+
+export function startBckIfExist(actor: LiveActor, animationName: string): boolean {
+    const bck = actor.resourceHolder.getRes(actor.resourceHolder.motionTable, animationName);
+    if (bck !== null)
+        actor.modelManager!.startBck(animationName);
+    return bck !== null;
+}
+
+export function startBtkIfExist(actor: LiveActor, animationName: string): boolean {
+    const btk = actor.resourceHolder.getRes(actor.resourceHolder.btkTable, animationName);
+    if (btk !== null)
+        actor.modelManager!.startBtk(animationName);
+    return btk !== null;
+}
+
+export function startBrkIfExist(actor: LiveActor, animationName: string): boolean {
+    const brk = actor.resourceHolder.getRes(actor.resourceHolder.brkTable, animationName);
+    if (brk !== null)
+        actor.modelManager!.startBrk(animationName);
+    return brk !== null;
+}
+
+export function startBpkIfExist(actor: LiveActor, animationName: string): boolean {
+    const bpk = actor.resourceHolder.getRes(actor.resourceHolder.bpkTable, animationName);
+    if (bpk !== null)
+        actor.modelManager!.startBpk(animationName);
+    return bpk !== null;
+}
+
+export function startBtpIfExist(actor: LiveActor, animationName: string): boolean {
+    const btp = actor.resourceHolder.getRes(actor.resourceHolder.btpTable, animationName);
+    if (btp !== null)
+        actor.modelManager!.startBtp(animationName);
+    return btp !== null;
+}
+
+export function startBvaIfExist(actor: LiveActor, animationName: string): boolean {
+    const bva = actor.resourceHolder.getRes(actor.resourceHolder.bvaTable, animationName);
+    if (bva !== null)
+        actor.modelManager!.startBva(animationName);
+    return bva !== null;
+}
+
+export function setBckFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBckCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
 }
 
 export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
@@ -219,4 +275,44 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     const ctrl = actor.modelManager!.getBvaCtrl();
     ctrl.currentTimeInFrames = frame;
     ctrl.speedInFrames = 0.0;
+}
+
+export function isBckPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBckPlaying(name);
+}
+
+export function isBtkPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBtkPlaying(name);
+}
+
+export function isBrkPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBrkPlaying(name);
+}
+
+export function isBtpPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBtpPlaying(name);
+}
+
+export function isBpkPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBpkPlaying(name);
+}
+
+export function isBvaPlaying(actor: LiveActor, name: string): boolean {
+    return actor.modelManager!.isBvaPlaying(name);
+}
+
+export function startAction(actor: LiveActor, animationName: string): void {
+    if (actor.actorAnimKeeper === null || !actor.actorAnimKeeper.start(actor, animationName))
+        tryStartAllAnim(actor, animationName);
+}
+
+export function tryStartAllAnim(actor: LiveActor, animationName: string): boolean {
+    let anyPlayed = false;
+    anyPlayed = startBckIfExist(actor, animationName) || anyPlayed;
+    anyPlayed = startBtkIfExist(actor, animationName) || anyPlayed;
+    anyPlayed = startBrkIfExist(actor, animationName) || anyPlayed;
+    anyPlayed = startBpkIfExist(actor, animationName) || anyPlayed;
+    anyPlayed = startBtpIfExist(actor, animationName) || anyPlayed;
+    anyPlayed = startBvaIfExist(actor, animationName) || anyPlayed;
+    return anyPlayed;
 }

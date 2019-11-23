@@ -5,22 +5,21 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3 } from '../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../Color';
 import { ColorKind } from '../gx/gx_render';
-import { BTK, BRK, LoopMode, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType } from './NameObj';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
-import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
+import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isExistBtk, isExistBtp, startBtp, setBtpFrameAndStop, setBtkFrameAndStop } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck } from './ActorUtil';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -371,7 +370,7 @@ function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, 
         return null;
     const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType);
     model.initFixedPositionRelative(null);
-    model.tryStartAllAnim(subModelObjName);
+    tryStartAllAnim(model, subModelObjName);
     return model;
 }
 
@@ -536,19 +535,19 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.rotator)
             this.rotator = new MapPartsRotator(sceneObjHolder, this, infoIter);
 
-        this.tryStartAllAnim(this.objName);
+        tryStartAllAnim(this, this.objName);
         if (initInfo.colorChangeFrame !== -1) {
             startBrk(this, 'ColorChange');
             setBrkFrameAndStop(this, initInfo.colorChangeFrame);
         }
 
         if (initInfo.texChangeFrame !== -1) {
-            if (isExistBtp(this, 'TexChange')) {
+            if (isBtpExist(this, 'TexChange')) {
                 startBtp(this, 'TexChange');
                 setBtpFrameAndStop(this, initInfo.texChangeFrame);
             }
 
-            if (isExistBtk(this, 'TexChange')) {
+            if (isBtkExist(this, 'TexChange')) {
                 startBtk(this, 'TexChange');
                 setBtkFrameAndStop(this, initInfo.texChangeFrame);
             }
@@ -803,7 +802,7 @@ export class PlanetMap extends LiveActor {
         this.initModel(sceneObjHolder, this.name, infoIter);
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
-        this.tryStartAllAnim(this.name);
+        tryStartAllAnim(this, this.name);
         this.tryStartMyEffect(sceneObjHolder);
     }
 
@@ -965,9 +964,8 @@ export class StarPiece extends LiveActor {
 
         this.modelInstance!.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
 
-        const animationController = new AnimationController();
-        animationController.setTimeInFrames(5);
-        this.modelInstance!.bindTTK1(BTK.parse(this.resourceHolder.arc.findFileData(`Gift.btk`)!), animationController);
+        startBtk(this, 'Gift');
+        setBtkFrameAndStop(this, 5);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -991,9 +989,8 @@ export class EarthenPipe extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
 
         const colorFrame = fallback(getJMapInfoArg7(infoIter), 0);
-        const animationController = new AnimationController();
-        animationController.setTimeInFrames(colorFrame);
-        this.modelInstance!.bindTRK1(BRK.parse(this.resourceHolder.arc.findFileData(`EarthenPipe.brk`)!), animationController);
+        startBrk(this, 'EarthenPipe');
+        setBrkFrameAndStop(this, colorFrame);
 
         connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
 
@@ -1018,7 +1015,7 @@ export class EarthenPipe extends LiveActor {
 
         if (this.name === "EarthenPipeInWater") {
             this.pipeStream = createPartsModelMapObj(sceneObjHolder, this, "EarthenPipeStream");
-            this.pipeStream.tryStartAllAnim("EarthenPipeStream");
+            tryStartAllAnim(this.pipeStream, "EarthenPipeStream");
         }
     }
 
@@ -1061,8 +1058,8 @@ export class BlackHole extends LiveActor {
         setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
 
         startBck(this, `BlackHoleRange`);
-        startBtkIfExist(this, `BlackHoleRange`);
-        startBtkIfExist(this.blackHoleModel, `BlackHole`);
+        startBtk(this, `BlackHoleRange`);
+        startBtk(this.blackHoleModel, `BlackHole`);
 
         let rangeScale: number;
         const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
@@ -1114,8 +1111,8 @@ export class PeachCastleGardenPlanet extends MapObjActor {
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
-        this.tryStartAllAnim('Before');
-        this.tryStartAllAnim('PeachCastleGardenPlanet');
+        tryStartAllAnim(this, 'Before');
+        tryStartAllAnim(this, 'PeachCastleGardenPlanet');
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
@@ -1132,7 +1129,7 @@ export class HatchWaterPlanet extends LiveActor {
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        this.tryStartAllAnim('HatchWaterPlanet');
+        tryStartAllAnim(this, 'HatchWaterPlanet');
         setLoopMode(this, LoopMode.ONCE);
     }
 }
@@ -1156,38 +1153,38 @@ export class Kinopio extends NPCActor {
 
         const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
         if (arg2 === 0) {
-            this.startAction(`SpinWait1`);
+            startAction(this, `SpinWait1`);
         } else if (arg2 === 1) {
-            this.startAction(`SpinWait2`);
+            startAction(this, `SpinWait2`);
         } else if (arg2 === 2) {
-            this.startAction(`SpinWait3`);
+            startAction(this, `SpinWait3`);
         } else if (arg2 === 3) {
-            this.startAction(`Wait`);
+            startAction(this, `Wait`);
         } else if (arg2 === 4) {
-            this.startAction(`Wait`);
+            startAction(this, `Wait`);
         } else if (arg2 === 5) {
-            this.startAction(`SwimWait`);
+            startAction(this, `SwimWait`);
         } else if (arg2 === 6) {
-            this.startAction(`Pickel`);
+            startAction(this, `Pickel`);
         } else if (arg2 === 7) {
-            this.startAction(`Sleep`);
+            startAction(this, `Sleep`);
         } else if (arg2 === 8) {
-            this.startAction(`Wait`);
+            startAction(this, `Wait`);
         } else if (arg2 === 9) {
-            this.startAction(`KinopioGoodsWeapon`);
+            startAction(this, `KinopioGoodsWeapon`);
         } else if (arg2 === 10) {
-            this.startAction(`Joy`);
+            startAction(this, `Joy`);
         } else if (arg2 === 11) {
-            this.startAction(`Rightened`);
+            startAction(this, `Rightened`);
         } else if (arg2 === 12) {
-            this.startAction(`StarPieceWait`);
+            startAction(this, `StarPieceWait`);
         } else if (arg2 === 13) {
-            this.startAction(`Getaway`);
+            startAction(this, `Getaway`);
         } else if (arg2 === -1) {
             if (itemGoodsIdx === 2) {
-                this.startAction(`WaitPickel`);
+                startAction(this, `WaitPickel`);
             } else {
-                this.startAction(`Wait`);
+                startAction(this, `Wait`);
             }
         }
 
@@ -1224,7 +1221,7 @@ export class Peach extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        this.startAction('Help');
+        startAction(this, 'Help');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1260,19 +1257,19 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
         this.arg0 = fallback(getJMapInfoArg0(infoIter), -1);
         if (this.arg0 === 0) {
-            this.startAction(`SitDown`);
+            startAction(this, `SitDown`);
         } else if (this.arg0 === 1) {
-            this.startAction(`SwimWait`);
+            startAction(this, `SwimWait`);
         } else if (this.arg0 === 2) {
-            this.startAction(`SwimWaitSurface`);
+            startAction(this, `SwimWaitSurface`);
         } else if (this.arg0 === 3) {
-            this.startAction(`SwimWaitSurface`);
+            startAction(this, `SwimWaitSurface`);
         } else if (this.arg0 === 4) {
-            this.startAction(`SwimTurtleTalk`);
+            startAction(this, `SwimTurtleTalk`);
         } else if (this.arg0 === 6) {
-            this.startAction(`Wait`);
+            startAction(this, `Wait`);
         } else {
-            this.startAction(`Wait`);
+            startAction(this, `Wait`);
         }
 
         startBrk(this, 'ColorChange');
@@ -1300,7 +1297,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
             if (isBckStopped(this)) {
                 // TODO(jstpierre): TalkCtrl
-                this.startAction(`SwimWaitSurface`);
+                startAction(this, `SwimWaitSurface`);
                 this.modelInstance!.animationController.setPhaseToCurrent();
                 this.setNerve(PenguinNrv.Wait);
             }
@@ -1327,7 +1324,7 @@ export class PenguinRacer extends NPCActor {
         startBrk(this, 'ColorChange');
         setBrkFrameAndStop(this, arg7);
 
-        this.startAction('RacerWait');
+        startAction(this, 'RacerWait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1353,8 +1350,8 @@ export class TicoComet extends NPCActor {
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
-        this.goods0!.startAction('LeftRotate');
-        this.goods1!.startAction('RightRotate');
+        startAction(this.goods0!, 'LeftRotate');
+        startAction(this.goods1!, 'RightRotate');
 
         startBtk(this, "TicoComet");
         startBva(this, "Small0");
@@ -1362,7 +1359,7 @@ export class TicoComet extends NPCActor {
         startBrk(this, 'Normal');
         setBrkFrameAndStop(this, 0);
 
-        this.startAction('Wait');
+        startAction(this, 'Wait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1387,10 +1384,10 @@ class Coin extends LiveActor {
         const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
         if (isNeedBubble) {
             this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble", vec3.fromValues(0, 70, 0));
-            this.airBubble.tryStartAllAnim("Move");
+            tryStartAllAnim(this, "Move");
         }
 
-        this.tryStartAllAnim('Move');
+        tryStartAllAnim(this, 'Move');
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -1555,11 +1552,11 @@ export class MiniRoutePoint extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
         vec3.copy(this.translation, pointInfo.position);
 
-        this.tryStartAllAnim('Open');
+        tryStartAllAnim(this, 'Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this, 'TicoBuild');
+            startBrk(this, 'TicoBuild');
         else
-            startBrkIfExist(this, 'Normal');
+            startBrk(this, 'Normal');
 
         if (pointInfo.isSmall)
             vec3.set(this.scale, 0.5, 1, 0.5);
@@ -1597,7 +1594,7 @@ export class MiniRouteGalaxy extends LiveActor {
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
-        this.startAction(miniatureName);
+        startAction(this, miniatureName);
         emitEffect(sceneObjHolder, this, miniatureName);
     }
 
@@ -1633,11 +1630,11 @@ export class MiniRoutePart extends LiveActor {
             this.modelInstance!.modelData.shapeData[0].sortKeyBias = 1;
         vec3.copy(this.translation, pointInfo.position);
 
-        this.tryStartAllAnim('Open');
+        tryStartAllAnim(this, 'Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this, 'TicoBuild');
+            startBrk(this, 'TicoBuild');
         else
-            startBrkIfExist(this, 'Normal');
+            startBrk(this, 'Normal');
 
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -1839,7 +1836,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         vec3.scaleAndAdd(this.upVec, this.translation, this.upVec, 300);
 
         hideModel(this);
-        startBtkIfExist(this, "FountainBig");
+        startBtk(this, "FountainBig");
 
         // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
         this.randomPhase = (Math.random() * 300) | 0;
@@ -1950,7 +1947,7 @@ export class AstroCountDownPlate extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
         emitEffect(sceneObjHolder, this, "Light");
 
-        startBrkIfExist(this, "Green");
+        startBrk(this, "Green");
     }
 }
 
@@ -1966,7 +1963,7 @@ export class Butler extends NPCActor {
 
         const location = getJMapInfoArg0(infoIter);
 
-        this.startAction('Wait');
+        startAction(this, 'Wait');
     }
 }
 
@@ -1980,7 +1977,7 @@ export class Rosetta extends NPCActor {
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        this.startAction('WaitA');
+        startAction(this, 'WaitA');
     }
 }
 
@@ -2000,7 +1997,7 @@ export class Tico extends NPCActor {
             setBrkFrameAndStop(this, color);
         }
 
-        this.startAction('Wait');
+        startAction(this, 'Wait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -2023,7 +2020,7 @@ export class Sky extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneSky(sceneObjHolder, this);
 
-        this.tryStartAllAnim(this.name);
+        tryStartAllAnim(this, this.name);
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2055,7 +2052,7 @@ export class Air extends LiveActor<AirNrv> {
         const distOutThreshold = 100 * (20 + thresholdParam);
         this.distOutThresholdSq = distOutThreshold*distOutThreshold;
 
-        this.tryStartAllAnim(getObjectName(infoIter));
+        tryStartAllAnim(this, getObjectName(infoIter));
         this.initNerve(AirNrv.In);
     }
 
@@ -2066,11 +2063,11 @@ export class Air extends LiveActor<AirNrv> {
         const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
 
         if (currentNerve === AirNrv.Out && distanceToPlayer < this.distInThresholdSq) {
-            if (this.tryStartAllAnim('Appear'))
+            if (tryStartAllAnim(this, 'Appear'))
                 this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.In);
         } else if (currentNerve === AirNrv.In && distanceToPlayer > this.distOutThresholdSq) {
-            if (this.tryStartAllAnim('Disappear'))
+            if (tryStartAllAnim(this, 'Disappear'))
                 this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.Out);
         }
@@ -2110,7 +2107,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
 
         calcUpVec(this.axisY, this);
 
-        startBpkIfExist(this, 'ShootingStar');
+        startBpk(this, 'ShootingStar');
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2172,7 +2169,7 @@ export class AstroMapObj extends MapObjActor {
 
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
-        this.tryStartAllAnim('Open');
+        tryStartAllAnim(this, 'Open');
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
 
         if (this.rotator !== null)
@@ -2182,7 +2179,7 @@ export class AstroMapObj extends MapObjActor {
     }
 
     private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
-        this.tryStartAllAnim(name);
+        tryStartAllAnim(this, name);
         if (this.isObjectName('AstroDomeEntranceKitchen'))
             emitEffect(sceneObjHolder, this, 'KitchenSmoke');
         if (isRegisteredEffect(this, name))
@@ -2190,9 +2187,9 @@ export class AstroMapObj extends MapObjActor {
     }
 
     private setStateAlive(sceneObjHolder: SceneObjHolder): void {
-        this.tryStartAllAnim('Revival');
+        tryStartAllAnim(this, 'Revival');
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
-        this.tryStartAllAnim('Open');
+        tryStartAllAnim(this, 'Open');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -2235,7 +2232,7 @@ export class AstroCore extends MapObjActor {
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         // We pick Revival4 because it's the most interesting of the bunch.
-        this.tryStartAllAnim('Revival4');
+        tryStartAllAnim(this, 'Revival4');
     }
 }
 
@@ -2266,12 +2263,12 @@ class ChipBase extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
-        this.tryStartAllAnim('Wait');
+        tryStartAllAnim(this, 'Wait');
 
         const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
         if (isNeedBubble) {
             this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble");
-            this.airBubble.tryStartAllAnim("Move");
+            tryStartAllAnim(this, "Move");
         }
     }
 
@@ -2404,7 +2401,7 @@ export class SurprisedGalaxy extends LiveActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "MiniSurprisedGalaxy");
         connectToSceneMapObj(sceneObjHolder, this);
-        this.startAction('MiniSurprisedGalaxy');
+        startAction(this, 'MiniSurprisedGalaxy');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -3200,7 +3197,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
         const currentNerve = this.getCurrentNerve();
         if (currentNerve === TreasureBoxNrv.Wait) {
             if (this.type === TreasureBoxType.Cracked) {
-                startBrkIfExist(this, `Wait`);
+                startBrk(this, `Wait`);
                 emitEffect(sceneObjHolder, this, `Light`);
             } else if (this.type === TreasureBoxType.Gold) {
                 emitEffect(sceneObjHolder, this, `Gold`);

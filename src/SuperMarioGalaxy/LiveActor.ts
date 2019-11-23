@@ -18,8 +18,9 @@ import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
-import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer } from "./Animation";
+import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer } from "./Animation";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck } from "./ActorUtil";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -73,58 +74,6 @@ class ActorAnimKeeperInfo {
     }
 }
 
-export function startBckIfExist(actor: LiveActor, animationName: string): boolean {
-    const bck = actor.resourceHolder.getRes(actor.resourceHolder.motionTable, animationName);
-    if (bck !== null) {
-        if (animationName.toLowerCase() === 'wait')
-            bck.loopMode = LoopMode.REPEAT;
-        actor.modelInstance!.bindANK1(bck);
-    }
-    return bck !== null;
-}
-
-export function startBtkIfExist(actor: LiveActor, animationName: string): boolean {
-    const btk = actor.resourceHolder.getRes(actor.resourceHolder.btkTable, animationName);
-    if (btk !== null)
-        actor.modelManager!.startBtk(animationName);
-    return btk !== null;
-}
-
-export function startBrkIfExist(actor: LiveActor, animationName: string): boolean {
-    const brk = actor.resourceHolder.getRes(actor.resourceHolder.brkTable, animationName);
-    if (brk !== null)
-        actor.modelManager!.startBrk(animationName);
-    return brk !== null;
-}
-
-export function startBpkIfExist(actor: LiveActor, animationName: string): boolean {
-    const bpk = actor.resourceHolder.getRes(actor.resourceHolder.bpkTable, animationName);
-    if (bpk !== null)
-        actor.modelManager!.startBpk(animationName);
-    return bpk !== null;
-}
-
-export function startBtpIfExist(actor: LiveActor, animationName: string): boolean {
-    const btp = actor.resourceHolder.getRes(actor.resourceHolder.btpTable, animationName);
-    if (btp !== null)
-        actor.modelManager!.startBtp(animationName);
-    return btp !== null;
-}
-
-export function startBvaIfExist(actor: LiveActor, animationName: string): boolean {
-    const bva = actor.resourceHolder.getRes(actor.resourceHolder.bvaTable, animationName);
-    if (bva !== null)
-        actor.modelManager!.startBva(animationName);
-    return bva !== null;
-}
-
-export function startBck(actor: LiveActor, animName: string): boolean {
-    const played = startBckIfExist(actor, animName);
-    if (played && actor.effectKeeper !== null)
-        actor.effectKeeper.changeBck(animName);
-    return played;
-}
-
 class ActorAnimKeeper {
     public keeperInfo: ActorAnimKeeperInfo[] = [];
 
@@ -151,48 +100,46 @@ class ActorAnimKeeper {
 
     public start(actor: LiveActor, animationName: string): boolean {
         animationName = animationName.toLowerCase();
-        const keeperInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
-        if (keeperInfo === undefined)
+        const animInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
+        if (animInfo === undefined)
             return false;
 
-        // TODO(jstpierre): Separate animation controllers for each player.
-        this.setBckAnimation(actor, keeperInfo, keeperInfo.Bck);
-        this.setBtkAnimation(actor, keeperInfo, keeperInfo.Btk);
-        this.setBrkAnimation(actor, keeperInfo, keeperInfo.Brk);
-        this.setBpkAnimation(actor, keeperInfo, keeperInfo.Bpk);
-        this.setBtpAnimation(actor, keeperInfo, keeperInfo.Btp);
-        this.setBvaAnimation(actor, keeperInfo, keeperInfo.Bva);
+        const bckAnimName = getAnimName(animInfo, animInfo.Bck);
+        if (isBckExist(actor, bckAnimName) && (!animInfo.Bck.IsKeepAnim || !isBckPlaying(actor, bckAnimName)))
+            startBck(actor, bckAnimName);
+
+        const btkAnimName = getAnimName(animInfo, animInfo.Btk);
+        if (isBtkExist(actor, btkAnimName) && (!animInfo.Btk.IsKeepAnim || !isBtkPlaying(actor, btkAnimName)))
+            startBtk(actor, btkAnimName);
+
+        const brkAnimName = getAnimName(animInfo, animInfo.Brk);
+        if (isBrkExist(actor, brkAnimName) && (!animInfo.Brk.IsKeepAnim || !isBrkPlaying(actor, brkAnimName)))
+            startBrk(actor, btkAnimName);
+
+        const bpkAnimName = getAnimName(animInfo, animInfo.Bpk);
+        if (isBpkExist(actor, bpkAnimName) && (!animInfo.Bpk.IsKeepAnim || !isBpkPlaying(actor, bpkAnimName)))
+            startBpk(actor, bpkAnimName);
+
+        const btpAnimName = getAnimName(animInfo, animInfo.Btp);
+        if (isBtpExist(actor, btpAnimName) && (!animInfo.Btp.IsKeepAnim || !isBtpPlaying(actor, btpAnimName)))
+            startBtp(actor, btkAnimName);
+
+        const bvaAnimName = getAnimName(animInfo, animInfo.Bva);
+        if (isBvaExist(actor, bvaAnimName) && (!animInfo.Bva.IsKeepAnim || !isBvaPlaying(actor, bvaAnimName)))
+            startBva(actor, bvaAnimName);
+
         return true;
     }
 
     private setBckAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
         startBck(actor, getAnimName(keeperInfo, dataInfo));
     }
-
-    private setBtkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtkIfExist(actor, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBrkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBrkIfExist(actor, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBpkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBpkIfExist(actor, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBtpAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtpIfExist(actor, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBvaAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBvaIfExist(actor, getAnimName(keeperInfo, dataInfo));
-    }
 }
 
 export class ModelManager {
     public resourceHolder: ResourceHolder;
     public modelInstance: J3DModelInstance;
+    public xanimePlayer: XanimePlayer | null = null;
     public btkPlayer: BtkPlayer | null = null;
     public brkPlayer: BrkPlayer | null = null;
     public btpPlayer: BtpPlayer | null = null;
@@ -208,6 +155,8 @@ export class ModelManager {
         this.modelInstance.animationController.fps = FPS;
         this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
 
+        if (this.resourceHolder.motionTable.size > 0)
+            this.xanimePlayer = new XanimePlayer(this.resourceHolder.motionTable, this.modelInstance);
         if (this.resourceHolder.btkTable.size > 0)
             this.btkPlayer = new BtkPlayer(this.resourceHolder.btkTable, this.modelInstance);
         if (this.resourceHolder.brkTable.size > 0)
@@ -229,6 +178,8 @@ export class ModelManager {
     }
 
     public update(deltaTimeFrames: number): void {
+        if (this.xanimePlayer !== null)
+            this.xanimePlayer.update(deltaTimeFrames);
         if (this.btkPlayer !== null)
             this.btkPlayer.update(deltaTimeFrames);
         if (this.brkPlayer !== null)
@@ -241,12 +192,28 @@ export class ModelManager {
             this.bvaPlayer.update(deltaTimeFrames);
     }
 
+    public getBckCtrl(): J3DFrameCtrl {
+        return this.xanimePlayer!.frameCtrl;
+    }
+
+    public startBck(name: string): void {
+        this.xanimePlayer!.start(name);
+    }
+
+    public isBckPlaying(name: string): boolean {
+        return this.xanimePlayer!.isPlaying(name);
+    }
+
     public getBtkCtrl(): J3DFrameCtrl {
         return this.btkPlayer!.frameCtrl;
     }
 
     public startBtk(name: string): void {
         this.btkPlayer!.start(name);
+    }
+
+    public isBtkPlaying(name: string): boolean {
+        return this.btkPlayer!.isPlaying(name);
     }
 
     public getBrkCtrl(): J3DFrameCtrl {
@@ -257,12 +224,20 @@ export class ModelManager {
         this.brkPlayer!.start(name);
     }
 
+    public isBrkPlaying(name: string): boolean {
+        return this.brkPlayer!.isPlaying(name);
+    }
+
     public getBtpCtrl(): J3DFrameCtrl {
         return this.btpPlayer!.frameCtrl;
     }
 
     public startBtp(name: string): void {
         this.btpPlayer!.start(name);
+    }
+
+    public isBtpPlaying(name: string): boolean {
+        return this.btpPlayer!.isPlaying(name);
     }
 
     public getBpkCtrl(): J3DFrameCtrl {
@@ -273,12 +248,20 @@ export class ModelManager {
         this.bpkPlayer!.start(name);
     }
 
+    public isBpkPlaying(name: string): boolean {
+        return this.bpkPlayer!.isPlaying(name);
+    }
+
     public getBvaCtrl(): J3DFrameCtrl {
         return this.bvaPlayer!.frameCtrl;
     }
 
     public startBva(name: string): void {
         this.bvaPlayer!.start(name);
+    }
+
+    public isBvaPlaying(name: string): boolean {
+        return this.bvaPlayer!.isPlaying(name);
     }
 }
 
@@ -461,24 +444,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.spine!.getNerveStep();
     }
 
-    public startAction(animationName: string): void {
-        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this, animationName))
-            this.tryStartAllAnim(animationName);
-    }
-
     public calcAndSetBaseMtxBase(): void {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
-    }
-
-    public tryStartAllAnim(animationName: string): boolean {
-        let anyPlayed = false;
-        anyPlayed = startBck(this, animationName) || anyPlayed;
-        anyPlayed = startBtkIfExist(this, animationName) || anyPlayed;
-        anyPlayed = startBrkIfExist(this, animationName) || anyPlayed;
-        anyPlayed = startBpkIfExist(this, animationName) || anyPlayed;
-        anyPlayed = startBtpIfExist(this, animationName) || anyPlayed;
-        anyPlayed = startBvaIfExist(this, animationName) || anyPlayed;
-        return anyPlayed;
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
