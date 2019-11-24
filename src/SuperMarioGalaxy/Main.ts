@@ -63,6 +63,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
+    public isInteractive = true;
+
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
 
@@ -1184,6 +1186,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
     }
 
+    public patchRenderer(renderer: SMGRenderer): void {
+    }
+
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${this.pathBase}/ModelCache`, async () => {
             return new ModelCache(device, this.pathBase, context.dataFetcher);
@@ -1243,6 +1248,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         spawner.place();
 
-        return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
+        const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
+        this.patchRenderer(renderer);
+        return renderer;
     }
 }

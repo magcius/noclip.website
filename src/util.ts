@@ -128,6 +128,10 @@ export function fallback<T>(v: T | null, fallback: T): T {
     return v !== null ? v : fallback;
 }
 
+export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
+    return (v !== null && v !== undefined) ? v : fallback;
+}
+
 export function arrayRemove<T>(L: T[], n: T): void {
     L.splice(L.indexOf(n), 1);
 }

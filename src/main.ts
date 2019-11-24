@@ -52,7 +52,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert } from './util';
+import { hexdump, assertExists, assert, fallbackUndefined } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -519,6 +519,10 @@ class Main {
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
 
+        const isInteractive = fallbackUndefined(scene.isInteractive, true);
+        this.viewer.inputManager.isInteractive = isInteractive;
+        this._toggleUI(isInteractive);
+
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
 
@@ -651,8 +655,8 @@ class Main {
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
     }
 
-    private _toggleUI() {
-        this.ui.elem.style.display = this.ui.elem.style.display === 'none' ? '' : 'none';
+    private _toggleUI(visible: boolean = this.ui.elem.style.display === 'none') {
+        this.ui.elem.style.display = visible ? '' : 'none';
     }
 
     private _getSceneDownloadPrefix() {

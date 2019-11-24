@@ -100,6 +100,10 @@ class DayInTheLifeOfALuma extends SMG1SceneDesc {
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
         this.controller = new DayInTheLifeOfALumaController(sceneObjHolder);
     }
+
+    public patchRenderer(renderer: SMGRenderer): void {
+        renderer.isInteractive = false;
+    }
 }
 
 const id = "smg";

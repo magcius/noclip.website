@@ -41,6 +41,7 @@ export default class InputManager {
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
+    public isInteractive: boolean = true;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -55,6 +56,8 @@ export default class InputManager {
         window.addEventListener('blur', this._onBlur);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', (e) => {
+            if (!this.isInteractive)
+                return;
             this.button = e.button;
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: true });
             if (this.onisdraggingchanged !== null)

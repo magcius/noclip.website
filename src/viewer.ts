@@ -33,6 +33,7 @@ export interface SceneGfx {
     textureHolder?: TextureHolder<any>;
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
+    isInteractive?: boolean;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
