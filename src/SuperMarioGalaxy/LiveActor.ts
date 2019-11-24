@@ -337,7 +337,7 @@ export const enum MessageType {
 }
 
 export class LiveActor<TNerve extends number = number> extends NameObj {
-    protected visibleScenario: boolean = true;
+    public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
     public boundingSphereRadius: number | null = null;

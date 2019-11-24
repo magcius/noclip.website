@@ -691,6 +691,8 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
 
         switch (vtxAttrDesc.type) {
         case GX.AttrType.DIRECT:
+            if (!isVtxAttribMtxIdx(vtxAttrib))
+                console.warn(`wtf direct`);
             return compileOneAttrib(`dlView`, `drawCallIdx`, srcAttrByteSize);
         case GX.AttrType.INDEX8:
             return compileAttribIndex(compileVtxArrayViewName(vtxAttrib), `dlView.getUint8(drawCallIdx)`, 1);

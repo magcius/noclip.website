@@ -157,7 +157,7 @@ export class NameObjGroup<T extends NameObj> extends NameObj {
 }
 
 export class NameObjHolder {
-    private nameObjs: NameObj[] = [];
+    public nameObjs: NameObj[] = [];
 
     public add(nameObj: NameObj): void {
         this.nameObjs.push(nameObj);

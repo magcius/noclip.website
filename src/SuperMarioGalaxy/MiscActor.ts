@@ -3226,7 +3226,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
 const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop, TalkStart, Talk, TalkCancel, GoodBye }
 
 export class TicoRail extends LiveActor<TicoRailNrv> {
-    private direction = vec3.create();
+    public direction = vec3.create();
     private talkingActor: LiveActor | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {

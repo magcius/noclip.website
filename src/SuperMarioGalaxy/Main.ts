@@ -50,11 +50,7 @@ export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
 }
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-
-class SMGRenderer implements Viewer.SceneGfx {
+export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
     private bloomParameters = new BloomPostFXParameters();
 
@@ -69,11 +65,13 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
+
+        this.applyCurrentScenario();
     }
 
     private applyCurrentScenario(): void {
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
-        if (this.currentScenarioIndex >= scenarioData.getNumRecords())
+        if (this.currentScenarioIndex < 0 || this.currentScenarioIndex >= scenarioData.getNumRecords())
             this.currentScenarioIndex = 0;
         scenarioData.setRecord(this.currentScenarioIndex);
 
@@ -121,7 +119,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             if (name === null && this.sceneObjHolder.messageDataHolder !== null)
                 name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i}`);
 
-            if (name === null)
+            if (name === null || name === '')
                 name = assertExists(scenarioData.getValueString(`ScenarioName`));
 
             scenarioNames.push(name);
@@ -224,21 +222,6 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
-
-        /*
-        const tico = this.sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail')[7] as TicoRail;
-        tico.railRider!.debugDrawRail(camera);
-
-        // Camera hax
-        vec3.scale(scratchVec3b, tico.direction, -1000);
-        vec3.add(scratchVec3b, tico.translation, scratchVec3b);
-        scratchVec3b[1] += 500;
-        vec3.set(scratchVec3c, 0, 1, 0);
-
-        mat4.lookAt(camera.viewMatrix, scratchVec3b, tico.translation, scratchVec3c);
-        mat4.invert(camera.worldMatrix, camera.viewMatrix);
-        camera.worldMatrixUpdated();
-        */
 
         this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
@@ -1189,7 +1172,7 @@ class MessageDataHolder {
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public pathBase: string;
 
-    constructor(public name: string, public galaxyName: string, public forceScenario: number | null = null, public id: string = galaxyName) {
+    constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
     }
 
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
@@ -1197,6 +1180,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.RARC;
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
+
+    public placeExtra(sceneObjHolder: SceneObjHolder): void {
+    }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${this.pathBase}/ModelCache`, async () => {
@@ -1253,7 +1239,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
 
+        this.placeExtra(sceneObjHolder);
+
         spawner.place();
+
         return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
     }
 }

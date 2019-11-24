@@ -1,8 +1,12 @@
 
 import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache } from "./Main";
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, FPS, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { RARC } from '../j3d/rarc';
+import { NameObj } from './NameObj';
+import { connectToScene, getRandomInt } from './ActorUtil';
+import { TicoRail, getRailTotalLength } from './MiscActor';
+import { vec3, mat4 } from 'gl-matrix';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy`;
@@ -22,6 +26,79 @@ class SMG1SceneDesc extends SMGSceneDescBase {
     }
     public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
         modelCache.requestArchiveData(`StageData/${zoneName}.arc`);
+    }
+}
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+class DayInTheLifeOfALumaController extends NameObj {
+    private ticos: TicoRail[] = [];
+    private ticoIndex: number = -1;
+    private switchCounter: number;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'DayInTheLifeOfALumaController');
+        connectToScene(sceneObjHolder, this, 0x01, -1, -1, -1);
+    }
+
+    private setSwitchCounter(): void {
+        const tico = this.ticos[this.ticoIndex];
+        const totalLength = getRailTotalLength(tico) / 2000;
+        const minSeconds = totalLength, maxSeconds = totalLength * 5;
+        this.switchCounter = getRandomInt(minSeconds, maxSeconds) * FPS;
+    }
+
+    private pickNewTico(): void {
+        this.ticoIndex = getRandomInt(0, this.ticos.length);
+        this.setSwitchCounter();
+    }
+
+    private refreshTicos(sceneObjHolder: SceneObjHolder): void {
+        this.ticos = sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail') as TicoRail[];
+        this.ticos = this.ticos.filter((obj) => obj.visibleAlive && obj.visibleScenario);
+    }
+
+    private getTico(sceneObjHolder: SceneObjHolder): TicoRail {
+        if (!this.ticos[this.ticoIndex].visibleScenario) {
+            this.refreshTicos(sceneObjHolder);
+            this.pickNewTico();
+        }
+        return this.ticos[this.ticoIndex];
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        this.refreshTicos(sceneObjHolder);
+        this.pickNewTico();
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        this.switchCounter -= getDeltaTimeFrames(viewerInput);
+        if (this.switchCounter <= 0)
+            this.pickNewTico();
+
+        const tico = this.getTico(sceneObjHolder);
+        const camera = viewerInput.camera;
+
+        // Camera hax
+        vec3.scale(scratchVec3a, tico.direction, -1000);
+        vec3.add(scratchVec3a, tico.translation, scratchVec3a);
+        scratchVec3a[1] += 500;
+        vec3.set(scratchVec3b, 0, 1, 0);
+
+        mat4.lookAt(camera.viewMatrix, scratchVec3a, tico.translation, scratchVec3b);
+        mat4.invert(camera.worldMatrix, camera.viewMatrix);
+        camera.worldMatrixUpdated();
+    }
+}
+
+class DayInTheLifeOfALuma extends SMG1SceneDesc {
+    private controller: DayInTheLifeOfALumaController;
+
+    public placeExtra(sceneObjHolder: SceneObjHolder): void {
+        this.controller = new DayInTheLifeOfALumaController(sceneObjHolder);
     }
 }
 
@@ -82,6 +159,8 @@ const sceneDescs = [
     new SMG1SceneDesc("Bubble Blast Galaxy", "CubeBubbleExLv2Galaxy"),
     new SMG1SceneDesc("Loopdeeswoop Galaxy", "SurfingLv2Galaxy"),
     new SMG1SceneDesc("Grand Finale Galaxy", "PeachCastleFinalGalaxy"),
+    "?",
+    new DayInTheLifeOfALuma("Day in the Life of a Luma", "AstroGalaxy", "DayInTheLifeOfALuma"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
