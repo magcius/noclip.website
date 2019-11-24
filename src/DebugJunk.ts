@@ -147,8 +147,10 @@ export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
 
 export function prepareFrameDebugOverlayCanvas2D(): void {
     if (_debugOverlayCanvas !== null) {
-        _debugOverlayCanvas.canvas.width = window.innerWidth;
-        _debugOverlayCanvas.canvas.height = window.innerHeight;
+        _debugOverlayCanvas.canvas.style.width = `${window.innerWidth}px`;
+        _debugOverlayCanvas.canvas.style.height = `${window.innerHeight}px`;
+        _debugOverlayCanvas.canvas.width = window.innerWidth * window.devicePixelRatio;
+        _debugOverlayCanvas.canvas.height = window.innerHeight * window.devicePixelRatio;
     }
 }
 

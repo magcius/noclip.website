@@ -5,9 +5,9 @@ import { SceneObjHolder } from "./Main";
 import { assertExists, assert, fallback } from "../util";
 import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers";
 import { LiveActor } from "./LiveActor";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk";
 import { Camera } from "../Camera";
-import { Magenta } from "../Color";
+import { Magenta, Yellow, Cyan } from "../Color";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
     dst[0] = fallback(infoIter.getValueNumber(`${prefix}_x`), 0);
@@ -24,6 +24,7 @@ function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JM
 //  - calcVelocity() appears to actually calculate a derivative of the path.
 
 const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 class LinearRailPart {
     public p0: vec3 = vec3.create();
     private p3: vec3 = vec3.create();
@@ -333,7 +334,7 @@ export class BezierRail {
 
     public calcRailDirection(dst: vec3, part: RailPart, param: number): void {
         part.calcVelocity(dst, param);
-        if (!isNearZeroVec3(dst, 0.001)) {
+        if (isNearZeroVec3(dst, 0.001)) {
             let p0: number, p1: number;
             if (param >= 0.5) {
                 p0 = param - 0.1;
@@ -391,6 +392,8 @@ export function isConnectedWithRail(actorIter: JMapInfoIter) {
 }
 
 export const enum RailDirection { TOWARDS_END, TOWARDS_START }
+
+const scratchVec3c = vec3.create();
 
 export class RailRider {
     public bezierRail: BezierRail;
@@ -508,14 +511,26 @@ export class RailRider {
         return this.bezierRail.getPartLength(partIdx);
     }
 
-    public debugDrawRail(camera: Camera, nPoints: number = 50): void {
+    public debugDrawRail(camera: Camera, nPoints: number = 100): void {
         const totalLength = this.getTotalLength();
         const speed = totalLength / nPoints;
         const ctx = getDebugOverlayCanvas2D();
+        let lastPartIdx = -1;
+
         for (let i = 0; i < nPoints; i++) {
             const coord = i * speed;
-            this.bezierRail.calcPos(scratchVec3a, coord);
-            drawWorldSpacePoint(ctx, camera, scratchVec3a, Magenta, 4);
+
+            const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
+            this.bezierRail.calcPos(scratchVec3c, coord);
+            drawWorldSpacePoint(ctx, camera, scratchVec3c, partIdx !== lastPartIdx ? Cyan : Magenta, 10);
+
+            lastPartIdx = partIdx;
+
+            this.bezierRail.calcDirection(scratchVec3b, coord);
+            vec3.scale(scratchVec3b, scratchVec3b, 100);
+            vec3.add(scratchVec3b, scratchVec3b, scratchVec3c);
+            drawWorldSpaceLine(ctx, camera, scratchVec3c, scratchVec3b, Yellow);
+
             /*
             const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
             const part = this.bezierRail.railParts[partIdx];
