@@ -4,8 +4,8 @@ import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, FPS, 
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { RARC } from '../j3d/rarc';
 import { NameObj } from './NameObj';
-import { connectToScene, getRandomInt } from './ActorUtil';
-import { TicoRail, getRailTotalLength } from './MiscActor';
+import { connectToScene, getRandomInt, getRandomFloat, connectToSceneNoSilhouettedMapObjStrongLight, calcDistanceVertical } from './ActorUtil';
+import { TicoRail, getRailTotalLength, vecKillElement } from './MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
@@ -29,66 +29,108 @@ class SMG1SceneDesc extends SMGSceneDescBase {
     }
 }
 
+function explerp(dst: vec3, target: vec3, k: number): void {
+    dst[0] += (target[0] - dst[0]) * k;
+    dst[1] += (target[1] - dst[1]) * k;
+    dst[2] += (target[2] - dst[2]) * k;
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 class DayInTheLifeOfALumaController extends NameObj {
     private ticos: TicoRail[] = [];
     private ticoIndex: number = -1;
+    private currentZoom: number;
     private switchCounter: number;
+    private cameraCenter = vec3.create();
+    private cameraEye = vec3.create();
+    private cameraK = 1/8;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'DayInTheLifeOfALumaController');
         connectToScene(sceneObjHolder, this, 0x01, -1, -1, -1);
     }
 
-    private setSwitchCounter(): void {
-        const tico = this.ticos[this.ticoIndex];
-        const totalLength = getRailTotalLength(tico) / 2000;
-        const minSeconds = totalLength, maxSeconds = totalLength * 5;
-        this.switchCounter = getRandomInt(minSeconds, maxSeconds) * FPS;
-    }
-
     private pickNewTico(): void {
-        this.ticoIndex = getRandomInt(0, this.ticos.length);
-        this.setSwitchCounter();
-    }
+        while (true) {
+            this.ticoIndex = getRandomInt(0, this.ticos.length);
+            const tico = this.ticos[this.ticoIndex];
 
-    private refreshTicos(sceneObjHolder: SceneObjHolder): void {
-        this.ticos = sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail') as TicoRail[];
-        this.ticos = this.ticos.filter((obj) => obj.visibleAlive && obj.visibleScenario);
-    }
+            if (!tico.visibleAlive || !tico.visibleScenario)
+                continue;
 
-    private getTico(sceneObjHolder: SceneObjHolder): TicoRail {
-        if (!this.ticos[this.ticoIndex].visibleScenario) {
-            this.refreshTicos(sceneObjHolder);
-            this.pickNewTico();
+            // Never picked a stopped Tico.
+            if (tico.isStopped(0))
+                continue;
+
+            break;
         }
-        return this.ticos[this.ticoIndex];
+
+        const tico = this.ticos[this.ticoIndex];
+        const isShortRail = getRailTotalLength(tico) < 10000;
+        this.currentZoom = isShortRail ? getRandomFloat(500, 2500) : getRandomFloat(1000, 3500);
+        this.switchCounter = isShortRail ? 2000 : -1;
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
-        this.refreshTicos(sceneObjHolder);
+        this.ticos = sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail') as TicoRail[];
         this.pickNewTico();
+
+        this.camera(1.0);
+    }
+
+    private camera(k: number = this.cameraK): void {
+        const tico = this.ticos[this.ticoIndex];
+
+        // Camera hax
+        vec3.copy(scratchVec3a, tico.direction);
+        vec3.set(scratchVec3b, 0, 1, 0);
+
+        // XZ plane
+        vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
+        // Jam the direction vector by this a ton to smooth out the Y axis.
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3c, 1);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        vec3.scaleAndAdd(scratchVec3a, tico.translation, scratchVec3a, -this.currentZoom);
+        scratchVec3a[1] += 500;
+
+        explerp(this.cameraEye, scratchVec3a, k);
+        explerp(this.cameraCenter, tico.translation, k);
+    }
+
+    private tryPickNewTico(deltaTimeFrames: number): void {
+        const tico = this.ticos[this.ticoIndex];
+
+        // If the Tico isn't visible due to scenario reasons, force a new Tico.
+        if (!tico.visibleScenario || !tico.visibleAlive)
+            this.pickNewTico();
+
+        if (tico.isStopped(0)) {
+            // Each frame that we're stopped, there's a 1 in 200 chance that we switch.
+            const rnd = getRandomInt(0, 200);
+            if (rnd === 0)
+                this.pickNewTico();
+        }
+
+        // The ticos in the middle will never stop because of how they're set up.
+        if (this.switchCounter >= 0) {
+            this.switchCounter -= deltaTimeFrames;
+            if (this.switchCounter <= 0)
+                this.pickNewTico();
+        }
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        this.switchCounter -= getDeltaTimeFrames(viewerInput);
-        if (this.switchCounter <= 0)
-            this.pickNewTico();
+        this.tryPickNewTico(getDeltaTimeFrames(viewerInput));
+        this.camera();
 
-        const tico = this.getTico(sceneObjHolder);
         const camera = viewerInput.camera;
-
-        // Camera hax
-        vec3.scale(scratchVec3a, tico.direction, -1000);
-        vec3.add(scratchVec3a, tico.translation, scratchVec3a);
-        scratchVec3a[1] += 500;
-        vec3.set(scratchVec3b, 0, 1, 0);
-
-        mat4.lookAt(camera.viewMatrix, scratchVec3a, tico.translation, scratchVec3b);
+        mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
         mat4.invert(camera.worldMatrix, camera.viewMatrix);
         camera.worldMatrixUpdated();
     }

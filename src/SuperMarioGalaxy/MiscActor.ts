@@ -3451,6 +3451,10 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         }
     }
 
+    public isStopped(step: number): boolean {
+        return this.getCurrentNerve() === TicoRailNrv.Wait && isGreaterStep(this, step);
+    }
+
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
     }
