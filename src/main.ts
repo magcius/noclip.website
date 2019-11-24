@@ -519,7 +519,7 @@ class Main {
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
 
-        const isInteractive = fallbackUndefined(scene.isInteractive, true);
+        const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
         this.viewer.inputManager.isInteractive = isInteractive;
         this._toggleUI(isInteractive);
 
