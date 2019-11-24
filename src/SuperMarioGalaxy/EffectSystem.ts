@@ -13,7 +13,6 @@ import { computeModelMatrixR } from "../MathHelpers";
 import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
-import { getBckFrameMax, connectToSceneNoSilhouettedMapObjStrongLight, isBckStopped } from './ActorUtil';
 import { XanimePlayer } from './Animation';
 
 export class ParticleResourceHolder {
@@ -218,7 +217,7 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
         m.startFrame = fallback(autoEffectIter.getValueNumber('StartFrame'), 0);
         m.endFrame = fallback(autoEffectIter.getValueNumber('EndFrame'), -1);
     } else {
-        m.animNames = [];
+        m.animNames = null;
         m.startFrame = 0;
         m.endFrame = -1;
     }
@@ -373,7 +372,7 @@ export class MultiEmitter {
     public childEmitters: MultiEmitter[] = [];
     public name: string;
     public drawType: DrawType;
-    public animNames: string[];
+    public animNames: string[] | null;
     public startFrame: number;
     public endFrame: number;
     public continueAnimEnd: boolean;
@@ -525,7 +524,7 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
 }
 
 function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | null): boolean {
-    return currentBckName !== null ? multiEmitter.animNames.includes(currentBckName.toLowerCase()) : false;
+    return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName.toLowerCase()) : false;
 }
 
 function checkPass(xanimePlayer: XanimePlayer, frame: number): boolean {
@@ -656,6 +655,9 @@ export class EffectKeeper {
     }
 
     private syncEffectBck(effectSystem: EffectSystem, xanimePlayer: XanimePlayer, multiEmitter: MultiEmitter): void {
+        if (multiEmitter.animNames === null)
+            return;
+
         if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.ONE_TIME, this.changeBckReset))
             multiEmitter.createOneTimeEmitter(effectSystem);
         if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.FOREVER, this.changeBckReset))
