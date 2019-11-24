@@ -14,7 +14,7 @@ import * as UI from '../../ui';
 import * as DZB from './DZB';
 import * as JPA from '../../Common/JSYSTEM/JPA';
 import { BMD, BTK, BRK, BCK, LoopMode, BMT } from '../../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelInstance, J3DModelData, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
 import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
@@ -106,7 +106,7 @@ export class ZWWExtraTextures {
         this.dynToonTex.prepareToRender(device);
     }
 
-    public fillExtraTextures(modelInstance: J3DModelInstance): void {
+    public fillExtraTextures(modelInstance: J3DModelInstanceSimple): void {
         const ZAtoon_map = modelInstance.getTextureMappingReference('ZAtoon');
         if (ZAtoon_map !== null)
             ZAtoon_map.copy(this.textureMapping[0]);
@@ -286,7 +286,7 @@ export function getKyankoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     };
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstance | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -297,7 +297,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new J3DModelData(device, cache, bdl);
-    const modelInstance = new J3DModelInstance(bmdModel);
+    const modelInstance = new J3DModelInstanceSimple(bmdModel);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
@@ -320,10 +320,10 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
 }
 
 class WindWakerRoomRenderer {
-    public bg0: J3DModelInstance | null;
-    public bg1: J3DModelInstance | null;
-    public bg2: J3DModelInstance | null;
-    public bg3: J3DModelInstance | null;
+    public bg0: J3DModelInstanceSimple | null;
+    public bg1: J3DModelInstanceSimple | null;
+    public bg2: J3DModelInstanceSimple | null;
+    public bg3: J3DModelInstanceSimple | null;
     public name: string;
     public visible: boolean = true;
     public objectsVisible = true;
@@ -675,10 +675,10 @@ const enum WindWakerPass {
 }
 
 class SkyEnvironment {
-    private vr_sky: J3DModelInstance | null;
-    private vr_uso_umi: J3DModelInstance | null;
-    private vr_kasumi_mae: J3DModelInstance | null;
-    private vr_back_cloud: J3DModelInstance | null;
+    private vr_sky: J3DModelInstanceSimple | null;
+    private vr_uso_umi: J3DModelInstanceSimple | null;
+    private vr_kasumi_mae: J3DModelInstanceSimple | null;
+    private vr_back_cloud: J3DModelInstanceSimple | null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, stageRarc: RARC.RARC) {
         this.vr_sky = createModelInstance(device, cache, stageRarc, `vr_sky`, true);
@@ -1216,7 +1216,7 @@ class SceneDesc {
 
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, cache, rarc, modelPath);
-            const modelInstance = new J3DModelInstance(model);
+            const modelInstance = new J3DModelInstanceSimple(model);
             modelInstance.passMask = WindWakerPass.MAIN;
             renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;

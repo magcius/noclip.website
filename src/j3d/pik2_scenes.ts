@@ -8,7 +8,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
 import { mat4, } from 'gl-matrix';
 import * as RARC from './rarc';
-import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
@@ -22,7 +22,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): J3DModelInstance {
+    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): J3DModelInstanceSimple {
         const bmdFile = assertExists(rarc.findFile(`${basename}.bmd`));
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);

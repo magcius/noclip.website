@@ -30,7 +30,7 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, TicoRail } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -49,6 +49,10 @@ export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): numbe
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
 }
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
@@ -220,6 +224,21 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
+
+        /*
+        const tico = this.sceneObjHolder.nameObjHolder.nameObjs.filter((obj) => obj.name === 'TicoRail')[7] as TicoRail;
+        tico.railRider!.debugDrawRail(camera);
+
+        // Camera hax
+        vec3.scale(scratchVec3b, tico.direction, -1000);
+        vec3.add(scratchVec3b, tico.translation, scratchVec3b);
+        scratchVec3b[1] += 500;
+        vec3.set(scratchVec3c, 0, 1, 0);
+
+        mat4.lookAt(camera.viewMatrix, scratchVec3b, tico.translation, scratchVec3c);
+        mat4.invert(camera.worldMatrix, camera.viewMatrix);
+        camera.worldMatrixUpdated();
+        */
 
         this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);

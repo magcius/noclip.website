@@ -4,7 +4,7 @@ import * as GX from '../../gx/gx_enum';
 import * as GX_Material from '../../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelInstance } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstanceSimple } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1 } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
 import { KyankoColors, ZWWExtraTextures } from "./zww_scenes";
@@ -35,7 +35,7 @@ export const enum LightTevColorType {
 }
 
 // dScnKy_env_light_c::settingTevStruct
-export function settingTevStruct(actor: J3DModelInstance, type: LightTevColorType, colors: KyankoColors): void {
+export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevColorType, colors: KyankoColors): void {
     if (type === LightTevColorType.ACTOR) {
         actor.setColorOverride(ColorKind.C0, colors.actorC0);
         actor.setColorOverride(ColorKind.K0, colors.actorK0);
@@ -76,7 +76,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
 
-    constructor(public modelInstance: J3DModelInstance) {
+    constructor(public modelInstance: J3DModelInstanceSimple) {
     }
 
     public bindANK1(ank1: ANK1, animationController?: AnimationController): void {

@@ -406,32 +406,25 @@ export class NoclipLegacyActorSpawner {
 
             case 'GreenStar':
             case 'PowerStar':
-                spawnGraph(`PowerStar`, SceneGraphTag.Normal, { }).then(([node, rarc]) => {
+                spawnGraph(`PowerStar`, SceneGraphTag.Normal, { }).then(([actor, rarc]) => {
                     if (this.isSMG1) {
                         // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
-                        const isRedStar = galaxyName === 'HeavensDoorGalaxy' && node.objinfo.objArg0 === 2;
+                        const isRedStar = galaxyName === 'HeavensDoorGalaxy' && actor.objinfo.objArg0 === 2;
                         // This is also hardcoded, but the designers left us a clue.
                         const isGreenStar = name === 'GreenStar';
                         const frame = isRedStar ? 5 : isGreenStar ? 2 : 0;
 
-                        const animationController = new AnimationController();
-                        animationController.setTimeInFrames(frame);
-
-                        const btp = BTP.parse(rarc.findFileData(`powerstar.btp`)!);
-                        node.modelInstance!.bindTPT1(btp, animationController);
+                        startBtp(actor, 'PowerStar')
+                        setBtpFrameAndStop(actor, frame);
                     } else {
                         const frame = name === 'GreenStar' ? 2 : 0;
 
-                        const animationController = new AnimationController();
-                        animationController.setTimeInFrames(frame);
-
-                        const btp = BTP.parse(rarc.findFileData(`PowerStarColor.btp`)!);
-                        node.modelInstance!.bindTPT1(btp, animationController);
+                        startBtp(actor, 'PowerStarColor')
+                        setBtpFrameAndStop(actor, frame);
                     }
 
-                    node.modelInstance!.setMaterialVisible('Empty', false);
-
-                    node.setRotateSpeed(140);
+                    actor.modelInstance!.setMaterialVisible('Empty', false);
+                    actor.setRotateSpeed(140);
                 });
                 return;
 
@@ -446,9 +439,8 @@ export class NoclipLegacyActorSpawner {
 
             // SMG2
             case 'Moc':
-                spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
-                    const bva = BVA.parse(rarc.findFileData(`FaceA.bva`)!);
-                    node.modelInstance!.bindVAF1(bva);
+                spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([actor, rarc]) => {
+                    startBva(actor, `FaceA`);
                 });
                 break;
             case 'CareTakerHunter':

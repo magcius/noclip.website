@@ -9,7 +9,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
-import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -174,7 +174,7 @@ class Plane {
     }
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstance | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -182,7 +182,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
         return null;
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new J3DModelData(device, cache, bdl);
-    const modelInstance = new J3DModelInstance(bmdModel);
+    const modelInstance = new J3DModelInstanceSimple(bmdModel);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
     modelInstance.isSkybox = isSkybox;
     return modelInstance;
@@ -197,10 +197,10 @@ export class WindWakerRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
 
-    private vr_sky: J3DModelInstance;
-    private vr_uso_umi: J3DModelInstance;
-    private vr_kasumi_mae: J3DModelInstance;
-    private vr_back_cloud: J3DModelInstance;
+    private vr_sky: J3DModelInstanceSimple;
+    private vr_uso_umi: J3DModelInstanceSimple;
+    private vr_kasumi_mae: J3DModelInstanceSimple;
+    private vr_back_cloud: J3DModelInstanceSimple;
     public plane: Plane[] = [];
     public modelData: J3DModelData[] = [];
     public textureHolder = new FakeTextureHolder([]);

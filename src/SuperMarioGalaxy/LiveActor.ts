@@ -149,9 +149,6 @@ export class ModelManager {
         const bmdModel = this.resourceHolder.getModel(objName);
         this.modelInstance = new J3DModelInstance(bmdModel);
         this.modelInstance.name = objName;
-        this.modelInstance.animationController.fps = FPS;
-        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
-
         if (this.resourceHolder.motionTable.size > 0)
             this.xanimePlayer = new XanimePlayer(this.resourceHolder.motionTable, this.modelInstance);
         if (this.resourceHolder.btkTable.size > 0)
@@ -179,7 +176,6 @@ export class ModelManager {
         if (this.bvaPlayer !== null)
             this.bvaPlayer.calc();
 
-        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
     }
 
@@ -509,7 +505,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.modelInstance === null)
             return;
 
-        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcView(viewerInput.camera);
 
         const visible = this.visibleModel && this.getActorVisible(viewerInput.camera);

@@ -10,7 +10,7 @@ import * as RARC from '../j3d/rarc';
 import { BMD, BCK, BRK, BTK, BTP } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
-import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { gxBindingLayouts, ub_SceneParams, u_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
@@ -41,7 +41,7 @@ interface GraphBase {
     destroy(device: GfxDevice): void;
 }
 
-class J3DGraphNode extends J3DModelInstance implements GraphBase {
+class J3DGraphNode extends J3DModelInstanceSimple implements GraphBase {
     public bindBCK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BCK.parse(buffer) : null; this.bindANK1(x !== null ? x : null); return x; }
     public bindBTK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BTK.parse(buffer) : null; this.bindTTK1(x !== null ? x : null); return x; }
     public bindBRK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BRK.parse(buffer) : null; this.bindTRK1(x !== null ? x : null); return x; }

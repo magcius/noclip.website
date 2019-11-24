@@ -972,11 +972,7 @@ export class J3DModelInstance {
     public modelMatrix = mat4.create();
     public baseScale = vec3.fromValues(1, 1, 1);
 
-    // Animations.
-    public animationController = new AnimationController();
-    public vaf1Animator: VAF1Animator | null = null;
     public jointMatrixCalc: JointMatrixCalc;
-
     public materialInstanceState = new MaterialInstanceState();
     public shapeInstances: ShapeInstance[] = [];
     public materialInstances: MaterialInstance[] = [];
@@ -1004,7 +1000,7 @@ export class J3DModelInstance {
         this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
-        this.bindANK1(null);
+        this.jointMatrixCalc = new JointMatrixCalcNoAnm();
         this.calcJointAnim();
 
         // DRW1 seems to specify each envelope twice. Not sure why. J3D actually corrects for this in
@@ -1182,66 +1178,6 @@ export class J3DModelInstance {
     }
 
     /**
-     * Binds {@param ttk1} (texture animations) to this model instance.
-     * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTTK1(ttk1: TTK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTTK1(animationController, ttk1);
-    }
-
-    /**
-     * Binds {@param trk1} (color register animations) to this model instance.
-     * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTRK1(trk1: TRK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTRK1(animationController, trk1);
-    }
-
-    /**
-     * Binds {@param tpt1} (texture palette animations) to this model instance.
-     * TPT1 objects can be parsed from {@link BTP} files. See {@link BTP.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTPT1(tpt1: TPT1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTPT1(animationController, tpt1);
-    }
-
-    /**
-     * Binds {@param ank1} (joint animations) to this model instance.
-     * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
-        this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
-    }
-
-    /**
-     * Binds {@param vaf1} (shape visibility animations) to this model instance.
-     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindVAF1(vaf1: VAF1 | null, animationController: AnimationController = this.animationController): void {
-        if (vaf1 !== null)
-            assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
-        this.vaf1Animator = vaf1 !== null ? bindVAF1Animator(animationController, vaf1) : null;
-    }
-
-    /**
      * Returns the joint-to-parent matrix for the joint with name {@param jointName}.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
@@ -1272,7 +1208,7 @@ export class J3DModelInstance {
         throw "could not find joint";
     }
 
-    private isAnyShapeVisible(): boolean {
+    protected isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.shapeInstanceState.drawViewMatrixVisibility.length; i++)
             if (this.shapeInstanceState.drawViewMatrixVisibility[i])
                 return true;
@@ -1292,10 +1228,6 @@ export class J3DModelInstance {
 
     public calcView(camera: Camera): void {
         this.calcJointToWorld();
-
-        if (this.vaf1Animator !== null)
-            for (let i = 0; i < this.shapeInstances.length; i++)
-                this.shapeInstances[i].visible = this.vaf1Animator.calcVisibility(i);
 
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
@@ -1324,33 +1256,12 @@ export class J3DModelInstance {
         this.calcDrawMatrixArray(this.shapeInstanceState.worldToViewMatrix);
     }
 
-    private computeDepth(camera: Camera): number {
+    protected computeDepth(camera: Camera): number {
         // Use the root joint to calculate depth.
         const rootJoint = this.modelData.bmd.jnt1.joints[0];
         bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
         const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch), 0);
         return depth;
-    }
-
-    // The classic public interface, for compatibility.
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.calcAnim(viewerInput.camera);
-        this.calcView(viewerInput.camera);
-
-        // If entire model is culled away, then we don't need to render anything.
-        if (!this.isAnyShapeVisible())
-            return;
-
-        const depth = this.computeDepth(viewerInput.camera);
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
-        for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
-        renderInstManager.popTemplateRenderInst();
     }
 
     // TODO(jstpierre): Sort shapeInstances based on translucent material?
@@ -1446,5 +1357,99 @@ export class J3DModelInstance {
                 mat4.mul(dst, worldToViewMatrix, dst);
             }
         }
+    }
+}
+
+export class J3DModelInstanceSimple extends J3DModelInstance {
+    public animationController = new AnimationController();
+    public vaf1Animator: VAF1Animator | null = null;
+
+    public calcAnim(camera: Camera): void {
+        super.calcAnim(camera);
+
+        if (this.vaf1Animator !== null)
+            for (let i = 0; i < this.shapeInstances.length; i++)
+                this.shapeInstances[i].visible = this.vaf1Animator.calcVisibility(i);
+    }
+
+    /**
+     * Binds {@param ttk1} (texture animations) to this model instance.
+     * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindTTK1(ttk1: TTK1 | null, animationController: AnimationController = this.animationController): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindTTK1(animationController, ttk1);
+    }
+
+    /**
+     * Binds {@param trk1} (color register animations) to this model instance.
+     * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindTRK1(trk1: TRK1 | null, animationController: AnimationController = this.animationController): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindTRK1(animationController, trk1);
+    }
+
+    /**
+     * Binds {@param tpt1} (texture palette animations) to this model instance.
+     * TPT1 objects can be parsed from {@link BTP} files. See {@link BTP.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindTPT1(tpt1: TPT1 | null, animationController: AnimationController = this.animationController): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindTPT1(animationController, tpt1);
+    }
+
+    /**
+     * Binds {@param ank1} (joint animations) to this model instance.
+     * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
+        this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
+    }
+
+    /**
+     * Binds {@param vaf1} (shape visibility animations) to this model instance.
+     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindVAF1(vaf1: VAF1 | null, animationController: AnimationController = this.animationController): void {
+        if (vaf1 !== null)
+            assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
+        this.vaf1Animator = vaf1 !== null ? bindVAF1Animator(animationController, vaf1) : null;
+    }
+
+    // The classic public interface, for compatibility.
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+        this.calcAnim(viewerInput.camera);
+        this.calcView(viewerInput.camera);
+
+        // If entire model is culled away, then we don't need to render anything.
+        if (!this.isAnyShapeVisible())
+            return;
+
+        const depth = this.computeDepth(viewerInput.camera);
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.filterKey = this.passMask;
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+        renderInstManager.popTemplateRenderInst();
     }
 }
