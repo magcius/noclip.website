@@ -271,6 +271,15 @@ const enum MapPartsRailMoverNrv {
     Vanish,
 }
 
+interface ActorHost {
+    actor: LiveActor;
+}
+
+function sendMsgToHost(actorHost: ActorHost, messageType: MessageType): boolean {
+    const bodySensor = actorHost.actor.getSensor('body');
+    return actorHost.actor.receiveMessage(messageType, bodySensor, bodySensor);
+}
+
 export class MapPartsRailMover extends NameObj {
     private moveConditionType: number;
     private moveStopType: MoveStopType;
@@ -287,7 +296,7 @@ export class MapPartsRailMover extends NameObj {
     public spine: Spine<MapPartsRailMoverNrv>;
     public mtx = mat4.create();
 
-    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, infoIter: JMapInfoIter) {
+    constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, 'MapPartsRailMover');
 
         this.passChecker = new MapPartsRailPointPassChecker(this.actor);
@@ -343,10 +352,6 @@ export class MapPartsRailMover extends NameObj {
             this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
         else
             this.spine.setNerve(MapPartsRailMoverNrv.Move);
-    }
-
-    private sendMsgToHost(msgType: MessageType): boolean {
-        return this.actor.receiveMessage(msgType);
     }
 
     private moveToInitPos(): void {
@@ -421,7 +426,7 @@ export class MapPartsRailMover extends NameObj {
             if (isFirstStep(this)) {
                 this.updateAccel();
                 this.moveSpeed = this.calcMoveSpeed();
-                this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotateBetweenPoints);
+                sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotateBetweenPoints);
             }
 
             if (!isNearZero(this.accel, 0.0001) && getStep(this) < this.accelTime)
@@ -451,7 +456,7 @@ export class MapPartsRailMover extends NameObj {
 
             if (isGreaterStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate) {
-                    if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate))
+                    if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
                     else
                         this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointAfterRotate);
@@ -462,7 +467,7 @@ export class MapPartsRailMover extends NameObj {
         } else if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtEndAfterRotate) {
             if (!this.tryRestartAtEnd() && isGreaterStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate) {
-                    if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate))
+                    if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
                     else
                         this.spine.setNerve(MapPartsRailMoverNrv.StopAtEndAfterRotate);
@@ -472,7 +477,7 @@ export class MapPartsRailMover extends NameObj {
             }
         } else if (currentNerve === MapPartsRailMoverNrv.Vanish) {
             if (isFirstStep(this))
-                this.sendMsgToHost(MessageType.MapPartsRailMover_Vanish);
+                sendMsgToHost(this, MessageType.MapPartsRailMover_Vanish);
         }
 
         super.movement(sceneObjHolder, viewerInput);
@@ -488,7 +493,7 @@ export class MapPartsRailMover extends NameObj {
         setRailCoordSpeed(this.actor, 0);
         this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
         if (this.stopTime < 1) {
-            if (this.actor.receiveMessage(MessageType.MapPartsRailMover_TryRotate)) {
+            if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate)) {
                 this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
             } else {
                 this.restartAtEnd();
@@ -531,8 +536,8 @@ export class MapPartsRailMover extends NameObj {
         this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
 
         if (this.stopTime < 1) {
-            if (!this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotateBetweenPoints)) {
-                if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate)) {
+            if (!sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotateBetweenPoints)) {
+                if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate)) {
                     this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
                 } else {
                     this.spine.setNerve(MapPartsRailMoverNrv.Move);

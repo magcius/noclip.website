@@ -127,3 +127,7 @@ export function flatten<T>(L: T[][]): T[] {
 export function fallback<T>(v: T | null, fallback: T): T {
     return v !== null ? v : fallback;
 }
+
+export function arrayRemove<T>(L: T[], n: T): void {
+    L.splice(L.indexOf(n), 1);
+}

@@ -36,6 +36,7 @@ import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder } from './MiscMap';
+import { SensorHitChecker } from './HitSensor';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -756,6 +757,7 @@ class CaptureSceneDirector {
 }
 
 export const enum SceneObj {
+    SENSOR_HIT_CHECKER = 0x00,
     AIR_BUBBLE_HOLDER = 0x39,
     WATER_AREA_HOLDER = 0x62,
 }
@@ -774,6 +776,7 @@ export class SceneObjHolder {
     public messageDataHolder: MessageDataHolder | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
+    public sensorHitChecker: SensorHitChecker | null = null;
     public captureSceneDirector = new CaptureSceneDirector();
 
     // This is technically stored outside the SceneObjHolder, separately
@@ -781,20 +784,25 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
-    public create(sceneObj: SceneObj): void {
+    public create(sceneObj: SceneObj): any {
         if (this.getObj(sceneObj) === null)
             this.newEachObj(sceneObj);
+        return this.getObj(sceneObj)!;
     }
 
     public getObj(sceneObj: SceneObj): any | null {
-        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
+        if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
+            return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
             return this.waterAreaHolder;
         return null;
     }
 
-    public newEachObj(sceneObj: SceneObj): void {
+    private newEachObj(sceneObj: SceneObj): void {
+        if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
+            this.sensorHitChecker = new SensorHitChecker(this);
         if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)

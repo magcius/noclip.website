@@ -525,7 +525,7 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
 }
 
 function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | null): boolean {
-    return currentBckName !== null ? multiEmitter.animNames.includes(currentBckName) : false;
+    return currentBckName !== null ? multiEmitter.animNames.includes(currentBckName.toLowerCase()) : false;
 }
 
 function checkPass(xanimePlayer: XanimePlayer, frame: number): boolean {
@@ -559,12 +559,16 @@ function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xan
         if (!multiEmitter.continueAnimEnd)
             return multiEmitter.bckName !== currentBckName;
 
-        // TODO(jstpierre): isTerminate. I suspect it will be true in 99% of cases.
-        return true;
-    } else {
-        if (multiEmitter.endFrame >= 0 && checkPass(xanimePlayer, multiEmitter.endFrame))
-            return true;
+        const actualCurrentBckName = xanimePlayer.getCurrentBckName();
+        if (actualCurrentBckName === null)
+            return false;
+
+        if (!isRegisteredBck(multiEmitter, actualCurrentBckName))
+            return xanimePlayer.isTerminate(actualCurrentBckName);
     }
+
+    if (multiEmitter.endFrame >= 0)
+        return checkPass(xanimePlayer, multiEmitter.endFrame);
 
     return false;
 }

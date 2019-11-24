@@ -45,10 +45,15 @@ export class Spine<Nerve extends number = number> {
 
     public update(deltaTime: number): void {
         // First tick is special.
-        if (this.tick < 0)
+        if (this.tick < 0) {
             this.tick = 0;
-        else
+        } else if (this.tick === 0.0 && deltaTime < 0.01) {
+            // If we have paused on a isFirstStep, increment the counter just
+            // a bit so we don't get stuck in a loop.
+            this.tick = 0.01;
+        } else {
             this.tick += clamp(deltaTime, 0.0, 1.5);
+        }
     }
 
     public getCurrentNerve(): Nerve {

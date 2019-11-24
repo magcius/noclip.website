@@ -1,7 +1,7 @@
 
 // Utilities for various actor implementations.
 
-import { LiveActor, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
+import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType } from "./LiveActor";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
@@ -10,6 +10,10 @@ import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { RARC } from "../j3d/rarc";
 import { getRes, XanimePlayer } from "./Animation";
+import { vec3 } from "gl-matrix";
+import { HitSensor } from "./HitSensor";
+
+const scratchVec3 = vec3.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
@@ -193,6 +197,12 @@ export function startBck(actor: LiveActor, name: string): void {
         actor.effectKeeper.changeBck();
 }
 
+export function startBckWithInterpole(actor: LiveActor, name: string, interpole: number): void {
+    actor.modelManager!.startBckWithInterpole(name, interpole);
+    if (actor.effectKeeper !== null)
+        actor.effectKeeper.changeBck();
+}
+
 export function startBtk(actor: LiveActor, name: string): void {
     actor.modelManager!.startBtk(name);
 }
@@ -314,6 +324,10 @@ export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: strin
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
 }
 
+export function isBckOneTimeAndStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBckStopped();
+}
+
 export function isBckPlaying(actor: LiveActor, name: string): boolean {
     return isBckPlayingXanimePlayer(actor.modelManager!.xanimePlayer!, name);
 }
@@ -360,4 +374,35 @@ export function getRandomFloat(min: number, max: number): number {
 
 export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
+}
+
+export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, 0x05, pairwiseCapacity, radius, actor, offset);
+}
+
+export function receiveMessage(thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
+    return thisSensor.actor.receiveMessage(messageType, thisSensor, otherSensor);
+}
+
+export function sendArbitraryMsg(messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+    return receiveMessage(otherSensor, messageType, thisSensor);
+}
+
+export function isExistRail(actor: LiveActor): boolean {
+    return actor.railRider !== null;
+}
+
+export function getRailPointPosStart(actor: LiveActor): vec3 {
+    return actor.railRider!.startPos;
+}
+
+export function getRailPointPosEnd(actor: LiveActor): vec3 {
+    return actor.railRider!.endPos;
+}
+
+export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
+    vec3.subtract(scratchVec3, actor.translation, other);
+    const m = vec3.dot(actor.gravityVector, scratchVec3);
+    vec3.scale(scratchVec3, actor.gravityVector, m);
+    return vec3.length(scratchVec3);
 }

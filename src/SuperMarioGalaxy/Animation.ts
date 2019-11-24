@@ -290,6 +290,13 @@ export class XanimePlayer {
         return this.currentResName === name;
     }
 
+    public isTerminate(name: string): boolean {
+        if (this.currentResName === name)
+            return this.frameCtrl.speedInFrames === 0.0;
+        else
+            return true;
+    }
+
     public getCurrentBckName(): string | null {
         return this.currentResName;
     }

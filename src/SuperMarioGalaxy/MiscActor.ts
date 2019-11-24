@@ -19,7 +19,8 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical } from './ActorUtil';
+import { HitSensorType, isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -709,13 +710,13 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
             startBck(this, `Move`);
     }
 
-    public receiveMessage(msgType: MessageType): boolean {
+    public receiveMessage(msgType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
         if (msgType === MessageType.MapPartsRailMover_Vanish && this.getCurrentNerve() === RailMoveObjNrv.Move) {
             this.makeActorDead();
             return true;
         }
 
-        return super.receiveMessage(msgType);
+        return super.receiveMessage(msgType, thisSensor, otherSensor);
     }
 
     protected move(): void {
@@ -3222,10 +3223,11 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     }
 }
 
-const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop }
+const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop, TalkStart, Talk, TalkCancel, GoodBye }
 
 export class TicoRail extends LiveActor<TicoRailNrv> {
     private direction = vec3.create();
+    private talkingActor: LiveActor | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -3233,6 +3235,9 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, `Tico`);
         connectToSceneNpc(sceneObjHolder, this);
+        this.initHitSensor();
+        addHitSensorNpc(sceneObjHolder, this, 'body', 8, 50.0, vec3.fromValues(0, 50.0, 0));
+        this.hitSensorKeeper!.validateBySystem();
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
         this.initRailRider(sceneObjHolder, infoIter);
@@ -3247,6 +3252,57 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             this.initNerve(TicoRailNrv.Wait);
         else
             this.initNerve(TicoRailNrv.Move);
+    }
+
+    public attackSensor(thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (isSensorPlayer(otherSensor)) {
+            // sendMsgPush
+        } else if (isSensorNpc(otherSensor)) {
+            const currentNerve = this.getCurrentNerve();
+            if (currentNerve !== TicoRailNrv.TalkStart && currentNerve !== TicoRailNrv.Talk && currentNerve !== TicoRailNrv.TalkCancel && currentNerve !== TicoRailNrv.GoodBye) {
+                if (sendArbitraryMsg(MessageType.TicoRail_StartTalk, otherSensor, thisSensor)) {
+                    this.talkingActor = otherSensor.actor;
+                    this.setNerve(TicoRailNrv.TalkStart);
+                } else {
+                    // If we're going in the same direction, no need to do anything.
+                    if (isExistRail(otherSensor.actor) && isRailGoingToEnd(this) === isRailGoingToEnd(otherSensor.actor))
+                        return;
+
+                    this.setNerve(TicoRailNrv.TalkCancel);
+                }
+            }
+        }
+    }
+
+    private isSameRailActor(other: LiveActor): boolean {
+        if (!isExistRail(other))
+            return false;
+
+        return vec3.equals(getRailPointPosStart(this), getRailPointPosStart(other)) && vec3.equals(getRailPointPosEnd(this), getRailPointPosEnd(other));
+    }
+
+    public receiveMessage(messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.TicoRail_StartTalk) {
+            const currentNerve = this.getCurrentNerve();
+
+            if (currentNerve !== TicoRailNrv.TalkStart && currentNerve !== TicoRailNrv.Talk && currentNerve !== TicoRailNrv.TalkCancel && currentNerve !== TicoRailNrv.GoodBye) {
+                if (this.isSameRailActor(otherSensor!.actor)) {
+                    const rnd = getRandomInt(0, 2);
+                    if (rnd !== 0) {
+                        const dist = calcDistanceVertical(this, otherSensor!.actor.translation);
+                        if (dist <= 30) {
+                            this.talkingActor = otherSensor!.actor;
+                            this.setNerve(TicoRailNrv.TalkStart);
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        } else {
+            return super.receiveMessage(messageType, thisSensor, otherSensor);
+        }
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -3333,15 +3389,65 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             if (this.isGreaterEqualStepAndRandom(500))
                 this.setNerve(TicoRailNrv.Stop);
         } else if (currentNerve === TicoRailNrv.Stop) {
-            if (isFirstStep(this)) {
+            if (isFirstStep(this))
                 startBck(this, `Spin`);
-            }
 
             const duration = getBckFrameMax(this);
             const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, duration, 15, 0);
             moveCoordAndFollowTrans(this, speed);
             if (isBckStopped(this))
                 this.setNerve(TicoRailNrv.Wait);
+        } else if (currentNerve === TicoRailNrv.TalkCancel) {
+            if (isFirstStep(this))
+                tryStartBck(this, `Spin`);
+
+            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 15);
+            getRailDirection(this.direction, this);
+            if (isBckStopped(this))
+                this.setNerve(TicoRailNrv.Move);
+        } else if (currentNerve === TicoRailNrv.TalkStart) {
+            vec3.sub(scratchVec3a, this.talkingActor!.translation, this.translation);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+
+            if (isFirstStep(this)) {
+                startBck(this, `Spin`);
+                getRailDirection(scratchVec3b, this);
+
+                if (vec3.dot(scratchVec3a, scratchVec3b) > 0)
+                    reverseRailDirection(this);
+            }
+
+            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 2);
+            const frameMax = getBckFrameMax(this);
+            const rate = calcNerveRate(this, frameMax);
+            getRailDirection(scratchVec3b, this);
+            vec3.lerp(this.direction, scratchVec3b, scratchVec3a, rate);
+
+            if (isBckStopped(this))
+                this.setNerve(TicoRailNrv.Talk);
+        } else if (currentNerve === TicoRailNrv.Talk) {
+            if (isFirstStep(this))
+                startBck(this, `Talk`);
+            if (!isBckPlaying(this, `Reaction`) && getRandomInt(0, 60) === 0)
+                startBckWithInterpole(this, `Reaction`, 5);
+            if (isBckOneTimeAndStopped(this))
+                startBck(this, `Talk`);
+            if (isGreaterStep(this, 320))
+                this.setNerve(TicoRailNrv.GoodBye);
+        } else if (currentNerve === TicoRailNrv.GoodBye) {
+            if (isFirstStep(this)) {
+                startBck(this, `CallBack`);
+                getRailDirection(scratchVec3a, this);
+                if (vec3.dot(this.direction, scratchVec3a) > 0)
+                    reverseRailDirection(this);
+            }
+            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 1.5);
+            // TODO(jstpierre): isBckLooped
+            const endFrame = getBckFrameMax(this);
+            if (isGreaterStep(this, endFrame)) {
+                this.talkingActor = null;
+                this.setNerve(TicoRailNrv.MoveSign);
+            }
         }
     }
 

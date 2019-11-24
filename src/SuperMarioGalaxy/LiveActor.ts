@@ -20,6 +20,7 @@ import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck } from "./ActorUtil";
+import { HitSensor, HitSensorKeeper } from "./HitSensor";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -213,6 +214,11 @@ export class ModelManager {
         this.xanimePlayer!.changeInterpoleFrame(interpole);
     }
 
+    public isBckStopped(): boolean {
+        // TODO(jstpierre): Play flags
+        return this.xanimePlayer!.frameCtrl.speedInFrames === 0.0;
+    }
+
     public getBtkCtrl(): J3DFrameCtrl {
         return this.btkPlayer!.frameCtrl;
     }
@@ -328,6 +334,7 @@ export interface ZoneAndLayer {
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
 
 export const enum MessageType {
+    TicoRail_StartTalk = 0xCE,
     MapPartsRailMover_TryRotate = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
     MapPartsRailMover_Vanish = 0xCF,
@@ -344,8 +351,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public effectKeeper: EffectKeeper | null = null;
     public spine: Spine<TNerve> | null = null;
     public railRider: RailRider | null = null;
-
     public modelManager: ModelManager | null = null;
+    public hitSensorKeeper: HitSensorKeeper | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -366,7 +373,18 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
 
-    public receiveMessage(msgType: MessageType): boolean {
+    public attackSensor(thisSensor: HitSensor, otherSensor: HitSensor): void {
+        // Do nothing by default.
+    }
+
+    public getSensor(name: string): HitSensor | null {
+        if (this.hitSensorKeeper !== null)
+            return this.hitSensorKeeper.getSensor(name);
+        else
+            return null;
+    }
+
+    public receiveMessage(messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
         return false;
     }
 
@@ -435,6 +453,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.railRider = new RailRider(sceneObjHolder, this, infoIter);
+    }
+
+    public initHitSensor(): void {
+        this.hitSensorKeeper = new HitSensorKeeper();
     }
 
     public initNerve(nerve: TNerve): void {
@@ -526,14 +548,20 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.doObjCol();
+        
         if (this.visibleAlive) {
             const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
             if (this.modelManager !== null)
                 this.modelManager.update(deltaTimeFrames);
 
+            // TODO(jstpierre): Split out updateSpine to a vfunc or something.
             if (this.spine !== null)
                 this.spine.update(deltaTimeFrames);
+
+            // TODO(jstpierre): Add control vfunc here.
 
             // updateBinder
             vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
@@ -545,6 +573,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
             if (this.actorLightCtrl !== null)
                 this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+
+            if (this.hitSensorKeeper !== null)
+                this.hitSensorKeeper.update();
         }
     }
 }

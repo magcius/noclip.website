@@ -400,10 +400,15 @@ export class RailRider {
     public coord: number = 0;
     public speed: number = 0;
     public direction: RailDirection = RailDirection.TOWARDS_END;
+    public startPos = vec3.create();
+    public endPos = vec3.create();
 
     constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, actorIter: JMapInfoIter) {
         assert(isConnectedWithRail(actorIter));
         this.bezierRail = getBezierRailForActor(sceneObjHolder, actorIter);
+
+        this.bezierRail.calcPos(this.startPos, 0.0);
+        this.bezierRail.calcPos(this.endPos, this.getTotalLength());
     }
 
     private syncPosDir(): void {
