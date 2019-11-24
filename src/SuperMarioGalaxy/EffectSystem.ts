@@ -13,7 +13,8 @@ import { computeModelMatrixR } from "../MathHelpers";
 import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
-import { getBckFrameMax } from './ActorUtil';
+import { getBckFrameMax, connectToSceneNoSilhouettedMapObjStrongLight, isBckStopped } from './ActorUtil';
+import { XanimePlayer } from './Animation';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -523,33 +524,54 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
     }
 }
 
-function isCreate(multiEmitter: MultiEmitter, currentBckName: string, frame: number, loopMode: EmitterLoopMode): boolean {
-    if (multiEmitter.bckName !== currentBckName) {
-        if (multiEmitter.animNames.includes(currentBckName)) {
-            if (loopMode === EmitterLoopMode.FOREVER) {
-                return true;
-            } else {
-                if (frame >= multiEmitter.startFrame)
-                    return true;
-            }
-        }
+function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | null): boolean {
+    return currentBckName !== null ? multiEmitter.animNames.includes(currentBckName) : false;
+}
+
+function checkPass(xanimePlayer: XanimePlayer, frame: number): boolean {
+    if (xanimePlayer.frameCtrl.speedInFrames === 0.0) {
+        // TODO(jstpierre): checkPassIfRate0.
+        return false;
+    } else {
+        return xanimePlayer.checkPass(frame);
     }
+}
+
+function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean): boolean {
+    if (isRegisteredBck(multiEmitter, currentBckName)) {
+        if (loopMode === EmitterLoopMode.FOREVER)
+            return true;
+
+        // TODO(jstpierre): Check speed
+        if (!changeBckReset && multiEmitter.startFrame >= 0)
+            return checkPass(xanimePlayer, multiEmitter.startFrame);
+        else
+            return true;
+    }
+
     return false;
 }
 
-function isDelete(multiEmitter: MultiEmitter, currentBckName: string, frame: number): boolean {
-    if (multiEmitter.bckName === currentBckName) {
-        if (multiEmitter.endFrame >= 0 && frame > multiEmitter.endFrame)
-            return true;
-    } else if (multiEmitter.bckName !== null) {
+function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer): boolean {
+    if (!isRegisteredBck(multiEmitter, currentBckName)) {
+        // TODO(jstpierre): isBckLoop.
+
         if (!multiEmitter.continueAnimEnd)
+            return multiEmitter.bckName !== currentBckName;
+
+        // TODO(jstpierre): isTerminate. I suspect it will be true in 99% of cases.
+        return true;
+    } else {
+        if (multiEmitter.endFrame >= 0 && checkPass(xanimePlayer, multiEmitter.endFrame))
             return true;
     }
+
     return false;
 }
 
 export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
+    public changeBckReset: boolean = false;
     private currentBckName: string | null = null;
     private visibleScenario: boolean = true;
     private visibleDrawParticle: boolean = true;
@@ -625,40 +647,38 @@ export class EffectKeeper {
             this.multiEmitters[i].deleteEmitter();
     }
 
-    public changeBck(bckName: string): void {
-        this.currentBckName = bckName.toLowerCase();
+    public changeBck(): void {
+        this.changeBckReset = true;
+    }
+
+    private syncEffectBck(effectSystem: EffectSystem, xanimePlayer: XanimePlayer, multiEmitter: MultiEmitter): void {
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.ONE_TIME, this.changeBckReset))
+            multiEmitter.createOneTimeEmitter(effectSystem);
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.FOREVER, this.changeBckReset))
+            multiEmitter.createForeverEmitter(effectSystem);
+        if (isDelete(multiEmitter, this.currentBckName, xanimePlayer))
+            multiEmitter.deleteEmitter();
+
+        multiEmitter.bckName = this.currentBckName;
     }
 
     public updateSyncBckEffect(effectSystem: EffectSystem): void {
-        if (this.currentBckName === null)
+        if (this.actor.modelManager === null || this.actor.modelManager.xanimePlayer === null)
             return;
 
-        if (this.actor.modelInstance === null)
-            return;
+        // SyncBckEffectChecker::updateBefore
+        const xanimePlayer = this.actor.modelManager.xanimePlayer;
+        const isPlayingBck = xanimePlayer.frameCtrl.speedInFrames !== 0;
 
-        const timeInFrames = getBckFrameMax(this.actor);
-        if (timeInFrames < 0)
-            return;
+        this.currentBckName = isPlayingBck ? xanimePlayer.getCurrentBckName() : null;
+        if (this.currentBckName !== null)
+            this.currentBckName = this.currentBckName.toLowerCase();
 
-        for (let i = 0; i < this.multiEmitters.length; i++) {
-            const multiEmitter = this.multiEmitters[i];
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.syncEffectBck(effectSystem, xanimePlayer, this.multiEmitters[i]);
 
-            let created = false;
-            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.ONE_TIME)) {
-                multiEmitter.createOneTimeEmitter(effectSystem);
-                created = true;
-            }
-            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.FOREVER)) {
-                multiEmitter.createForeverEmitter(effectSystem);
-                created = true;
-            }
-            if (created)
-                multiEmitter.bckName = this.currentBckName;
-            if (isDelete(multiEmitter, this.currentBckName, timeInFrames)) {
-                multiEmitter.deleteEmitter();
-                multiEmitter.bckName = null;
-            }
-        }
+        // SyncBckEffectChecker::updateAfter
+        this.changeBckReset = false;
     }
 
     private syncVisibility(): void {

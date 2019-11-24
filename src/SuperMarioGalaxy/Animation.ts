@@ -277,6 +277,9 @@ export class XanimePlayer {
     private core: XanimeCore;
     private interpoleRatio: number = 0.0;
     private interpoleFrameCounter: number = 0.0;
+    private updatedFrameCtrl: boolean = false;
+    private oldTimeInFrames: number = 0.0;
+    private oldSpeedInFrames: number = 0.0;
 
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
         this.core = new XanimeCore(this.modelInstance.modelData.bmd.jnt1.joints.length);
@@ -285,6 +288,10 @@ export class XanimePlayer {
 
     public isRun(name: string): boolean {
         return this.currentResName === name;
+    }
+
+    public getCurrentBckName(): string | null {
+        return this.currentResName;
     }
 
     public changeAnimationBck(name: string): void {
@@ -311,11 +318,13 @@ export class XanimePlayer {
     public calcAnm(): void {
         if (this.currentRes !== null) {
             const duration = this.currentRes.duration !== 0 ? this.currentRes.duration : 1;
-            this.core.curAnmTime = this.frameCtrl.currentTimeInFrames / duration;
+            const currentTimeInFrames = this.updatedFrameCtrl ? this.oldTimeInFrames : this.frameCtrl.currentTimeInFrames;
+            this.core.curAnmTime = currentTimeInFrames / duration;
         }
 
         this.core.updateFrame();
         this.modelInstance.jointMatrixCalc = this.core;
+        this.updatedFrameCtrl = false;
     }
 
     public clearAnm(): void {
@@ -350,8 +359,11 @@ export class XanimePlayer {
 
     public update(deltaTimeFrames: number): void {
         if (this.currentRes !== null) {
-            const frameCtrl = this.frameCtrl;
-            frameCtrl.update(deltaTimeFrames);
+            this.oldTimeInFrames = this.frameCtrl.currentTimeInFrames;
+            this.oldSpeedInFrames = this.frameCtrl.speedInFrames;
+            this.frameCtrl.update(deltaTimeFrames);
+            this.updatedFrameCtrl = true;
+
             this.updateInterpoleRatio(deltaTimeFrames);
             this.core.interpoleRatio = this.interpoleRatio;
         }
@@ -372,6 +384,14 @@ export class XanimePlayer {
             this.interpoleRatio = 0.0;
             this.core.interpoleRatio = 0.0;
             this.updateInterpoleRatio(1.0);
+        }
+    }
+
+    public checkPass(frame: number): boolean {
+        if (this.updatedFrameCtrl) {
+            return this.frameCtrl.checkPass(frame, this.oldTimeInFrames, this.oldSpeedInFrames);
+        } else {
+            return this.frameCtrl.checkPass(frame);
         }
     }
 }

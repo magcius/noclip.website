@@ -176,10 +176,21 @@ export function isBvaExist(actor: LiveActor, name: string): boolean {
     return getRes(actor.modelManager!.resourceHolder.bvaTable, name) !== null;
 }
 
+export function tryStartBck(actor: LiveActor, name: string): boolean {
+    if (!isBckPlaying(actor, name)) {
+        actor.modelManager!.startBck(name);
+        if (actor.effectKeeper !== null)
+            actor.effectKeeper.changeBck();
+        return true;
+    } else {
+        return false;
+    }
+}
+
 export function startBck(actor: LiveActor, name: string): void {
     actor.modelManager!.startBck(name);
     if (actor.effectKeeper !== null)
-        actor.effectKeeper.changeBck(name);
+        actor.effectKeeper.changeBck();
 }
 
 export function startBtk(actor: LiveActor, name: string): void {
@@ -207,7 +218,7 @@ export function startBckIfExist(actor: LiveActor, name: string): boolean {
     if (bck !== null) {
         actor.modelManager!.startBck(name);
         if (actor.effectKeeper !== null)
-            actor.effectKeeper.changeBck(name);
+            actor.effectKeeper.changeBck();
     }
     return bck !== null;
 }

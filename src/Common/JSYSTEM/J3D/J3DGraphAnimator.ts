@@ -66,6 +66,16 @@ export class J3DFrameCtrl {
             }
         }
     }
+
+    public checkPass(frame: number, currentTimeInFrames = this.currentTimeInFrames, speedInFrames = this.speedInFrames): boolean {
+        if (this.loopMode === LoopMode.ONCE || this.loopMode === LoopMode.ONCE_AND_RESET) {
+            const oldTime = currentTimeInFrames, newTime = currentTimeInFrames + speedInFrames;
+            return oldTime < frame && newTime >= frame;
+        } else {
+            // TODO(jstpierre): RE this.
+            return false;
+        }
+    }
 }
 
 export function VAF1_getVisibility(vaf1: VAF1, shapeIndex: number, animFrame: number): boolean {
