@@ -1,8 +1,7 @@
 
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewFromRGBA8, colorCopy, Color } from "../Color";
-import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { getVertexAttribLocation } from "../gx/gx_material";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import * as GX from "../gx/gx_enum";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
@@ -15,8 +14,6 @@ import { calcUpVec, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } 
 import { MathConstants, lerp, normToLength } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
 import { Camera } from "../Camera";
 import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
@@ -59,10 +56,10 @@ class WarpPodPathDrawer {
         this.testMask = loadBTIData(sceneObjHolder, arc, `TestMask.bti`);
 
         this.ddraw = new TDDraw();
-        this.ddraw.setVtxDesc(GX.VertexAttribute.POS, GX.AttrType.DIRECT);
-        this.ddraw.setVtxDesc(GX.VertexAttribute.TEX0, GX.AttrType.DIRECT);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.VertexAttribute.POS, GX.CompCnt.POS_XYZ, GX.CompType.F32, 0);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.VertexAttribute.TEX0, GX.CompCnt.TEX_ST, GX.CompType.F32, 0);
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         // Material.
         const mb = new GXMaterialBuilder('WarpPodPathDrawer');
@@ -106,11 +103,11 @@ class WarpPodPathDrawer {
 
             vec3.add(scratchVec3c, this.points[i], scratchVec3a);
             this.ddraw.position3vec3(scratchVec3c);
-            this.ddraw.texCoord2f32(GX.VertexAttribute.TEX0, 0.0, texCoordY);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, texCoordY);
 
             vec3.sub(scratchVec3c, this.points[i], scratchVec3a);
             this.ddraw.position3vec3(scratchVec3c);
-            this.ddraw.texCoord2f32(GX.VertexAttribute.TEX0, 1.0, texCoordY);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, texCoordY);
         }
         this.ddraw.end();
     }

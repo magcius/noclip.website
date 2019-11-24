@@ -113,7 +113,7 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
 //#endregion
 //#region VTX1
 export interface VertexArray {
-    vtxAttrib: GX.VertexAttribute;
+    vtxAttrib: GX.Attr;
     compType: GX.CompType;
     compCnt: GX.CompCnt;
     compShift: number;
@@ -123,7 +123,7 @@ export interface VertexArray {
 }
 
 export interface VTX1 {
-    vertexArrays: Map<GX.VertexAttribute, VertexArray>;
+    vertexArrays: Map<GX.Attr, VertexArray>;
 }
 
 function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
@@ -134,26 +134,26 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     // Data tables are stored in this order. Assumed to be hardcoded in a
     // struct somewhere inside JSystem.
     const dataTables = [
-        GX.VertexAttribute.POS,
-        GX.VertexAttribute.NRM,
-        GX.VertexAttribute.NBT,
-        GX.VertexAttribute.CLR0,
-        GX.VertexAttribute.CLR1,
-        GX.VertexAttribute.TEX0,
-        GX.VertexAttribute.TEX1,
-        GX.VertexAttribute.TEX2,
-        GX.VertexAttribute.TEX3,
-        GX.VertexAttribute.TEX4,
-        GX.VertexAttribute.TEX5,
-        GX.VertexAttribute.TEX6,
-        GX.VertexAttribute.TEX7,
+        GX.Attr.POS,
+        GX.Attr.NRM,
+        GX.Attr.NBT,
+        GX.Attr.CLR0,
+        GX.Attr.CLR1,
+        GX.Attr.TEX0,
+        GX.Attr.TEX1,
+        GX.Attr.TEX2,
+        GX.Attr.TEX3,
+        GX.Attr.TEX4,
+        GX.Attr.TEX5,
+        GX.Attr.TEX6,
+        GX.Attr.TEX7,
     ];
 
     let offs = formatOffs;
-    const vertexArrays = new Map<GX.VertexAttribute, VertexArray>();
+    const vertexArrays = new Map<GX.Attr, VertexArray>();
     while (true) {
-        const vtxAttrib: GX.VertexAttribute = view.getUint32(offs + 0x00);
-        if (vtxAttrib === GX.VertexAttribute.NULL)
+        const vtxAttrib: GX.Attr = view.getUint32(offs + 0x00);
+        if (vtxAttrib === GX.Attr.NULL)
             break;
 
         const compCnt: GX.CompCnt = view.getUint32(offs + 0x04);
@@ -462,8 +462,8 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
         let attribIdx = attribTableOffs + attribOffs;
         while (true) {
-            const vtxAttrib: GX.VertexAttribute = view.getUint32(attribIdx + 0x00);
-            if (vtxAttrib === GX.VertexAttribute.NULL)
+            const vtxAttrib: GX.Attr = view.getUint32(attribIdx + 0x00);
+            if (vtxAttrib === GX.Attr.NULL)
                 break;
             const indexDataType: GX.AttrType = view.getUint32(attribIdx + 0x04);
             vcd[vtxAttrib] = { type: indexDataType };

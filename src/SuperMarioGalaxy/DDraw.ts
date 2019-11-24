@@ -43,9 +43,9 @@ export class TDDraw {
     private currentPrim: GX.Command;
 
     constructor() {
-        for (let i = GX.VertexAttribute.POS; i <= GX.VertexAttribute.TEX7; i++) {
+        for (let i = GX.Attr.POS; i <= GX.Attr.TEX7; i++) {
             this.vcd[i] = { type: GX.AttrType.NONE };
-            this.vat[0][i] = { } as GX_VtxAttrFmt;
+            this.vat[0][i] = { compType: GX.CompType.F32, compShift: 0 } as GX_VtxAttrFmt;
         }
 
         this.vertexData = new DataView(new ArrayBuffer(0x400));
@@ -73,28 +73,27 @@ export class TDDraw {
         }
     }
 
-    public setVtxDesc(attr: GX.VertexAttribute, type: GX.AttrType) {
+    public setVtxDesc(attr: GX.Attr, enabled: boolean): void {
         const vcd = assertExists(this.vcd[attr]);
 
+        const type = enabled ? GX.AttrType.DIRECT : GX.AttrType.NONE;
         if (vcd.type !== type) {
             vcd.type = type;
             this.dirtyInputLayout();
         }
     }
 
-    public setVtxAttrFmt(fmt: GX.VtxFmt, attr: GX.VertexAttribute, cnt: GX.CompCnt, type: GX.CompType, frac: number): void {
+    public setVtxAttrFmt(fmt: GX.VtxFmt, attr: GX.Attr, cnt: GX.CompCnt): void {
         assert(fmt === 0);
         const vf = assertExists(this.vat[fmt][attr]);
 
-        if (vf.compCnt !== cnt || vf.compType !== type || vf.compShift !== frac) {
+        if (vf.compCnt !== cnt) {
             vf.compCnt = cnt;
-            vf.compType = type;
-            vf.compShift = frac;
             this.dirtyInputLayout();
         }
     }
 
-    private getOffs(v: number, attr: GX.VertexAttribute): number {
+    private getOffs(v: number, attr: GX.Attr): number {
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
         const attrOffs = this.loadedVertexLayout!.vertexAttributeLayouts.find((v) => v.vtxAttrib === attr)!.bufferOffset;
         return v*stride + attrOffs;
@@ -131,7 +130,7 @@ export class TDDraw {
         ++this.currentPrimVertex;
         this.allocVertices(0);
 
-        const offs = this.getOffs(this.currentVertex, GX.VertexAttribute.POS);
+        const offs = this.getOffs(this.currentVertex, GX.Attr.POS);
         this.writeFloat32(offs + 0x00, x);
         this.writeFloat32(offs + 0x04, y);
         this.writeFloat32(offs + 0x08, z);

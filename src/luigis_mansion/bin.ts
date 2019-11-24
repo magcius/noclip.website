@@ -112,23 +112,23 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const vat: GX_VtxAttrFmt[] = [];
 
         // Should always have position.
-        assert((attributes & (1 << GX.VertexAttribute.POS)) !== 0);
-        vat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 0 };
+        assert((attributes & (1 << GX.Attr.POS)) !== 0);
+        vat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 0 };
         // Should always have tex0.
-        if (!(attributes & (1 << GX.VertexAttribute.TEX0))) {
+        if (!(attributes & (1 << GX.Attr.TEX0))) {
             // If we don't have TEX0, then skip this batch...
             console.warn(`Batch ${index} does not have TEX0. WTF? / Attributes: ${attributes.toString(16)}`);
             return null;
         }
-        vat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
-        vat[GX.VertexAttribute.NRM] = { compCnt: nbt3 ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_NBT, compType: GX.CompType.F32, compShift: 0 };
+        vat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift: 0 };
+        vat[GX.Attr.NRM] = { compCnt: nbt3 ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_NBT, compType: GX.CompType.F32, compShift: 0 };
 
         // Set up our input vertex description.
         const vcd: GX_VtxDesc[] = [];
-        for (let i = 0; i <= GX.VertexAttribute.MAX; i++) {
+        for (let i = 0; i <= GX.Attr.MAX; i++) {
             if ((attributes & (1 << i)) !== 0) {
                 // Only care about TEX0 and POS for now...
-                const enableOutput = (i === GX.VertexAttribute.POS || i === GX.VertexAttribute.TEX0);
+                const enableOutput = (i === GX.Attr.POS || i === GX.Attr.TEX0);
                 vcd[i] = { type: GX.AttrType.INDEX16, enableOutput };
             }
         }
@@ -138,8 +138,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const displayListBuffer = buffer.subarray(displayListOffset, displayListSize);
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: positionBufferOffs,stride: getAttributeByteSize(vat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: tex0BufferOffs, stride: getAttributeByteSize(vat, GX.VertexAttribute.TEX0) };
+        vtxArrays[GX.Attr.POS] = { buffer, offs: positionBufferOffs,stride: getAttributeByteSize(vat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.TEX0] = { buffer, offs: tex0BufferOffs, stride: getAttributeByteSize(vat, GX.Attr.TEX0) };
 
         let loadedVertexData;
         try {

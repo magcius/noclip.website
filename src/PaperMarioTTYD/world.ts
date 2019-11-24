@@ -735,21 +735,21 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const vtxArrays: GX_Array[] = [];
             // First element of the blocks is item count, so we add 0x04 to skip past it.
 
-            vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x00) + 0x04, stride: 0x06 };
-            vtxArrays[GX.VertexAttribute.NRM] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x04) + 0x04, stride: 0x06 };
+            vtxArrays[GX.Attr.POS] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x00) + 0x04, stride: 0x06 };
+            vtxArrays[GX.Attr.NRM] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x04) + 0x04, stride: 0x06 };
 
             const clrCount = view.getUint32(modelVcdTableOffs + 0x08);
             assert(clrCount === 0x01);
 
-            vtxArrays[GX.VertexAttribute.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x0C) + 0x04, stride: 0x04 };
+            vtxArrays[GX.Attr.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x0C) + 0x04, stride: 0x04 };
             // vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x10) + 0x04, stride: 0x04 };
             assert(view.getUint32(modelVcdTableOffs + 0x10) === 0);
 
             const texCoordCount = view.getUint32(modelVcdTableOffs + 0x14);
             assert(texCoordCount <= 0x03);
-            vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x18) + 0x04, stride: 0x04 };
-            vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x1C) + 0x04, stride: 0x04 };
-            vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x20) + 0x04, stride: 0x04 };
+            vtxArrays[GX.Attr.TEX0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x18) + 0x04, stride: 0x04 };
+            vtxArrays[GX.Attr.TEX1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x1C) + 0x04, stride: 0x04 };
+            vtxArrays[GX.Attr.TEX2] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x20) + 0x04, stride: 0x04 };
 
             if (isPackedDisplayList) {
                 const displayListTableCount = view.getUint32(meshOffs + 0x04);
@@ -781,38 +781,38 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                 assert((workingBits & VcdBitFlags.POS) !== 0);
                 if ((workingBits & VcdBitFlags.POS) !== 0) {
-                    vat[GX.VertexAttribute.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(modelVcdTableOffs + 0x44) };
-                    vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(modelVcdTableOffs + 0x44) };
+                    vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.POS;
                 }
 
                 if ((workingBits & VcdBitFlags.NRM) !== 0) {
-                    vat[GX.VertexAttribute.NRM] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
-                    vcd[GX.VertexAttribute.NRM] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.NRM] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
+                    vcd[GX.Attr.NRM] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.NRM;
                 }
 
                 if ((workingBits & VcdBitFlags.CLR0) !== 0) {
-                    vat[GX.VertexAttribute.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
-                    vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
+                    vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.CLR0;
                 }
 
                 if ((workingBits & VcdBitFlags.TEX0) !== 0) {
-                    vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x48) };
-                    vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x48) };
+                    vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.TEX0;
                 }
 
                 if ((workingBits & VcdBitFlags.TEX1) !== 0) {
-                    vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x4C) };
-                    vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x4C) };
+                    vcd[GX.Attr.TEX1] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.TEX1;
                 }
 
                 if ((workingBits & VcdBitFlags.TEX2) !== 0) {
-                    vat[GX.VertexAttribute.TEX2] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x50) };
-                    vcd[GX.VertexAttribute.TEX2] = { type: GX.AttrType.INDEX16 };
+                    vat[GX.Attr.TEX2] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x50) };
+                    vcd[GX.Attr.TEX2] = { type: GX.AttrType.INDEX16 };
                     workingBits &= ~VcdBitFlags.TEX2;
                 }
 
@@ -848,18 +848,18 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 const vat: GX_VtxAttrFmt[] = [];
                 const vcd: GX_VtxDesc[] = [];
 
-                vat[GX.VertexAttribute.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(modelVcdTableOffs + 0x44) };
-                vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX16 };
-                vat[GX.VertexAttribute.NRM] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
-                vcd[GX.VertexAttribute.NRM] = { type: GX.AttrType.INDEX16 };
-                vat[GX.VertexAttribute.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
-                vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX16 };
-                vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x48) };
-                vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX16 };
-                vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x4C) };
-                vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
-                vat[GX.VertexAttribute.TEX2] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x50) };
-                vcd[GX.VertexAttribute.TEX2] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.POS] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(modelVcdTableOffs + 0x44) };
+                vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.NRM] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
+                vcd[GX.Attr.NRM] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
+                vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.TEX0] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x48) };
+                vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.TEX1] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x4C) };
+                vcd[GX.Attr.TEX1] = { type: GX.AttrType.INDEX16 };
+                vat[GX.Attr.TEX2] = { compType: GX.CompType.F32, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(modelVcdTableOffs + 0x50) };
+                vcd[GX.Attr.TEX2] = { type: GX.AttrType.INDEX16 };
 
                 const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
 
@@ -890,7 +890,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         assert(posIdx !== 0xFFFF);
                         const posAttr = loadedVertexLayout.vertexAttributeLayouts[0];
-                        const posOffs = vtxArrays[GX.VertexAttribute.POS].offs + (posIdx * 0x0C);
+                        const posOffs = vtxArrays[GX.Attr.POS].offs + (posIdx * 0x0C);
                         const posX = view.getFloat32(posOffs + 0x00);
                         const posY = view.getFloat32(posOffs + 0x04);
                         const posZ = view.getFloat32(posOffs + 0x08);
@@ -900,7 +900,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         if (nrmIdx !== 0xFFFF) {
                             const nrmAttr = loadedVertexLayout.vertexAttributeLayouts[1];
-                            const nrmOffs = vtxArrays[GX.VertexAttribute.NRM].offs + (nrmIdx * 0x0C);
+                            const nrmOffs = vtxArrays[GX.Attr.NRM].offs + (nrmIdx * 0x0C);
                             const nrmX = view.getFloat32(nrmOffs + 0x00);
                             const nrmY = view.getFloat32(nrmOffs + 0x04);
                             const nrmZ = view.getFloat32(nrmOffs + 0x08);
@@ -911,7 +911,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         if (clr0Idx !== 0xFFFF) {
                             const clr0Attr = loadedVertexLayout.vertexAttributeLayouts[2];
-                            const clr0Offs = vtxArrays[GX.VertexAttribute.CLR0].offs + (clr0Idx * 0x04);
+                            const clr0Offs = vtxArrays[GX.Attr.CLR0].offs + (clr0Idx * 0x04);
                             const clr0R = view.getUint8(clr0Offs + 0x00);
                             const clr0G = view.getUint8(clr0Offs + 0x01);
                             const clr0B = view.getUint8(clr0Offs + 0x02);
@@ -924,7 +924,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         if (tex0Idx !== 0xFFFF) {
                             const tex0Attr = loadedVertexLayout.vertexAttributeLayouts[3];
-                            const tex0Offs = vtxArrays[GX.VertexAttribute.TEX0].offs + (tex0Idx * 0x08);
+                            const tex0Offs = vtxArrays[GX.Attr.TEX0].offs + (tex0Idx * 0x08);
                             const tex0S = view.getFloat32(tex0Offs + 0x00);
                             const tex0T = view.getFloat32(tex0Offs + 0x04);
                             dstView.setFloat32(dstIdx + tex0Attr.bufferOffset + 0x00, tex0S, littleEndian);
@@ -933,7 +933,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         if (tex1Idx !== 0xFFFF) {
                             const tex1Attr = loadedVertexLayout.vertexAttributeLayouts[4];
-                            const tex1Offs = vtxArrays[GX.VertexAttribute.TEX1].offs + (tex1Idx * 0x08);
+                            const tex1Offs = vtxArrays[GX.Attr.TEX1].offs + (tex1Idx * 0x08);
                             const tex1S = view.getFloat32(tex1Offs + 0x00);
                             const tex1T = view.getFloat32(tex1Offs + 0x04);
                             dstView.setFloat32(dstIdx + tex1Attr.bufferOffset + 0x00, tex1S, littleEndian);
@@ -942,7 +942,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                         if (tex2Idx !== 0xFFFF) {
                             const tex2Attr = loadedVertexLayout.vertexAttributeLayouts[5];
-                            const tex2Offs = vtxArrays[GX.VertexAttribute.TEX2].offs + (tex2Idx * 0x08);
+                            const tex2Offs = vtxArrays[GX.Attr.TEX2].offs + (tex2Idx * 0x08);
                             const tex2S = view.getFloat32(tex2Offs + 0x00);
                             const tex2T = view.getFloat32(tex2Offs + 0x04);
                             dstView.setFloat32(dstIdx + tex2Attr.bufferOffset + 0x00, tex2S, littleEndian);

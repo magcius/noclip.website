@@ -231,17 +231,17 @@ export class WhiteFlowerData {
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vatFormat: GX_VtxAttrFmt[] = [];
-        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR0) };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.TEX0) };
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
         const vcd: GX_VtxDesc[] = [];
-        vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX8 };
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
         const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_OhanaDL);
@@ -317,17 +317,17 @@ export class PinkFlowerData {
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vatFormat: GX_VtxAttrFmt[] = [];
-        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: l_pos2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR0) };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: l_texCoord2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.TEX0) };
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
         const vcd: GX_VtxDesc[] = [];
-        vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX8 };
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
         const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_Ohana_highDL);
@@ -403,17 +403,17 @@ export class BessouFlowerData {
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vatFormat: GX_VtxAttrFmt[] = [];
-        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
-        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: l_pos3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR0) };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: l_texCoord3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.TEX0) };
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
         const vcd: GX_VtxDesc[] = [];
-        vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX8 };
-        vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX8 };
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
         const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_QbsfwDL);

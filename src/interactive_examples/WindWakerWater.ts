@@ -75,10 +75,10 @@ class PlaneShape {
         this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.PNMTXIDX), format: GfxFormat.U8_R, bufferByteOffset: 0, bufferIndex: 2, usesIntInShader: true },
-            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
-            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, },
-            { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.CLR0), format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 1, },
+            { location: GX_Material.getVertexAttribLocation(GX.Attr.PNMTXIDX), format: GfxFormat.U8_R, bufferByteOffset: 0, bufferIndex: 2, usesIntInShader: true },
+            { location: GX_Material.getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
+            { location: GX_Material.getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, },
+            { location: GX_Material.getVertexAttribLocation(GX.Attr.CLR0), format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 1, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },

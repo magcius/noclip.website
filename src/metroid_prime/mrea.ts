@@ -447,25 +447,25 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
 }
 
 export const vtxAttrFormats = [
-    { vtxAttrib: GX.VertexAttribute.PNMTXIDX,   type: GX.AttrType.DIRECT, mask: 0x01000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, type: GX.AttrType.DIRECT, mask: 0x02000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX1MTXIDX, type: GX.AttrType.DIRECT, mask: 0x04000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX2MTXIDX, type: GX.AttrType.DIRECT, mask: 0x08000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX3MTXIDX, type: GX.AttrType.DIRECT, mask: 0x10000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, type: GX.AttrType.DIRECT, mask: 0x20000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX5MTXIDX, type: GX.AttrType.DIRECT, mask: 0x40000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX6MTXIDX, type: GX.AttrType.DIRECT, mask: 0x80000000 },
-    { vtxAttrib: GX.VertexAttribute.POS,  type: GX.AttrType.INDEX16, mask: 0x00000003 },
-    { vtxAttrib: GX.VertexAttribute.NRM,  type: GX.AttrType.INDEX16, mask: 0x0000000C },
-    { vtxAttrib: GX.VertexAttribute.CLR0, type: GX.AttrType.INDEX16, mask: 0x00000030 },
-    { vtxAttrib: GX.VertexAttribute.CLR1, type: GX.AttrType.INDEX16, mask: 0x000000C0 },
-    { vtxAttrib: GX.VertexAttribute.TEX0, type: GX.AttrType.INDEX16, mask: 0x00000300 },
-    { vtxAttrib: GX.VertexAttribute.TEX1, type: GX.AttrType.INDEX16, mask: 0x00000C00 },
-    { vtxAttrib: GX.VertexAttribute.TEX2, type: GX.AttrType.INDEX16, mask: 0x00003000 },
-    { vtxAttrib: GX.VertexAttribute.TEX3, type: GX.AttrType.INDEX16, mask: 0x0000C000 },
-    { vtxAttrib: GX.VertexAttribute.TEX4, type: GX.AttrType.INDEX16, mask: 0x00030000 },
-    { vtxAttrib: GX.VertexAttribute.TEX5, type: GX.AttrType.INDEX16, mask: 0x000C0000 },
-    { vtxAttrib: GX.VertexAttribute.TEX6, type: GX.AttrType.INDEX16, mask: 0x00300000 },
+    { vtxAttrib: GX.Attr.PNMTXIDX,   type: GX.AttrType.DIRECT, mask: 0x01000000 },
+    { vtxAttrib: GX.Attr.TEX0MTXIDX, type: GX.AttrType.DIRECT, mask: 0x02000000 },
+    { vtxAttrib: GX.Attr.TEX1MTXIDX, type: GX.AttrType.DIRECT, mask: 0x04000000 },
+    { vtxAttrib: GX.Attr.TEX2MTXIDX, type: GX.AttrType.DIRECT, mask: 0x08000000 },
+    { vtxAttrib: GX.Attr.TEX3MTXIDX, type: GX.AttrType.DIRECT, mask: 0x10000000 },
+    { vtxAttrib: GX.Attr.TEX4MTXIDX, type: GX.AttrType.DIRECT, mask: 0x20000000 },
+    { vtxAttrib: GX.Attr.TEX5MTXIDX, type: GX.AttrType.DIRECT, mask: 0x40000000 },
+    { vtxAttrib: GX.Attr.TEX6MTXIDX, type: GX.AttrType.DIRECT, mask: 0x80000000 },
+    { vtxAttrib: GX.Attr.POS,  type: GX.AttrType.INDEX16, mask: 0x00000003 },
+    { vtxAttrib: GX.Attr.NRM,  type: GX.AttrType.INDEX16, mask: 0x0000000C },
+    { vtxAttrib: GX.Attr.CLR0, type: GX.AttrType.INDEX16, mask: 0x00000030 },
+    { vtxAttrib: GX.Attr.CLR1, type: GX.AttrType.INDEX16, mask: 0x000000C0 },
+    { vtxAttrib: GX.Attr.TEX0, type: GX.AttrType.INDEX16, mask: 0x00000300 },
+    { vtxAttrib: GX.Attr.TEX1, type: GX.AttrType.INDEX16, mask: 0x00000C00 },
+    { vtxAttrib: GX.Attr.TEX2, type: GX.AttrType.INDEX16, mask: 0x00003000 },
+    { vtxAttrib: GX.Attr.TEX3, type: GX.AttrType.INDEX16, mask: 0x0000C000 },
+    { vtxAttrib: GX.Attr.TEX4, type: GX.AttrType.INDEX16, mask: 0x00030000 },
+    { vtxAttrib: GX.Attr.TEX5, type: GX.AttrType.INDEX16, mask: 0x000C0000 },
+    { vtxAttrib: GX.Attr.TEX6, type: GX.AttrType.INDEX16, mask: 0x00300000 },
 ];
 
 export interface Surface {
@@ -563,18 +563,18 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
 function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number | null, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean): [Surface[], number] {
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
-        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: nrmType, compShift: 14 };
-        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
-        vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
-        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: tex0Type, compShift };
-        vatFormat[GX.VertexAttribute.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX3] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX4] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX5] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX6] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.TEX7] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: nrmType, compShift: 14 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: tex0Type, compShift };
+        vatFormat[GX.Attr.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX3] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX4] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX5] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX6] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
+        vatFormat[GX.Attr.TEX7] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
         return vatFormat;
     }
 
@@ -642,18 +642,18 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         const uvSectionOffs = useUvsArray ? assertExists(uvsSectionOffs) : uvfSectionOffs;
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.NRM) };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.CLR0) };
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.CLR1) };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: uvSectionOffs,  stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX0) };
-        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX1) };
-        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX2) };
-        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX3) };
-        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX4) };
-        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX5) };
-        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX6) };
-        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX7) };
+        vtxArrays[GX.Attr.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.NRM) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.CLR1) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: stream.getBuffer(), offs: uvSectionOffs,  stride: getAttributeByteSize(fmtVat, GX.Attr.TEX0) };
+        vtxArrays[GX.Attr.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX1) };
+        vtxArrays[GX.Attr.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX2) };
+        vtxArrays[GX.Attr.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX3) };
+        vtxArrays[GX.Attr.TEX4] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX4) };
+        vtxArrays[GX.Attr.TEX5] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX5) };
+        vtxArrays[GX.Attr.TEX6] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX6) };
+        vtxArrays[GX.Attr.TEX7] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.Attr.TEX7) };
 
         const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
@@ -709,24 +709,24 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
 
         const vatFormat: GX_VtxAttrFmt[] = [];
         if (hasPosShort)
-            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 13 };
+            vatFormat[GX.Attr.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 13 };
         else
-            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
-        vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 14 };
-        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
-        vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+            vatFormat[GX.Attr.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.Attr.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 14 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+        vatFormat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.POS) };
-        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.NRM) };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR0) };
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR1) };
+        vtxArrays[GX.Attr.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(vatFormat, GX.Attr.NRM) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR1) };
 
         // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
         const isShort = (uvArrayIndex === 1);
         for (let i = 0; i < 8; i++) {
-            vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
-            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? assertExists(uvsSectionOffs) : uvfSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.TEX0 + i) };
+            vatFormat[GX.Attr.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
+            vtxArrays[GX.Attr.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? assertExists(uvsSectionOffs) : uvfSectionOffs, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0 + i) };
         }
 
         const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat];

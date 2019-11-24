@@ -53,7 +53,7 @@ export const enum Command {
     LOAD_XF_REG         = 0x10,
 }
 
-export const enum VertexAttribute {
+export const enum Attr {
     PNMTXIDX = 0,
     TEX0MTXIDX = 1,
     TEX1MTXIDX = 2,

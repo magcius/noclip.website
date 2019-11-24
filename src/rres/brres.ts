@@ -943,7 +943,7 @@ interface VtxBufferData {
     offs: 0;
 }
 
-function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribute): VtxBufferData {
+function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.Attr): VtxBufferData {
     const view = buffer.createDataView();
     const dataOffs = view.getUint32(0x08);
     const nameOffs = view.getUint32(0x0C);
@@ -956,7 +956,7 @@ function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribu
     const count: number = view.getUint16(0x1E);
 
     // Color attributes don't have shift -- they store stride in the shift field.
-    if (vtxAttrib === GX.VertexAttribute.CLR0) {
+    if (vtxAttrib === GX.Attr.CLR0) {
         stride = compShift;
         compShift = 0;
     }
@@ -979,7 +979,7 @@ interface InputVertexBuffers {
     txc: VtxBufferData[];
 }
 
-function parseInputBufferSet(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribute, resDic: ResDicEntry[]): VtxBufferData[] {
+function parseInputBufferSet(buffer: ArrayBufferSlice, vtxAttrib: GX.Attr, resDic: ResDicEntry[]): VtxBufferData[] {
     const vtxBuffers: VtxBufferData[] = [];
     for (let i = 0; i < resDic.length; i++) {
         const entry = resDic[i];
@@ -992,10 +992,10 @@ function parseInputBufferSet(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttri
 }
 
 function parseInputVertexBuffers(buffer: ArrayBufferSlice, vtxPosResDic: ResDicEntry[], vtxNrmResDic: ResDicEntry[], vtxClrResDic: ResDicEntry[], vtxTxcResDic: ResDicEntry[]): InputVertexBuffers {
-    const pos = parseInputBufferSet(buffer, GX.VertexAttribute.POS, vtxPosResDic);
-    const nrm = parseInputBufferSet(buffer, GX.VertexAttribute.NRM, vtxNrmResDic);
-    const clr = parseInputBufferSet(buffer, GX.VertexAttribute.CLR0, vtxClrResDic);
-    const txc = parseInputBufferSet(buffer, GX.VertexAttribute.TEX0, vtxTxcResDic);
+    const pos = parseInputBufferSet(buffer, GX.Attr.POS, vtxPosResDic);
+    const nrm = parseInputBufferSet(buffer, GX.Attr.NRM, vtxNrmResDic);
+    const clr = parseInputBufferSet(buffer, GX.Attr.CLR0, vtxClrResDic);
+    const txc = parseInputBufferSet(buffer, GX.Attr.TEX0, vtxTxcResDic);
     return { pos, nrm, clr, txc };
 }
 
@@ -1078,30 +1078,30 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const vcdH = r.cp[GX.CPRegister.VCD_HI_ID];
     const vcd: GX_VtxDesc[] = [];
 
-    vcd[GX.VertexAttribute.PNMTXIDX] =   { type: (vcdL >>>  0) & 0x01 };
-    vcd[GX.VertexAttribute.TEX0MTXIDX] = { type: (vcdL >>>  1) & 0x01 };
-    vcd[GX.VertexAttribute.TEX1MTXIDX] = { type: (vcdL >>>  2) & 0x01 };
-    vcd[GX.VertexAttribute.TEX2MTXIDX] = { type: (vcdL >>>  3) & 0x01 };
-    vcd[GX.VertexAttribute.TEX3MTXIDX] = { type: (vcdL >>>  4) & 0x01 };
-    vcd[GX.VertexAttribute.TEX4MTXIDX] = { type: (vcdL >>>  5) & 0x01 };
-    vcd[GX.VertexAttribute.TEX5MTXIDX] = { type: (vcdL >>>  6) & 0x01 };
-    vcd[GX.VertexAttribute.TEX6MTXIDX] = { type: (vcdL >>>  7) & 0x01 };
-    vcd[GX.VertexAttribute.TEX7MTXIDX] = { type: (vcdL >>>  8) & 0x01 };
-    vcd[GX.VertexAttribute.POS] =        { type: (vcdL >>>  9) & 0x03 };
-    vcd[GX.VertexAttribute.NRM] =        { type: (vcdL >>> 11) & 0x03 };
-    vcd[GX.VertexAttribute.CLR0] =       { type: (vcdL >>> 13) & 0x03 };
-    vcd[GX.VertexAttribute.CLR1] =       { type: (vcdL >>> 15) & 0x03 };
-    vcd[GX.VertexAttribute.TEX0] =       { type: (vcdH >>>  0) & 0x03 };
-    vcd[GX.VertexAttribute.TEX1] =       { type: (vcdH >>>  2) & 0x03 };
-    vcd[GX.VertexAttribute.TEX2] =       { type: (vcdH >>>  4) & 0x03 };
-    vcd[GX.VertexAttribute.TEX3] =       { type: (vcdH >>>  6) & 0x03 };
-    vcd[GX.VertexAttribute.TEX4] =       { type: (vcdH >>>  8) & 0x03 };
-    vcd[GX.VertexAttribute.TEX5] =       { type: (vcdH >>> 10) & 0x03 };
-    vcd[GX.VertexAttribute.TEX6] =       { type: (vcdH >>> 12) & 0x03 };
-    vcd[GX.VertexAttribute.TEX7] =       { type: (vcdH >>> 14) & 0x03 };
+    vcd[GX.Attr.PNMTXIDX] =   { type: (vcdL >>>  0) & 0x01 };
+    vcd[GX.Attr.TEX0MTXIDX] = { type: (vcdL >>>  1) & 0x01 };
+    vcd[GX.Attr.TEX1MTXIDX] = { type: (vcdL >>>  2) & 0x01 };
+    vcd[GX.Attr.TEX2MTXIDX] = { type: (vcdL >>>  3) & 0x01 };
+    vcd[GX.Attr.TEX3MTXIDX] = { type: (vcdL >>>  4) & 0x01 };
+    vcd[GX.Attr.TEX4MTXIDX] = { type: (vcdL >>>  5) & 0x01 };
+    vcd[GX.Attr.TEX5MTXIDX] = { type: (vcdL >>>  6) & 0x01 };
+    vcd[GX.Attr.TEX6MTXIDX] = { type: (vcdL >>>  7) & 0x01 };
+    vcd[GX.Attr.TEX7MTXIDX] = { type: (vcdL >>>  8) & 0x01 };
+    vcd[GX.Attr.POS] =        { type: (vcdL >>>  9) & 0x03 };
+    vcd[GX.Attr.NRM] =        { type: (vcdL >>> 11) & 0x03 };
+    vcd[GX.Attr.CLR0] =       { type: (vcdL >>> 13) & 0x03 };
+    vcd[GX.Attr.CLR1] =       { type: (vcdL >>> 15) & 0x03 };
+    vcd[GX.Attr.TEX0] =       { type: (vcdH >>>  0) & 0x03 };
+    vcd[GX.Attr.TEX1] =       { type: (vcdH >>>  2) & 0x03 };
+    vcd[GX.Attr.TEX2] =       { type: (vcdH >>>  4) & 0x03 };
+    vcd[GX.Attr.TEX3] =       { type: (vcdH >>>  6) & 0x03 };
+    vcd[GX.Attr.TEX4] =       { type: (vcdH >>>  8) & 0x03 };
+    vcd[GX.Attr.TEX5] =       { type: (vcdH >>> 10) & 0x03 };
+    vcd[GX.Attr.TEX6] =       { type: (vcdH >>> 12) & 0x03 };
+    vcd[GX.Attr.TEX7] =       { type: (vcdH >>> 14) & 0x03 };
 
     // Validate against our VCD flags.
-    for (let attr: GX.VertexAttribute = 0; attr <= GX.VertexAttribute.TEX7; attr++) {
+    for (let attr: GX.Attr = 0; attr <= GX.Attr.TEX7; attr++) {
         const vcdFlagsEnabled = !!(vcdFlags & (1 << attr));
         const vcdEnabled = !!(vcd[attr].type !== GX.AttrType.NONE);
         // Some community tooling doesn't export correct vcdFlags. Ignore it and use VCD regs as source of truth.
@@ -1120,47 +1120,47 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
 
     const vat: GX_VtxAttrFmt[] = [];
     //                                        compCnt               compType              compShift
-    vat[GX.VertexAttribute.POS]      = vatFmt((vatA >>>  0) & 0x01, (vatA >>>  1) & 0x07, (vatA >>>  4) & 0x1F);
+    vat[GX.Attr.POS]      = vatFmt((vatA >>>  0) & 0x01, (vatA >>>  1) & 0x07, (vatA >>>  4) & 0x1F);
     const nrm3 = !!(vatA >>> 31);
     const nrmCnt = nrm3 ? GX.CompCnt.NRM_NBT3:(vatA >>>  9) & 0x01;
-    vat[GX.VertexAttribute.NRM]      = vatFmt(nrmCnt,               (vatA >>> 10) & 0x07, 0);
-    vat[GX.VertexAttribute.CLR0]     = vatFmt((vatA >>> 13) & 0x01, (vatA >>> 14) & 0x07, 0);
-    vat[GX.VertexAttribute.CLR1]     = vatFmt((vatA >>> 17) & 0x01, (vatA >>> 18) & 0x07, 0);
-    vat[GX.VertexAttribute.TEX0]     = vatFmt((vatA >>> 21) & 0x01, (vatA >>> 22) & 0x07, (vatA >>> 25) & 0x1F);
-    vat[GX.VertexAttribute.TEX1]     = vatFmt((vatB >>>  0) & 0x01, (vatB >>>  1) & 0x07, (vatB >>>  4) & 0x1F);
-    vat[GX.VertexAttribute.TEX2]     = vatFmt((vatB >>>  9) & 0x01, (vatB >>> 10) & 0x07, (vatB >>> 13) & 0x1F);
-    vat[GX.VertexAttribute.TEX3]     = vatFmt((vatB >>> 18) & 0x01, (vatB >>> 19) & 0x07, (vatB >>> 22) & 0x1F);
-    vat[GX.VertexAttribute.TEX4]     = vatFmt((vatB >>> 27) & 0x01, (vatB >>> 28) & 0x07, (vatC >>>  0) & 0x1F);
-    vat[GX.VertexAttribute.TEX5]     = vatFmt((vatC >>>  5) & 0x01, (vatC >>>  6) & 0x07, (vatC >>>  9) & 0x1F);
-    vat[GX.VertexAttribute.TEX6]     = vatFmt((vatC >>> 14) & 0x01, (vatC >>> 15) & 0x07, (vatC >>> 18) & 0x1F);
-    vat[GX.VertexAttribute.TEX7]     = vatFmt((vatC >>> 23) & 0x01, (vatC >>> 24) & 0x07, (vatC >>> 27) & 0x1F);
+    vat[GX.Attr.NRM]      = vatFmt(nrmCnt,               (vatA >>> 10) & 0x07, 0);
+    vat[GX.Attr.CLR0]     = vatFmt((vatA >>> 13) & 0x01, (vatA >>> 14) & 0x07, 0);
+    vat[GX.Attr.CLR1]     = vatFmt((vatA >>> 17) & 0x01, (vatA >>> 18) & 0x07, 0);
+    vat[GX.Attr.TEX0]     = vatFmt((vatA >>> 21) & 0x01, (vatA >>> 22) & 0x07, (vatA >>> 25) & 0x1F);
+    vat[GX.Attr.TEX1]     = vatFmt((vatB >>>  0) & 0x01, (vatB >>>  1) & 0x07, (vatB >>>  4) & 0x1F);
+    vat[GX.Attr.TEX2]     = vatFmt((vatB >>>  9) & 0x01, (vatB >>> 10) & 0x07, (vatB >>> 13) & 0x1F);
+    vat[GX.Attr.TEX3]     = vatFmt((vatB >>> 18) & 0x01, (vatB >>> 19) & 0x07, (vatB >>> 22) & 0x1F);
+    vat[GX.Attr.TEX4]     = vatFmt((vatB >>> 27) & 0x01, (vatB >>> 28) & 0x07, (vatC >>>  0) & 0x1F);
+    vat[GX.Attr.TEX5]     = vatFmt((vatC >>>  5) & 0x01, (vatC >>>  6) & 0x07, (vatC >>>  9) & 0x1F);
+    vat[GX.Attr.TEX6]     = vatFmt((vatC >>> 14) & 0x01, (vatC >>> 15) & 0x07, (vatC >>> 18) & 0x1F);
+    vat[GX.Attr.TEX7]     = vatFmt((vatC >>> 23) & 0x01, (vatC >>> 24) & 0x07, (vatC >>> 27) & 0x1F);
 
     const vtxArrays: GX_Array[] = [];
     assert(idVtxPos >= 0);
     if (idVtxPos >= 0)
-        vtxArrays[GX.VertexAttribute.POS] = inputBuffers.pos[idVtxPos];
+        vtxArrays[GX.Attr.POS] = inputBuffers.pos[idVtxPos];
     if (idVtxNrm >= 0)
-        vtxArrays[GX.VertexAttribute.NRM] = inputBuffers.nrm[idVtxNrm];
+        vtxArrays[GX.Attr.NRM] = inputBuffers.nrm[idVtxNrm];
     if (idVtxClr0 >= 0)
-        vtxArrays[GX.VertexAttribute.CLR0] = inputBuffers.clr[idVtxClr0];
+        vtxArrays[GX.Attr.CLR0] = inputBuffers.clr[idVtxClr0];
     if (idVtxClr1 >= 0)
-        vtxArrays[GX.VertexAttribute.CLR1] = inputBuffers.clr[idVtxClr1];
+        vtxArrays[GX.Attr.CLR1] = inputBuffers.clr[idVtxClr1];
     if (idVtxTxc0 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX0] = inputBuffers.txc[idVtxTxc0];
+        vtxArrays[GX.Attr.TEX0] = inputBuffers.txc[idVtxTxc0];
     if (idVtxTxc1 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX1] = inputBuffers.txc[idVtxTxc1];
+        vtxArrays[GX.Attr.TEX1] = inputBuffers.txc[idVtxTxc1];
     if (idVtxTxc2 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX2] = inputBuffers.txc[idVtxTxc2];
+        vtxArrays[GX.Attr.TEX2] = inputBuffers.txc[idVtxTxc2];
     if (idVtxTxc3 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX3] = inputBuffers.txc[idVtxTxc3];
+        vtxArrays[GX.Attr.TEX3] = inputBuffers.txc[idVtxTxc3];
     if (idVtxTxc4 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX4] = inputBuffers.txc[idVtxTxc4];
+        vtxArrays[GX.Attr.TEX4] = inputBuffers.txc[idVtxTxc4];
     if (idVtxTxc5 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX5] = inputBuffers.txc[idVtxTxc5];
+        vtxArrays[GX.Attr.TEX5] = inputBuffers.txc[idVtxTxc5];
     if (idVtxTxc6 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX6] = inputBuffers.txc[idVtxTxc6];
+        vtxArrays[GX.Attr.TEX6] = inputBuffers.txc[idVtxTxc6];
     if (idVtxTxc7 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX7] = inputBuffers.txc[idVtxTxc7];
+        vtxArrays[GX.Attr.TEX7] = inputBuffers.txc[idVtxTxc7];
 
     const vtxLoader = compileVtxLoader(vat, vcd);
     const loadedVertexLayout = vtxLoader.loadedVertexLayout;

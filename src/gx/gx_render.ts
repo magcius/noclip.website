@@ -373,7 +373,7 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
     let usesZeroBuffer = false;
-    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
+    for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
         const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
         if (attribLocation === -1)
@@ -425,7 +425,7 @@ export class GXShapeHelperGfx {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         let usesZeroBuffer = false;
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
+        for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
     
             if (attribLocation === -1)

@@ -462,7 +462,7 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     loadedVertexData.vertexBuffers[1] = buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.VertexAttribute.PNMTXIDX));
+    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.Attr.PNMTXIDX));
     let offs = pnmtxidxLayout.bufferOffset;
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
 
@@ -545,9 +545,9 @@ function patchBMD(bmd: BMD): void {
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }

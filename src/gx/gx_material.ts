@@ -236,35 +236,35 @@ export interface RopInfo {
 
 // #region Material shader generation.
 interface VertexAttributeGenDef {
-    attrib: GX.VertexAttribute;
+    attrib: GX.Attr;
     format: GfxFormat;
     name: string;
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.POS,        name: "Position",      format: GfxFormat.F32_RGB },
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.U8_R },
+    { attrib: GX.Attr.POS,        name: "Position",      format: GfxFormat.F32_RGB },
+    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.U8_R },
     // These are packed separately since we would run out of attribute space otherwise.
-    { attrib: GX.VertexAttribute.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.U8_RGBA },
-    { attrib: GX.VertexAttribute.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.U8_RGBA },
-    { attrib: GX.VertexAttribute.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
-    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
-    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
-    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",          format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.Attr.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
+    { attrib: GX.Attr.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
+    { attrib: GX.Attr.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
+    { attrib: GX.Attr.TEX0,       name: "Tex0",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX1,       name: "Tex1",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX2,       name: "Tex2",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX3,       name: "Tex3",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX4,       name: "Tex4",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX5,       name: "Tex5",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX6,       name: "Tex6",          format: GfxFormat.F32_RG },
+    { attrib: GX.Attr.TEX7,       name: "Tex7",          format: GfxFormat.F32_RG },
 ];
 
-export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
+export function getVertexAttribLocation(vtxAttrib: GX.Attr): number {
     return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
 }
 
-export function getVertexAttribGenDef(vtxAttrib: GX.VertexAttribute): VertexAttributeGenDef {
+export function getVertexAttribGenDef(vtxAttrib: GX.Attr): VertexAttributeGenDef {
     return vtxAttributeGenDefs.find((genDef) => genDef.attrib === vtxAttrib)!;
 }
 

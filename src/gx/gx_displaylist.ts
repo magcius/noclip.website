@@ -62,7 +62,7 @@ export interface GX_Array {
 }
 
 export interface VertexAttributeLayout {
-    vtxAttrib: GX.VertexAttribute;
+    vtxAttrib: GX.Attr;
     bufferOffset: number;
     bufferIndex: number;
     format: GfxFormat;
@@ -132,37 +132,37 @@ export function getAttributeComponentByteSizeRaw(compType: GX.CompType): CompSiz
 }
 
 // PNMTXIDX, TEXnMTXIDX are special cases in GX.
-function isVtxAttribMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
-    return vtxAttrib === GX.VertexAttribute.PNMTXIDX || isVtxAttribTexMtxIdx(vtxAttrib);
+function isVtxAttribMtxIdx(vtxAttrib: GX.Attr): boolean {
+    return vtxAttrib === GX.Attr.PNMTXIDX || isVtxAttribTexMtxIdx(vtxAttrib);
 }
 
-function isVtxAttribTexMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
+function isVtxAttribTexMtxIdx(vtxAttrib: GX.Attr): boolean {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.TEX0MTXIDX:
-    case GX.VertexAttribute.TEX1MTXIDX:
-    case GX.VertexAttribute.TEX2MTXIDX:
-    case GX.VertexAttribute.TEX3MTXIDX:
-    case GX.VertexAttribute.TEX4MTXIDX:
-    case GX.VertexAttribute.TEX5MTXIDX:
-    case GX.VertexAttribute.TEX6MTXIDX:
-    case GX.VertexAttribute.TEX7MTXIDX:
+    case GX.Attr.TEX0MTXIDX:
+    case GX.Attr.TEX1MTXIDX:
+    case GX.Attr.TEX2MTXIDX:
+    case GX.Attr.TEX3MTXIDX:
+    case GX.Attr.TEX4MTXIDX:
+    case GX.Attr.TEX5MTXIDX:
+    case GX.Attr.TEX6MTXIDX:
+    case GX.Attr.TEX7MTXIDX:
         return true;
     default:
         return false;
     }
 }
 
-function isVtxAttribColor(vtxAttrib: GX.VertexAttribute): boolean {
+function isVtxAttribColor(vtxAttrib: GX.Attr): boolean {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.CLR0:
-    case GX.VertexAttribute.CLR1:
+    case GX.Attr.CLR0:
+    case GX.Attr.CLR1:
         return true;
     default:
         return false;
     }
 }
 
-function getAttributeComponentByteSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): CompSize {
+function getAttributeComponentByteSize(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): CompSize {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return 1;
@@ -170,7 +170,7 @@ function getAttributeComponentByteSize(vtxAttrib: GX.VertexAttribute, vatFormat:
     return getAttributeComponentByteSizeRaw(vatFormat.compType);
 }
 
-function getAttributeByteSizeRaw(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+function getAttributeByteSizeRaw(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return 1;
@@ -198,18 +198,18 @@ function getAttributeByteSizeRaw(vtxAttrib: GX.VertexAttribute, vatFormat: GX_Vt
     return compSize * compCount;
 }
 
-export function getAttributeByteSize(vat: GX_VtxAttrFmt[], vtxAttrib: GX.VertexAttribute): number {
+export function getAttributeByteSize(vat: GX_VtxAttrFmt[], vtxAttrib: GX.Attr): number {
     return getAttributeByteSizeRaw(vtxAttrib, vat[vtxAttrib]);
 }
 
-export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
+export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.CompCnt): number {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.POS:
+    case GX.Attr.POS:
         if (compCnt === GX.CompCnt.POS_XY)
             return FormatCompFlags.COMP_RG;
         else if (compCnt === GX.CompCnt.POS_XYZ)
             return FormatCompFlags.COMP_RGB;
-    case GX.VertexAttribute.NRM:
+    case GX.Attr.NRM:
         if (compCnt === GX.CompCnt.NRM_XYZ)
             return FormatCompFlags.COMP_RGB;
         // NBT*XYZ
@@ -220,32 +220,32 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.VertexAttribute, co
         // Separated NBT has three components per index.
         else if (compCnt === GX.CompCnt.NRM_NBT3)
             return FormatCompFlags.COMP_RGB;
-    case GX.VertexAttribute.CLR0:
-    case GX.VertexAttribute.CLR1:
+    case GX.Attr.CLR0:
+    case GX.Attr.CLR1:
         if (compCnt === GX.CompCnt.CLR_RGB)
             return FormatCompFlags.COMP_RGB;
         else if (compCnt === GX.CompCnt.CLR_RGBA)
             return FormatCompFlags.COMP_RGBA;
-    case GX.VertexAttribute.TEX0:
-    case GX.VertexAttribute.TEX1:
-    case GX.VertexAttribute.TEX2:
-    case GX.VertexAttribute.TEX3:
-    case GX.VertexAttribute.TEX4:
-    case GX.VertexAttribute.TEX5:
-    case GX.VertexAttribute.TEX6:
-    case GX.VertexAttribute.TEX7:
+    case GX.Attr.TEX0:
+    case GX.Attr.TEX1:
+    case GX.Attr.TEX2:
+    case GX.Attr.TEX3:
+    case GX.Attr.TEX4:
+    case GX.Attr.TEX5:
+    case GX.Attr.TEX6:
+    case GX.Attr.TEX7:
         if (compCnt === GX.CompCnt.TEX_S)
             return FormatCompFlags.COMP_R;
         else if (compCnt === GX.CompCnt.TEX_ST)
             return FormatCompFlags.COMP_RG;
-    case GX.VertexAttribute.NULL:
+    case GX.Attr.NULL:
     default:
         // Shouldn't ever happen
         throw new Error("whoops");
     }
 }
 
-function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
+function getAttributeFormatCompFlags(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return FormatCompFlags.COMP_R;
@@ -253,7 +253,7 @@ function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFormat: G
     return getAttributeFormatCompFlagsRaw(vtxAttrib, vatFormat.compCnt);
 }
 
-function getAttributeComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+function getAttributeComponentCount(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
     return getFormatCompFlagsComponentCount(getAttributeFormatCompFlags(vtxAttrib, vatFormat));
 }
 
@@ -270,14 +270,14 @@ function getComponentShiftRaw(compType: GX.CompType, compShift: number): number 
     }
 }
 
-function getComponentShift(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return 0;
 
     // Normals *always* use either 6 or 14 for their shift values.
     // The value in the VAT is ignored.
-    if (vtxAttrib === GX.VertexAttribute.NRM || vtxAttrib === GX.VertexAttribute.NBT) {
+    if (vtxAttrib === GX.Attr.NRM || vtxAttrib === GX.Attr.NBT) {
         if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
             return 6;
         else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
@@ -289,16 +289,16 @@ function getComponentShift(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrF
     return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
 }
 
-function getComponentType(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): GX.CompType {
+function getComponentType(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): GX.CompType {
     if (isVtxAttribMtxIdx(vtxAttrib))
         return GX.CompType.U8;
 
     return vatFormat.compType;
 }
 
-function getIndexNumComponents(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+function getIndexNumComponents(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.NRM:
+    case GX.Attr.NRM:
         if (vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
             return 3;
         // Fallthrough
@@ -307,40 +307,40 @@ function getIndexNumComponents(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxA
     }
 }
 
-function getAttrName(vtxAttrib: GX.VertexAttribute): string {
+function getAttrName(vtxAttrib: GX.Attr): string {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.PNMTXIDX:   return `PNMTXIDX`;
-    case GX.VertexAttribute.TEX0MTXIDX: return `TEX0MTXIDX`;
-    case GX.VertexAttribute.TEX1MTXIDX: return `TEX1MTXIDX`;
-    case GX.VertexAttribute.TEX2MTXIDX: return `TEX2MTXIDX`;
-    case GX.VertexAttribute.TEX3MTXIDX: return `TEX3MTXIDX`;
-    case GX.VertexAttribute.TEX4MTXIDX: return `TEX4MTXIDX`;
-    case GX.VertexAttribute.TEX5MTXIDX: return `TEX5MTXIDX`;
-    case GX.VertexAttribute.TEX6MTXIDX: return `TEX6MTXIDX`;
-    case GX.VertexAttribute.TEX7MTXIDX: return `TEX7MTXIDX`;
-    case GX.VertexAttribute.POS:        return `POS`;
-    case GX.VertexAttribute.NRM:        return `NRM`;
-    case GX.VertexAttribute.CLR0:       return `CLR0`;
-    case GX.VertexAttribute.CLR1:       return `CLR1`;
-    case GX.VertexAttribute.TEX0:       return `TEX0`;
-    case GX.VertexAttribute.TEX1:       return `TEX1`;
-    case GX.VertexAttribute.TEX2:       return `TEX2`;
-    case GX.VertexAttribute.TEX3:       return `TEX3`;
-    case GX.VertexAttribute.TEX4:       return `TEX4`;
-    case GX.VertexAttribute.TEX5:       return `TEX5`;
-    case GX.VertexAttribute.TEX6:       return `TEX6`;
-    case GX.VertexAttribute.TEX7:       return `TEX7`;
+    case GX.Attr.PNMTXIDX:   return `PNMTXIDX`;
+    case GX.Attr.TEX0MTXIDX: return `TEX0MTXIDX`;
+    case GX.Attr.TEX1MTXIDX: return `TEX1MTXIDX`;
+    case GX.Attr.TEX2MTXIDX: return `TEX2MTXIDX`;
+    case GX.Attr.TEX3MTXIDX: return `TEX3MTXIDX`;
+    case GX.Attr.TEX4MTXIDX: return `TEX4MTXIDX`;
+    case GX.Attr.TEX5MTXIDX: return `TEX5MTXIDX`;
+    case GX.Attr.TEX6MTXIDX: return `TEX6MTXIDX`;
+    case GX.Attr.TEX7MTXIDX: return `TEX7MTXIDX`;
+    case GX.Attr.POS:        return `POS`;
+    case GX.Attr.NRM:        return `NRM`;
+    case GX.Attr.CLR0:       return `CLR0`;
+    case GX.Attr.CLR1:       return `CLR1`;
+    case GX.Attr.TEX0:       return `TEX0`;
+    case GX.Attr.TEX1:       return `TEX1`;
+    case GX.Attr.TEX2:       return `TEX2`;
+    case GX.Attr.TEX3:       return `TEX3`;
+    case GX.Attr.TEX4:       return `TEX4`;
+    case GX.Attr.TEX5:       return `TEX5`;
+    case GX.Attr.TEX6:       return `TEX6`;
+    case GX.Attr.TEX7:       return `TEX7`;
     default:
         throw new Error("whoops");
     }
 }
 
-function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
+function getAttributeBaseFormat(vtxAttrib: GX.Attr): GfxFormat {
     if (isVtxAttribMtxIdx(vtxAttrib))
         return GfxFormat.U8_R;
 
     // To save on space, we put color data in U8.
-    if (vtxAttrib === GX.VertexAttribute.CLR0 || vtxAttrib === GX.VertexAttribute.CLR1)
+    if (vtxAttrib === GX.Attr.CLR0 || vtxAttrib === GX.Attr.CLR1)
         return GfxFormat.U8_R_NORM;
 
     // In theory, we could use U8_R/S8_R/S16_R/U16_R for the other types,
@@ -348,7 +348,7 @@ function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
     return GfxFormat.F32_R;
 }
 
-function getAttributeFormat(vatLayouts: (VatLayout | undefined)[], vtxAttrib: GX.VertexAttribute): GfxFormat {
+function getAttributeFormat(vatLayouts: (VatLayout | undefined)[], vtxAttrib: GX.Attr): GfxFormat {
     let formatCompFlags = 0;
 
     const baseFormat = getAttributeBaseFormat(vtxAttrib);
@@ -377,7 +377,7 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
 
     let srcVertexSize = 0;
 
-    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vcd.length; vtxAttrib++) {
+    for (let vtxAttrib: GX.Attr = 0; vtxAttrib < vcd.length; vtxAttrib++) {
         // Describes packed vertex layout.
         const vtxAttrDesc = vcd[vtxAttrib];
         // Describes format of pointed-to data.
@@ -419,7 +419,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
     // Create destination vertex layout.
     let dstVertexSize = 0;
     const vertexAttributeLayouts: VertexAttributeLayout[] = [];
-    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vcd.length; vtxAttrib++) {
+    for (let vtxAttrib: GX.Attr = 0; vtxAttrib < vcd.length; vtxAttrib++) {
         const vtxAttrDesc = vcd[vtxAttrib];
         if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE)
             continue;
@@ -433,7 +433,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
         // TEXnMTXIDX are packed specially because of GL limitations.
         if (isVtxAttribTexMtxIdx(vtxAttrib)) {
-            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? 0 : 1;
+            const layoutIdx = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? 0 : 1;
             fieldByteOffset = (vtxAttrib - 1) & 0x03;
 
             if (texMtxIdxLayout[layoutIdx] !== null) {
@@ -459,10 +459,10 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
         vertexAttributeLayouts.push(vtxAttribLayout);
 
         if (isVtxAttribTexMtxIdx(vtxAttrib)) {
-            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? 0 : 1;
+            const layoutIdx = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? 0 : 1;
 
             if (texMtxIdxLayout[layoutIdx] === null) {
-                const baseVtxAttrib = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? GX.VertexAttribute.TEX0MTXIDX : GX.VertexAttribute.TEX4MTXIDX;
+                const baseVtxAttrib = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? GX.Attr.TEX0MTXIDX : GX.Attr.TEX4MTXIDX;
                 if (vtxAttrib === baseVtxAttrib) {
                     texMtxIdxLayout[layoutIdx] = vtxAttribLayout
                 } else {
@@ -487,12 +487,12 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 type SingleVtxLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, dlView: DataView, dlOffs: number, vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
 
 function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): SingleVtxLoaderFunc {
-    function compileVtxArrayViewName(vtxAttrib: GX.VertexAttribute): string {
+    function compileVtxArrayViewName(vtxAttrib: GX.Attr): string {
         return `vtxArrayViews[${vtxAttrib}]`;
     }
 
     // Loads a single vertex layout.
-    function compileVatLayoutAttribute(vatLayout: VatLayout, vtxAttrib: GX.VertexAttribute): string {
+    function compileVatLayoutAttribute(vatLayout: VatLayout, vtxAttrib: GX.Attr): string {
         const vtxAttrFmt = vatLayout.vatFormat[vtxAttrib];
         const vtxAttrDesc = vatLayout.vcd[vtxAttrib];
 
@@ -673,7 +673,7 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
         }
 
         function compileAttribIndex(viewName: string, readIndex: string, drawCallIdxIncr: number): string {
-            if (vtxAttrib === GX.VertexAttribute.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
+            if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
                 // Special case: NBT3.
                 return `
         // NBT Normal
@@ -703,7 +703,7 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
 
     function compileVatLayout(vatLayout: VatLayout): string {
         let S = '';
-        for (let vtxAttrib = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++)
+        for (let vtxAttrib = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++)
             S += compileVatLayoutAttribute(vatLayout, vtxAttrib);
         return S;
     }
@@ -741,7 +741,7 @@ class VtxLoaderImpl implements VtxLoader {
 
         const vtxArrayViews: DataView[] = [];
         const vtxArrayStrides: number[] = [];
-        for (let i = 0; i < GX.VertexAttribute.MAX; i++) {
+        for (let i = 0; i < GX.Attr.MAX; i++) {
             if (vtxArrays[i] !== undefined) {
                 vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
                 vtxArrayStrides[i] = vtxArrays[i].stride;
