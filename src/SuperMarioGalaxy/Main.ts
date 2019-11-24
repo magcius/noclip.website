@@ -458,16 +458,16 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     const vertexCount = loadedVertexData.totalVertexCount;
 
     const buffer = new Uint8Array(vertexCount * bufferStride);
+    loadedVertexLayout.vertexBufferStrides[1] = bufferStride;
     loadedVertexData.vertexBuffers[1] = buffer;
-    loadedVertexData.vertexBufferStrides[1] = bufferStride;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.VertexAttribute.PNMTXIDX));
+    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.VertexAttribute.PNMTXIDX));
     let offs = pnmtxidxLayout.bufferOffset;
-    const loadedStride = loadedVertexData.vertexBufferStrides[0];
+    const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
 
     for (let i = 0; i < vertexCount; i++) {
-        const p = view.getUint8(offs);
+        const p = view.getUint8(offs + 0x00);
         for (let j = 0; j < bufferStride; j++) {
             if (texMtxIdxBaseOffsets[j] >= 0)
                 buffer[i*bufferStride + j] = p + texMtxIdxBaseOffsets[j];
@@ -540,14 +540,14 @@ function patchBMD(bmd: BMD): void {
             bufferStride = align(bufferStride, 4);
 
             for (let j = 0; j < shape.mtxGroups.length; j++) {
-                const packet = shape.mtxGroups[j];
-                patchInTexMtxIdxBuffer(shape.loadedVertexLayout, packet.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
+                const mtxGroup = shape.mtxGroups[j];
+                patchInTexMtxIdxBuffer(shape.loadedVertexLayout, mtxGroup.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }

@@ -870,7 +870,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const vertexDataOffs = mainDataOffs + view.getUint32(displayListTableIdx + 0x00);
 
                     const vertexCount = view.getUint32(vertexDataOffs + 0x00);
-                    const vertexData = new ArrayBuffer(loadedVertexLayout.dstVertexSize * vertexCount);
+                    const vertexData = new ArrayBuffer(loadedVertexLayout.vertexBufferStrides[0] * vertexCount);
                     const dstView = new DataView(vertexData);
                     let rawIdx = vertexDataOffs + 0x04;
                     let dstIdx = 0x00;
@@ -889,7 +889,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         // const tex7Idx = view.getUint16(rawIdx + 0x16);
 
                         assert(posIdx !== 0xFFFF);
-                        const posAttr = loadedVertexLayout.dstVertexAttributeLayouts[0];
+                        const posAttr = loadedVertexLayout.vertexAttributeLayouts[0];
                         const posOffs = vtxArrays[GX.VertexAttribute.POS].offs + (posIdx * 0x0C);
                         const posX = view.getFloat32(posOffs + 0x00);
                         const posY = view.getFloat32(posOffs + 0x04);
@@ -899,7 +899,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         dstView.setFloat32(dstIdx + posAttr.bufferOffset + 0x08, posZ, littleEndian);
 
                         if (nrmIdx !== 0xFFFF) {
-                            const nrmAttr = loadedVertexLayout.dstVertexAttributeLayouts[1];
+                            const nrmAttr = loadedVertexLayout.vertexAttributeLayouts[1];
                             const nrmOffs = vtxArrays[GX.VertexAttribute.NRM].offs + (nrmIdx * 0x0C);
                             const nrmX = view.getFloat32(nrmOffs + 0x00);
                             const nrmY = view.getFloat32(nrmOffs + 0x04);
@@ -910,7 +910,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (clr0Idx !== 0xFFFF) {
-                            const clr0Attr = loadedVertexLayout.dstVertexAttributeLayouts[2];
+                            const clr0Attr = loadedVertexLayout.vertexAttributeLayouts[2];
                             const clr0Offs = vtxArrays[GX.VertexAttribute.CLR0].offs + (clr0Idx * 0x04);
                             const clr0R = view.getUint8(clr0Offs + 0x00);
                             const clr0G = view.getUint8(clr0Offs + 0x01);
@@ -923,7 +923,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex0Idx !== 0xFFFF) {
-                            const tex0Attr = loadedVertexLayout.dstVertexAttributeLayouts[3];
+                            const tex0Attr = loadedVertexLayout.vertexAttributeLayouts[3];
                             const tex0Offs = vtxArrays[GX.VertexAttribute.TEX0].offs + (tex0Idx * 0x08);
                             const tex0S = view.getFloat32(tex0Offs + 0x00);
                             const tex0T = view.getFloat32(tex0Offs + 0x04);
@@ -932,7 +932,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex1Idx !== 0xFFFF) {
-                            const tex1Attr = loadedVertexLayout.dstVertexAttributeLayouts[4];
+                            const tex1Attr = loadedVertexLayout.vertexAttributeLayouts[4];
                             const tex1Offs = vtxArrays[GX.VertexAttribute.TEX1].offs + (tex1Idx * 0x08);
                             const tex1S = view.getFloat32(tex1Offs + 0x00);
                             const tex1T = view.getFloat32(tex1Offs + 0x04);
@@ -941,7 +941,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex2Idx !== 0xFFFF) {
-                            const tex2Attr = loadedVertexLayout.dstVertexAttributeLayouts[5];
+                            const tex2Attr = loadedVertexLayout.vertexAttributeLayouts[5];
                             const tex2Offs = vtxArrays[GX.VertexAttribute.TEX2].offs + (tex2Idx * 0x08);
                             const tex2S = view.getFloat32(tex2Offs + 0x00);
                             const tex2T = view.getFloat32(tex2Offs + 0x04);
@@ -950,7 +950,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         rawIdx += 0x18;
-                        dstIdx += loadedVertexLayout.dstVertexSize;
+                        dstIdx += loadedVertexLayout.vertexBufferStrides[0];
                     }
 
                     const indexBuffer = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, vertexId, vertexCount);
@@ -959,8 +959,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const indexData = indexBuffer.buffer;
                     const totalVertexCount = vertexCount;
                     const vertexBuffers: ArrayBuffer[] = [ vertexData ];
-                    const vertexBufferStrides: number[] = [ loadedVertexLayout.dstVertexSize ];
-                    loadedDatas.push({ indexData, indexFormat: GfxFormat.U16_R, packets: [], totalIndexCount, totalVertexCount, vertexBuffers, vertexBufferStrides, vertexId });
+                    loadedDatas.push({ indexData, packets: [], totalIndexCount, totalVertexCount, vertexBuffers, vertexId });
                     displayListTableIdx += 0x04;
                 }
 

@@ -77,9 +77,9 @@ interface VatLayout {
 
 // Describes the loaded vertex layout.
 export interface LoadedVertexLayout {
-    // Packed vertex size.
-    dstVertexSize: number;
-    dstVertexAttributeLayouts: VertexAttributeLayout[];
+    indexFormat: GfxFormat;
+    vertexBufferStrides: number[];
+    vertexAttributeLayouts: VertexAttributeLayout[];
 }
 
 interface VertexLayout extends LoadedVertexLayout {
@@ -95,10 +95,8 @@ export interface LoadedVertexPacket {
 }
 
 export interface LoadedVertexData {
-    indexFormat: GfxFormat;
     indexData: ArrayBuffer;
     vertexBuffers: ArrayBuffer[];
-    vertexBufferStrides: number[];
     totalIndexCount: number;
     totalVertexCount: number;
     vertexId: number;
@@ -420,7 +418,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
     // Create destination vertex layout.
     let dstVertexSize = 0;
-    const dstVertexAttributeLayouts: VertexAttributeLayout[] = [];
+    const vertexAttributeLayouts: VertexAttributeLayout[] = [];
     for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < vcd.length; vtxAttrib++) {
         const vtxAttrDesc = vcd[vtxAttrib];
         if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE)
@@ -458,7 +456,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
         const bufferOffset = fieldBase + fieldByteOffset;
 
         const vtxAttribLayout = { vtxAttrib, bufferIndex, bufferOffset, format };
-        dstVertexAttributeLayouts.push(vtxAttribLayout);
+        vertexAttributeLayouts.push(vtxAttribLayout);
 
         if (isVtxAttribTexMtxIdx(vtxAttrib)) {
             const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? 0 : 1;
@@ -469,7 +467,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
                     texMtxIdxLayout[layoutIdx] = vtxAttribLayout
                 } else {
                     const baseAttribLayout = { vtxAttrib: baseVtxAttrib, bufferIndex, bufferOffset: fieldBase, format };
-                    dstVertexAttributeLayouts.push(baseAttribLayout);
+                    vertexAttributeLayouts.push(baseAttribLayout);
                     texMtxIdxLayout[layoutIdx] = baseAttribLayout;
                 }
             }
@@ -478,7 +476,10 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
     // Align the whole thing to our minimum required alignment (F32).
     dstVertexSize = align(dstVertexSize, 4);
-    return { dstVertexSize, dstVertexAttributeLayouts, vatLayouts };
+    const vertexBufferStrides = [dstVertexSize];
+
+    const indexFormat = GfxFormat.U16_R;
+    return { indexFormat, vertexBufferStrides, vertexAttributeLayouts, vatLayouts };
 }
 //#endregion
 
@@ -498,7 +499,7 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
         if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE)
             return '';
 
-        const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
+        const dstAttribLayout = loadedVertexLayout.vertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
 
         // If we don't have a destination for the data, then don't bother outputting.
         const outputEnabled = !!dstAttribLayout;
@@ -885,7 +886,7 @@ class VtxLoaderImpl implements VtxLoader {
         const dstIndexData = new Uint16Array(totalIndexCount);
         let vertexId = firstVertexId;
 
-        const dstVertexDataSize = this.loadedVertexLayout.dstVertexSize * totalVertexCount;
+        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
         const dstVertexData = new ArrayBuffer(dstVertexDataSize);
         const dstVertexDataView = new DataView(dstVertexData);
         let dstVertexDataOffs = 0;
@@ -945,15 +946,13 @@ class VtxLoaderImpl implements VtxLoader {
             let drawCallIdx = drawCall.srcOffs;
             for (let j = 0; j < drawCall.vertexCount; j++) {
                 drawCallIdx = this.vtxLoaders[drawCall.vertexFormat](dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides);
-                dstVertexDataOffs += this.loadedVertexLayout.dstVertexSize;
+                dstVertexDataOffs += this.loadedVertexLayout.vertexBufferStrides[0];
             }
         }
         
         return {
-            indexFormat: GfxFormat.U16_R,
             indexData: dstIndexData.buffer,
             vertexBuffers: [dstVertexData],
-            vertexBufferStrides: [this.loadedVertexLayout.dstVertexSize],
             totalVertexCount, totalIndexCount, vertexId, packets
         };
     }
@@ -1028,7 +1027,6 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
     for (let i = 0; i < loadedDatas.length; i++) {
         const loadedData = loadedDatas[i];
         assert(loadedData.vertexBuffers.length === 1);
-        assert(loadedData.vertexBufferStrides[0] === loadedVertexLayout.dstVertexSize);
 
         for (let j = 0; j < loadedData.packets.length; j++) {
             const packet = loadedData.packets[j];
@@ -1043,7 +1041,6 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
         totalVertexCount += loadedData.totalVertexCount;
         indexDataSize += loadedData.indexData.byteLength;
         packedVertexDataSize += loadedData.vertexBuffers[0].byteLength;
-        assert(loadedData.indexFormat === loadedDatas[0].indexFormat);
     }
 
     const indexData = new Uint8Array(indexDataSize);
@@ -1061,9 +1058,7 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
 
     return {
         indexData: indexData.buffer,
-        indexFormat: loadedDatas[0].indexFormat,
         vertexBuffers: [packedVertexData.buffer],
-        vertexBufferStrides: [loadedVertexLayout.dstVertexSize],
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,

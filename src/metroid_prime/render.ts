@@ -351,7 +351,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const packets: LoadedVertexPacket[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
-        assert(surface.loadedVertexLayout.dstVertexSize === surfaces[0].loadedVertexLayout.dstVertexSize);
+        assert(surface.loadedVertexLayout.vertexBufferStrides === surfaces[0].loadedVertexLayout.vertexBufferStrides);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
@@ -373,7 +373,6 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     let vertexOffset = 0;
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
-        assert(surface.loadedVertexData.indexFormat === GfxFormat.U16_R);
         assert(surface.loadedVertexData.indexData.byteLength === surface.loadedVertexData.totalIndexCount * 0x02);
         const surfaceIndexBuffer = new Uint16Array(surface.loadedVertexData.indexData);
         for (let j = 0; j < surfaceIndexBuffer.length; j++)
@@ -386,15 +385,17 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     }
 
     const newLoadedVertexData: LoadedVertexData = {
-        indexFormat: GfxFormat.U32_R,
         indexData: indexData.buffer,
         vertexBuffers: [packedVertexData.buffer],
-        vertexBufferStrides: [surfaces[0].loadedVertexLayout.dstVertexSize],
         totalIndexCount,
         totalVertexCount,
         packets,
         vertexId: 0,
     };
+
+    // Patch the vertex layout.
+    const loadedVertexLayout = surfaces[0].loadedVertexLayout;
+    loadedVertexLayout.indexFormat = GfxFormat.U32_R;
 
     return {
         materialIndex: surfaces[0].materialIndex,
@@ -402,7 +403,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         loadedVertexLayout: surfaces[0].loadedVertexLayout,
         loadedVertexData: newLoadedVertexData,
         origSurfaces: surfaces,
-    }
+    };
 }
 
 export class ModelCache {

@@ -7,7 +7,7 @@ import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
 import { assert, readString, assertExists } from '../../../util';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../../../gx/gx_displaylist';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
 import * as GX_Material from '../../../gx/gx_material';
 import AnimationController from '../../../AnimationController';
@@ -470,8 +470,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             attribIdx += 0x08;
         }
 
+        // TODO(jstpierre): Make sure these are compatible.
+        // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
+        const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
         const vtxLoader = compileVtxLoader(vat, vcd);
-        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
         let mtxGroupIdx = matrixGroupTableOffs + (firstMtxGroup * 0x08);
         const mtxGroups: MtxGroup[] = [];

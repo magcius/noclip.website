@@ -22,6 +22,7 @@ import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_Pa
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { setLoopMode, initDefaultPos, loadBTIData, connectToScene, startBrk, startBck } from "./ActorUtil";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
+import { TDDraw } from "./DDraw";
 
 const warpPodColorTable = [
     colorNewFromRGBA8(0x0064C8FF),
@@ -47,56 +48,21 @@ const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c =
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 
-// TODO(jstpierre): Would be nice to have a better way to do dynamic drawing so we don't
-// have to set this up every time...
 class WarpPodPathDrawer {
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
     private testColor: BTIData;
     private testMask: BTIData;
     private materialHelper: GXMaterialHelperGfx;
-
-    private shadowBufferF32: Float32Array;
-    private shadowBufferU8: Uint8Array;
+    private ddraw: TDDraw;
 
     constructor(sceneObjHolder: SceneObjHolder, arc: RARC, private points: vec3[], private color: Color) {
-        const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
-
         this.testColor = loadBTIData(sceneObjHolder, arc, `TestColor.bti`);
         this.testMask = loadBTIData(sceneObjHolder, arc, `TestMask.bti`);
 
-        const oneStripVertexCount = this.points.length * 2;
-        const totalVertexCount = oneStripVertexCount * 2;
-        const totalWordCount = totalVertexCount * 5;
-
-        const indexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, totalVertexCount);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
-
-        this.vertexBuffer = device.createBuffer(totalWordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
-
-        this.shadowBufferF32 = new Float32Array(totalWordCount);
-        this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
-
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 0x04*3, },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 0x04*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-        ];
-
-        this.inputLayout = cache.createInputLayout(device, {
-            indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-        });
-
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
+        this.ddraw = new TDDraw();
+        this.ddraw.setVtxDesc(GX.VertexAttribute.POS, GX.AttrType.DIRECT);
+        this.ddraw.setVtxDesc(GX.VertexAttribute.TEX0, GX.AttrType.DIRECT);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.VertexAttribute.POS, GX.CompCnt.POS_XYZ, GX.CompType.F32, 0);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.VertexAttribute.TEX0, GX.CompCnt.TEX_ST, GX.CompType.F32, 0);
 
         // Material.
         const mb = new GXMaterialBuilder('WarpPodPathDrawer');
@@ -113,67 +79,52 @@ class WarpPodPathDrawer {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    private updateStripeBuffer(device: GfxDevice, camera: Camera): void {
-        let idx0 = 0, idx1 = (this.points.length * 10);
-        for (let i = 0; i < this.points.length - 1; i++) {
-            vec3.sub(scratchVec3a, this.points[i + 1], this.points[i]);
-            getCamZdir(scratchVec3b, camera);
-            vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
-            vec3.normalize(scratchVec3c, scratchVec3c);
+    private setupPoint(dst: vec3, i: number, cross: boolean, camera: Camera): void {
+        vec3.sub(scratchVec3a, this.points[i + 1], this.points[i]);
+        getCamZdir(scratchVec3b, camera);
+        vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
+        vec3.normalize(scratchVec3c, scratchVec3c);
 
-            vec3.cross(scratchVec3a, scratchVec3c, scratchVec3b);
+        vec3.cross(scratchVec3a, scratchVec3c, scratchVec3b);
+
+        if (cross) {
             vec3.normalize(scratchVec3a, scratchVec3a);
-
             vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
-            vec3.normalize(scratchVec3b, scratchVec3b);
+            vec3.copy(dst, scratchVec3b);
+        } else {
+            vec3.copy(dst, scratchVec3a);
+        }
 
-            normToLength(scratchVec3b, 30);
-            normToLength(scratchVec3a, 30);
+        normToLength(dst, 30);
+    }
 
+    private drawPathPart(camera: Camera, cross: boolean): void {
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i < this.points.length - 1; i++) {
+            this.setupPoint(scratchVec3a, i, cross, camera);
             const texCoordY = Math.abs((2.0 * (i / this.points.length)) - 1.0);
 
             vec3.add(scratchVec3c, this.points[i], scratchVec3a);
-            this.shadowBufferF32[idx0++] = scratchVec3c[0];
-            this.shadowBufferF32[idx0++] = scratchVec3c[1];
-            this.shadowBufferF32[idx0++] = scratchVec3c[2];
-            this.shadowBufferF32[idx0++] = 0.0;
-            this.shadowBufferF32[idx0++] = texCoordY;
+            this.ddraw.position3vec3(scratchVec3c);
+            this.ddraw.texCoord2f32(GX.VertexAttribute.TEX0, 0.0, texCoordY);
 
             vec3.sub(scratchVec3c, this.points[i], scratchVec3a);
-            this.shadowBufferF32[idx0++] = scratchVec3c[0];
-            this.shadowBufferF32[idx0++] = scratchVec3c[1];
-            this.shadowBufferF32[idx0++] = scratchVec3c[2];
-            this.shadowBufferF32[idx0++] = 1.0;
-            this.shadowBufferF32[idx0++] = texCoordY;
-
-            vec3.add(scratchVec3c, this.points[i], scratchVec3b);
-            this.shadowBufferF32[idx1++] = scratchVec3c[0];
-            this.shadowBufferF32[idx1++] = scratchVec3c[1];
-            this.shadowBufferF32[idx1++] = scratchVec3c[2];
-            this.shadowBufferF32[idx1++] = 0.0;
-            this.shadowBufferF32[idx1++] = texCoordY;
-
-            vec3.sub(scratchVec3c, this.points[i], scratchVec3b);
-            this.shadowBufferF32[idx1++] = scratchVec3c[0];
-            this.shadowBufferF32[idx1++] = scratchVec3c[1];
-            this.shadowBufferF32[idx1++] = scratchVec3c[2];
-            this.shadowBufferF32[idx1++] = 1.0;
-            this.shadowBufferF32[idx1++] = texCoordY;
+            this.ddraw.position3vec3(scratchVec3c);
+            this.ddraw.texCoord2f32(GX.VertexAttribute.TEX0, 1.0, texCoordY);
         }
+        this.ddraw.end();
+    }
 
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer, 0, this.shadowBufferU8);
-        device.submitPass(hostAccessPass);
+    private drawPath(camera: Camera): void {
+        this.drawPathPart(camera, false);
+        this.drawPathPart(camera, true);
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        this.updateStripeBuffer(device, viewerInput.camera);
-
         this.testColor.fillTextureMapping(materialParams.m_TextureMapping[0]);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
         const offs = template.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
@@ -186,21 +137,15 @@ class WarpPodPathDrawer {
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        const oneStripVertexCount = (this.points.length - 1) * 2;
-        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
-
-        const renderInst1 = renderInstManager.pushRenderInst();
-        renderInst1.drawIndexes(oneStripIndexCount);
-        const renderInst2 = renderInstManager.pushRenderInst();
-        renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 12);
+        this.ddraw.beginDraw();
+        this.drawPath(viewerInput.camera);
+        this.ddraw.endDraw(device, renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputState(this.inputState);
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyBuffer(this.indexBuffer);
+        this.ddraw.destroy(device);
         this.testColor.destroy(device);
         this.testMask.destroy(device);
     }

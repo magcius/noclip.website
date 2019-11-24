@@ -369,48 +369,80 @@ export class GXMaterialHelperGfx {
     }
 }
 
+export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout, wantZeroBuffer: boolean = true): GfxInputLayout {
+    const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+
+    let usesZeroBuffer = false;
+    for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
+        const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
+
+        if (attribLocation === -1)
+            continue;
+
+        const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
+        const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+        const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
+
+        if (attrib !== undefined) {
+            const bufferByteOffset = attrib.bufferOffset;
+            const bufferIndex = attrib.bufferIndex;
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, usesIntInShader });
+        } else if (wantZeroBuffer) {
+            const bufferByteOffset = 0;
+            const bufferIndex = loadedVertexLayout.vertexBufferStrides.length;
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset, usesIntInShader });
+            usesZeroBuffer = true;
+        }
+    }
+
+    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
+    for (let i = 0; i < loadedVertexLayout.vertexBufferStrides.length; i++) {
+        vertexBufferDescriptors.push({
+            byteStride: loadedVertexLayout.vertexBufferStrides[i],
+            frequency: GfxVertexBufferFrequency.PER_VERTEX,
+        });
+    }
+
+    if (usesZeroBuffer) {
+        vertexBufferDescriptors.push({
+            byteStride: 0,
+            frequency: GfxVertexBufferFrequency.PER_INSTANCE,
+        });
+    }
+
+    const indexBufferFormat = loadedVertexLayout.indexFormat;
+    return cache.createInputLayout(device, {
+        vertexAttributeDescriptors,
+        vertexBufferDescriptors,
+        indexBufferFormat,
+    });
+}
+
 export class GXShapeHelperGfx {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
-        // First, build the inputLayout
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-
         let usesZeroBuffer = false;
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-
+    
             if (attribLocation === -1)
                 continue;
-
-            const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
-            const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
-            const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
-
-            if (attrib !== undefined) {
-                const bufferByteOffset = attrib.bufferOffset;
-                const bufferIndex = attrib.bufferIndex;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, usesIntInShader });
-            } else {
-                const bufferByteOffset = 0;
-                const bufferIndex = loadedVertexData.vertexBuffers.length;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset, usesIntInShader });
+    
+            const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+            if (attrib === undefined) {
                 usesZeroBuffer = true;
+                break;
             }
         }
 
         const buffers: GfxVertexBufferDescriptor[] = [];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
             buffers.push({
                 buffer: coalescedBuffers.vertexBuffers[i].buffer,
                 byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
-            });
-            vertexBufferDescriptors.push({
-                byteStride: loadedVertexData.vertexBufferStrides[i],
-                frequency: GfxVertexBufferFrequency.PER_VERTEX,
             });
         }
 
@@ -421,18 +453,9 @@ export class GXShapeHelperGfx {
                 buffer: this.zeroBuffer,
                 byteOffset: 0,
             });
-            vertexBufferDescriptors.push({
-                byteStride: 0,
-                frequency: GfxVertexBufferFrequency.PER_INSTANCE,
-            });
         }
 
-        const indexBufferFormat = this.loadedVertexData.indexFormat;
-        this.inputLayout = cache.createInputLayout(device, {
-            vertexAttributeDescriptors,
-            vertexBufferDescriptors,
-            indexBufferFormat,
-        });
+        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
 
         const indexBuffer: GfxIndexBufferDescriptor = {
             buffer: coalescedBuffers.indexBuffer.buffer,
