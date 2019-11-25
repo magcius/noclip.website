@@ -5,14 +5,14 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3 } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
-import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
-import { assertExists, leftPad, fallback } from '../util';
+import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
+import { assertExists, leftPad, fallback, nArray } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
@@ -27,6 +27,7 @@ import * as GX from '../gx/gx_enum';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { TextureMapping } from '../TextureHolder';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -305,7 +306,7 @@ function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
     const upNorm = scratchVec3b;
     const right = scratchVec3c;
     vec3.normalize(frontNorm, front);
-    vec3.cross(right, frontNorm, up);
+    vec3.cross(right, up, frontNorm);
     vec3.normalize(right, right);
     vec3.cross(upNorm, frontNorm, right);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
@@ -3809,5 +3810,211 @@ export class WarpPod extends LiveActor {
 
         if (this.pathDrawer !== null)
             this.pathDrawer.destroy(device);
+    }
+}
+
+export class WaterPlantDrawInit extends NameObj {
+    public angle: number = 0;
+    public swingSpeed: number = 0.03;
+    public swingWidth: number = 20;
+    public swingPoints: number[] = nArray(64, () => 0);
+    public waterPlantA: BTIData;
+    public waterPlantB: BTIData;
+    public waterPlantC: BTIData;
+    public waterPlantD: BTIData;
+    public materialHelper: GXMaterialHelperGfx;
+    public drawVec = vec3.create();
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'WaterPlantDrawInit');
+
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+
+        const arc = sceneObjHolder.modelCache.getObjectData('WaterPlant')!;
+        this.waterPlantA = loadBTIData(sceneObjHolder, arc, `WaterPlantA.bti`);
+        this.waterPlantB = loadBTIData(sceneObjHolder, arc, `WaterPlantB.bti`);
+        this.waterPlantC = loadBTIData(sceneObjHolder, arc, `WaterPlantC.bti`);
+        this.waterPlantD = loadBTIData(sceneObjHolder, arc, `WaterPlantD.bti`);
+
+        const mb = new GXMaterialBuilder(`WaterPlant`);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 50, GX.AlphaOp.OR, GX.CompareType.GREATER, 50);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        this.updateSwingPos();
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+        this.updateSwingPos();
+        this.angle += this.swingSpeed * getDeltaTimeFrames(viewerInput);
+
+        const viewMtxInv = viewerInput.camera.worldMatrix;
+        vec3.set(this.drawVec, viewMtxInv[0], viewMtxInv[1], viewMtxInv[2]);
+    }
+
+    private updateSwingPos(): void {
+        let theta = this.angle;
+        for (let i = 0; i < this.swingPoints.length; i++) {
+            this.swingPoints[i] = Math.sin(theta) * this.swingWidth;
+            theta += 0.2;
+        }
+    }
+
+    public loadTex(m: TextureMapping, plantType: number): void {
+        if (plantType === 0)
+            this.waterPlantA.fillTextureMapping(m);
+        else if (plantType === 1)
+            this.waterPlantB.fillTextureMapping(m);
+        else if (plantType === 2)
+            this.waterPlantC.fillTextureMapping(m);
+        else if (plantType === 3)
+            this.waterPlantD.fillTextureMapping(m);
+        else
+            throw "whoops";
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.waterPlantA.destroy(device);
+        this.waterPlantB.destroy(device);
+        this.waterPlantC.destroy(device);
+        this.waterPlantD.destroy(device);
+    }
+}
+
+class WaterPlantData {
+    public position = vec3.create();
+    public axisZ = vec3.create();
+    public swingPosIdx0: number = 0;
+    public swingPosIdx1: number = 0;
+    public swingPosIdx2: number = 0;
+}
+
+const waterPlantHeightTable = [150, 200, 300, 250];
+export class WaterPlant extends LiveActor {
+    private plantCount: number;
+    private radius: number;
+    private plantType: number;
+    private height: number;
+    private plantData: WaterPlantData[] = [];
+    private ddraw: TDDraw;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        sceneObjHolder.create(SceneObj.WATER_PLANT_DRAW_INIT);
+
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.WATER_PLANT);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.plantCount = fallback(getJMapInfoArg0(infoIter), 0x16);
+        this.radius = fallback(getJMapInfoArg1(infoIter), 500);
+        this.plantType = fallback(getJMapInfoArg3(infoIter), 0);
+        this.height = waterPlantHeightTable[this.plantType];
+
+        this.ddraw = new TDDraw();
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.POS_XYZ);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        computeModelMatrixR(scratchMatrix, 0, 15.0 * MathConstants.DEG_TO_RAD, 0);
+
+        // Scatter the plants around.
+        const axisZ = scratchVec3;
+        let swingPosIdx = 0;
+        vec3.set(axisZ, 0, 0, 1);
+        for (let i = 0; i < this.plantCount; i++) {
+            const plantData = new WaterPlantData();
+
+            // TODO(jstpierre): Search for ground. For now, just scatter them around on XZ plane.
+            const x = getRandomFloat(-this.radius, this.radius);
+            const z = getRandomFloat(-this.radius, this.radius);
+            vec3.copy(plantData.position, this.translation);
+            plantData.position[0] += x;
+            plantData.position[2] += z;
+
+            vec3.copy(plantData.axisZ, axisZ);
+
+            plantData.swingPosIdx0 = swingPosIdx + 6;
+            plantData.swingPosIdx1 = swingPosIdx + 3;
+            plantData.swingPosIdx2 = swingPosIdx;
+            swingPosIdx = (swingPosIdx + 60) % 57;
+
+            vec3.transformMat4(axisZ, axisZ, scratchMatrix);
+
+            this.plantData.push(plantData);
+        }
+    }
+
+    private drawStrip(ddraw: TDDraw, v0: vec3, dx: number, dz: number, tx: number): void {
+        ddraw.position3f32(v0[0] - dx, v0[1], v0[2] - dz);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, tx);
+        ddraw.position3f32(v0[0] + dx, v0[1], v0[2] + dz);
+        ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, tx);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        const waterPlantDrawInit = sceneObjHolder.waterPlantDrawInit!;
+
+        this.ddraw.beginDraw();
+
+        for (let i = 0; i < this.plantData.length; i++) {
+            const plantData = this.plantData[i];
+            vec3.scaleAndAdd(scratchVec3a, plantData.position, plantData.axisZ, waterPlantDrawInit.swingPoints[plantData.swingPosIdx0]);
+            vec3.scaleAndAdd(scratchVec3b, plantData.position, plantData.axisZ, waterPlantDrawInit.swingPoints[plantData.swingPosIdx1]);
+            vec3.scaleAndAdd(scratchVec3c, plantData.position, plantData.axisZ, waterPlantDrawInit.swingPoints[plantData.swingPosIdx2]);
+
+            scratchVec3a[1] += this.height * 0.5;
+            scratchVec3b[1] += this.height * 0.8;
+            scratchVec3c[1] += this.height * 1.0;
+
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            this.ddraw.allocVertices(8);
+
+            const dx = waterPlantDrawInit.drawVec[0] * 20.0;
+            const dz = waterPlantDrawInit.drawVec[2] * 20.0;
+
+            this.drawStrip(this.ddraw, scratchVec3c, dx, dz, 0.0);
+            this.drawStrip(this.ddraw, scratchVec3b, dx, dz, 0.2);
+            this.drawStrip(this.ddraw, scratchVec3a, dx, dz, 0.5);
+            this.drawStrip(this.ddraw, plantData.position, dx, dz, 1.0);
+
+            this.ddraw.end();
+        }
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
+        const materialHelper = waterPlantDrawInit.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.ddraw.destroy(device);
     }
 }

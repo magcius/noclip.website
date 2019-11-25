@@ -30,7 +30,7 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, TicoRail } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, WaterPlant } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -331,6 +331,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // executeDrawListOpa();
         this.execute(passRenderer, DrawType.WARP_POD_PATH);
+        this.execute(passRenderer, DrawType.WATER_PLANT);
 
         this.drawOpa(passRenderer, 0x18);
 
@@ -764,6 +765,7 @@ export const enum SceneObj {
     SENSOR_HIT_CHECKER = 0x00,
     AIR_BUBBLE_HOLDER = 0x39,
     WATER_AREA_HOLDER = 0x62,
+    WATER_PLANT_DRAW_INIT = 0x63,
 }
 
 export class SceneObjHolder {
@@ -778,9 +780,12 @@ export class SceneObjHolder {
     public stageDataHolder: StageDataHolder;
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
+
+    public sensorHitChecker: SensorHitChecker | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
-    public sensorHitChecker: SensorHitChecker | null = null;
+    public waterPlantDrawInit: WaterPlantDrawInit | null = null;
+
     public captureSceneDirector = new CaptureSceneDirector();
 
     // This is technically stored outside the SceneObjHolder, separately
@@ -801,16 +806,20 @@ export class SceneObjHolder {
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
             return this.waterAreaHolder;
+        else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
+            return this.waterPlantDrawInit;
         return null;
     }
 
     private newEachObj(sceneObj: SceneObj): void {
         if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
             this.sensorHitChecker = new SensorHitChecker(this);
-        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
+        else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
             this.waterAreaHolder = new WaterAreaHolder(this);
+        else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
+            this.waterPlantDrawInit = new WaterPlantDrawInit(this);
     }
 
     public destroy(device: GfxDevice): void {
