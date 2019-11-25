@@ -117,7 +117,8 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    // Noclip-specific hook to fetch any needed archives.
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Default implementation; nothing.
     }
 }

@@ -4,7 +4,7 @@ import { SceneObjHolder, getObjectName } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
-import { computeModelMatrixSRT, clamp } from "../MathHelpers";
+import { clamp } from "../MathHelpers";
 import AnimationController from "../AnimationController";
 import { colorFromRGBA8 } from "../Color";
 import { assert } from "../util";
@@ -16,7 +16,7 @@ import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketPar
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType } from "./NameObj";
-import { LiveActor, ZoneAndLayer, makeMtxTRFromActor } from "./LiveActor";
+import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
