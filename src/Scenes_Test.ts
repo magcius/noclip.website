@@ -6,6 +6,7 @@ import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
+import * as PVRT from "./Common/GC/PVRT";
 import { CtrTextureHolder } from "./oot3d/render";
 
 const id = 'test';
@@ -47,9 +48,25 @@ class H3DSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+export class JetSetRadioScene implements Viewer.SceneGfx {
+
+    
+
+    public textureHolder = new PVRT.PVRTextureHolder(); // raw uploader?
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        return null as unknown as GfxRenderPass;
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+
 const sceneDescs = [
     new BasicRRESSceneDesc('test/dthro_cmn1.brres'),
     new H3DSceneDesc('test/cave_Common.bch'),
+    //new JetSetRadioSceneDesc('jsr/DPTEX/FLAGTEX001.PVR'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = {
