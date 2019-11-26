@@ -18,7 +18,14 @@ export interface AnimationSetup {
     bones: Bone[];
 }
 
+export interface VertexBoneEntry {
+    position: vec3;
+    boneID: number;
+    vertexIDs: number[];
+}
+
 export interface VertexBoneTable {
+    vertexBoneEntries: VertexBoneEntry[];
 }
 
 export interface Geometry {
@@ -402,7 +409,30 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
     const vertexBoneTableOffs = view.getUint32(0x28);
     let vertexBoneTable: VertexBoneTable | null = null;
     if (vertexBoneTableOffs !== 0) {
-        vertexBoneTable = {};
+        assert(animationSetup !== null); // not sure what this would mean
+        const vertexBoneEntries: VertexBoneEntry[] = [];
+        const tableCount = view.getUint16(vertexBoneTableOffs);
+        let tableOffs = vertexBoneTableOffs + 0x04;
+        for (let i = 0; i < tableCount; i++) {
+            const x = view.getInt16(tableOffs + 0x00);
+            const y = view.getInt16(tableOffs + 0x02);
+            const z = view.getInt16(tableOffs + 0x04);
+            const boneID = view.getInt8(tableOffs + 0x06);
+            const boneVertexCount = view.getUint8(tableOffs + 0x07);
+            tableOffs += 0x08;
+            if (boneID === -1) { // these just take the model matrix
+                tableOffs += 2 * boneVertexCount;
+                continue;
+            }
+
+            const vertexIDs: number[] = [];
+            for (let j = 0; j < boneVertexCount; j++) {
+                vertexIDs.push(view.getUint16(tableOffs));
+                tableOffs += 0x02;
+            }
+            vertexBoneEntries.push({position: vec3.fromValues(x,y,z), boneID, vertexIDs});
+        }
+        vertexBoneTable = {vertexBoneEntries};
     }
 
     const vertexDataOffs = view.getUint32(0x10);

@@ -776,7 +776,7 @@ function getAnimFrame(anim: AnimationFile, frame: number): number {
 export class GeometryData {
     public renderData: RenderData;
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
-        this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0);
+        this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null);
     }
 }
 
@@ -864,6 +864,8 @@ function shouldDrawNode(selector: SelectorState, stateIndex: number, childIndex:
     return false;
 }
 
+const boneTransformScratch = vec3.create();
+const dummyTransform = mat4.create();
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -871,6 +873,7 @@ export class GeometryRenderer {
     public sortKeyBase: number;
     public modelMatrix = mat4.create();
     public boneToWorldMatrixArray: mat4[];
+    public boneToModelMatrixArray: mat4[];
     public boneToParentMatrixArray: mat4[];
     public boneAnimator: BoneAnimator | null = null;
     public animationController = new AnimationController(30);
@@ -891,6 +894,11 @@ export class GeometryRenderer {
         const geo = this.geometryData.geo;
         this.animationSetup = geo.animationSetup;
         this.vertexEffects = geo.vertexEffects;
+
+        if (geo.vertexBoneTable !== null) {
+            const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
+            this.boneToModelMatrixArray = nArray(boneToModelMatrixArrayCount, () => mat4.create());
+        }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
         this.boneToWorldMatrixArray = nArray(boneToWorldMatrixArrayCount, () => mat4.create());
@@ -973,7 +981,7 @@ export class GeometryRenderer {
         }
     }
 
-    private calcBoneToWorld(): void {
+    private calcBonesRelativeToMatrix(array: mat4[], base: mat4): void {
         if (this.animationSetup !== null) {
             const bones = this.animationSetup.bones;
 
@@ -981,13 +989,21 @@ export class GeometryRenderer {
                 const boneDef = bones[i];
 
                 const parentIndex = boneDef.parentIndex;
-                const parentMtx = parentIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[parentIndex];
+                const parentMtx = parentIndex === -1 ? base : array[parentIndex];
                 const boneIndex = i;
-                mat4.mul(this.boneToWorldMatrixArray[boneIndex], parentMtx, this.boneToParentMatrixArray[boneIndex]);
+                mat4.mul(array[boneIndex], parentMtx, this.boneToParentMatrixArray[boneIndex]);
             }
         } else {
-            mat4.copy(this.boneToWorldMatrixArray[0], this.modelMatrix);
+            mat4.copy(array[0], base);
         }
+    }
+
+    private calcBoneToWorld(): void {
+        this.calcBonesRelativeToMatrix(this.boneToWorldMatrixArray, this.modelMatrix);
+    }
+
+    private calcBoneToModel(): void {
+        this.calcBonesRelativeToMatrix(this.boneToModelMatrixArray, dummyTransform);
     }
 
     private calcSelectorState(): void {
@@ -1045,7 +1061,11 @@ export class GeometryRenderer {
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
+        // TODO: make sure the underlying vertex data gets modified only once per frame
+        let reuploadVertices = false;
+        // hope these are mutually exclusive
         if (this.vertexEffects.length > 0) {
+            reuploadVertices = true;
             for (let i = 0; i < this.vertexEffects.length; i++) {
                 const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
@@ -1053,6 +1073,22 @@ export class GeometryRenderer {
                     applyVertexEffect(effect, renderData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
+        } 
+        if (this.geometryData.geo.vertexBoneTable !== null) {
+            this.calcBoneToModel();
+            reuploadVertices = true;
+            const boneEntries = this.geometryData.geo.vertexBoneTable.vertexBoneEntries;
+            for (let i = 0; i < boneEntries.length; i++) {
+                vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
+                for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
+                    const vertexID = boneEntries[i].vertexIDs[j];
+                    renderData.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+                    renderData.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+                    renderData.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                }
+            }
+        }
+        if (reuploadVertices) {
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadBufferData(renderData.vertexBuffer, 0, new Uint8Array(renderData.vertexBufferData.buffer));
             device.submitPass(hostAccessPass);

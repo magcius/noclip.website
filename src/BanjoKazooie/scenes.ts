@@ -337,37 +337,68 @@ class ObjectData {
         return renderer;
     }
 
-    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | FlipbookRenderer | null {
+    private static pairedIDs = new Map<number, number>([
+        [0x011, 0x059],     // ju-ju stack
+        [0x12b, 0x12c],     // molehills
+        [0x37a, 0x12c],
+        //[0x167, ],        // cauliflower with empty honeycomb, seems like it can be other veggie enemies?
+        [0x2e2, 0x2df],     // lighthouse
+    ]);
+
+    private spawnDependentObjects(device: GfxDevice, id: number, pos: vec3, yaw = 0): (GeometryRenderer | FlipbookRenderer)[] {
+        const pairedID = ObjectData.pairedIDs.get(id);
+        if (pairedID === undefined)
+            return [];
+
+        const pairedObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
+        const posCopy = vec3.clone(pos);
+        switch (id) {
+            case 0x011:
+                for (let i = 0; i < 3; i++) {
+                    pairedObjects.push(...this.spawnObject(device, pairedID, posCopy, yaw));
+                    vec3.add(posCopy, posCopy, [0, 250, 0]);
+                }
+                return pairedObjects;
+        }
+        return this.spawnObject(device, pairedID, pos, yaw);
+    }
+
+    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0, selector = 0): (GeometryRenderer | FlipbookRenderer)[] {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
             console.warn(`Unknown object ID ${hexzero(id, 4)}`);
-            return null;
+            return [];
         }
 
-        if (spawnEntry.GeoFileID === 0)
-            return null; // nothing to render
-        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw);
-        if (renderer === null) {
-            return null;
-        }
-        (renderer as any).spawnEntry = spawnEntry;
+        const allObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
+        // if this object has a model file, make a renderer
+        const renderer = spawnEntry.GeoFileID !== 0 ? this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw) : null;
+        if (renderer !== null) {
+            (renderer as any).spawnEntry = spawnEntry;
 
-        if (renderer instanceof GeometryRenderer)
-            renderer.objectFlags = spawnEntry.Flags;
-
-        const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
-        if (animEntry !== undefined) {
             if (renderer instanceof GeometryRenderer) {
-                const file = findFileByID(this.objectSetupData, animEntry.FileID);
-                if (file !== null) {
-                    const animFile = parseAnimationFile(file.Data);
-                    renderer.boneAnimator = new BoneAnimator(animFile);
-                }
-            } else {
-                console.warn(`animation data for flipbook object ${hexzero(id, 4)}`)
+                renderer.objectFlags = spawnEntry.Flags;
+                setObjectSpecificSelectors(renderer, id, selector);
             }
+
+            const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
+            if (animEntry !== undefined) {
+                if (renderer instanceof GeometryRenderer) {
+                    const file = findFileByID(this.objectSetupData, animEntry.FileID);
+                    if (file !== null) {
+                        const animFile = parseAnimationFile(file.Data);
+                        renderer.boneAnimator = new BoneAnimator(animFile);
+                    }
+                } else {
+                    console.warn(`animation data for flipbook object ${hexzero(id, 4)}`)
+                }
+            }
+            allObjects.push(renderer);
         }
-        return renderer;
+        // an object with no geometry can still spawn others
+        allObjects.push(...this.spawnDependentObjects(device, id, pos, yaw));
+
+        return allObjects;
     }
 
     public destroy(device: GfxDevice): void {
@@ -382,7 +413,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=5`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=6`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -457,12 +488,13 @@ class SceneDesc implements Viewer.SceneDesc {
 
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
-                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
-                            if (objRenderer instanceof GeometryRenderer) {
-                                setObjectSpecificSelectors(objRenderer, id, selectorValue);
-                                sceneRenderer.geoRenderers.push(objRenderer);
-                            } else if (objRenderer instanceof FlipbookRenderer) {
-                                sceneRenderer.flipbookRenderers.push(objRenderer);
+                            const objRenderers = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorValue);
+                            for (let obj of objRenderers) {
+                                if (obj instanceof GeometryRenderer) {
+                                    sceneRenderer.geoRenderers.push(obj);
+                                } else if (obj instanceof FlipbookRenderer) {
+                                    sceneRenderer.flipbookRenderers.push(obj);
+                                }
                             }
                         }
                         offs += 0x14;
@@ -566,7 +598,11 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
             this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
-
+            if (obj.SceneID == 0x0b) {
+                const clanker = objectData.spawnObject(device, 0x10001, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
+                clanker.animationController.fps = 15; // seems slower than others, not sure the source
+                sceneRenderer.geoRenderers.push(clanker);
+            }
             return sceneRenderer;
         });
     }

@@ -253,6 +253,17 @@ function extractObjectLoad(fs: FS) {
     extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD0420, 0XFD6190, 0x803863F0);
     extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD6190, 0XFDAA10, 0X8038DB6C);
 
+    // clanker
+    setupTable.push({
+        OtherID: 0,
+        SpawnID: 0x10001, // fake ID
+        GeoFileID: 0x88e,
+        AnimationTable: [{FileID: 0xc3, Duration: 1}],
+        AnimationStartIndex: 0,
+        Flags: 0,
+        Scale: 1,
+    });
+
     const fileTable: CRG1File[] = [];
     for (let i = 0; i < setupTable.length; i++) {
         const setup = setupTable[i];
