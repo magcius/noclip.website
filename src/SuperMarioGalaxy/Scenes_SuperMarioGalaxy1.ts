@@ -1,11 +1,11 @@
 
 import * as Viewer from '../viewer';
-import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, FPS, SMGRenderer } from "./Main";
+import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { RARC } from '../j3d/rarc';
 import { NameObj } from './NameObj';
-import { connectToScene, getRandomInt, getRandomFloat, connectToSceneNoSilhouettedMapObjStrongLight, calcDistanceVertical } from './ActorUtil';
-import { TicoRail, getRailTotalLength, vecKillElement } from './MiscActor';
+import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength } from './ActorUtil';
+import { TicoRail, vecKillElement } from './MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
 
 class SMG1SceneDesc extends SMGSceneDescBase {

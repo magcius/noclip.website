@@ -190,7 +190,7 @@ function makeRailPart(p0: vec3, p1: vec3, p2: vec3, p3: vec3): RailPart {
 }
 
 export class BezierRail {
-    private pointRecordCount: number;
+    public pointRecordCount: number;
     public isClosed: boolean;
     public railParts: RailPart[] = [];
     public railPartCoords: number[] = [];
@@ -483,6 +483,10 @@ export class RailRider {
 
     public getTotalLength(): number {
         return this.bezierRail.getTotalLength();
+    }
+
+    public getPointNum(): number {
+        return this.bezierRail.pointRecordCount;
     }
 
     public isLoop(): boolean {

@@ -15,7 +15,7 @@ import { LightType } from "./DrawBuffer";
 
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import * as Viewer from '../viewer';
-import { assertExists, fallback, assert } from "../util";
+import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
@@ -545,7 +545,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.hitSensorKeeper !== null)
             this.hitSensorKeeper.doObjCol();
-        
+
         if (this.visibleAlive) {
             const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
@@ -562,7 +562,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
 
             if (this.effectKeeper !== null) {
-                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
+                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
                 this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
             }
 

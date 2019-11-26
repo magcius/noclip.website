@@ -67,9 +67,9 @@ export class J3DFrameCtrl {
         }
     }
 
-    public checkPass(frame: number, currentTimeInFrames = this.currentTimeInFrames, speedInFrames = this.speedInFrames): boolean {
+    public checkPass(frame: number, deltaTimeFrames: number, currentTimeInFrames = this.currentTimeInFrames, speedInFrames = this.speedInFrames): boolean {
         if (this.loopMode === LoopMode.ONCE || this.loopMode === LoopMode.ONCE_AND_RESET) {
-            const oldTime = currentTimeInFrames, newTime = currentTimeInFrames + speedInFrames;
+            const oldTime = currentTimeInFrames, newTime = currentTimeInFrames + (speedInFrames * deltaTimeFrames);
             return oldTime < frame && newTime >= frame;
         } else {
             // TODO(jstpierre): RE this.

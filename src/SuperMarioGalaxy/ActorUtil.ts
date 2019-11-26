@@ -12,6 +12,7 @@ import { RARC } from "../j3d/rarc";
 import { getRes, XanimePlayer } from "./Animation";
 import { vec3 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
+import { RailDirection } from "./RailRider";
 
 const scratchVec3 = vec3.create();
 
@@ -388,6 +389,91 @@ export function sendArbitraryMsg(messageType: MessageType, otherSensor: HitSenso
     return receiveMessage(otherSensor, messageType, thisSensor);
 }
 
+export function getRailTotalLength(actor: LiveActor): number {
+    return actor.railRider!.getTotalLength();
+}
+
+export function getRailDirection(dst: vec3, actor: LiveActor): void {
+    vec3.copy(dst, actor.railRider!.currentDir);
+}
+
+export function getRailCoordSpeed(actor: LiveActor): number {
+    return actor.railRider!.speed;
+}
+
+export function calcRailPosAtCoord(dst: vec3, actor: LiveActor, coord: number): void {
+    actor.railRider!.calcPosAtCoord(dst, coord);
+}
+
+export function isRailGoingToEnd(actor: LiveActor): boolean {
+    return actor.railRider!.direction === RailDirection.TOWARDS_END;
+}
+
+export function reverseRailDirection(actor: LiveActor): void {
+    actor.railRider!.reverse();
+}
+
+export function isLoopRail(actor: LiveActor): boolean {
+    return actor.railRider!.isLoop();
+}
+
+export function moveCoordToStartPos(actor: LiveActor): void {
+    actor.railRider!.setCoord(0);
+}
+
+export function setRailCoordSpeed(actor: LiveActor, v: number): void {
+    actor.railRider!.setSpeed(Math.abs(v));
+}
+
+export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(actor.translation);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveCoordAndTransToNearestRailPoint(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPoint(actor.translation);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveCoordAndTransToRailStartPoint(actor: LiveActor): void {
+    actor.railRider!.setCoord(0);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveCoord(actor: LiveActor, speed: number): void {
+    actor.railRider!.setSpeed(speed);
+    actor.railRider!.move();
+}
+
+export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
+    moveCoord(actor, speed);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function getCurrentRailPointNo(actor: LiveActor): number {
+    return actor.railRider!.currentPointId;
+}
+
+export function getRailPartLength(actor: LiveActor, partIdx: number): number {
+    return actor.railRider!.getPartLength(partIdx);
+}
+
+export function getRailCoord(actor: LiveActor): number {
+    return actor.railRider!.coord;
+}
+
+export function getRailPos(v: vec3, actor: LiveActor): void {
+    vec3.copy(v, actor.railRider!.currentPos);
+}
+
+export function setRailCoord(actor: LiveActor, coord: number): void {
+    actor.railRider!.setCoord(coord);
+}
+
+export function moveRailRider(actor: LiveActor): void {
+    actor.railRider!.move();
+}
+
 export function isExistRail(actor: LiveActor): boolean {
     return actor.railRider !== null;
 }
@@ -400,9 +486,21 @@ export function getRailPointPosEnd(actor: LiveActor): vec3 {
     return actor.railRider!.endPos;
 }
 
+export function getRailPointNum(actor: LiveActor): number {
+    return actor.railRider!.getPointNum();
+}
+
+export function moveTransToOtherActorRailPos(actor: LiveActor, otherActor: LiveActor): void {
+    getRailPos(actor.translation, otherActor);
+}
+
 export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
     vec3.subtract(scratchVec3, actor.translation, other);
     const m = vec3.dot(actor.gravityVector, scratchVec3);
     vec3.scale(scratchVec3, actor.gravityVector, m);
     return vec3.length(scratchVec3);
+}
+
+export function isValidDraw(actor: LiveActor): boolean {
+    return actor.visibleAlive && actor.visibleScenario;
 }

@@ -120,6 +120,11 @@ class ParticleEmitter {
         if (this.baseEmitter !== null)
             colorCopy(this.baseEmitter.globalColorEnv, color);
     }
+
+    public setGlobalScale(v: vec3): void {
+        if (this.baseEmitter !== null)
+            this.baseEmitter.setGlobalScale(v);
+    }
 }
 
 const enum EmitterLoopMode {
@@ -232,6 +237,7 @@ class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
     public baseScale: number | null = null;
     public affectFlags: SRTFlags = 0;
     public followFlags: SRTFlags = 0;
+    public drawParticle: boolean = true;
 
     public hostMtx: mat4 | null = null;
     public hostTranslation: vec3 | null = null;
@@ -341,13 +347,14 @@ class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
     }
 
     public init(emitter: JPA.JPABaseEmitter): void {
+        emitter.setDrawParticle(this.drawParticle);
         this.followSRT(emitter, true);
     }
 
     public setHostMtx(hostMtx: mat4, hostScale: vec3 | null = null): void {
-        this.hostScale = hostScale;
-        this.hostRotation = null;
         this.hostTranslation = null;
+        this.hostRotation = null;
+        this.hostScale = hostScale;
         this.hostMtx = hostMtx;
     }
 
@@ -464,11 +471,27 @@ export class MultiEmitter {
     }
 
     public setDrawParticle(v: boolean): void {
+        this.emitterCallBack.drawParticle = v;
+
         for (let i = 0; i < this.singleEmitters.length; i++) {
             const emitter = this.singleEmitters[i];
             if (!emitter.isValid())
                 continue;
             emitter.setDrawParticle(v);
+        }
+    }
+
+    public setGlobalScale(v: vec3, emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.setGlobalScale(v);
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.setGlobalScale(v);
         }
     }
 
@@ -527,23 +550,23 @@ function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | nu
     return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName.toLowerCase()) : false;
 }
 
-function checkPass(xanimePlayer: XanimePlayer, frame: number): boolean {
+function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: number): boolean {
     if (xanimePlayer.frameCtrl.speedInFrames === 0.0) {
         // TODO(jstpierre): checkPassIfRate0.
         return false;
     } else {
-        return xanimePlayer.checkPass(frame);
+        return xanimePlayer.checkPass(frame, deltaTimeFrames);
     }
 }
 
-function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean): boolean {
+function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean, deltaTimeFrames: number): boolean {
     if (isRegisteredBck(multiEmitter, currentBckName)) {
         if (loopMode === EmitterLoopMode.FOREVER)
             return true;
 
         // TODO(jstpierre): Check speed
         if (!changeBckReset && multiEmitter.startFrame >= 0)
-            return checkPass(xanimePlayer, multiEmitter.startFrame);
+            return checkPass(xanimePlayer, multiEmitter.startFrame, deltaTimeFrames);
         else
             return true;
     }
@@ -551,7 +574,7 @@ function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xan
     return false;
 }
 
-function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer): boolean {
+function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, deltaTimeFrames: number): boolean {
     if (!isRegisteredBck(multiEmitter, currentBckName)) {
         // TODO(jstpierre): isBckLoop.
 
@@ -567,7 +590,7 @@ function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xan
     }
 
     if (multiEmitter.endFrame >= 0)
-        return checkPass(xanimePlayer, multiEmitter.endFrame);
+        return checkPass(xanimePlayer, multiEmitter.endFrame, deltaTimeFrames);
 
     return false;
 }
@@ -654,21 +677,21 @@ export class EffectKeeper {
         this.changeBckReset = true;
     }
 
-    private syncEffectBck(effectSystem: EffectSystem, xanimePlayer: XanimePlayer, multiEmitter: MultiEmitter): void {
+    private syncEffectBck(effectSystem: EffectSystem, xanimePlayer: XanimePlayer, multiEmitter: MultiEmitter, deltaTimeFrames: number): void {
         if (multiEmitter.animNames === null)
             return;
 
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.ONE_TIME, this.changeBckReset))
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.ONE_TIME, this.changeBckReset, deltaTimeFrames))
             multiEmitter.createOneTimeEmitter(effectSystem);
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.FOREVER, this.changeBckReset))
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.FOREVER, this.changeBckReset, deltaTimeFrames))
             multiEmitter.createForeverEmitter(effectSystem);
-        if (isDelete(multiEmitter, this.currentBckName, xanimePlayer))
+        if (isDelete(multiEmitter, this.currentBckName, xanimePlayer, deltaTimeFrames))
             multiEmitter.deleteEmitter();
 
         multiEmitter.bckName = this.currentBckName;
     }
 
-    public updateSyncBckEffect(effectSystem: EffectSystem): void {
+    public updateSyncBckEffect(effectSystem: EffectSystem, deltaTimeFrames: number): void {
         if (this.actor.modelManager === null || this.actor.modelManager.xanimePlayer === null)
             return;
 
@@ -681,7 +704,7 @@ export class EffectKeeper {
             this.currentBckName = this.currentBckName.toLowerCase();
 
         for (let i = 0; i < this.multiEmitters.length; i++)
-            this.syncEffectBck(effectSystem, xanimePlayer, this.multiEmitters[i]);
+            this.syncEffectBck(effectSystem, xanimePlayer, this.multiEmitters[i], deltaTimeFrames);
 
         // SyncBckEffectChecker::updateAfter
         this.changeBckReset = false;

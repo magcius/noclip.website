@@ -394,11 +394,11 @@ export class XanimePlayer {
         }
     }
 
-    public checkPass(frame: number): boolean {
+    public checkPass(frame: number, deltaTimeFrames: number): boolean {
         if (this.updatedFrameCtrl) {
-            return this.frameCtrl.checkPass(frame, this.oldTimeInFrames, this.oldSpeedInFrames);
+            return this.frameCtrl.checkPass(frame, deltaTimeFrames, this.oldTimeInFrames, this.oldSpeedInFrames);
         } else {
-            return this.frameCtrl.checkPass(frame);
+            return this.frameCtrl.checkPass(frame, deltaTimeFrames);
         }
     }
 }
