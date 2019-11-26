@@ -9,7 +9,6 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { interactiveVizSliderSelect, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
@@ -770,7 +769,7 @@ function getAnimFrame(anim: AnimationFile, frame: number): number {
     const lastFrame = anim.endFrame - anim.startFrame;
     while (frame > lastFrame)
         frame -= lastFrame;
-    return (frame + anim.startFrame) | 0;
+    return frame + anim.startFrame;
 }
 
 export class GeometryData {
@@ -1063,6 +1062,7 @@ export class GeometryRenderer {
 
         // TODO: make sure the underlying vertex data gets modified only once per frame
         let reuploadVertices = false;
+
         // hope these are mutually exclusive
         if (this.vertexEffects.length > 0) {
             reuploadVertices = true;
@@ -1073,7 +1073,8 @@ export class GeometryRenderer {
                     applyVertexEffect(effect, renderData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
-        } 
+        }
+
         if (this.geometryData.geo.vertexBoneTable !== null) {
             this.calcBoneToModel();
             reuploadVertices = true;

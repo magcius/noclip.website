@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
+import { Endianness } from "../endian";
 
 // Banjo-Kazooie Geometry
 
@@ -21,7 +22,7 @@ export interface AnimationSetup {
 export interface VertexBoneEntry {
     position: vec3;
     boneID: number;
-    vertexIDs: number[];
+    vertexIDs: Uint16Array;
 }
 
 export interface VertexBoneTable {
@@ -417,20 +418,19 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
             const x = view.getInt16(tableOffs + 0x00);
             const y = view.getInt16(tableOffs + 0x02);
             const z = view.getInt16(tableOffs + 0x04);
+            const position = vec3.fromValues(x, y, z);
+
             const boneID = view.getInt8(tableOffs + 0x06);
             const boneVertexCount = view.getUint8(tableOffs + 0x07);
             tableOffs += 0x08;
-            if (boneID === -1) { // these just take the model matrix
-                tableOffs += 2 * boneVertexCount;
-                continue;
+
+            // When -1, it just takes the model matrix... no entry required.
+            if (boneID !== -1) {
+                const vertexIDs = buffer.createTypedArray(Uint16Array, tableOffs, boneVertexCount, Endianness.BIG_ENDIAN);
+                vertexBoneEntries.push({ position, boneID, vertexIDs });
             }
 
-            const vertexIDs: number[] = [];
-            for (let j = 0; j < boneVertexCount; j++) {
-                vertexIDs.push(view.getUint16(tableOffs));
-                tableOffs += 0x02;
-            }
-            vertexBoneEntries.push({position: vec3.fromValues(x,y,z), boneID, vertexIDs});
+            tableOffs += 0x02 * boneVertexCount;
         }
         vertexBoneTable = {vertexBoneEntries};
     }
