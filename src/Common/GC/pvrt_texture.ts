@@ -8,7 +8,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 
 class Untwiddle {
     static kTwiddleTableSize = 1024;
-    twittleTable = new Uint8Array(Untwiddle.kTwiddleTableSize);
+    twittleTable = new Uint32Array(Untwiddle.kTwiddleTableSize);
 
     constructor() {
         this.genTwiddleTable();    
@@ -54,14 +54,14 @@ function unpackTexelToRGBA(srcTexel: number, srcFormat: PVRTFormat, dst: Uint8Ar
         case PVRTFormat.RGB565:
         {
             const a = 0xFF;
-            const r = (srcTexel & 0xF800) >> 8;
-            const g = (srcTexel & 0x07E0) >> 3;
+            const r = (srcTexel & 0xF800) >>> 8;
+            const g = (srcTexel & 0x07E0) >>> 3;
             const b = (srcTexel & 0x001F) << 3;
 
-            dst[dstOffs + 0] = a;
-            dst[dstOffs + 1] = r;
-            dst[dstOffs + 2] = g;
-            dst[dstOffs + 3] = b;
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
 
             break;
         }
@@ -69,29 +69,29 @@ function unpackTexelToRGBA(srcTexel: number, srcFormat: PVRTFormat, dst: Uint8Ar
         case PVRTFormat.ARGB1555:
         {
             const a = (srcTexel & 0x8000) ? 0xFF : 0x00;
-            const r = (srcTexel & 0x7C00) >> 7;
-            const g = (srcTexel & 0x03E0) >> 2;
+            const r = (srcTexel & 0x7C00) >>> 7;
+            const g = (srcTexel & 0x03E0) >>> 2;
             const b = (srcTexel & 0x001F) << 3;
 
-            dst[dstOffs + 0] = a;
-            dst[dstOffs + 1] = r;
-            dst[dstOffs + 2] = g;
-            dst[dstOffs + 3] = b;
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
             
             break;
         }
             
         case PVRTFormat.ARGB4444:
         {
-            const a = (srcTexel & 0xF000) >> 8;
-            const r = (srcTexel & 0x0F00) >> 4;
+            const a = (srcTexel & 0xF000) >>> 8;
+            const r = (srcTexel & 0x0F00) >>> 4;
             const g = (srcTexel & 0x00F0);
             const b = (srcTexel & 0x000F) << 4;
 
-            dst[dstOffs + 0] = a;
-            dst[dstOffs + 1] = r;
-            dst[dstOffs + 2] = g;
-            dst[dstOffs + 3] = b;
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
             
             break;
         }
@@ -164,7 +164,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
     let mipHeight = 0;
     let mipSize = 0;
 
-    // skip mipmaps - todo: don't do this
+    // skip mipmaps - todo: keep all texture levels
     let mipMapCount = (isMipMaps) ? MipMapsCountFromWidth(width) : 1;
     while (mipMapCount)
     {
@@ -176,7 +176,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
         {
             if (isVQCompressed)
             {
-                srcDataOffset += mipSize / 4;
+                srcDataOffset += Math.floor(mipSize / 4);
             }
             else
             {
@@ -188,7 +188,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
             srcDataOffset += (isVQCompressed) ? 1 : kSrcStride;  // skip 1x1 mip
         }
     }
-    
+
     // Compressed textures processes only half-size
     if (isVQCompressed)
     {
@@ -217,7 +217,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
                 for (let xoffset = 0; xoffset < 2; ++xoffset)
                 {   
                     const srcPos = (vqIndex + (xoffset * 2 + yoffset)) * kSrcStride;
-                    const srcTexel = srcData.getUint16(srcPos);
+                    const srcTexel = srcData.getUint16(srcDataOffset + srcPos, true);
                                     
                     const dstPos = ((y * 2 + yoffset) * 2 * mipWidth + (x * 2 + xoffset)) * kDstStride;
 
@@ -234,12 +234,12 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
         else
         {
             x = proccessed % mipWidth;
-            y = proccessed / mipWidth;
+            y = Math.floor(proccessed / mipWidth);
             
             const srcPos = ((isTwiddled) ? untwiddler.getUntwiddledTexelPosition(x, y) : proccessed) * kSrcStride;
-
-            const srcTexel = srcData.getUint16(srcPos);
+            const srcTexel = srcData.getUint16(srcDataOffset + srcPos, true);
             const dstPos = proccessed * kDstStride;
+
             unpackTexelToRGBA(srcTexel, meta.format, dstData, dstPos);
         }
         
