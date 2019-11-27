@@ -2,6 +2,7 @@
 // Resource System
 
 import * as Pako from 'pako';
+import { decompress as lzoDecompress } from "../Common/Compression/LZO";
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, readString, assertExists } from "../util";
@@ -71,7 +72,28 @@ export class ResourceSystem {
         this._cache = new Map<string, Resource>();
     }
 
-    private loadResourceBuffer_CMPD_ZLIB(buffer: ArrayBufferSlice): ArrayBufferSlice {
+    private loadResourceBuffer_LZO(buffer: ArrayBufferSlice): ArrayBufferSlice {
+        const view = buffer.createDataView();
+        const decompressedChunks: Uint8Array[] = [];
+        const decompressedSize = view.getUint32(0x00);
+
+        let remaining = decompressedSize;
+        let ptr = 0x04;
+        while (remaining > 0) {
+            const chunkCompressedSize = view.getUint16(ptr);
+            ptr += 0x02;
+            const chunkBuffer = buffer.subarray(ptr, chunkCompressedSize);
+            ptr += chunkCompressedSize;
+            const decompressedChunkBuffer = lzoDecompress(chunkBuffer, 0x4000);
+            decompressedChunks.push(decompressedChunkBuffer.createTypedArray(Uint8Array));
+            remaining -= decompressedChunkBuffer.byteLength;
+        }
+
+        const decompressedBuffer = combineBuffers(decompressedSize, decompressedChunks);
+        return new ArrayBufferSlice(decompressedBuffer.buffer);
+    }
+
+    private loadResourceBuffer_CMPD(buffer: ArrayBufferSlice, method: CompressionMethod): ArrayBufferSlice {
         const view = buffer.createDataView();
         assert(readString(buffer, 0x00, 0x04, false) === 'CMPD');
         const chunkCount = view.getUint32(0x04);
@@ -88,9 +110,23 @@ export class ResourceSystem {
                 // Left uncompressed
                 decompressedChunks.push(chunkBuffer.createTypedArray(Uint8Array));
             } else {
-                const inflated = Pako.inflate(chunkBuffer.createTypedArray(Uint8Array));
-                assert(inflated.byteLength === chunkDecompressedSize);
-                decompressedChunks.push(inflated);
+                if (method === CompressionMethod.CMPD_ZLIB) {
+                    const inflated = Pako.inflate(chunkBuffer.createTypedArray(Uint8Array));
+                    assert(inflated.byteLength === chunkDecompressedSize);
+                    decompressedChunks.push(inflated);
+                } else {
+                    let remaining = chunkDecompressedSize;
+                    let ptr = chunkDataIdx;
+                    while (remaining > 0) {
+                        const lzoChunkCompressedSize = view.getUint16(ptr);
+                        ptr += 0x02;
+                        const lzoChunkBuffer = buffer.subarray(ptr, lzoChunkCompressedSize);
+                        ptr += lzoChunkCompressedSize;
+                        const lzoDecompressedChunkBuffer = lzoDecompress(lzoChunkBuffer, 0x4000);
+                        decompressedChunks.push(lzoDecompressedChunkBuffer.createTypedArray(Uint8Array));
+                        remaining -= lzoDecompressedChunkBuffer.byteLength;
+                    }
+                }
             }
             chunkTableIdx += 0x08;
             chunkDataIdx += chunkCompressedSize;
@@ -109,8 +145,11 @@ export class ResourceSystem {
             const deflated = resource.buffer.createTypedArray(Uint8Array, 0x04);
             const inflated = Pako.inflate(deflated);
             return new ArrayBufferSlice(inflated.buffer);
-        } else if (resource.compressionMethod === CompressionMethod.CMPD_ZLIB) {
-            return this.loadResourceBuffer_CMPD_ZLIB(resource.buffer);
+        } else if (resource.compressionMethod === CompressionMethod.LZO) {
+            return this.loadResourceBuffer_LZO(resource.buffer);
+        } else if (resource.compressionMethod === CompressionMethod.CMPD_ZLIB ||
+                   resource.compressionMethod === CompressionMethod.CMPD_LZO) {
+            return this.loadResourceBuffer_CMPD(resource.buffer, resource.compressionMethod);
         } else {
             throw "whoops";
         }

@@ -22,7 +22,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(`dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
-            const levelPak = PAK.parse(buffer);
+            const levelPak = PAK.parse(buffer, PAK.CompressionMethod.CMPD_ZLIB);
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 if (this.worldName.length !== 0 && this.worldName != mlvlEntry.name) continue;
