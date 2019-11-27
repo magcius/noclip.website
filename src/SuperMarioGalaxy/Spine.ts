@@ -52,7 +52,7 @@ export class Spine<Nerve extends number = number> {
             // a bit so we don't get stuck in a loop.
             this.tick = 0.01;
         } else {
-            this.tick += clamp(deltaTime, 0.0, 1.5);
+            this.tick += deltaTime;
         }
     }
 

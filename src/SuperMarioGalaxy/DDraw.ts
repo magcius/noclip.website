@@ -11,6 +11,7 @@ import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
 import { vec3 } from 'gl-matrix';
+import { Color } from '../Color';
 
 function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
     if (cmd === GX.Command.DRAW_QUADS)
@@ -99,6 +100,10 @@ export class TDDraw {
         return v*stride + attrOffs;
     }
 
+    private writeUint8(offs: number, v: number): void {
+        this.vertexData.setUint8(offs, v);
+    }
+
     private writeFloat32(offs: number, v: number): void {
         const e = (getSystemEndianness() === Endianness.LITTLE_ENDIAN);
         this.vertexData.setFloat32(offs, v, e);
@@ -146,12 +151,24 @@ export class TDDraw {
         this.writeFloat32(offs + 0x04, t);
     }
 
+    public color4rgba8(attr: GX.Attr, r: number, g: number, b: number, a: number): void {
+        const offs = this.getOffs(this.currentVertex, attr);
+        this.writeUint8(offs + 0x00, r);
+        this.writeUint8(offs + 0x01, g);
+        this.writeUint8(offs + 0x02, b);
+        this.writeUint8(offs + 0x03, a);
+    }
+
+    public color4color(attr: GX.Attr, c: Color): void {
+        this.color4rgba8(attr, c.r * 0xFF, c.g * 0xFF, c.b * 0xFF, c.a * 0xFF);
+    }
+
     public end(): void {
         const gfxTopo = getGfxToplogyFromCommand(this.currentPrim);
-        const numIndices = getTriangleIndexCountForTopologyIndexCount(gfxTopo, this.currentPrimVertex);
+        const numIndices = getTriangleIndexCountForTopologyIndexCount(gfxTopo, this.currentPrimVertex + 1);
         this.ensureIndexBufferData(this.currentIndex + numIndices);
         const baseVertex = this.currentVertex - this.currentPrimVertex;
-        const numVertices = this.currentPrimVertex;
+        const numVertices = this.currentPrimVertex + 1;
         convertToTrianglesRange(this.indexData, this.currentIndex, gfxTopo, baseVertex, numVertices);
         this.currentIndex += numIndices;
     }

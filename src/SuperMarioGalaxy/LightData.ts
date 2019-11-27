@@ -47,9 +47,9 @@ class LightInfo {
 
     public setLight(dst: Light, camera: Camera): void {
         if (this.FollowCamera) {
-            vec3.transformMat4(dst.Position, this.Position, camera.worldMatrix);
-        } else {
             vec3.copy(dst.Position, this.Position);
+        } else {
+            vec3.transformMat4(dst.Position, this.Position, camera.worldMatrix);
         }
 
         vec3.set(dst.Direction, 1, 0, 0);

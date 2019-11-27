@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback, nullify } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, computeNormalMatrix } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
@@ -30,7 +30,7 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, WaterPlant } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, WaterPlant, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -42,8 +42,13 @@ import { SensorHitChecker } from './HitSensor';
 export const FPS = 60;
 const FPS_RATE = FPS/1000;
 
-export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+export function getDeltaTimeFramesRaw(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.deltaTime * FPS_RATE;
+}
+
+export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+    // Clamp to reasonable values.
+    return clamp(getDeltaTimeFramesRaw(viewerInput), 0.0, 1.5);
 }
 
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
@@ -330,6 +335,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // if not PriorDrawAir, they would go here...
 
         // executeDrawListOpa();
+        this.execute(passRenderer, DrawType.SWING_ROPE);
+        this.execute(passRenderer, DrawType.TRAPEZE);
         this.execute(passRenderer, DrawType.WARP_POD_PATH);
         this.execute(passRenderer, DrawType.WATER_PLANT);
 
@@ -762,10 +769,12 @@ class CaptureSceneDirector {
 }
 
 export const enum SceneObj {
-    SENSOR_HIT_CHECKER = 0x00,
-    AIR_BUBBLE_HOLDER = 0x39,
-    WATER_AREA_HOLDER = 0x62,
-    WATER_PLANT_DRAW_INIT = 0x63,
+    SENSOR_HIT_CHECKER     = 0x00,
+    AIR_BUBBLE_HOLDER      = 0x39,
+    SWING_ROPE_GROUP       = 0x47,
+    TRAPEZE_ROPE_DRAW_INIT = 0x4A,
+    WATER_AREA_HOLDER      = 0x62,
+    WATER_PLANT_DRAW_INIT  = 0x63,
 }
 
 export class SceneObjHolder {
@@ -783,6 +792,8 @@ export class SceneObjHolder {
 
     public sensorHitChecker: SensorHitChecker | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
+    public swingRopeGroup: SwingRopeGroup | null = null;
+    public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
 
@@ -804,6 +815,10 @@ export class SceneObjHolder {
             return this.sensorHitChecker;
         else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             return this.airBubbleHolder;
+        else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
+            return this.swingRopeGroup;
+        else if (sceneObj === SceneObj.TRAPEZE_ROPE_DRAW_INIT)
+            return this.trapezeRopeDrawInit;
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
@@ -816,6 +831,10 @@ export class SceneObjHolder {
             this.sensorHitChecker = new SensorHitChecker(this);
         else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
+        else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
+            this.swingRopeGroup = new SwingRopeGroup(this);
+        else if (sceneObj === SceneObj.TRAPEZE_ROPE_DRAW_INIT)
+            this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
         else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
@@ -827,6 +846,19 @@ export class SceneObjHolder {
 
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
+
+        if (this.sensorHitChecker !== null)
+            this.sensorHitChecker.destroy(device);
+        if (this.airBubbleHolder !== null)
+            this.airBubbleHolder.destroy(device);
+        if (this.swingRopeGroup !== null)
+            this.swingRopeGroup.destroy(device);
+        if (this.trapezeRopeDrawInit !== null)
+            this.trapezeRopeDrawInit.destroy(device);
+        if (this.waterAreaHolder !== null)
+            this.waterAreaHolder.destroy(device);
+        if (this.waterPlantDrawInit !== null)
+            this.waterPlantDrawInit.destroy(device);
     }
 }
 

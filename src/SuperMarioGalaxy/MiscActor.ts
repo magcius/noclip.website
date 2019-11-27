@@ -37,6 +37,7 @@ const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchMatrix = mat4.create();
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
@@ -819,6 +820,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
 }
 
 class FixedPosition {
+    public transformMatrix = mat4.create();
     private localTrans = vec3.create();
 
     constructor(private baseMtx: mat4, localTrans: vec3 | null = null) {
@@ -830,16 +832,17 @@ class FixedPosition {
         vec3.copy(this.localTrans, localTrans);
     }
 
-    public calc(dst: mat4): void {
-        mat4.copy(dst, this.baseMtx);
-        mat4.translate(dst, dst, this.localTrans);
+    public calc(): void {
+        mat4.copy(this.transformMatrix, this.baseMtx);
+        mat4.translate(this.transformMatrix, this.transformMatrix, this.localTrans);
     }
 }
 
 class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
+    public transformMatrix: mat4 | null = null;
 
-    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
+    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType, transformMatrix: mat4 | null = null) {
         super(parentActor.zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -854,20 +857,37 @@ class PartsModel extends LiveActor {
             calcAnimType = 0x06;
         }
 
+        this.transformMatrix = transformMatrix;
+
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
     public initFixedPositionRelative(localTrans: vec3 | null): void {
         this.fixedPosition = new FixedPosition(this.parentActor.modelInstance!.modelMatrix, localTrans);
+        this.transformMatrix = this.fixedPosition.transformMatrix;
     }
 
     public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
         this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName)!, localTrans);
+        this.transformMatrix = this.fixedPosition.transformMatrix;
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAnim(sceneObjHolder, viewerInput);
+
+        if (this.fixedPosition !== null)
+            this.fixedPosition.calc();
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.fixedPosition !== null)
-            this.fixedPosition.calc(this.modelInstance!.modelMatrix);
+        if (this.transformMatrix !== null) {
+            this.translation[0] = this.transformMatrix[12];
+            this.translation[1] = this.transformMatrix[13];
+            this.translation[2] = this.transformMatrix[14];
+            mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
+        } else {
+            super.calcAndSetBaseMtx(viewerInput);
+        }
     }
 }
 
@@ -935,7 +955,7 @@ export class StarPiece extends LiveActor {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const newCounter = (this.effectCounter + clamp(getDeltaTimeFrames(viewerInput), 0, 1.5));
+        const newCounter = this.effectCounter + getDeltaTimeFrames(viewerInput);
         if (checkPass(this.effectCounter, newCounter, 20))
             this.emitGettableEffect(sceneObjHolder, viewerInput, 4.0);
         this.effectCounter = newCounter % 90;
@@ -1356,7 +1376,6 @@ export class TicoComet extends NPCActor {
     }
 }
 
-const scratchMatrix = mat4.create();
 class Coin extends LiveActor {
     private airBubble: PartsModel | null = null;
 
@@ -3894,7 +3913,7 @@ export class WaterPlant extends LiveActor {
     private plantType: number;
     private height: number;
     private plantData: WaterPlantData[] = [];
-    private ddraw: TDDraw;
+    private ddraw = new TDDraw();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -3908,7 +3927,6 @@ export class WaterPlant extends LiveActor {
         this.plantType = fallback(getJMapInfoArg3(infoIter), 0);
         this.height = waterPlantHeightTable[this.plantType];
 
-        this.ddraw = new TDDraw();
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -4254,5 +4272,394 @@ export class ChooChooTrain extends LiveActor {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('ChooChooTrainBody');
+    }
+}
+
+class SwingRopePoint {
+    public position = vec3.create();
+    public accel = vec3.create();
+    public axisX = vec3.fromValues(1, 0, 0);
+    public axisY = vec3.fromValues(0, 1, 0);
+    public axisZ = vec3.fromValues(0, 0, 1);
+
+    constructor(position: vec3) {
+        vec3.copy(this.position, position);
+    }
+
+    public updatePos(drag: number): void {
+        vec3.add(this.position, this.position, this.accel);
+        vec3.scale(this.accel, this.accel, drag);
+    }
+
+    public updateAxis(axisZ: vec3): void {
+        vec3.cross(this.axisX, this.axisY, axisZ);
+        vec3.normalize(this.axisX, this.axisX);
+
+        vec3.cross(this.axisZ, this.axisX, this.axisY);
+        vec3.normalize(this.axisZ, this.axisZ);
+    }
+
+    public updatePosAndAxis(axisZ: vec3, drag: number): void {
+        this.updatePos(drag);
+        this.updateAxis(axisZ);
+    }
+}
+
+export class SwingRopeGroup extends NameObj {
+    public swingRope: BTIData;
+    public materialHelper: GXMaterialHelperGfx;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'SwingRopeGroup');
+
+        const arc = sceneObjHolder.modelCache.getObjectData('SwingRope')!;
+        this.swingRope = loadBTIData(sceneObjHolder, arc, `SwingRope.bti`);
+
+        const mb = new GXMaterialBuilder(`SwingRope`);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        // Original code uses a pretty awful alpha compare... we up it a bit to get it looking better...
+        mb.setAlphaCompare(GX.CompareType.GREATER, 50, GX.AlphaOp.OR, GX.CompareType.GREATER, 50);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.swingRope.destroy(device);
+    }
+}
+
+const swingRopeColorPlusZ = colorNewFromRGBA8(0xFFFFFFFF);
+const swingRopeColorPlusX = colorNewFromRGBA8(0xFFFFFFFF);
+const swingRopeColorMinusX = colorNewFromRGBA8(0xFFFFFFFF);
+export class SwingRope extends LiveActor {
+    private pos = vec3.create();
+    private height: number;
+    private ddraw = new TDDraw();
+    private swingRopePoints: SwingRopePoint[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        sceneObjHolder.create(SceneObj.SWING_ROPE_GROUP);
+        connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.SWING_ROPE);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.pos, this.translation);
+        this.height = 100.0 * this.scale[1];
+        this.initPoints();
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+    }
+
+    private initPoints(): void {
+        const pointCount = (this.height / 50.0) | 0;
+
+        for (let i = 0; i < pointCount; i++) {
+            vec3.scaleAndAdd(scratchVec3a, this.pos, this.gravityVector, 50.0 * (i + 1));
+            const p = new SwingRopePoint(scratchVec3a);
+            this.swingRopePoints.push(p);
+        }
+    }
+
+    private sendPoint(v: vec3, axisX: vec3, axisZ: vec3, sx: number, sz: number, color: Color, tx: number, ty: number): void {
+        this.ddraw.position3f32(
+            v[0] + axisX[0] * sx + axisZ[0] * sz,
+            v[1] + axisX[1] * sx + axisZ[1] * sz,
+            v[2] + axisX[2] * sx + axisZ[2] * sz,
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, color);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, tx, ty);
+    }
+
+    private drawStop(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.ddraw.beginDraw();
+        this.ddraw.allocVertices(12);
+
+        const ty = 0.13 * (this.height / 50.0);
+
+        const p = this.swingRopePoints[0]!;
+        vec3.copy(scratchVec3a, this.pos);
+        vec3.copy(scratchVec3b, this.pos);
+        scratchVec3b[1] -= this.height;
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ, -30.0,  43.0, swingRopeColorPlusZ,  0.0, 0.0);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ,  33.0, -43.0, swingRopeColorPlusX,  1.0, 0.0);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ, -30.0,  43.0, swingRopeColorPlusZ,  0.0, ty);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ,  33.0, -43.0, swingRopeColorPlusX,  1.0, ty);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ, -33.0, -43.0, swingRopeColorMinusX, 0.0, 0.0);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ,  30.0,  43.0, swingRopeColorPlusZ,  1.0, 0.0);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ, -33.0, -43.0, swingRopeColorMinusX, 0.0, ty);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ,  30.0,  43.0, swingRopeColorPlusZ,  1.0, ty);
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ,  43.0,  -3.0, swingRopeColorPlusX,  0.0, 0.0);
+        this.sendPoint(scratchVec3a, p.axisX, p.axisZ, -43.0,  -3.0, swingRopeColorMinusX, 1.0, 0.0);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ,  43.0,  -3.0, swingRopeColorPlusX,  0.0, ty);
+        this.sendPoint(scratchVec3b, p.axisX, p.axisZ, -43.0,  -3.0, swingRopeColorMinusX, 1.0, ty);
+        this.ddraw.end();
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
+        swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        const materialHelper = swingRopeGroup.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+        this.drawStop(sceneObjHolder, renderInstManager, viewerInput);
+    }
+}
+
+export class TrapezeRopeDrawInit extends NameObj {
+    public trapezeRope: BTIData;
+    public materialHelper: GXMaterialHelperGfx;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'TrapezeRopeDrawInit');
+
+        const arc = sceneObjHolder.modelCache.getObjectData('Trapeze')!;
+        this.trapezeRope = loadBTIData(sceneObjHolder, arc, `TrapezeRope.bti`);
+
+        const mb = new GXMaterialBuilder(`TrapezeRope`);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        // Original code uses a pretty awful alpha compare... we up it a bit to get it looking better...
+        mb.setAlphaCompare(GX.CompareType.GREATER, 50, GX.AlphaOp.OR, GX.CompareType.GREATER, 50);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.trapezeRope.destroy(device);
+    }
+}
+
+const trapezeColorPlusZ = colorNewFromRGBA8(0xFFFFFFFF);
+const trapezeColorPlusX = colorNewFromRGBA8(0xB4B4B4FF);
+const trapezeColorMinusX = colorNewFromRGBA8(0x646464FF);
+export class Trapeze extends LiveActor {
+    private axisX = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+    private swingRopePoint: SwingRopePoint;
+    private stick: PartsModel;
+    private stickMtx = mat4.create();
+    private ddraw = new TDDraw();
+    private height: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        sceneObjHolder.create(SceneObj.TRAPEZE_ROPE_DRAW_INIT);
+        connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.TRAPEZE);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        makeMtxTRFromActor(scratchMatrix, this);
+        calcMtxAxis(this.axisX, this.axisY, this.axisZ, scratchMatrix);
+
+        this.height = this.scale[1] * 100.0;
+        vec3.set(this.scale, 1.0, 1.0, 1.0);
+
+        vec3.set(scratchVec3, this.translation[0], this.translation[1] - this.height, this.translation[2]);
+        this.swingRopePoint = new SwingRopePoint(scratchVec3);
+        this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995);
+
+        // I think this is a bug in the original game -- it uses ENEMY rather than RIDE?
+        this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.ENEMY, this.stickMtx);
+        this.updateStickMtx();
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+    }
+
+    private drawRope(top: vec3, bottom: vec3, axisX: vec3, axisZ: vec3, txc0: number, txc1: number): void {
+        this.ddraw.allocVertices(12);
+
+        // Rope 1.
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+        this.ddraw.position3f32(
+            top[0] - 12.0 * axisX[0] + 19.0 * axisZ[0],
+            top[1] - 12.0 * axisX[1] + 19.0 * axisZ[1],
+            top[2] - 12.0 * axisX[2] + 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusZ);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, txc0);
+
+        this.ddraw.position3f32(
+            top[0] + 19.0 * axisX[0] - 19.0 * axisZ[0],
+            top[1] + 19.0 * axisX[1] - 19.0 * axisZ[1],
+            top[2] + 19.0 * axisX[2] - 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, txc0);
+
+        this.ddraw.position3f32(
+            bottom[0] - 12.0 * axisX[0] + 19.0 * axisZ[0],
+            bottom[1] - 12.0 * axisX[1] + 19.0 * axisZ[1],
+            bottom[2] - 12.0 * axisX[2] + 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusZ);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, txc1);
+
+        this.ddraw.position3f32(
+            bottom[0] + 19.0 * axisX[0] - 19.0 * axisZ[0],
+            bottom[1] + 19.0 * axisX[1] - 19.0 * axisZ[1],
+            bottom[2] + 19.0 * axisX[2] - 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, txc1);
+
+        this.ddraw.end();
+
+        // Rope 2.
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+        this.ddraw.position3f32(
+            top[0] - 19.0 * axisX[0] - 19.0 * axisZ[0],
+            top[1] - 19.0 * axisX[1] - 19.0 * axisZ[1],
+            top[2] - 19.0 * axisX[2] - 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorMinusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.7 + txc0);
+
+        this.ddraw.position3f32(
+            top[0] + 12.0 * axisX[0] + 19.0 * axisZ[0],
+            top[1] + 12.0 * axisX[1] + 19.0 * axisZ[1],
+            top[2] + 12.0 * axisX[2] + 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusZ);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.7 + txc0);
+
+        this.ddraw.position3f32(
+            bottom[0] - 19.0 * axisX[0] + 19.0 * axisZ[0],
+            bottom[1] - 19.0 * axisX[1] + 19.0 * axisZ[1],
+            bottom[2] - 19.0 * axisX[2] + 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorMinusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.7 + txc1);
+
+        this.ddraw.position3f32(
+            bottom[0] + 12.0 * axisX[0] + 19.0 * axisZ[0],
+            bottom[1] + 12.0 * axisX[1] + 19.0 * axisZ[1],
+            bottom[2] + 12.0 * axisX[2] + 19.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusZ);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.7 + txc1);
+
+        this.ddraw.end();
+        
+        // Rope 3.
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+        this.ddraw.position3f32(
+            top[0] + 19.0 * axisX[0] - 7.0 * axisZ[0],
+            top[1] + 19.0 * axisX[1] - 7.0 * axisZ[1],
+            top[2] + 19.0 * axisX[2] - 7.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.5 + txc0);
+
+        this.ddraw.position3f32(
+            top[0] - 19.0 * axisX[0] - 7.0 * axisZ[0],
+            top[1] - 19.0 * axisX[1] - 7.0 * axisZ[1],
+            top[2] - 19.0 * axisX[2] - 7.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorMinusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.5 + txc0);
+
+        this.ddraw.position3f32(
+            bottom[0] + 19.0 * axisX[0] - 7.0 * axisZ[0],
+            bottom[1] + 19.0 * axisX[1] - 7.0 * axisZ[1],
+            bottom[2] + 19.0 * axisX[2] - 7.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorPlusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.5 + txc1);
+
+        this.ddraw.position3f32(
+            bottom[0] - 19.0 * axisX[0] - 7.0 * axisZ[0],
+            bottom[1] - 19.0 * axisX[1] - 7.0 * axisZ[1],
+            bottom[2] - 19.0 * axisX[2] - 7.0 * axisZ[2],
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, trapezeColorMinusX);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.5 + txc1);
+
+        this.ddraw.end();
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        this.ddraw.beginDraw();
+
+        // Neg
+        vec3.scaleAndAdd(scratchVec3a, this.translation, this.axisX, -60.0);
+        vec3.scaleAndAdd(scratchVec3b, this.swingRopePoint.position, this.axisX, -60.0);
+        this.drawRope(scratchVec3a, scratchVec3b, this.swingRopePoint.axisX, this.swingRopePoint.axisZ, 0.0, 0.003 * this.height);
+
+        // Pos
+        vec3.scaleAndAdd(scratchVec3a, this.translation, this.axisX, 60.0);
+        vec3.scaleAndAdd(scratchVec3b, this.swingRopePoint.position, this.axisX, 60.0);
+        this.drawRope(scratchVec3a, scratchVec3b, this.swingRopePoint.axisX, this.swingRopePoint.axisZ, 0.0, 0.003 * this.height);
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
+        trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        const materialHelper = trapezeRopeDrawInit.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    }
+
+    private updateStickMtx(): void {
+        const point = this.swingRopePoint;
+        setMtxAxisXYZ(this.stickMtx, point.axisX, point.axisY, point.axisZ);
+        setTrans(this.stickMtx, point.position);
     }
 }
