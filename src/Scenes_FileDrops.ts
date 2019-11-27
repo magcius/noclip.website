@@ -106,11 +106,11 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
 
     if (buffer.name.toLowerCase().endsWith('.pvr')) {
         // Load texture data
-        let image = GC_PVTR.parse(buffer);
+        let image = GC_PVTR.parse(buffer, buffer.name);
 
         // Create faux scene
         const jsrScene = new JetSetRadioScene();
-        jsrScene.textureHolder.loadTexture(device, image);
+        jsrScene.textureHolder.addTextures(device, [image]);
         
         return jsrScene;
     }

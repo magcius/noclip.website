@@ -50,10 +50,8 @@ class H3DSceneDesc implements Viewer.SceneDesc {
 
 export class JetSetRadioScene implements Viewer.SceneGfx {
 
+    public textureHolder = new PVRT.PVRTextureHolder();
     
-
-    public textureHolder = new PVRT.PVRTextureHolder(); // raw uploader?
-
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         return null as unknown as GfxRenderPass;
     }

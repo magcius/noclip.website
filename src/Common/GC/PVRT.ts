@@ -7,6 +7,8 @@ import { GfxDevice, GfxTextureDimension, GfxFormat, makeTextureDescriptor2D } fr
 import { TextureHolder, LoadedTexture, TextureBase } from "../../TextureHolder";
 import * as Viewer from '../../viewer';
 
+// Port from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
+
 export interface Texture {
     name: string;
     width: number;
@@ -62,7 +64,6 @@ export const enum PVRTFormat {
     //Ex8b        = 0x06, // <no planned support>
 }
 
-// https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.h
 export const enum PVRTMask {
 
     Twiddled                = 0x01,
@@ -73,13 +74,10 @@ export const enum PVRTMask {
 
 export function getFormatName(fmt: PVRTFormat): string {
     switch (fmt) {
-    case PVRTFormat.ARGB1555: return "ARGB1555";
-    case PVRTFormat.RGB565:   return "RGB565";
-    case PVRTFormat.ARGB4444: return "ARGB4444";
-    case PVRTFormat.YUV442:   return "YUV442";
-    //case PVRTFormat.Bump:     return "Bump";
-    //case PVRTFormat.Ex4b:     return "Ex4b";
-    //case PVRTFormat.Ex8b:     return "Ex8b";
+    case PVRTFormat.ARGB1555:   return "ARGB1555";
+    case PVRTFormat.RGB565:     return "RGB565";
+    case PVRTFormat.ARGB4444:   return "ARGB4444";
+    case PVRTFormat.YUV442:     return "YUV442";
     }
 }
 
@@ -113,84 +111,60 @@ function readImageDataHeader(stream: DataStream): PVR_Texture {
     const width = view.getUint16(0x04, true);
     const height = view.getUint16(0x06, true);
 
-    console.log('width:'+ width);
-    console.log('height:'+ height);
-    console.log(getFormatName(format));
-    console.log(getMaskName(mask));
-
     const imageDataView = chunk.data.createDataView(8);
 
     const meta = {format, mask};
 
     let result = decompressPVRT(imageDataView, meta, width, height);
-    console.log('converted '+result.byteLength+' bytes');
 
-    // todo: name it
+    // TODO: Name this texture
     return {name: "", meta, data: result, width: width, height: height};
 }
 
-export function parse(buffer: ArrayBufferSlice): PVR_Texture {
+export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
 
     const stream = new DataStream(buffer);
  
+    // The data from this chunk will likely be used elsewhere
     readGlobalIndexHeader(stream);
     
     let imageData = readImageDataHeader(stream);
-    imageData.name = "hello world";
+    imageData.name = name;
   
     return imageData;
 }
 
 function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
-    const surfaces: HTMLCanvasElement[] = [];
 
-    {
-        const canvas = document.createElement("canvas");
-        canvas.width = texture.width;
-        canvas.height = texture.height;
+    const canvas = document.createElement("canvas");
 
-        console.log('created surface with width '+texture.width);
-        console.log('created surface with height '+texture.height);
+    canvas.width = texture.width;
+    canvas.height = texture.height;
+
+    const ctx = canvas.getContext("2d")!;
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
+    imgData.data.set(texture.data);
+    ctx.putImageData(imgData, 0, 0);
         
-        const ctx = canvas.getContext("2d")!;
-        const imgData = ctx.createImageData(canvas.width, canvas.height);
-        imgData.data.set(texture.data);
-        ctx.putImageData(imgData, 0, 0);
-
-        // screw everything        
-        console.log(canvas.toDataURL("image/png"));
-        
-        surfaces.push(canvas);
-    }
+    const surfaces = [canvas];
 
     const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', 'pvr');
+    extraInfo.set('Format', getFormatName(texture.meta.format));
 
-    return { name: texture.name, extraInfo, surfaces };
+    return { name: texture.name, surfaces, extraInfo };
 }
 
 export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
     public loadTexture(device: GfxDevice, textureEntry: PVR_Texture): LoadedTexture {
 
-        const levelDatas: Uint8Array[] = [];
-        levelDatas.push(textureEntry.data);
-        
-        console.log('pushed '+textureEntry.data.length);
-
-        // ez
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, 1));
         
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, levelDatas);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [textureEntry.data]);
         device.submitPass(hostAccessPass);
-        
-        console.log(gfxTexture);
 
-        const extraInfo = new Map<string, string>();
-        extraInfo.set('Format', 'pvrt');
         const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
-        
-        //const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
+
         return { gfxTexture, viewerTexture };
     }
 }

@@ -1,10 +1,7 @@
 
-import { DecodedSurfaceSW } from "../../Common/bc_texture";
-import { PVR_TextureMeta, PVRTFormat, PVRTMask } from "./pvrt";
+import { PVR_TextureMeta, PVRTFormat, PVRTMask } from "./PVRT";
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-
-// Largely ported from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
+// Port from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
 
 class Untwiddle {
     static kTwiddleTableSize = 1024;
