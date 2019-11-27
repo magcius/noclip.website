@@ -6,20 +6,20 @@ import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, creat
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, colorCopy, Yellow, colorNewCopy } from '../Color';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
 import { assertExists, leftPad, fallback, nArray } from '../util';
-import { Camera, computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from '../Camera';
+import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
-import { isConnectedWithRail, RailDirection } from './RailRider';
+import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, getRailCoordSpeed, setRailCoord } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -152,14 +152,18 @@ export function getCamZdir(v: vec3, camera: Camera): void {
     v[2] *= -1;
 }
 
+export function calcDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.distance(actor.translation, scratch);
+}
+
 export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
     getCamPos(scratch, camera);
     return vec3.squaredDistance(actor.translation, scratch);
 }
 
 export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
-    getCamPos(scratch, camera);
-    return vec3.distance(actor.translation, scratch);
+    return calcDistToCamera(actor, camera, scratch);
 }
 
 export function getJointNum(actor: LiveActor): number {
@@ -889,10 +893,8 @@ function checkPass(old: number, new_: number, thresh: number): boolean {
     return old < thresh && new_ >= thresh;
 }
 
-const scratchProjection = new ScreenSpaceProjection();
 export class StarPiece extends LiveActor {
     private effectCounter: number = 0;
-    private color: Color;
     private effectPrmColor: Color;
     private effectEnvColor: Color;
 
@@ -912,37 +914,22 @@ export class StarPiece extends LiveActor {
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
             starPieceColorIndex = getRandomInt(1, 7);
 
-        this.color = starPieceColorTable[starPieceColorIndex];
-        this.effectPrmColor = colorNewCopy(this.color);
+        const color = starPieceColorTable[starPieceColorIndex];
+        this.effectPrmColor = colorNewCopy(color);
         this.effectPrmColor.r = clamp(this.effectPrmColor.r + 0xFF/0xFF, 0.0, 1.0);
         this.effectPrmColor.g = clamp(this.effectPrmColor.g + 0xFF/0xFF, 0.0, 1.0);
         this.effectPrmColor.b = clamp(this.effectPrmColor.b + 0xFF/0xFF, 0.0, 1.0);
 
-        this.effectEnvColor = colorNewCopy(this.color);
+        this.effectEnvColor = colorNewCopy(color);
         this.effectEnvColor.r = clamp(this.effectEnvColor.r + 0x20/0xFF, 0.0, 1.0);
         this.effectEnvColor.g = clamp(this.effectEnvColor.g + 0x20/0xFF, 0.0, 1.0);
         this.effectEnvColor.b = clamp(this.effectEnvColor.b + 0x20/0xFF, 0.0, 1.0);
 
-        this.modelInstance!.setColorOverride(ColorKind.MAT0, this.color);
+        this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
         this.initEffectKeeper(sceneObjHolder, 'StarPiece');
 
         startBtk(this, 'Gift');
         setBtkFrameAndStop(this, 5);
-    }
-
-    public calcEffectScale(viewerInput: Viewer.ViewerRenderInput, m1: number, m2: number, v: boolean): number {
-        const camera = viewerInput.camera;
-        computeScreenSpaceProjectionFromWorldSpaceSphere(scratchProjection, camera, this.translation, 30);
-        const radius = clamp(scratchProjection.getScreenArea(), 0, 1);
-
-        if (!v) {
-            if (radius * m2 < m1)
-                return m1 / radius;
-            else
-                return m2;
-        } else {
-            return m1 / radius;
-        }
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -955,11 +942,14 @@ export class StarPiece extends LiveActor {
     }
 
     private emitGettableEffect(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput, scale: number): void {
-        // TODO(jstpierre): Figure out why effectScale does nothing.
-        const effectScale = 1.0;
+        // Due to a bug in the original game, effectScale effectively does nothing, so it doesn't
+        // really make sense to calculate it.
         // const effectScale = this.calcEffectScale(viewerInput, scale, 0.8, true);
+        const effectScale = 1.0;
 
-        emitEffectWithScale(sceneObjHolder, this, 'GetAble', effectScale);
+        if (calcDistToCamera(this, viewerInput.camera) > 200)
+            emitEffectWithScale(sceneObjHolder, this, 'GetAble', effectScale);
+
         setEffectColor(this, 'GetAble', this.effectPrmColor, this.effectEnvColor);
     }
 
