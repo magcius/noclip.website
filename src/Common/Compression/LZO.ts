@@ -3,13 +3,14 @@
  * https://github.com/jackoalan/lzokay
  */
 
-import { assert, readString } from '../../util';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 
-const M1Marker = 0x0;
-const M2Marker = 0x40;
-const M3Marker = 0x20;
-const M4Marker = 0x10;
+const enum Marker {
+    M1 = 0x00,
+    M2 = 0x40,
+    M3 = 0x20,
+    M4 = 0x10,
+}
 
 export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): ArrayBufferSlice {
     const srcView = srcBuffer.createDataView();
@@ -26,12 +27,12 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
 
     const outBuffer = new Uint8Array(maxDstSize);
 
-    function needsIn(count) {
+    function needsIn(count: number): void {
         if (inp + count > srcView.byteLength)
             throw "Input overrun";
     }
 
-    function needsOut(count) {
+    function needsOut(count: number): void {
         if (outp + count > maxDstSize)
             throw "Output overrun";
     }
@@ -50,8 +51,8 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
          *           skip byte
          */
         const len = srcView.getUint8(inp++) - 17;
-        needsIn(len)
-        needsOut(len)
+        needsIn(len);
+        needsOut(len);
         for (let i = 0; i < len; ++i)
             outBuffer[outp++] = srcView.getUint8(inp++);
         state = 4;
@@ -62,8 +63,8 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
          */
         nstate = srcView.getUint8(inp++) - 17;
         state = nstate;
-        needsIn(nstate)
-        needsOut(nstate)
+        needsIn(nstate);
+        needsOut(nstate);
         for (let i = 0; i < nstate; ++i)
             outBuffer[outp++] = srcView.getUint8(inp++);
     }
@@ -74,9 +75,9 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
      */
 
     while (true) {
-        needsIn(1)
+        needsIn(1);
         const inst = srcView.getUint8(inp++);
-        if (inst & 0xC0) {
+        if (!!(inst & 0xC0)) {
             /* [M2]
              * 1 L L D D D S S  (128..255)
              *   Copy 5-8 bytes from block within 2kB distance
@@ -92,11 +93,11 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
              * Always followed by exactly one byte : H H H H H H H H
              *   distance = (H << 3) + D + 1
              */
-            needsIn(1)
-            lbcur = outp - ((srcView.getUint8(inp++) << 3) + ((inst >> 2) & 0x7) + 1);
-            lblen = (inst >> 5) + 1;
-            nstate = inst & 0x3;
-        } else if (inst & M3Marker) {
+            needsIn(1);
+            lbcur = outp - ((srcView.getUint8(inp++) << 3) + ((inst >>> 2) & 0x07) + 1);
+            lblen = (inst >>> 5) + 1;
+            nstate = inst & 0x03;
+        } else if (!!(inst & Marker.M3)) {
             /* [M3]
              * 0 0 1 L L L L L  (32..63)
              *   Copy of small block within 16kB distance (preferably less than 34B)
@@ -108,15 +109,15 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
             lblen = (inst & 0x1f) + 2;
             if (lblen === 2) {
                 const offset = consumeZeroByteLength();
-                needsIn(1)
+                needsIn(1);
                 lblen += offset * 255 + 31 + srcView.getUint8(inp++);
             }
-            needsIn(2)
+            needsIn(2);
             nstate = srcView.getUint16(inp, true);
             inp += 2;
-            lbcur = outp - ((nstate >> 2) + 1);
+            lbcur = outp - ((nstate >>> 2) + 1);
             nstate &= 0x3;
-        } else if (inst & M4Marker) {
+        } else if (!!(inst & Marker.M4)) {
             /* [M4]
              * 0 0 0 1 H L L L  (16..31)
              *   Copy of a block within 16..48kB distance (preferably less than 10B)
@@ -129,13 +130,13 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
             lblen = (inst & 0x7) + 2;
             if (lblen === 2) {
                 const offset = consumeZeroByteLength();
-                needsIn(1)
+                needsIn(1);
                 lblen += offset * 255 + 7 + srcView.getUint8(inp++);
             }
-            needsIn(2)
+            needsIn(2);
             nstate = srcView.getUint16(inp, true);
             inp += 2;
-            lbcur = outp - (((inst & 0x8) << 11) + (nstate >> 2));
+            lbcur = outp - (((inst & 0x8) << 11) + (nstate >>> 2));
             nstate &= 0x3;
             if (lbcur === outp)
                 break; /* Stream finished */
@@ -154,12 +155,12 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
                 let len = inst + 3;
                 if (len === 3) {
                     const offset = consumeZeroByteLength();
-                    needsIn(1)
+                    needsIn(1);
                     len += offset * 255 + 15 + srcView.getUint8(inp++);
                 }
                 /* copy_literal_run */
-                needsIn(len)
-                needsOut(len)
+                needsIn(len);
+                needsOut(len);
                 for (let i = 0; i < len; ++i)
                     outBuffer[outp++] = srcView.getUint8(inp++);
                 state = 4;
@@ -178,9 +179,9 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
                  *  Always followed by exactly one byte : H H H H H H H H
                  *    distance = (H << 2) + D + 1
                  */
-                needsIn(1)
+                needsIn(1);
                 nstate = inst & 0x3;
-                lbcur = outp - ((inst >> 2) + (srcView.getUint8(inp++) << 2) + 1);
+                lbcur = outp - ((inst >>> 2) + (srcView.getUint8(inp++) << 2) + 1);
                 lblen = 2;
             } else {
                 /* If last instruction used to copy 4 or more literals (as detected by
@@ -193,16 +194,16 @@ export function decompress(srcBuffer: ArrayBufferSlice, maxDstSize: number): Arr
                  *  Always followed by exactly one byte : H H H H H H H H
                  *    distance = (H << 2) + D + 2049
                  */
-                needsIn(1)
+                needsIn(1);
                 nstate = inst & 0x3;
-                lbcur = outp - ((inst >> 2) + (srcView.getUint8(inp++) << 2) + 2049);
+                lbcur = outp - ((inst >>> 2) + (srcView.getUint8(inp++) << 2) + 2049);
                 lblen = 3;
             }
         }
         if (lbcur < 0)
             throw "Lookbehind overrun";
-        needsIn(nstate)
-        needsOut(lblen + nstate)
+        needsIn(nstate);
+        needsOut(lblen + nstate);
         /* Copy lookbehind */
         for (let i = 0; i < lblen; ++i)
             outBuffer[outp++] = outBuffer[lbcur++];
