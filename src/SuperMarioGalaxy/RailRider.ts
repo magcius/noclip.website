@@ -431,7 +431,7 @@ export class RailRider {
         this.currentPointId = this.bezierRail.getCurrentCtrlPointIndex(this.coord, this.direction);
     }
 
-    private copyPointPos(v: vec3, m: number): void {
+    public copyPointPos(v: vec3, m: number): void {
         vec3.copy(v, this.bezierRail.railParts[m].p0);
     }
 

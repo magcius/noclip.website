@@ -810,7 +810,10 @@ export class EffectSystem {
         const particleEmitter = this.particleEmitterHolder.findAvailableParticleEmitter();
         if (particleEmitter === null)
             return null;
-        const baseEmitter = assertExists(this.emitterManager.createEmitter(resData));
+        // It's possible to run out of base emitters in some cases. Don't crash in this case.
+        const baseEmitter = this.emitterManager.createEmitter(resData);
+        if (baseEmitter === null)
+            return null;
         baseEmitter.drawGroupId = groupID;
         particleEmitter.init(baseEmitter);
         return particleEmitter;

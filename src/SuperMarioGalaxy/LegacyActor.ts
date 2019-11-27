@@ -242,7 +242,7 @@ export class NoclipLegacyActorSpawner {
             case 'RingBeamerAreaObj':
             case 'StatusFloor':
                 // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
-                console.log('Spawn A', name);
+                // console.log('Spawn A', name);
                 return;
 
             case 'StarPieceFollowGroup':
@@ -287,7 +287,7 @@ export class NoclipLegacyActorSpawner {
             case 'SphereRailDash':
             case 'HammerHeadPackunSpike':
                 // No archives. Needs R&D for what to display.
-                console.log('Spawn B', name);
+                // console.log('Spawn B', name);
                 return;
 
             case 'SplashCoinBlock':

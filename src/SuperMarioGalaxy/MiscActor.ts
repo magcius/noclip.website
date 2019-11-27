@@ -12,14 +12,14 @@ import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
-import { assertExists, leftPad, fallback, nArray } from '../util';
+import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -935,7 +935,7 @@ export class StarPiece extends LiveActor {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const newCounter = (this.effectCounter + getDeltaTimeFrames(viewerInput));
+        const newCounter = (this.effectCounter + clamp(getDeltaTimeFrames(viewerInput), 0, 1.5));
         if (checkPass(this.effectCounter, newCounter, 20))
             this.emitGettableEffect(sceneObjHolder, viewerInput, 4.0);
         this.effectCounter = newCounter % 90;
@@ -4013,6 +4013,7 @@ export class StarPieceGroup extends LiveActor {
     private starPieces: StarPiece[] = [];
     private isConnectedWithRail: boolean = false;
     private spawnOnRailPoints: boolean = false;
+    private radius: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -4023,6 +4024,7 @@ export class StarPieceGroup extends LiveActor {
 
         // TODO(jstpierre): StarPieceFlow
         starPieceCount = fallback(getJMapInfoArg0(infoIter), starPieceCount);
+        this.radius = fallback(getJMapInfoArg1(infoIter), 400);
         const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
 
         if (isConnectedWithRail(infoIter)) {
@@ -4054,24 +4056,47 @@ export class StarPieceGroup extends LiveActor {
     }
 
     private placementPieceOnCircle(): void {
+        if (this.starPieces.length === 1) {
+            vec3.copy(this.starPieces[0].translation, this.translation);
+        } else {
+            makeMtxTRFromActor(scratchMatrix, this);
+            calcMtxAxis(scratchVec3a, null, scratchVec3b, scratchMatrix);
+
+            for (let i = 0; i < this.starPieces.length; i++) {
+                const starPiece = this.starPieces[i];
+                const theta = MathConstants.TAU * (i / this.starPieces.length);
+                vec3.scaleAndAdd(starPiece.translation, starPiece.translation, scratchVec3a, Math.cos(theta) * this.radius);
+                vec3.scaleAndAdd(starPiece.translation, starPiece.translation, scratchVec3b, Math.sin(theta) * this.radius);
+            }
+        }
     }
 
     private placementPieceOnRailPoint(): void {
+        assert(this.starPieces.length === getRailPointNum(this));
+        for (let i = 0; i < this.starPieces.length; i++)
+            calcRailPointPos(this.starPieces[i].translation, this, i);
     }
 
     private placementPieceOnRail(): void {
         const totalRailLength = getRailTotalLength(this);
 
-        let denom = this.starPieces.length;
-        if (!isLoopRail(this))
-            denom -= 1;
+        let speed = 0.0;
+        if (this.starPieces.length > 1) {
+            let denom = this.starPieces.length;
+            if (!isLoopRail(this))
+                denom -= 1;
 
-        const speed = totalRailLength / denom;
+            speed = totalRailLength / denom;
+        }
+
         let coord = 0;
         for (let i = 0; i < this.starPieces.length; i++) {
             calcRailPosAtCoord(this.starPieces[i].translation, this, coord);
             coord += speed;
         }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
 

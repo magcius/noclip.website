@@ -630,6 +630,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("MessageAreaCube"),
     N("MessageAreaCylinder"),
     N("AudioEffectCube"),
+    N("AudioEffectCylinder"),
     N("SoundEmitter"),
     N("SoundEmitterCube"),
     N("SoundEmitterSphere"),
@@ -673,6 +674,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("SlopeRunningCancelArea"),
     N("BeeWallShortDistAreaCube"),
     N("EffectCylinder"),
+    N("ExtraWallCheckArea"),
     N("ExtraWallCheckCylinder"),
     N("DodoryuClosedCylinder"),
 

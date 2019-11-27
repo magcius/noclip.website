@@ -490,6 +490,10 @@ export function getRailPointNum(actor: LiveActor): number {
     return actor.railRider!.getPointNum();
 }
 
+export function calcRailPointPos(dst: vec3, actor: LiveActor, i: number): void {
+    actor.railRider!.copyPointPos(dst, i);
+}
+
 export function moveTransToOtherActorRailPos(actor: LiveActor, otherActor: LiveActor): void {
     getRailPos(actor.translation, otherActor);
 }
