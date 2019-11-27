@@ -2444,6 +2444,25 @@ class PlayPauseButton extends SingleIconButton {
     }
 }
 
+class RecordingBranding {
+    public elem: HTMLElement;
+
+    constructor() {
+        this.elem = document.createElement('div');
+        this.elem.style.position = 'absolute';
+        this.elem.style.left = '0';
+        this.elem.style.bottom = '0';
+        this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.4)';
+        this.elem.style.borderTopRightRadius = '8px';
+        this.elem.style.font = '22px Norwester';
+        this.elem.style.color = 'white';
+        this.elem.style.padding = '4px 8px';
+        this.elem.style.pointerEvents = 'none';
+        this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.6)';
+        this.elem.textContent = 'noclip.website';
+    }
+}
+
 export class UI {
     public elem: HTMLElement;
 
@@ -2465,6 +2484,7 @@ export class UI {
     public panels: Panel[];
     private about: About;
     private faqPanel: FAQPanel;
+    private recordingBranding = new RecordingBranding();
 
     public cameraSpeedIndicator = new CameraSpeedIndicator();
     private bottomBar = new BottomBar();
@@ -2523,6 +2543,9 @@ export class UI {
 
         this.floatingPanelContainer = document.createElement('div');
         this.toplevel.appendChild(this.floatingPanelContainer);
+
+        // Uncomment while recording.
+        // this.toplevel.appendChild(this.recordingBranding.elem);
 
         this.toplevel.appendChild(this.bottomBar.elem);
         this.bottomBar.addWidgets(BottomBarArea.Left, this.cameraSpeedIndicator);
@@ -2734,6 +2757,14 @@ export class UI {
             panel.contents.removeChild(panel.contents.firstChild);
 
         this.bindSlidersRecurse(obj, panel, '', keys);
+    }
+
+    public toggleUI(visible: boolean | undefined): void {
+        if (visible === undefined)
+            visible = this.panelToplevel.style.display === 'none';
+
+        this.panelToplevel.style.display = visible ? '' : 'none';
+        this.bottomBar.elem.style.display = visible ? 'grid' : 'none';
     }
 }
 

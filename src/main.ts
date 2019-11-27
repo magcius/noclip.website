@@ -655,8 +655,8 @@ class Main {
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
     }
 
-    private _toggleUI(visible: boolean = this.ui.elem.style.display === 'none') {
-        this.ui.elem.style.display = visible ? '' : 'none';
+    private _toggleUI(visible?: boolean) {
+        this.ui.toggleUI(visible);
     }
 
     private _getSceneDownloadPrefix() {
