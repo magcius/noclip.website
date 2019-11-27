@@ -15,6 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
+import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { AABB } from '../Geometry';
 import { colorFromRGBA8, Color, colorNew, colorNewCopy, TransparentBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';
@@ -950,11 +951,9 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
                     compressedBlocksIdx += segmentSize;
                     remainingSize -= segmentSize;
                 } else {
-                    // Compressed segment.
-                    const compressedSegment = stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize);
-
                     if (!usesLzo) {
                         // zlib
+                        const compressedSegment = stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize);
                         const decompressedSegment = Pako.inflate(compressedSegment);
                         decompressedSegments.push(decompressedSegment);
                         compressedBlocksIdx += segmentSize;
@@ -962,7 +961,11 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
                     }
                     else {
                         // LZO1X
-                        throw new Error("MREA data is compressed with LZO. This is currently unsupported.");
+                        const compressedSegment = stream.getBuffer().subarray(compressedBlocksIdx, segmentSize);
+                        const decompressedSegment = lzoDecompress(compressedSegment, 0x4000);
+                        decompressedSegments.push(decompressedSegment.createTypedArray(Uint8Array));
+                        compressedBlocksIdx += segmentSize;
+                        remainingSize -= decompressedSegment.byteLength;
                     }
                 }
             }
