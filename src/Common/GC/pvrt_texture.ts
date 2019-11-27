@@ -106,7 +106,7 @@ function MipMapsCountFromWidth(width: number) : number
         ++mipMapsCount;
         width /= 2;
     }
-    
+
     return mipMapsCount;
 }
 
@@ -153,10 +153,12 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
     }
 
     let srcDataOffset = 0;
+    let vqDataOffset = 0;
     
     const numCodedComponents = 4;
     if (isVQCompressed)
     {
+        vqDataOffset = 0;
         srcDataOffset += 4 * kSrcStride * codeBookSize;
     }
     
@@ -209,7 +211,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
             const codebookIndex = untwiddler.getUntwiddledTexelPosition(x, y);
 
             // Index of codebook * numbers of 2x2 block components
-            let vqIndex = srcData.getUint8(codebookIndex) * numCodedComponents;
+            let vqIndex = srcData.getUint8(srcDataOffset + codebookIndex) * numCodedComponents;
 
             // Bypass elements in 2x2 block
             for (let yoffset = 0; yoffset < 2; ++yoffset)
@@ -217,7 +219,7 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
                 for (let xoffset = 0; xoffset < 2; ++xoffset)
                 {   
                     const srcPos = (vqIndex + (xoffset * 2 + yoffset)) * kSrcStride;
-                    const srcTexel = srcData.getUint16(srcDataOffset + srcPos, true);
+                    const srcTexel = srcData.getUint16(vqDataOffset + srcPos, true);
                                     
                     const dstPos = ((y * 2 + yoffset) * 2 * mipWidth + (x * 2 + xoffset)) * kDstStride;
 
