@@ -29,10 +29,16 @@ export interface VertexBoneTable {
     vertexBoneEntries: VertexBoneEntry[];
 }
 
+export interface ModelPoint {
+    boneID: number;
+    offset: vec3;
+}
+
 export interface Geometry {
     animationSetup: AnimationSetup | null;
     vertexBoneTable: VertexBoneTable | null;
     vertexEffects: VertexAnimationEffect[];
+    modelPoints: ModelPoint[];
     sharedOutput: F3DEX.RSPSharedOutput;
     rootNode: GeoNode;
 }
@@ -200,6 +206,7 @@ interface GeoContext {
 
     segmentBuffers: ArrayBufferSlice[];
     sharedOutput: F3DEX.RSPSharedOutput;
+    modelPoints: ModelPoint[];
 
     nodeStack: GeoNode[];
 }
@@ -315,7 +322,13 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             // Draw distance conditional test.
             runGeoLayout(context, geoIdx + view.getUint32(geoIdx +  0x1C));
         } else if (cmd === 0x0A) {
-            // push vector?. Skip.
+            const vectorIndex = view.getInt16(geoIdx + 0x08);
+            const boneID = view.getInt16(geoIdx + 0x0a);
+            const x = view.getFloat32(geoIdx + 0x0c);
+            const y = view.getFloat32(geoIdx + 0x10);
+            const z = view.getFloat32(geoIdx + 0x14);
+
+            context.modelPoints[vectorIndex] = {boneID, offset: vec3.fromValues(x,y,z)};
         } else if (cmd === 0x0C) {
             // select child geo list(s), e.g. eye blink state
             const childCount = view.getUint16(geoIdx + 0x08);
@@ -457,12 +470,14 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
     const sharedOutput = new F3DEX.RSPSharedOutput();
     sharedOutput.setVertexBufferFromData(vertexData.createDataView());
+    const modelPoints: ModelPoint[] = [];
 
     const geoContext: GeoContext = {
         buffer,
 
         segmentBuffers,
         sharedOutput,
+        modelPoints,
 
         nodeStack: [],
     };
@@ -532,7 +547,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         }
     }
 
-    return { animationSetup, vertexBoneTable, vertexEffects, rootNode, sharedOutput };
+    return { animationSetup, vertexBoneTable, vertexEffects, rootNode, sharedOutput, modelPoints };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {

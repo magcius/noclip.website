@@ -842,11 +842,17 @@ const enum ObjectFlags {
     Blink = 0x100,
 }
 
+const enum BlinkState {
+    Open,
+    Closing,
+    Opening,
+}
+
 interface SelectorState {
     // we leave unknown entries undefined, so everything gets rendered
     values: (number | undefined)[];
     lastFrame: number;
-    blinkState: number;
+    blinkState: BlinkState;
 }
 
 function shouldDrawNode(selector: SelectorState, stateIndex: number, childIndex: number): boolean {
@@ -874,6 +880,7 @@ export class GeometryRenderer {
     public boneToWorldMatrixArray: mat4[];
     public boneToModelMatrixArray: mat4[];
     public boneToParentMatrixArray: mat4[];
+    public modelPointArray: vec3[];
     public boneAnimator: BoneAnimator | null = null;
     public animationController = new AnimationController(30);
     public objectFlags = 0;
@@ -904,6 +911,8 @@ export class GeometryRenderer {
 
         const boneToParentMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 0;
         this.boneToParentMatrixArray = nArray(boneToParentMatrixArrayCount, () => mat4.create());
+
+        this.modelPointArray = nArray(geo.modelPoints.length, () => vec3.create());
 
         this.selectorState = {
             lastFrame: 0,
@@ -970,6 +979,8 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
+    protected movement(): void {} // do nothing by default
+
     private calcAnim(): void {
         const animationSetup = this.animationSetup;
         if (this.boneAnimator !== null && animationSetup !== null) {
@@ -1005,6 +1016,16 @@ export class GeometryRenderer {
         this.calcBonesRelativeToMatrix(this.boneToModelMatrixArray, dummyTransform);
     }
 
+    private calcModelPoints(): void {
+        for (let i = 0; i < this.modelPointArray.length; i++) {
+            const modelPoint = this.geometryData.geo.modelPoints[i];
+            if (modelPoint === undefined)
+                continue;
+            const transform = modelPoint.boneID === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[modelPoint.boneID];
+            vec3.transformMat4(this.modelPointArray[i], modelPoint.offset, transform);
+        }
+    }
+
     private calcSelectorState(): void {
         const currFrame = Math.floor(this.animationController.getTimeInFrames());
         if (currFrame === this.selectorState.lastFrame)
@@ -1015,21 +1036,21 @@ export class GeometryRenderer {
             if (eyePos === undefined)
                 eyePos = 1;
             switch (this.selectorState.blinkState) {
-                case 0:
+                case BlinkState.Open:
                     if (Math.random() < 0.03)
-                        this.selectorState.blinkState++;
+                        this.selectorState.blinkState = BlinkState.Closing;
                     break;
-                case 1:
+                case BlinkState.Closing:
                     if (eyePos < 4)
                         eyePos++;
                     else
-                        this.selectorState.blinkState++;
+                        this.selectorState.blinkState = BlinkState.Opening;
                     break;
-                case 2:
+                case BlinkState.Opening:
                     if (eyePos > 1)
                         eyePos--;
                     else
-                        this.selectorState.blinkState = 0;
+                        this.selectorState.blinkState = BlinkState.Open;
                     break;
             }
             this.selectorState.values[1] = eyePos;
@@ -1042,8 +1063,10 @@ export class GeometryRenderer {
             return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
+        this.movement();
         this.calcAnim();
         this.calcBoneToWorld();
+        this.calcModelPoints();
         this.calcSelectorState();
 
         const renderData = this.geometryData.renderData;

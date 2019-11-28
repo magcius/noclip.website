@@ -4,6 +4,7 @@ import * as UI from '../ui';
 import * as Geo from './geo';
 import * as Flipbook from './flipbook'
 import * as BYML from '../byml';
+import * as Actors from './actors';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
@@ -318,18 +319,17 @@ class ObjectData {
     }
 
     public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
+        return this.baseSpawnObject(device, -1 /* no object ID */, fileID, pos, yaw, pitch);
+    }
+
+    private baseSpawnObject(device: GfxDevice, objectID: number, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
         }
-        let modelMatrix: mat4;
-        let renderer: GeometryRenderer | FlipbookRenderer;
-        if (geoData instanceof GeometryData) {
-            renderer = new GeometryRenderer(geoData);
-        } else {
-            renderer = new FlipbookRenderer(geoData)
-        }
+        const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(objectID, geoData);
+
         renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
@@ -372,7 +372,7 @@ class ObjectData {
 
         const allObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
         // if this object has a model file, make a renderer
-        const renderer = spawnEntry.GeoFileID !== 0 ? this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw) : null;
+        const renderer = spawnEntry.GeoFileID !== 0 ? this.baseSpawnObject(device, id, spawnEntry.GeoFileID, pos, yaw) : null;
         if (renderer !== null) {
             (renderer as any).spawnEntry = spawnEntry;
 
@@ -601,6 +601,11 @@ class SceneDesc implements Viewer.SceneDesc {
             if (obj.SceneID == 0x0b) {
                 const clanker = objectData.spawnObject(device, 0x10001, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
                 clanker.animationController.fps = 15; // seems slower than others, not sure the source
+                // TODO: make sure Clanker renders before the parts
+                for (let object of sceneRenderer.geoRenderers) {
+                    if (object instanceof Actors.ClankerPart)
+                    object.clankerVectors = clanker.modelPointArray;
+                }
                 sceneRenderer.geoRenderers.push(clanker);
             }
             return sceneRenderer;
