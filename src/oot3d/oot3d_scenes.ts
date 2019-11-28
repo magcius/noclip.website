@@ -689,31 +689,37 @@ const enum Scene {
     WaterTemple,
     SpiritTemple,
     ShadowTemple,
+    IceCavern,
+    BottomOfTheWell,
     GanonsTower,
     GerudoTrainingGround,
     Other,
 }
 
 function chooseSceneFromId(id: string): Scene {
-    if (id === 'ydan')
+    if (id === 'ydan' || id === 'ydan_dd')
         return Scene.DekuTree;
-    else if (id === 'ddan')
+    else if (id === 'ddan' || id === 'ddan_dd')
         return Scene.DodongosCavern;
-    else if (id === 'bdan')
+    else if (id === 'bdan' || id === 'bdan_dd')
         return Scene.JabuJabusBelly;
-    else if (id === 'bmori1')
+    else if (id === 'bmori1' || id === 'bmori1_dd')
         return Scene.ForestTemple;
-    else if (id === 'hidan')
+    else if (id === 'hidan' || id === 'hidan_dd')
         return Scene.FireTemple;
-    else if (id === 'mizusin')
+    else if (id === 'mizusin' || id === 'mizusin_dd')
         return Scene.WaterTemple;
-    else if (id === 'jyasinzou')
+    else if (id === 'jyasinzou' || id === 'jyasinzou_dd')
         return Scene.SpiritTemple;
-    else if (id === 'hakadan')
+    else if (id === 'hakadan' || id === 'hakadan_dd')
         return Scene.ShadowTemple;
-    else if (id === 'ganontika')
+    else if (id === 'ice_doukutu' || id === 'ice_doukutu_dd')
+        return Scene.IceCavern;
+    else if (id === 'hakadan_ch' || id === 'hakadan_ch_dd')
+        return Scene.BottomOfTheWell;
+    else if (id === 'ganontika' || id === 'ganontika_dd')
         return Scene.GanonsTower;
-    else if (id === 'men')
+    else if (id === 'men' || id === 'men_dd')
         return Scene.GerudoTrainingGround;
     else
         return Scene.Other;
@@ -724,6 +730,7 @@ function isChildDungeon(scene: Scene) {
     case Scene.DekuTree:
     case Scene.DodongosCavern:
     case Scene.JabuJabusBelly:
+    case Scene.BottomOfTheWell:
         return true;
     default:
         return false;
@@ -738,6 +745,7 @@ function isAdultDungeon(scene: Scene) {
     case Scene.SpiritTemple:
     case Scene.ShadowTemple:
     case Scene.GanonsTower:
+    case Scene.IceCavern:
     case Scene.GerudoTrainingGround:
         return true;
     default:
