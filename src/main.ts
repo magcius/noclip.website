@@ -187,6 +187,8 @@ class Main {
         }
 
         this.toplevel.ondragover = (e) => {
+            if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
+                return;
             this.ui.dragHighlight.style.display = 'block';
             e.preventDefault();
         };
@@ -340,8 +342,12 @@ class Main {
 
     private async _onDrop(e: DragEvent) {
         this.ui.dragHighlight.style.display = 'none';
+
+        if (!e.dataTransfer || e.dataTransfer.files.length === 0)
+            return;
+
         e.preventDefault();
-        const transfer = assertExists(e.dataTransfer);
+        const transfer = e.dataTransfer;
         const files = await traverseFileSystemDataTransfer(transfer);
         const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
