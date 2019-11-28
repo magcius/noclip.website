@@ -4115,6 +4115,7 @@ export class StarPieceGroup extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('StarPiece');
     }
 }
 
