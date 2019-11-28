@@ -922,8 +922,7 @@ class SMGSpawner {
 
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
-        assert(this.zones[stageDataHolder.zoneId] === undefined);
-        this.zones[stageDataHolder.zoneId] = zoneNode;
+        this.zones.push(zoneNode);
 
         stageDataHolder.iterPlacement((infoIter, layerId) => {
             const actorTableEntry = this.getActorTableEntry(getObjectName(infoIter));
@@ -996,8 +995,19 @@ class SMGSpawner {
             return true;
         }
 
-        const zone = this.zones[zoneAndLayer.zoneId];
-        return zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
+        // Check any placed zones that match the zone ID.
+        for (let i = 0; i < this.zones.length; i++) {
+            const zone = this.zones[i];
+
+            if (zone.stageDataHolder.zoneId !== zoneAndLayer.zoneId)
+                continue;
+
+            // If this actor is visible in *any* matching placed zones, then it's visible.
+            if (zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask))
+                return true;
+        }
+
+        return false;
     }
 }
 
