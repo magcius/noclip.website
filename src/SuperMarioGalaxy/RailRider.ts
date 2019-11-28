@@ -27,7 +27,7 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 class LinearRailPart {
     public p0: vec3 = vec3.create();
-    private p3: vec3 = vec3.create();
+    public p3: vec3 = vec3.create();
     private length: number;
 
     constructor(p0: vec3, p3: vec3) {
@@ -68,9 +68,9 @@ class LinearRailPart {
 
 class BezierRailPart {
     public p0: vec3 = vec3.create();
-    private p1: vec3 = vec3.create();
-    private p2: vec3 = vec3.create();
-    private p3: vec3 = vec3.create();
+    public p1: vec3 = vec3.create();
+    public p2: vec3 = vec3.create();
+    public p3: vec3 = vec3.create();
     private length: number;
 
     constructor(p0: vec3, p1: vec3, p2: vec3, p3: vec3) {
@@ -229,6 +229,14 @@ export class BezierRail {
             totalLength += partLength;
             this.railPartCoords.push(totalLength);
         }
+    }
+
+    public copyPointPos(dst: vec3, idx: number): void {
+        assert(idx < this.pointRecordCount);
+        if (!this.isClosed && idx === this.railParts.length)
+            vec3.copy(dst, this.railParts[idx - 1].p3);
+        else
+            vec3.copy(dst, this.railParts[idx].p0);
     }
 
     public calcRailCtrlPointIter(idx: number): JMapInfoIter {
@@ -431,8 +439,8 @@ export class RailRider {
         this.currentPointId = this.bezierRail.getCurrentCtrlPointIndex(this.coord, this.direction);
     }
 
-    public copyPointPos(v: vec3, m: number): void {
-        vec3.copy(v, this.bezierRail.railParts[m].p0);
+    public copyPointPos(v: vec3, idx: number): void {
+        this.bezierRail.copyPointPos(v, idx);
     }
 
     public moveToNearestPoint(v: vec3): void {
