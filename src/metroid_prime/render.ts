@@ -15,7 +15,7 @@ import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, G
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
@@ -351,7 +351,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const packets: LoadedVertexPacket[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
-        assert(surface.loadedVertexLayout.vertexBufferStrides === surfaces[0].loadedVertexLayout.vertexBufferStrides);
+        assert(surface.loadedVertexLayout.vertexBufferStrides[0] === surfaces[0].loadedVertexLayout.vertexBufferStrides[0]);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
@@ -389,18 +389,17 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         vertexBuffers: [packedVertexData.buffer],
         totalIndexCount,
         totalVertexCount,
-        packets,
         vertexId: 0,
+        packets,
     };
 
-    // Patch the vertex layout.
-    const loadedVertexLayout = surfaces[0].loadedVertexLayout;
+    const loadedVertexLayout: LoadedVertexLayout = { ... surfaces[0].loadedVertexLayout };
     loadedVertexLayout.indexFormat = GfxFormat.U32_R;
 
     return {
         materialIndex: surfaces[0].materialIndex,
         worldModelIndex: -1,
-        loadedVertexLayout: surfaces[0].loadedVertexLayout,
+        loadedVertexLayout: loadedVertexLayout,
         loadedVertexData: newLoadedVertexData,
         origSurfaces: surfaces,
     };
