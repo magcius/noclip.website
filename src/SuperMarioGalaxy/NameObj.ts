@@ -19,6 +19,7 @@ export const enum DrawType {
     SWING_ROPE                     = 0x00,
     TRAPEZE                        = 0x06,
     OCEAN_BOWL                     = 0x07,
+    OCEAN_RING                     = 0x08,
     WARP_POD_PATH                  = 0x18,
     WATER_PLANT                    = 0x1B,
     WATER_CAMERA_FILTER            = 0x3A,

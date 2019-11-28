@@ -386,7 +386,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, 0x22);
         this.drawOpa(passRenderer, 0x17);
         this.drawOpa(passRenderer, 0x16);
-        this.execute(passRenderer, DrawType.OCEAN_BOWL);
         this.drawXlu(passRenderer, DrawBufferType.INDIRECT_PLANET);
         this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
         this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT);
@@ -395,6 +394,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x22);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
+        this.execute(passRenderer, DrawType.OCEAN_RING);
+        this.execute(passRenderer, DrawType.OCEAN_BOWL);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 

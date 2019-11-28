@@ -4,9 +4,9 @@
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec2 } from 'gl-matrix';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy } from '../Color';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8 } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -28,6 +28,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TextureMapping } from '../TextureHolder';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -37,6 +38,7 @@ const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec2 = vec2.create();
 const scratchMatrix = mat4.create();
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
@@ -201,7 +203,7 @@ function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number 
 }
 
 function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
-    const t = Math.cos((v0 / v3) * Math.PI * 0.5);
+    const t = Math.sin((v0 / v3) * Math.PI * 0.5);
     return lerp(v1, v2, t);
 }
 
@@ -4662,5 +4664,325 @@ export class Trapeze extends LiveActor {
         const point = this.swingRopePoint;
         setMtxAxisXYZ(this.stickMtx, point.axisX, point.axisY, point.axisZ);
         setTrans(this.stickMtx, point.position);
+    }
+}
+
+class WaterPoint {
+    public originalPos = vec3.create();
+    public pos = vec3.create();
+    public upVec = vec3.create();
+    public alpha = 1.0;
+
+    constructor(originalPos: vec3, upVec: vec3, public coordAcrossRail: number, public coordOnRail: number, public height: number, public flowSpeedRate: number) {
+        vec3.copy(this.originalPos, originalPos);
+        vec3.copy(this.upVec, upVec);
+    }
+
+    public calcHeight(theta1: number, theta2: number, wave1Height: number, wave2Height: number, coordAcrossRail: number, coordOnRail: number): number {
+        const wave2 = wave2Height * Math.sin(theta2 + (0.0025 * coordOnRail));
+        const wave1 = wave1Height * Math.sin(theta1 + (0.003 * coordAcrossRail) + (0.0003 * coordOnRail));
+        return this.height * (wave1 + wave2);
+    }
+
+    public updatePos(theta1: number, theta2: number, wave1Height: number, wave2Height: number, heightScale: number): void {
+        const waveHeight = this.calcHeight(theta1, theta2, wave1Height, wave2Height, this.coordAcrossRail, this.coordOnRail) * heightScale;
+        vec3.scaleAndAdd(this.pos, this.originalPos, this.upVec, -waveHeight);
+    }
+}
+
+class OceanRingDrawer {
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+    private water: BTIData;
+    private waterIndirect: BTIData;
+    private tex0Trans = vec2.create();
+    private tex1Trans = vec2.create();
+    private tex2Trans = vec2.create();
+
+    constructor(sceneObjHolder: SceneObjHolder, private oceanRing: OceanRing) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX1, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX2, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX1, GX.CompCnt.TEX_ST);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX2, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder('OceanRing');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.TEXMTX1);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX2, GX.TexGenMatrix.TEXMTX2);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX3);
+
+        const isCameraInWater = false;
+        if (!isCameraInWater) {
+            mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
+            mb.setTevIndWarp(3, GX.IndTexStageID.STAGE0, true, false, GX.IndTexMtxID._0);
+        }
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.DIVIDE_2, false, GX.Register.PREV);
+        mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, false, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(2, GX.CombineColorInput.CPREV, GX.CombineColorInput.A0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV);
+        mb.setTevColorOp(2, GX.TevOp.COMP_R8_EQ, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(2, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
+        mb.setTevOrder(3, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(3, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.C1, GX.CombineColorInput.CPREV);
+        mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(3, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        const arc = sceneObjHolder.modelCache.getObjectData('WaterWave');
+        this.water = loadBTIData(sceneObjHolder, arc, 'Water.bti');
+        this.waterIndirect = loadBTIData(sceneObjHolder, arc, 'WaterIndirect.bti');
+    }
+
+    public update(deltaTimeFrames: number): void {
+        this.tex0Trans[0] = (this.tex0Trans[0] + (deltaTimeFrames * -0.003)) % 1.0;
+        this.tex0Trans[1] = (this.tex0Trans[1] + (deltaTimeFrames * -0.001)) % 1.0;
+
+        this.tex1Trans[0] = (this.tex1Trans[0] + (deltaTimeFrames * -0.002)) % 1.0;
+        this.tex1Trans[1] = (this.tex1Trans[1] + (deltaTimeFrames *  0.001)) % 1.0;
+
+        this.tex2Trans[0] = (this.tex2Trans[0] + (deltaTimeFrames *  0.000)) % 1.0;
+        this.tex2Trans[1] = (this.tex2Trans[1] + (deltaTimeFrames *  0.003)) % 1.0;
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.ddraw.beginDraw();
+
+        const p = this.oceanRing.points, pointCount = p.length, pointsPerSegment = this.oceanRing.pointsPerSegment;
+
+        let tx0S = 0.0, tx1S = 0.0, tx2S = 0.0;
+        for (let i = 0; i < pointCount; i += pointsPerSegment) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+            let tx0T = 0.0, tx1T = 0.0, tx2T = 0.0;
+
+            const tx0Sb = tx0S + 0.05;
+            const tx1Sb = tx1S + 0.05;
+            const tx2Sb = tx2S + 0.1;
+
+            for (let j = i; j < i + pointsPerSegment; j++) {
+                const p0 = p[j], p1 = p[(j + pointsPerSegment) % pointCount];
+
+                this.ddraw.position3vec3(p0.pos);
+                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, p0.alpha * 0xFF);
+                this.ddraw.texCoord2f32(GX.Attr.TEX0, tx0S, tx0T);
+                this.ddraw.texCoord2f32(GX.Attr.TEX1, tx1S, tx1T);
+                this.ddraw.texCoord2f32(GX.Attr.TEX2, tx2S, tx2T);
+
+                this.ddraw.position3vec3(p1.pos);
+                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, p1.alpha * 0xFF);
+                this.ddraw.texCoord2f32(GX.Attr.TEX0, tx0Sb, tx0T);
+                this.ddraw.texCoord2f32(GX.Attr.TEX1, tx1Sb, tx1T);
+                this.ddraw.texCoord2f32(GX.Attr.TEX2, tx2Sb, tx2T);
+
+                tx0T += 0.05;
+                tx1T += 0.05;
+                tx2T += 0.1;
+            }
+
+            tx0S = tx0Sb;
+            tx1S = tx1Sb;
+            tx2S = tx2Sb;
+
+            this.ddraw.end();
+        }
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
+        setTextureMatrixST(materialParams.u_TexMtx[0], 1.0, this.tex0Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[1], 1.0, this.tex1Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[2], 1.0, this.tex2Trans);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
+
+        this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(materialParams.m_TextureMapping[1]);
+        this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x76D7FFFF);
+
+        const materialHelper = this.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.water.destroy(device);
+        this.waterIndirect.destroy(device);
+    }
+}
+
+export class OceanRing extends LiveActor {
+    public points: WaterPoint[] = [];
+    public pointsPerSegment: number = 0x0F;
+    private segmentCount: number;
+    private widthMax: number = 1200.0;
+    private waveHeight1: number;
+    private waveHeight2: number;
+    private waveTheta1: number = 0.0;
+    private waveTheta2: number = 0.0;
+    private arg1: number;
+    private oceanRingDrawer: OceanRingDrawer | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_RING);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initRailRider(sceneObjHolder, infoIter);
+        this.initPoints();
+
+        const arg0 = fallback(getJMapInfoArg0(infoIter), 0);
+        if (arg0 === 0) {
+            // TODO(jstpierre): OceanRingPipe
+        } else if (arg0 === 1) {
+            this.waveHeight1 = 50.0;
+            this.waveHeight2 = 80.0;
+        } else if (arg0 === 2) {
+            this.waveHeight1 = 20.0;
+            this.waveHeight2 = 30.0;
+        }
+
+        this.oceanRingDrawer = new OceanRingDrawer(sceneObjHolder, this);
+
+        this.arg1 = fallback(getJMapInfoArg1(infoIter), 30);
+    }
+
+    private initPoints(): void {
+        const railTotalLength = getRailTotalLength(this);
+
+        this.segmentCount = ((railTotalLength / 200.0) | 0) + 1;
+
+        const segmentSize = railTotalLength / this.segmentCount;
+        const edgePointNum = 2.0;
+
+        for (let i = 0; i < this.segmentCount; i++) {
+            // getRailPos(scratchVec3a, this);
+            // calcGravityVector of rail pos
+            vec3.negate(scratchVec3a, this.gravityVector);
+            getRailDirection(scratchVec3b, this);
+
+            vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
+
+            const railCoord = getRailCoord(this);
+            const widthRate = this.calcCurrentWidthRate(railCoord);
+            const flowSpeedRate = this.calcCurrentFlowSpeedRate(railCoord);
+
+            for (let j = -7; j <= 7; j++) {
+                getRailPos(scratchVec3b, this);
+                const width = (1200.0/7.0) * j;
+                vec3.scaleAndAdd(scratchVec3b, scratchVec3b, scratchVec3c, widthRate * width);
+
+                const edgePointIdx = 7 - Math.abs(j);
+                const height = edgePointIdx < edgePointNum ? getEaseOutValue(edgePointIdx / edgePointNum, 0.0, 1.0, 1.0) : 1.0;
+                const waterPoint = new WaterPoint(scratchVec3b, scratchVec3a, width, i * segmentSize, height, flowSpeedRate);
+                this.points.push(waterPoint);
+            }
+
+            moveCoord(this, segmentSize);
+        }
+    }
+
+    private updatePoints(): void {
+        // TODO(jstpierre): Accurate heightScale?
+        for (let i = 0; i < this.points.length; i++)
+            this.points[i].updatePos(this.waveTheta1, this.waveTheta2, this.waveHeight1, this.waveHeight2, 1.0);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        this.waveTheta2 += -0.06 * deltaTimeFrames;
+        this.waveTheta1 += -0.04 * deltaTimeFrames;
+        this.updatePoints();
+
+        if (this.oceanRingDrawer !== null)
+            this.oceanRingDrawer.update(deltaTimeFrames);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (this.oceanRingDrawer !== null)
+            this.oceanRingDrawer.draw(sceneObjHolder, renderInstManager, viewerInput);
+    }
+
+    private calcCurrentFlowSpeedRate(coord: number): number {
+        setRailCoord(this, coord);
+        calcDistanceToCurrentAndNextRailPoint(scratchVec2, this);
+
+        const totalDist = scratchVec2[0] + scratchVec2[1];
+        if (totalDist >= 1.0) {
+            const currRate = fallback(this.railRider!.getCurrentPointArg('point_arg0'), 100.0);
+            const nextRate = fallback(this.railRider!.getNextPointArg('point_arg0'), 100.0);
+            const normRate = ((currRate * scratchVec2[1]) + (nextRate * scratchVec2[0])) / totalDist;
+            return normRate / 100.0;
+        } else {
+            return 1.0;
+        }
+    }
+
+    private calcCurrentWidthRate(coord: number): number {
+        setRailCoord(this, coord);
+        calcDistanceToCurrentAndNextRailPoint(scratchVec2, this);
+
+        const totalDist = scratchVec2[0] + scratchVec2[1];
+        if (totalDist >= 1.0) {
+            const currRate = fallback(this.railRider!.getCurrentPointArg('point_arg1'), 12.0);
+            const nextRate = fallback(this.railRider!.getNextPointArg('point_arg1'), 12.0);
+            const normRate = ((currRate * scratchVec2[1]) + (nextRate * scratchVec2[0])) / totalDist;
+            return normRate / 12.0;
+        } else {
+            return 1.0;
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const arg0 = fallback(getJMapInfoArg0(infoIter), 0);
+        if (arg0 === 0) {
+            // TODO(jstpierre): OceanRingPipe. For now, always request WaterWave.
+            sceneObjHolder.modelCache.requestObjectData('WaterWave');
+        } else {
+            sceneObjHolder.modelCache.requestObjectData('WaterWave');
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.oceanRingDrawer !== null)
+            this.oceanRingDrawer.destroy(device);
     }
 }

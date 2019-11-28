@@ -418,8 +418,10 @@ export class RailRider {
         assert(isConnectedWithRail(actorIter));
         this.bezierRail = getBezierRailForActor(sceneObjHolder, actorIter);
 
-        this.bezierRail.calcPos(this.startPos, 0.0);
-        this.bezierRail.calcPos(this.endPos, this.getTotalLength());
+        this.setCoord(this.bezierRail.getTotalLength());
+        vec3.copy(this.endPos, this.currentPos);
+        this.setCoord(0.0);
+        vec3.copy(this.startPos, this.currentPos);
     }
 
     private syncPosDir(): void {
@@ -519,8 +521,27 @@ export class RailRider {
         return pointIter.getValueNumberNoInit(argName);
     }
 
+    public getNextPointArg(argName: string): number | null {
+        const pointIter = this.bezierRail.calcRailCtrlPointIter(this.getNextPointNo());
+        return pointIter.getValueNumberNoInit(argName);
+    }
+
     public getPartLength(partIdx: number): number {
         return this.bezierRail.getPartLength(partIdx);
+    }
+
+    public getCurrentPointCoord(): number {
+        return this.bezierRail.getRailPosCoord(this.currentPointId);
+    }
+
+    public getNextPointNo(): number {
+        const delta = (this.direction === RailDirection.TOWARDS_END) ? 1 : -1;
+        const numParts = this.bezierRail.railParts.length;
+        return (this.currentPointId + delta + numParts) % numParts;
+    }
+
+    public getNextPointCoord(): number {
+        return this.bezierRail.getRailPosCoord(this.getNextPointNo());
     }
 
     public debugDrawRail(camera: Camera, nPoints: number = 100): void {

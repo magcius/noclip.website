@@ -13,15 +13,13 @@ import { getVertexAttribLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
-import { Camera, texProjCameraSceneTex } from "../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { initDefaultPos, connectToScene, loadBTIData } from "./ActorUtil";
+import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
@@ -41,22 +39,6 @@ class OceanBowlPoint {
         vec3.copy(this.drawPosition, this.gridPosition);
         this.drawPosition[1] += height;
     }
-}
-
-function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void {
-    mat4.identity(m);
-    m[0] = scale;
-    m[5] = scale;
-    m[10] = scale;
-    if (v !== null) {
-        m[12] = v[0];
-        m[13] = v[1];
-    }
-}
-
-function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
-    texProjCameraSceneTex(m, camera, viewport, -1);
-    mat4.mul(m, m, camera.viewMatrix);
 }
 
 const scratchVec3 = vec3.create();
@@ -320,10 +302,11 @@ export class OceanBowl extends LiveActor {
         const scale2 = 0.1 * this.gridAxisPointCount;
         const scale4 = this.tex4Scale * this.gridAxisPointCount;
 
+        const camera = viewerInput.camera;
+
         setTextureMatrixST(materialParams.u_TexMtx[0], scale0, this.tex0Trans);
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
         setTextureMatrixST(materialParams.u_TexMtx[2], scale2, this.tex2Trans);
-        const camera = viewerInput.camera;
         loadTexProjectionMtx(materialParams.u_TexMtx[3], camera, viewerInput.viewport);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
 

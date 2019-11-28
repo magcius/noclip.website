@@ -10,9 +10,12 @@ import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { RARC } from "../j3d/rarc";
 import { getRes, XanimePlayer } from "./Animation";
-import { vec3 } from "gl-matrix";
+import { vec3, vec2, mat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
+import { isNearZero } from "../MathHelpers";
+import { Camera, texProjCameraSceneTex } from "../Camera";
+import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 
 const scratchVec3 = vec3.create();
 
@@ -498,6 +501,32 @@ export function moveTransToOtherActorRailPos(actor: LiveActor, otherActor: LiveA
     getRailPos(actor.translation, otherActor);
 }
 
+export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActor): void {
+    const railRider = actor.railRider!;
+
+    const currCoord = railRider.coord;
+
+    const currPointCoord = railRider.getCurrentPointCoord();
+    if (isNearZero(currPointCoord, 0.001)) {
+        if (railRider.direction === RailDirection.TOWARDS_START)
+            dst[0] = railRider.getTotalLength() - currCoord;
+        else
+            dst[0] = currCoord;
+    } else {
+        dst[0] = Math.abs(currCoord - currPointCoord);
+    }
+
+    const nextPointCoord = railRider.getNextPointCoord();
+    if (isNearZero(nextPointCoord, 0.001)) {
+        if (railRider.direction === RailDirection.TOWARDS_START)
+            dst[1] = currCoord;
+        else
+            dst[1] = railRider.getTotalLength() - currCoord;
+    } else {
+        dst[1] = Math.abs(nextPointCoord - currCoord);
+    }
+}
+
 export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
     vec3.subtract(scratchVec3, actor.translation, other);
     const m = vec3.dot(actor.gravityVector, scratchVec3);
@@ -507,4 +536,20 @@ export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
 
 export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario;
+}
+
+export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
+    texProjCameraSceneTex(m, camera, viewport, -1);
+    mat4.mul(m, m, camera.viewMatrix);
+}
+
+export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void {
+    mat4.identity(m);
+    m[0] = scale;
+    m[5] = scale;
+    m[10] = scale;
+    if (v !== null) {
+        m[12] = v[0];
+        m[13] = v[1];
+    }
 }

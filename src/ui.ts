@@ -2454,11 +2454,13 @@ class RecordingBranding {
         this.elem.style.bottom = '0';
         this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.4)';
         this.elem.style.borderTopRightRadius = '8px';
-        this.elem.style.font = '22px Norwester';
+        this.elem.style.font = '32px Norwester';
         this.elem.style.color = 'white';
         this.elem.style.padding = '4px 8px';
         this.elem.style.pointerEvents = 'none';
         this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.6)';
+        this.elem.style.visibility = 'hidden';
+        this.elem.style.userSelect = 'none';
         this.elem.textContent = 'noclip.website';
     }
 }
@@ -2544,8 +2546,7 @@ export class UI {
         this.floatingPanelContainer = document.createElement('div');
         this.toplevel.appendChild(this.floatingPanelContainer);
 
-        // Uncomment while recording.
-        // this.toplevel.appendChild(this.recordingBranding.elem);
+        this.toplevel.appendChild(this.recordingBranding.elem);
 
         this.toplevel.appendChild(this.bottomBar.elem);
         this.bottomBar.addWidgets(BottomBarArea.Left, this.cameraSpeedIndicator);
