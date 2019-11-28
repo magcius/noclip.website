@@ -609,6 +609,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("GlobalWireGravity"),
 
     // Other Areas
+    N("WaterArea"),
     N("WaterCube"),
     N("WaterCylinder"),
     N("WaterSphere"),
@@ -624,6 +625,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("CubeCameraBox"),
     N("CubeCameraCylinder"),
     N("CubeCameraSphere"),
+    N("DeathCube"),
+    N("DeathArea"),
     N("BloomCube"),
     N("SimpleBloomCube"),
     N("PostFogArea"),
@@ -650,7 +653,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("AstroChangeStageCube"),
     N("RasterScrollCube"),
     N("ChangeBgmCube"),
-    N("DeathCube"),
     N("CollisionArea"),
     N("ForbidTriangleJumpCube"),
     N("MirrorAreaCube"),
