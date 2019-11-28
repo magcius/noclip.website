@@ -923,6 +923,19 @@ export interface JointMatrixCalc {
     calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void;
 }
 
+function calcJointMatrixBase(dst: mat4, jnt1: Joint): void {
+    const scaleX = jnt1.scaleX;
+    const scaleY = jnt1.scaleY;
+    const scaleZ = jnt1.scaleZ;
+    const rotationX = jnt1.rotationX;
+    const rotationY = jnt1.rotationY;
+    const rotationZ = jnt1.rotationZ;
+    const translationX = jnt1.translationX;
+    const translationY = jnt1.translationY;
+    const translationZ = jnt1.translationZ;
+    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+}
+
 // TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
 export class JointMatrixCalcANK1 {
     constructor(public animationController: AnimationController, public ank1: ANK1) {
@@ -933,31 +946,26 @@ export class JointMatrixCalcANK1 {
         const animFrame = getAnimFrame(this.ank1, frame);
         const entry = this.ank1.jointAnimationEntries[i];
 
-        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-        const translationX = sampleAnimationData(entry.translationX, animFrame);
-        const translationY = sampleAnimationData(entry.translationY, animFrame);
-        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        if (entry !== undefined) {
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame);
+            const translationY = sampleAnimationData(entry.translationY, animFrame);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        } else {
+            calcJointMatrixBase(dst, jnt1);
+        }
     }
 }
 
 export class JointMatrixCalcNoAnm {
     public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        const scaleX = jnt1.scaleX;
-        const scaleY = jnt1.scaleY;
-        const scaleZ = jnt1.scaleZ;
-        const rotationX = jnt1.rotationX;
-        const rotationY = jnt1.rotationY;
-        const rotationZ = jnt1.rotationZ;
-        const translationX = jnt1.translationX;
-        const translationY = jnt1.translationY;
-        const translationZ = jnt1.translationZ;
-        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        calcJointMatrixBase(dst, jnt1);
     }
 }
 

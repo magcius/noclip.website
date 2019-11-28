@@ -2450,18 +2450,22 @@ class RecordingBranding {
     constructor() {
         this.elem = document.createElement('div');
         this.elem.style.position = 'absolute';
-        this.elem.style.left = '0';
+        this.elem.style.right = '0';
         this.elem.style.bottom = '0';
-        this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.4)';
-        this.elem.style.borderTopRightRadius = '8px';
+        this.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+        this.elem.style.borderTopLeftRadius = '8px';
         this.elem.style.font = '32px Norwester';
         this.elem.style.color = 'white';
-        this.elem.style.padding = '4px 8px';
+        this.elem.style.padding = '4px 8px 4px 12px';
         this.elem.style.pointerEvents = 'none';
-        this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.6)';
+        this.elem.style.textShadow = '0px 0px 10px rgba(0, 0, 0, 0.8)';
         this.elem.style.visibility = 'hidden';
         this.elem.style.userSelect = 'none';
         this.elem.textContent = 'noclip.website';
+    }
+
+    public v(): void {
+        this.elem.style.visibility = '';
     }
 }
 
