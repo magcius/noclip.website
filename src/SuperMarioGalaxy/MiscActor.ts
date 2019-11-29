@@ -5327,24 +5327,31 @@ class FlagFixPoints {
 }
 
 export class Flag extends LiveActor {
+    // Flags are an NxM grid of points, similar to a standard cloth simulation. To
+    // make the explanation easier, we will consider typical horizontal flags, with
+    // the left edge affixed to a pole. FlagFixPoints are the points on the fixed edge,
+    // run vertically along the pole, with N evenly spaced hoistPerPoint units apart.
+    // Each FlagFixPoints then has swingPointCount SwingRopePoints, spaced flyPerPoint
+    // units apart, which are the cloth simulation points.
+
     private fixPoints: FlagFixPoints[] = [];
     private fixPointCount: number;
     private swingPointCount: number;
     private colors: Uint32Array;
     private poleHeight: number = 0.0;
-    private texture: BTIData;
-    private widthPerPoint: number = 0.0;
-    private heightPerPoint: number = 0.0;
+    private flyPerPoint: number = 0.0;
+    private hoistPerPoint: number = 0.0;
     private axisX: vec3 = vec3.fromValues(0, 0, 0);
     private axisY: vec3 = vec3.fromValues(0, 1, 0);
-    private axisZ: vec3 = vec3.fromValues(0, 0, 1);
+    private windDirection: vec3 = vec3.fromValues(0, 0, 1);
     private vertical: boolean = false;
     private animCounter: number = 0.0;
     private noColorTint: boolean = false;
+    private texture: BTIData;
 
     private affectGravity: number = 0.1;
-    private affectAxisZ: number = 0.1;
-    private affectAxisZWave: number = 10.0;
+    private affectWindConst: number = 0.1;
+    private affectWindWave: number = 10.0;
     private affectRndmMin: number = 1.0;
     private affectRndmMax: number = 4.0;
     private dragMin: number = 0.6;
@@ -5360,8 +5367,8 @@ export class Flag extends LiveActor {
 
         this.fixPointCount = 10;
         this.swingPointCount = 10;
-        this.widthPerPoint = 40.0;
-        this.heightPerPoint = 40.0;
+        this.flyPerPoint = 40.0;
+        this.hoistPerPoint = 40.0;
 
         if (infoIter !== null) {
             initDefaultPos(sceneObjHolder, this, infoIter);
@@ -5369,46 +5376,46 @@ export class Flag extends LiveActor {
 
             const flagName = this.name;
             if (flagName === 'FlagKoopaCastle') {
-                this.widthPerPoint = 1000.0 / this.swingPointCount;
-                this.heightPerPoint = 500.0 / (this.fixPointCount - 1);
+                this.flyPerPoint = 1000.0 / this.swingPointCount;
+                this.hoistPerPoint = 500.0 / (this.fixPointCount - 1);
             } else if (flagName === 'FlagKoopaA') {
-                this.widthPerPoint = 450.0 / this.swingPointCount;
-                this.heightPerPoint = 275.0 / (this.fixPointCount - 1);
+                this.flyPerPoint = 450.0 / this.swingPointCount;
+                this.hoistPerPoint = 275.0 / (this.fixPointCount - 1);
             } else if (flagName === 'FlagKoopaB') {
-                this.widthPerPoint = 450.0 / this.swingPointCount;
-                this.heightPerPoint = 112.5 / (this.fixPointCount - 1);
+                this.flyPerPoint = 450.0 / this.swingPointCount;
+                this.hoistPerPoint = 112.5 / (this.fixPointCount - 1);
             } else if (flagName === 'FlagPeachCastleA') {
                 this.fixPointCount = 5;
                 this.swingPointCount = 6;
-                this.widthPerPoint = 160.0 / 6;
+                this.flyPerPoint = 160.0 / 6;
                 // this.minDistAlpha = 200.0;
                 // this.maxDistALpha = 500.0;
-                this.heightPerPoint = 145.0 / 4;
+                this.hoistPerPoint = 145.0 / 4;
                 this.vertical = true;
                 this.affectGravity = 0.5;
                 this.dragMin = 0.85;
                 this.dragMax = 1.0;
-                this.affectAxisZWave = 0.0;
-                this.affectAxisZ = 0.01;
+                this.affectWindWave = 0.0;
+                this.affectWindConst = 0.01;
                 this.affectRndmMin = 0.5;
                 this.affectRndmMax = 1.5;
             } else if (flagName === 'FlagPeachCastleB') {
                 this.fixPointCount = 5;
                 this.swingPointCount = 5;
-                this.widthPerPoint = 500.0 / 5;
-                this.heightPerPoint = 400.0 / 4;
+                this.flyPerPoint = 500.0 / 5;
+                this.hoistPerPoint = 400.0 / 4;
             } else if (flagName === 'FlagPeachCastleC') {
                 this.fixPointCount = 5;
                 this.swingPointCount = 5;
-                this.widthPerPoint = 500.0 / 5;
-                this.heightPerPoint = 400.0 / 4;
+                this.flyPerPoint = 500.0 / 5;
+                this.hoistPerPoint = 400.0 / 4;
             } else if (flagName === 'FlagRaceA') {
                 // Nothing to do.
             } else {
                 throw "whoops";
             }
 
-            calcActorAxis(null, this.axisY, this.axisZ, this);
+            calcActorAxis(null, this.axisY, this.windDirection, this);
 
             this.init(sceneObjHolder);
         }
@@ -5438,11 +5445,11 @@ export class Flag extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public setInfoPos(name: string, position: vec3, axisZ: vec3, poleHeight: number, width: number, height: number, swingPointCount: number, fixPointCount: number): void {
+    public setInfoPos(name: string, position: vec3, windDirection: vec3, poleHeight: number, width: number, height: number, swingPointCount: number, fixPointCount: number): void {
         this.name = name;
 
         vec3.copy(this.translation, position);
-        vec3.copy(this.axisZ, axisZ);
+        vec3.copy(this.windDirection, windDirection);
 
         this.poleHeight = poleHeight;
         if (swingPointCount > 0)
@@ -5450,8 +5457,8 @@ export class Flag extends LiveActor {
         if (fixPointCount > 0)
             this.fixPointCount = fixPointCount;
 
-        this.widthPerPoint = width / this.swingPointCount;
-        this.heightPerPoint = height / (this.fixPointCount - 1);
+        this.flyPerPoint = width / this.swingPointCount;
+        this.hoistPerPoint = height / (this.fixPointCount - 1);
     }
 
     public init(sceneObjHolder: SceneObjHolder): void {
@@ -5464,13 +5471,13 @@ export class Flag extends LiveActor {
             const fp = new FlagFixPoints();
 
             const pointIdxUp = this.fixPointCount - 1 - i;
-            vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, this.poleHeight + this.heightPerPoint * pointIdxUp);
+            vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, this.poleHeight + this.hoistPerPoint * pointIdxUp);
 
             vec3.copy(fp.position, scratchVec3);
 
             for (let j = 0; j < this.swingPointCount; j++) {
                 if (this.vertical) {
-                    const y = this.widthPerPoint * (j + 1);
+                    const y = this.flyPerPoint * (j + 1);
                     vec3.scaleAndAdd(scratchVec3, fp.position, this.gravityVector, y);
                 }
 
@@ -5553,7 +5560,7 @@ export class Flag extends LiveActor {
         if (this.poleHeight > 0) {
             this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
 
-            const top = this.poleHeight + this.heightPerPoint * (this.fixPointCount - 1);
+            const top = this.poleHeight + this.hoistPerPoint * (this.fixPointCount - 1);
             this.drawPolePoint( 1.0, 0.0, top, 0xC8);
             this.drawPolePoint( 0.0, 1.0, top, 0xDC);
             this.drawPolePoint(-1.0, 0.0, top, 0xB4);
@@ -5579,28 +5586,33 @@ export class Flag extends LiveActor {
     }
 
     private updateFlag(camera: Camera): void {
-        vec3.cross(this.axisX, this.axisZ, this.axisY);
+        vec3.cross(this.axisX, this.windDirection, this.axisY);
         vec3.normalize(this.axisX, this.axisX);
 
-        // Camera fade colors
         // Camera fade alpha
         // mpTranslationPtr
         // mpBaseMtx
 
+        // Base acceleration
         vec3.scale(scratchVec3a, this.gravityVector, this.affectGravity);
         for (let i = 0; i < this.fixPoints.length; i++) {
             const fp = this.fixPoints[i];
             for (let j = 0; j < fp.points.length; j++) {
+                // Apply gravity
                 const sp = fp.points[j];
                 sp.addAccel(scratchVec3a);
 
-                const wave = Math.abs(Math.sin(MathConstants.DEG_TO_RAD * (this.animCounter + (10.0 * i) + (10.0 * j))));
-                vec3.scale(scratchVec3b, this.axisZ, this.affectAxisZ + (wave * this.affectAxisZWave));
+                // Apply wind
+                const windTheta = Math.abs(Math.sin(MathConstants.DEG_TO_RAD * (this.animCounter + (10.0 * i) + (10.0 * j))));
+                const windStrength = this.affectWindConst + (windTheta * this.affectWindWave);
+                vec3.scale(scratchVec3b, this.windDirection, windStrength);
                 sp.addAccel(scratchVec3b);
             }
         }
 
+        // Random acceleration
         if (this.vertical) {
+            // Vertical flags give a swing point some acceleration every few frames.
             if (getRandomInt(0, 2) === 0) {
                 const fpi = getRandomInt(0, this.fixPointCount);
                 const spi = getRandomInt(0, this.swingPointCount);
@@ -5611,6 +5623,7 @@ export class Flag extends LiveActor {
                 this.fixPoints[fpi].points[spi].addAccel(scratchVec3a);
             }
         } else {
+            // Horizontal flags give the first swing point some random acceleration.
             for (let i = 0; i < this.fixPoints.length; i++) {
                 vec3.set(scratchVec3a, getRandomFloat(-1.0, 1.0), 0.0, getRandomFloat(-1.0, 1.0));
                 vec3.scale(scratchVec3a, scratchVec3a, getRandomFloat(this.affectRndmMin, this.affectRndmMax));
@@ -5622,7 +5635,7 @@ export class Flag extends LiveActor {
         for (let i = 0; i < this.swingPointCount; i++) {
             for (let j = 1; j < this.fixPoints.length; j++) {
                 const p0 = this.fixPoints[j - 1].points[i], p1 = this.fixPoints[j].points[i];
-                p1.restrict(p0.position, this.heightPerPoint, p0.accel);
+                p1.restrict(p0.position, this.hoistPerPoint, p0.accel);
             }
         }
 
@@ -5630,9 +5643,9 @@ export class Flag extends LiveActor {
         for (let i = 0; i < this.fixPoints.length; i++) {
             const fp = this.fixPoints[i];
             let pos = fp.position;
-            for (let j = 0; j < fp.points.length; j++) {
+            for (let j = 0; j < this.swingPointCount; j++) {
                 const sp = fp.points[j];
-                sp.restrict(pos, this.widthPerPoint, null);
+                sp.restrict(pos, this.flyPerPoint, null);
                 pos = sp.position;
             }
         }
@@ -5648,8 +5661,8 @@ export class Flag extends LiveActor {
         // Update position & colors.
         for (let i = 0; i < this.fixPoints.length; i++) {
             const fp = this.fixPoints[i];
-            for (let j = 0; j < fp.points.length; j++) {
-                const drag = lerp(this.dragMin, this.dragMax, 1.0 - (j / (fp.points.length - 1)));
+            for (let j = 0; j < this.swingPointCount; j++) {
+                const drag = lerp(this.dragMin, this.dragMax, 1.0 - (j / (this.swingPointCount - 1)));
                 const sp = fp.points[j];
                 sp.updatePos(drag);
 
