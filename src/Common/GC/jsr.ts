@@ -41,6 +41,24 @@ function readDataHeader(stream: DataStream): AFSHeader {
     return {datas: headerItems};
 }
 
+const enum ChunkType {
+    GBIX,
+    PTEX,
+}
+
+function peekParser(stream: DataStream): ChunkType | null {
+    // Verify the magic bytes without updating the internal offset
+    const magic = stream.readString(4, 0);
+
+    switch(magic)
+    {
+        case "GBIX": return ChunkType.GBIX;
+        case "PTEX": return ChunkType.PTEX;
+    }
+
+    return null;
+}
+
 export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
 
     const stream = new DataStream(buffer);
@@ -55,13 +73,19 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
         const textureBlobEnd = textureBlobOffset + textureBlobSize;
 
         stream.offs = textureBlobOffset;
+
+        if(peekParser(stream) === ChunkType.PTEX ) {
+            // todo: parse initial ptex chunk
+            stream.offs += 4096;
+        }
+
         while(stream.offs < textureBlobEnd) {
             // Align current file offset to 32-bits
             stream.offs = (stream.offs + 31) & ~31;
 
-            if (GC_PVRT.canParse(stream) === false)
+            if(peekParser(stream) !== ChunkType.GBIX)
                 break;
-
+        
             const uniqueName = `${name}_${textures.length}`;
 
             console.log(`parsing ${uniqueName} at ${stream.offs}`);
