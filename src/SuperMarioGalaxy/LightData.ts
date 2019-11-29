@@ -7,7 +7,7 @@ import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
-import { ColorKind } from "../gx/gx_render";
+import { ColorKind, MaterialParams } from "../gx/gx_render";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
 import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj";
@@ -77,6 +77,21 @@ class ActorLightInfo {
         this.Light1.setFromLightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
         this.Alpha2 = fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) / 0xFF;
+    }
+
+    public setOnMaterialParams(mp: MaterialParams, camera: Camera, setAmbient: boolean): void {
+        this.Light0.setLight(mp.u_Lights[0], camera);
+        this.Light1.setLight(mp.u_Lights[1], camera);
+
+        const light2 = mp.u_Lights[2];
+        vec3.set(light2.Position, 0, 0, 0);
+        vec3.set(light2.Direction, 0, -1, 0);
+        vec3.set(light2.CosAtten, 1, 0, 0);
+        vec3.set(light2.DistAtten, 1, 0, 0);
+        colorFromRGBA(light2.Color, 0, 0, 0, this.Alpha2);
+
+        if (setAmbient)
+            colorCopy(mp.u_Color[ColorKind.AMB0], this.Ambient);
     }
 
     public setOnModelInstance(modelInstance: J3DModelInstance, camera: Camera, setAmbient: boolean): void {

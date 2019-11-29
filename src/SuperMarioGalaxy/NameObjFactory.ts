@@ -134,6 +134,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("OceanPierFloaterA",              OceanWaveFloater),
     _("OceanHexagonFloater",            OceanWaveFloater),
     _("OceanRing",                      OceanRing),
+    _("OceanRingAndFlag",               OceanRing),
     _("PalmIsland",                     PalmIsland),
     _("PhantomBonfire",                 PhantomTorch),
     _("PhantomTorch",                   PhantomTorch),

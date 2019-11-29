@@ -335,6 +335,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // if not PriorDrawAir, they would go here...
 
         // executeDrawListOpa();
+        this.execute(passRenderer, DrawType.OCEAN_RING_OUTSIDE);
         this.execute(passRenderer, DrawType.SWING_ROPE);
         this.execute(passRenderer, DrawType.TRAPEZE);
         this.execute(passRenderer, DrawType.WARP_POD_PATH);

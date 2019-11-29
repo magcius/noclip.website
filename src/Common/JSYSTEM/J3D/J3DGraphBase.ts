@@ -306,7 +306,7 @@ function buildEnvMtxOld(dst: mat4, flipYScale: number): void {
     dst[14] = 0.0;
 }
 
-function buildEnvMtx(dst: mat4, flipYScale: number): void {
+export function buildEnvMtx(dst: mat4, flipYScale: number): void {
     // Map from -1...1 range to 0...1 range.
     texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
     // texEnvMtx puts translation in fourth column, so we need to swap.

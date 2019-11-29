@@ -22,7 +22,7 @@ import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gf
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { Color, TransparentBlack, colorNewCopy } from '../Color';
+import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -45,6 +45,11 @@ export class MaterialParams {
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
     public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
+
+    constructor() {
+        colorFromRGBA(this.u_Color[ColorKind.MAT0], 1.0, 1.0, 1.0, 1.0);
+        colorFromRGBA(this.u_Color[ColorKind.MAT1], 1.0, 1.0, 1.0, 1.0);
+    }
 }
 
 export class PacketParams {
