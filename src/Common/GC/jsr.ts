@@ -4,35 +4,35 @@ import { assert } from "../../util";
 import { DataStream } from "./DataStream";
 import * as GC_PVRT from './PVRT';
 
-export interface AFXContainer {
+export interface AFSContainer {
     name: string;
     textures: GC_PVRT.PVR_Texture[];
 }
 
-interface AFXChunkHeader {
+interface AFSChunkHeader {
     offset: number;
     size: number;
 }
 
-interface AFXHeader {
-    datas : AFXChunkHeader[];
+interface AFSHeader {
+    datas : AFSChunkHeader[];
 }
 
-function readDataHeaderItem(stream: DataStream) : AFXChunkHeader {
+function readDataHeaderItem(stream: DataStream) : AFSChunkHeader {
     const itemOffset = stream.readUint32();
     const itemSize = stream.readUint32();
 
     return { offset: itemOffset, size: itemSize };
 }
 
-function readDataHeader(stream: DataStream): AFXHeader {
+function readDataHeader(stream: DataStream): AFSHeader {
     
     const magic = stream.readString(4);
     assert(magic === "AFS\0");
 
     const headerCount = stream.readUint32();
 
-    const headerItems: AFXChunkHeader[] = [];
+    const headerItems: AFSChunkHeader[] = [];
     for(let i=0; i < headerCount; ++i) {
         const item = readDataHeaderItem(stream);
         headerItems.push(item);
@@ -41,17 +41,17 @@ function readDataHeader(stream: DataStream): AFXHeader {
     return {datas: headerItems};
 }
 
-export function parse(buffer: ArrayBufferSlice, name: string): AFXContainer {
+export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
 
     const stream = new DataStream(buffer);
  
-    const afxHeader = readDataHeader(stream);
+    const header = readDataHeader(stream);
     let textures: GC_PVRT.PVR_Texture[] = [];
 
-    for(let i=0; i<afxHeader.datas.length; ++i) {
+    for(let i=0; i<header.datas.length; ++i) {
 
-        const textureBlobOffset = afxHeader.datas[i].offset;
-        const textureBlobSize = afxHeader.datas[i].size;
+        const textureBlobOffset = header.datas[i].offset;
+        const textureBlobSize = header.datas[i].size;
         const textureBlobEnd = textureBlobOffset + textureBlobSize;
 
         stream.offs = textureBlobOffset;
