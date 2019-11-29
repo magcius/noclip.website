@@ -671,8 +671,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentActiveTexture: GLenum | null = null;
     private _currentBoundVAO: WebGLVertexArrayObject | null = null;
     private _currentBoundUBO: WebGLBuffer | null = null;
+
+    // These are the bound IBO/VBO when there is no VAO bound.
     private _currentBoundIBO: WebGLBuffer | null = null;
     private _currentBoundVBO: WebGLBuffer | null = null;
+
     private _currentProgram: WebGLProgram | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
@@ -930,6 +933,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (this._currentBoundVAO !== vao) {
             this.gl.bindVertexArray(vao);
             this._currentBoundVAO = vao;
+
+            if (this._currentBoundVAO !== null) {
+                this._currentBoundVBO = null;
+                this._currentBoundIBO = null;
+            }
         }
     }
 
@@ -1011,6 +1019,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const buffer: GfxBufferP_GL = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(buffer);
+
         return buffer;
     }
 
@@ -1201,7 +1210,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 if (inputLayoutBuffer === null)
                     continue;
 
-                this._bindBuffer(gl.ARRAY_BUFFER, null);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
                 if (attr.usesIntInShader) {
                     gl.vertexAttribIPointer(attr.location, size, type, 0, 0);
