@@ -670,12 +670,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GfxDevice
     private _currentActiveTexture: GLenum | null = null;
     private _currentBoundVAO: WebGLVertexArrayObject | null = null;
-    private _currentBoundUBO: WebGLBuffer | null = null;
-
-    // These are the bound IBO/VBO when there is no VAO bound.
-    private _currentBoundIBO: WebGLBuffer | null = null;
-    private _currentBoundVBO: WebGLBuffer | null = null;
-
     private _currentProgram: WebGLProgram | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
@@ -933,34 +927,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (this._currentBoundVAO !== vao) {
             this.gl.bindVertexArray(vao);
             this._currentBoundVAO = vao;
-
-            if (this._currentBoundVAO !== null) {
-                this._currentBoundVBO = null;
-                this._currentBoundIBO = null;
-            }
-        }
-    }
-
-    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer | null): void {
-        if (gl_target === WebGL2RenderingContext.UNIFORM_BUFFER) {
-            if (this._currentBoundUBO !== gl_buffer) {
-                this.gl.bindBuffer(gl_target, gl_buffer);
-                this._currentBoundUBO = gl_buffer;
-            }
-        } else if (gl_target === WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER) {
-            if (this._currentBoundIBO !== gl_buffer) {
-                this._bindVAO(null);
-                this.gl.bindBuffer(gl_target, gl_buffer);
-                this._currentBoundIBO = gl_buffer;
-            }
-        } else if (gl_target === WebGL2RenderingContext.ARRAY_BUFFER) {
-            if (this._currentBoundVBO !== gl_buffer) {
-                this._bindVAO(null);
-                this.gl.bindBuffer(gl_target, gl_buffer);
-                this._currentBoundVBO = gl_buffer;
-            }
-        } else {
-            throw "whoops";
         }
     }
 
@@ -987,7 +953,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_buffer = this.ensureResourceExists(gl.createBuffer());
         const gl_target = translateBufferUsageToTarget(usage);
         const gl_hint = translateBufferHint(hint);
-        this._bindBuffer(gl_target, gl_buffer);
+        gl.bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
         return gl_buffer;
     }
@@ -997,6 +963,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
+        // Temporarily unbind VAO when creating buffers to not stomp on the VAO configuration.
+        this.gl.bindVertexArray(null);
+
         const byteSize = wordCount * 4;
         const gl_buffer_pages: WebGLBuffer[] = [];
 
@@ -1019,6 +988,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const buffer: GfxBufferP_GL = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(buffer);
+
+        this.gl.bindVertexArray(this._currentBoundVAO);
 
         return buffer;
     }
@@ -1442,9 +1413,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     //#region Debugging
     public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {
         const gl = this.gl;
-        const { gl_target } = buffer as GfxBufferP_GL;
-        this._bindBuffer(gl_target, getPlatformBuffer(buffer, wordOffset * 4));
-        gl.getBufferSubData(gl_target, wordOffset * 4, dstBuffer);
+        gl.bindBuffer(gl.COPY_READ_BUFFER, getPlatformBuffer(buffer, wordOffset * 4));
+        gl.getBufferSubData(gl.COPY_READ_BUFFER, wordOffset * 4, dstBuffer);
     }
 
     public checkForLeaks(): void {
@@ -1690,7 +1660,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this._currentUniformBufferByteOffsets[index] = byteOffset;
             }
         }
-        this._currentBoundUBO = null;
 
         for (let i = 0; i < samplerBindings.length; i++) {
             const binding = samplerBindings[i];
@@ -1832,8 +1801,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         let virtBufferByteOffset = dstByteOffset;
         let physBufferByteOffset = dstByteOffset % dstPageByteSize;
         while (virtBufferByteOffset < virtBufferByteOffsetEnd) {
-            this._bindBuffer(gl_target, getPlatformBuffer(buffer, virtBufferByteOffset));
-            gl.bufferSubData(gl_target, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
+            gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformBuffer(buffer, virtBufferByteOffset));
+            gl.bufferSubData(gl.COPY_WRITE_BUFFER, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
             virtBufferByteOffset += dstPageByteSize;
             physBufferByteOffset = 0;
             srcByteOffset += dstPageByteSize;
