@@ -13,7 +13,7 @@ import { range } from '../../MathHelpers';
 const SHADER_DEBUG = IS_DEVELOPMENT;
 
 // TODO(jstpierre): Turn this back on at some point in the future. The DataShare really breaks this concept...
-const TRACK_RESOURCES = false && IS_DEVELOPMENT;
+const TRACK_RESOURCES = IS_DEVELOPMENT;
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -543,7 +543,6 @@ class ResourceCreationTracker {
             this.liveObjects.add(o);
         else
             this.liveObjects.delete(o);
-        console.log(o, v, this.liveObjects.has(o));
     }
 }
 
@@ -1263,6 +1262,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public destroyInputState(o: GfxInputState): void {
         const inputState = o as GfxInputStateP_GL;
+        if (this._currentBoundVAO === inputState.vao) {
+            this.gl.bindVertexArray(null);
+            this._currentBoundVAO = null;
+        }
         this.gl.deleteVertexArray(inputState.vao);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
@@ -1296,7 +1299,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
         if (shouldClearStencil)
             clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
-        
+
         const { colorAttachment, depthStencilAttachment, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
 
         pass.setRenderPassParameters(colorAttachment, depthStencilAttachment, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
