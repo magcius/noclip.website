@@ -19,14 +19,14 @@ export class DataShare {
 
     private deleteObjectsOlderThan(device: GfxDevice, ageThreshold: number): void {
         for (const [k, v] of this.objects.entries()) {
-            if (v.lastUsedAge < ageThreshold) {
+            if (v.lastUsedAge <= ageThreshold) {
                 v.object.destroy(device);
                 this.objects.delete(k);
             }
         }
     }
 
-    public pruneOldObjects(device: GfxDevice, delta: number = 0): void {
+    public pruneOldObjects(device: GfxDevice, delta: number): void {
         const ageThreshold = this.currentAge - delta;
         this.deleteObjectsOlderThan(device, ageThreshold);
     }

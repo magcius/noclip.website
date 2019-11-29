@@ -325,6 +325,7 @@ export interface GfxDevice {
     // Debugging and high-level queries.
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
+    checkForLeaks(): void;
     pushDebugGroup(debugGroup: GfxDebugGroup): void;
     popDebugGroup(): void;
 }

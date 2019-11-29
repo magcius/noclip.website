@@ -69,6 +69,7 @@ import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
+import { gfxDeviceGetImpl_GL } from './gfx/platform/GfxPlatformWebGL2';
 
 const sceneGroups = [
     "Wii",
@@ -609,7 +610,16 @@ class Main {
             device, dataFetcher, dataShare, uiContainer, destroyablePool,
         };
 
-        this.dataShare.pruneOldObjects(device);
+        // The age delta on pruneOldObjects determines whether any resources will be shared at all.
+        // delta = 0 means that we destroy the set of resources used by the previous scene, before
+        // we increment the age below fore the "new" scene, which is the only proper way to do leak
+        // checking. Typically, we allow one old scene's worth of contents.
+        const delta: number = 1;
+        this.dataShare.pruneOldObjects(device, delta);
+
+        if (delta === 0)
+            this.viewer.gfxDevice.checkForLeaks();
+
         this.dataShare.loadNewScene();
 
         this.loadingSceneDesc = sceneDesc;

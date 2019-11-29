@@ -4470,6 +4470,11 @@ export class SwingRope extends LiveActor {
 
         this.drawStop(sceneObjHolder, renderInstManager, viewerInput);
     }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.ddraw.destroy(device);
+    }
 }
 
 export class TrapezeRopeDrawInit extends NameObj {
@@ -4699,6 +4704,11 @@ export class Trapeze extends LiveActor {
         setMtxAxisXYZ(this.stickMtx, point.axisX, point.axisY, point.axisZ);
         setTrans(this.stickMtx, point.position);
     }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.ddraw.destroy(device);
+    }
 }
 
 class WaterPoint {
@@ -4881,6 +4891,7 @@ class OceanRingDrawer {
     public destroy(device: GfxDevice): void {
         this.water.destroy(device);
         this.waterIndirect.destroy(device);
+        this.ddraw.destroy(device);
     }
 }
 
@@ -4974,6 +4985,7 @@ class OceanRingPipeOutside extends LiveActor {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
         this.waterPipeIndirect.destroy(device);
         this.waterPipeHighLight.destroy(device);
     }
@@ -5147,6 +5159,7 @@ class OceanRingPipe extends LiveActor {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
@@ -5303,6 +5316,7 @@ export class OceanRing extends LiveActor {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
         this.oceanRingDrawer.destroy(device);
     }
 }
@@ -5657,6 +5671,8 @@ export class Flag extends LiveActor {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.ddraw.destroy(device);
         this.texture.destroy(device);
     }
 }

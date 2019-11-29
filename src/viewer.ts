@@ -63,6 +63,7 @@ class ClearScene {
 
     public minimize(device: GfxDevice): void {
         this.colorAttachment.setParameters(device, 1, 1, 1);
+        device.setResourceLeakCheck(this.colorAttachment.gfxColorAttachment!, false);
     }
 
     public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass {

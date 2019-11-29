@@ -27,7 +27,7 @@ import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBa
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, LightDirector } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, WaterPlant, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
@@ -807,13 +807,12 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
-    public create(sceneObj: SceneObj): any {
+    public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
             this.newEachObj(sceneObj);
-        return this.getObj(sceneObj)!;
     }
 
-    public getObj(sceneObj: SceneObj): any | null {
+    public getObj(sceneObj: SceneObj): NameObj | null {
         if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
             return this.sensorHitChecker;
         else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
@@ -849,19 +848,6 @@ export class SceneObjHolder {
 
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
-
-        if (this.sensorHitChecker !== null)
-            this.sensorHitChecker.destroy(device);
-        if (this.airBubbleHolder !== null)
-            this.airBubbleHolder.destroy(device);
-        if (this.swingRopeGroup !== null)
-            this.swingRopeGroup.destroy(device);
-        if (this.trapezeRopeDrawInit !== null)
-            this.trapezeRopeDrawInit.destroy(device);
-        if (this.waterAreaHolder !== null)
-            this.waterAreaHolder.destroy(device);
-        if (this.waterPlantDrawInit !== null)
-            this.waterPlantDrawInit.destroy(device);
     }
 }
 

@@ -8,8 +8,8 @@ import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
 
 function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): void {
-    const sensorHitChecker = sceneObjHolder.create(SceneObj.SENSOR_HIT_CHECKER) as SensorHitChecker;
-    sensorHitChecker.initGroup(sensor);
+    sceneObjHolder.create(SceneObj.SENSOR_HIT_CHECKER);
+    sceneObjHolder.sensorHitChecker!.initGroup(sensor);
 }
 
 export const enum HitSensorType {

@@ -902,6 +902,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public setResourceLeakCheck(o: GfxResource, v: boolean): void {
     }
 
+    public checkForLeaks(): void {
+    }
+
     public pushDebugGroup(debugGroup: GfxDebugGroup): void {
     }
 

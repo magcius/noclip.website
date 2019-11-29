@@ -251,8 +251,6 @@ export class TDDraw extends TDDrawVtxSpec {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputLayout !== null)
-            device.destroyInputLayout(this.inputLayout);
         if (this.inputState !== null)
             device.destroyInputState(this.inputState);
         if (this.indexBuffer !== null)

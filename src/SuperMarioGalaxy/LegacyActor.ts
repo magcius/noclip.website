@@ -290,12 +290,6 @@ export class NoclipLegacyActorSpawner {
                 spawnGraph("CoinBlock", SceneGraphTag.Normal);
                 break;
 
-            case 'SurfingRaceSubGate':
-                spawnGraph(name).then(([node, rarc]) => {
-                    bindChangeAnimation(node, rarc, objinfo.objArg1);
-                });
-                return;
-
             // Bloomables.
             // The actual engine will search for a file suffixed "Bloom" and spawn it if so.
             // Here, we don't want to trigger that many HTTP requests, so we just list all
