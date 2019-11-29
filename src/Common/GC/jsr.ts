@@ -46,29 +46,34 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFXContainer {
     const stream = new DataStream(buffer);
  
     const afxHeader = readDataHeader(stream);
-    assert(afxHeader.datas.length === 2);
-
-    // Note textures can appear in either blob
-
-    const textureBlobOffset = afxHeader.datas[1].offset;
-    const textureBlobSize = afxHeader.datas[1].size;
-    const textureBlobEnd = textureBlobOffset + textureBlobSize;
-
     let textures: GC_PVRT.PVR_Texture[] = [];
 
-    stream.offs = textureBlobOffset;
-    while(stream.offs < textureBlobEnd) {
+    for(let i=0; i<afxHeader.datas.length; ++i) {
 
-        // Align current file offset to 32-bits
-        stream.offs = (stream.offs + 31) & ~31;
+        const textureBlobOffset = afxHeader.datas[i].offset;
+        const textureBlobSize = afxHeader.datas[i].size;
+        const textureBlobEnd = textureBlobOffset + textureBlobSize;
 
-        const uniqueName = `${name}_${textures.length}`;
+        stream.offs = textureBlobOffset;
+        while(stream.offs < textureBlobEnd) {
+            // Align current file offset to 32-bits
+            stream.offs = (stream.offs + 31) & ~31;
 
-        console.log(`parsing ${uniqueName} at ${stream.offs}`);
+            if (GC_PVRT.canParse(stream) === false)
+                break;
 
-        const texture = GC_PVRT.parseFromStream(stream, uniqueName);
-        textures.push(texture);
+            const uniqueName = `${name}_${textures.length}`;
+
+            console.log(`parsing ${uniqueName} at ${stream.offs}`);
+
+            try {
+            const texture = GC_PVRT.parseFromStream(stream, uniqueName);
+            textures.push(texture);
+            } catch (e) {
+                console.warn(`File ${uniqueName} failed to parse:`, e);
+            }
+        }
     }
-    
+
     return {name, textures};
 }

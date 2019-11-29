@@ -116,6 +116,12 @@ function readImageDataHeader(stream: DataStream, length?: number): PVR_Texture {
     return {name: "", meta, data: result, width: width, height: height};
 }
 
+export function canParse(stream: DataStream): boolean {
+    // Verify the magic bytes without updating the internal offset
+    const magic = stream.readString(4, 0);
+    return magic === "GBIX";
+}
+
 export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
 
     const stream = new DataStream(buffer);
