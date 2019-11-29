@@ -11,7 +11,8 @@ import * as Grezzo3DS from './oot3d/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
-import * as GC_PVTR from './Common/GC/PVRT';
+import * as GC_PVRT from './Common/GC/PVRT';
+import * as JSR from './Common/GC/jsr';
 import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import * as JPAExplorer from './interactive_examples/JPAExplorer';
@@ -106,11 +107,22 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
 
     if (buffer.name.toLowerCase().endsWith('.pvr')) {
         // Load texture data
-        let image = GC_PVTR.parse(buffer, buffer.name);
+        let image = GC_PVRT.parse(buffer, buffer.name);
 
         // Create faux scene
         const jsrScene = new JetSetRadioScene();
         jsrScene.textureHolder.addTextures(device, [image]);
+        
+        return jsrScene;
+    }
+
+    if (buffer.name.toLowerCase().endsWith('.afs')) {
+        // Load texture data
+        let image = JSR.parse(buffer, buffer.name);
+
+        // Create faux scene
+        const jsrScene = new JetSetRadioScene();
+        jsrScene.textureHolder.addTextures(device, image.textures);
         
         return jsrScene;
     }

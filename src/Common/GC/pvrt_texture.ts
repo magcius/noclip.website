@@ -98,10 +98,10 @@ function unpackTexelToRGBA(srcTexel: number, srcFormat: PVRTFormat, dst: Uint8Ar
 function MipMapsCountFromWidth(width: number) : number
 {
     let mipMapsCount = 0;
-    while( width )
+    while( width > 0 )
     {
         ++mipMapsCount;
-        width /= 2;
+        width >>= 1;
     }
 
     return mipMapsCount;
@@ -109,7 +109,7 @@ function MipMapsCountFromWidth(width: number) : number
 
 export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: number, height: number): Uint8Array {
 
-    // size of rgba output
+    // Size of RGBA output
     let dstData = new Uint8Array(width * height * 4);
 
     let untwiddler = new Untwiddle();
@@ -144,6 +144,33 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
             isVQCompressed = true;
             codeBookSize = 256;
             break;
+
+        case PVRTMask.VectorQuantizedCustomCodeBookMipMaps:
+            isMipMaps = true;
+            isVQCompressed = true;
+            if(width < 16) {
+                codeBookSize = 16;
+            }
+            else if(width == 64) {
+                codeBookSize = 128;
+            }
+            else {
+                codeBookSize = 256;
+            }
+            break;
+
+        case PVRTMask.VectorQuantizedCustomCodeBook:
+            isVQCompressed = true;
+            if(width < 16) {
+                codeBookSize = 16;
+            }
+            else if(width == 64) {
+                codeBookSize = 128;
+            }
+            else {
+                codeBookSize = 256;
+            }
+            break;
             
         default:
             throw "Unhandled mask";
@@ -171,7 +198,8 @@ export function decompressPVRT(srcData: DataView, meta: PVR_TextureMeta, width: 
         mipHeight = (height >> (mipMapCount - 1));
         mipSize = mipWidth * mipHeight;
         
-        if (--mipMapCount > 0)
+        mipMapCount--;
+        if (mipMapCount > 0)
         {
             if (isVQCompressed)
             {

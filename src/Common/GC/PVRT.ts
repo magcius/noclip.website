@@ -9,45 +9,32 @@ import * as Viewer from '../../viewer';
 
 // Port from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
 
-export interface Texture {
-    name: string;
-    width: number;
-    height: number;
-}
-
-export interface PVRT {
-    textures: Texture[];
-}
-
 // wrapper for chunked data prefixed with a 4-char magic
 interface ChunkData {
     magic: string;
     data: ArrayBufferSlice;
 }
 
-function readChunk(stream: DataStream): ChunkData {
+function readChunk(stream: DataStream, lengthOverride?: number): ChunkData {
     const magic = stream.readString(4);
     const length = stream.readUint32();
-    const data = stream.readSlice(length);
+    const data = stream.readSlice((lengthOverride !== undefined) ? lengthOverride : length);
     return {magic, data};
 }
 
 export interface PVR_Texture extends TextureBase {
     name: string;
-    meta : PVR_TextureMeta;
-    //mipData: ArrayBufferSlice[];
+    meta: PVR_TextureMeta;
     data: Uint8Array;
 }
 
 export interface PVR_TextureMeta {
     format: PVRTFormat;
     mask: PVRTMask;
-    //width: number;
-    //height: number;
 }
 
 export interface PVR_GlobalIndex {
-    data: ArrayBufferSlice;
+    id: number;
 }
 
 export interface PPVR {
@@ -66,10 +53,12 @@ export const enum PVRTFormat {
 
 export const enum PVRTMask {
 
-    Twiddled                = 0x01,
-    TwiddledMipMaps         = 0x02,
-    VectorQuantized         = 0x03,
-    VectorQuantizedMipMaps  = 0x04,
+    Twiddled                                = 0x01,
+    TwiddledMipMaps                         = 0x02,
+    VectorQuantized                         = 0x03,
+    VectorQuantizedMipMaps                  = 0x04,
+    VectorQuantizedCustomCodeBook           = 0x10,
+    VectorQuantizedCustomCodeBookMipMaps    = 0x11,
 }
 
 export function getFormatName(fmt: PVRTFormat): string {
@@ -83,10 +72,12 @@ export function getFormatName(fmt: PVRTFormat): string {
 
 export function getMaskName(mask: PVRTMask): string {
     switch(mask) {
-        case PVRTMask.Twiddled:                 return "Twiddled";
-        case PVRTMask.TwiddledMipMaps:          return "Twiddled (mips)";
-        case PVRTMask.VectorQuantized:          return "Vector Quantized";
-        case PVRTMask.VectorQuantizedMipMaps:   return "Vector Quantized (mips)";
+        case PVRTMask.Twiddled:                             return "Twiddled";
+        case PVRTMask.TwiddledMipMaps:                      return "Twiddled (mips)";
+        case PVRTMask.VectorQuantized:                      return "Vector Quantized";
+        case PVRTMask.VectorQuantizedMipMaps:               return "Vector Quantized (mips)";
+        case PVRTMask.VectorQuantizedCustomCodeBook:        return "Vector Quantized (custom)";
+        case PVRTMask.VectorQuantizedCustomCodeBookMipMaps: return "Vector Quantized (custom)(mips)";
     }
 }
 
@@ -95,12 +86,13 @@ function readGlobalIndexHeader(stream: DataStream): PVR_GlobalIndex {
     const chunk = readChunk(stream);
     assert(chunk.magic === "GBIX");
 
-    return {data: chunk.data};
+    const index = chunk.data.createDataView().getUint32(0x00, true);
+    return {id: index};
 }
 
-function readImageDataHeader(stream: DataStream): PVR_Texture {
+function readImageDataHeader(stream: DataStream, length?: number): PVR_Texture {
     
-    const chunk = readChunk(stream);
+    const chunk = readChunk(stream, length);
     assert(chunk.magic === "PVRT");
 
     const view = chunk.data.createDataView();
@@ -115,9 +107,12 @@ function readImageDataHeader(stream: DataStream): PVR_Texture {
 
     const meta = {format, mask};
 
+
+    
+    console.log(`${width}x${height}: ${getFormatName(format)}/${getMaskName(mask)}`);
+
     let result = decompressPVRT(imageDataView, meta, width, height);
 
-    // TODO: Name this texture
     return {name: "", meta, data: result, width: width, height: height};
 }
 
@@ -125,13 +120,30 @@ export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
 
     const stream = new DataStream(buffer);
  
-    // The data from this chunk will likely be used elsewhere
-    readGlobalIndexHeader(stream);
-    
-    let imageData = readImageDataHeader(stream);
-    imageData.name = name;
-  
-    return imageData;
+    return parseFromStream(stream, name);
+}
+
+export function parseFromStream(buffer: DataStream, name: string): PVR_Texture {
+    const index = readGlobalIndexHeader(buffer);
+
+    switch(index.id)
+    {
+        case 12009:
+        {
+            let imageData = readImageDataHeader(buffer, 18440);
+            imageData.name = name;
+            
+            return imageData;
+        }
+
+        default:
+        {
+            let imageData = readImageDataHeader(buffer);
+            imageData.name = name;
+            
+            return imageData;
+        }
+    }
 }
 
 function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
