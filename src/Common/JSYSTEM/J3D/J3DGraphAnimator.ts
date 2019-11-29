@@ -29,6 +29,11 @@ export class J3DFrameCtrl {
     }
 
     public update(deltaTimeFrames: number): void {
+        // TODO(jstpierre): Figure out why SurfingRaceSubGate is broken in Loopdeswoop Galaxy...
+        // This isn't correct.
+        if (this.speedInFrames === 0)
+            return;
+
         this.currentTimeInFrames += (this.speedInFrames * deltaTimeFrames);
 
         if (this.loopMode === LoopMode.ONCE) {

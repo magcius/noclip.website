@@ -5,8 +5,8 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2 } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8 } from '../Color';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate } from '../MathHelpers';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -44,6 +44,7 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec2 = vec2.create();
 const scratchMatrix = mat4.create();
+const scratchColor = colorNewCopy(White);
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
@@ -942,14 +943,14 @@ export class StarPiece extends LiveActor {
 
         const color = starPieceColorTable[starPieceColorIndex];
         this.effectPrmColor = colorNewCopy(color);
-        this.effectPrmColor.r = clamp(this.effectPrmColor.r + 0xFF/0xFF, 0.0, 1.0);
-        this.effectPrmColor.g = clamp(this.effectPrmColor.g + 0xFF/0xFF, 0.0, 1.0);
-        this.effectPrmColor.b = clamp(this.effectPrmColor.b + 0xFF/0xFF, 0.0, 1.0);
+        this.effectPrmColor.r = saturate(this.effectPrmColor.r + 0xFF/0xFF);
+        this.effectPrmColor.g = saturate(this.effectPrmColor.g + 0xFF/0xFF);
+        this.effectPrmColor.b = saturate(this.effectPrmColor.b + 0xFF/0xFF);
 
         this.effectEnvColor = colorNewCopy(color);
-        this.effectEnvColor.r = clamp(this.effectEnvColor.r + 0x20/0xFF, 0.0, 1.0);
-        this.effectEnvColor.g = clamp(this.effectEnvColor.g + 0x20/0xFF, 0.0, 1.0);
-        this.effectEnvColor.b = clamp(this.effectEnvColor.b + 0x20/0xFF, 0.0, 1.0);
+        this.effectEnvColor.r = saturate(this.effectEnvColor.r + 0x20/0xFF);
+        this.effectEnvColor.g = saturate(this.effectEnvColor.g + 0x20/0xFF);
+        this.effectEnvColor.b = saturate(this.effectEnvColor.b + 0x20/0xFF);
 
         this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
         this.initEffectKeeper(sceneObjHolder, 'StarPiece');
@@ -5298,26 +5299,28 @@ class FlagFixPoints {
 }
 
 export class Flag extends LiveActor {
-    public fixPoints: FlagFixPoints[] = [];
-    public fixPointCount: number;
-    public swingPointCount: number;
-    public poleHeight: number = 0.0;
-    public texture: BTIData;
-    public widthPerPoint: number = 0.0;
-    public heightPerPoint: number = 0.0;
-    public axisX: vec3 = vec3.fromValues(0, 0, 0);
-    public axisY: vec3 = vec3.fromValues(0, 1, 0);
-    public axisZ: vec3 = vec3.fromValues(0, 0, 1);
-    public vertical: boolean = false;
-    public animCounter: number = 0.0;
+    private fixPoints: FlagFixPoints[] = [];
+    private fixPointCount: number;
+    private swingPointCount: number;
+    private colors: Uint32Array;
+    private poleHeight: number = 0.0;
+    private texture: BTIData;
+    private widthPerPoint: number = 0.0;
+    private heightPerPoint: number = 0.0;
+    private axisX: vec3 = vec3.fromValues(0, 0, 0);
+    private axisY: vec3 = vec3.fromValues(0, 1, 0);
+    private axisZ: vec3 = vec3.fromValues(0, 0, 1);
+    private vertical: boolean = false;
+    private animCounter: number = 0.0;
+    private noColorTint: boolean = false;
 
-    public simGravityMul: number = 0.1;
-    public simAxisZConst: number = 0.1;
-    public simAxisZWave: number = 10.0;
-    public simAccelRndmMin: number = 1.0;
-    public simAccelRndmMax: number = 4.0;
-    public dragMin: number = 0.6;
-    public dragMax: number = 1.0;
+    private affectGravity: number = 0.1;
+    private affectAxisZ: number = 0.1;
+    private affectAxisZWave: number = 10.0;
+    private affectRndmMin: number = 1.0;
+    private affectRndmMax: number = 4.0;
+    private dragMin: number = 0.6;
+    private dragMax: number = 1.0;
 
     private ddraw = new TDDraw();
     private materialHelper: GXMaterialHelperGfx;
@@ -5336,12 +5339,47 @@ export class Flag extends LiveActor {
             initDefaultPos(sceneObjHolder, this, infoIter);
             this.poleHeight = fallback(getJMapInfoArg1(infoIter), 0.0);
 
-            // TODO(jstpierre): Flag settings.
             const flagName = this.name;
-
-            this.init(sceneObjHolder);
+            if (flagName === 'FlagKoopaA') {
+                this.widthPerPoint = 450.0 / this.swingPointCount;
+                this.heightPerPoint = 275.0 / (this.fixPointCount - 1);
+            } else if (flagName === 'FlagKoopaB') {
+                this.widthPerPoint = 450.0 / this.swingPointCount;
+                this.heightPerPoint = 112.5 / (this.fixPointCount - 1);
+            } else if (flagName === 'FlagPeachCastleA') {
+                this.fixPointCount = 5;
+                this.swingPointCount = 6;
+                this.widthPerPoint = 160.0 / 6;
+                // this.minDistAlpha = 200.0;
+                // this.maxDistALpha = 500.0;
+                this.heightPerPoint = 145.0 / 4;
+                this.vertical = true;
+                this.affectGravity = 0.5;
+                this.dragMin = 0.85;
+                this.dragMax = 1.0;
+                this.affectAxisZWave = 0.0;
+                this.affectAxisZ = 0.01;
+                this.affectRndmMin = 0.5;
+                this.affectRndmMax = 1.5;
+            } else if (flagName === 'FlagPeachCastleB') {
+                this.fixPointCount = 5;
+                this.swingPointCount = 5;
+                this.widthPerPoint = 500.0 / 5;
+                this.heightPerPoint = 400.0 / 4;
+            } else if (flagName === 'FlagPeachCastleC') {
+                this.fixPointCount = 5;
+                this.swingPointCount = 5;
+                this.widthPerPoint = 500.0 / 5;
+                this.heightPerPoint = 400.0 / 4;
+            } else if (flagName === 'FlagRaceA') {
+                // Nothing to do.
+            } else {
+                throw "whoops";
+            }
 
             calcActorAxis(null, this.axisY, this.axisZ, this);
+
+            this.init(sceneObjHolder);
         }
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -5386,6 +5424,9 @@ export class Flag extends LiveActor {
     }
 
     public init(sceneObjHolder: SceneObjHolder): void {
+        if (this.name === 'FlagSurfing')
+            this.noColorTint = true;
+
         assert(this.fixPoints.length === 0);
 
         for (let i = 0; i < this.fixPointCount; i++) {
@@ -5398,8 +5439,8 @@ export class Flag extends LiveActor {
 
             for (let j = 0; j < this.swingPointCount; j++) {
                 if (this.vertical) {
-                    // TODO(jstpierre): mbVertical
-                    debugger;
+                    const y = this.widthPerPoint * (j + 1);
+                    vec3.scaleAndAdd(scratchVec3, fp.position, this.gravityVector, y);
                 }
 
                 const sp = new SwingRopePoint(scratchVec3);
@@ -5409,8 +5450,9 @@ export class Flag extends LiveActor {
             this.fixPoints.push(fp);
         }
 
-        // TODO(jstpierre): Colors
-        // TODO(jstpierre): TexCoords
+        this.colors = new Uint32Array(this.fixPointCount * (this.swingPointCount + 1));
+        for (let i = 0; i < this.colors.length; i++)
+            this.colors[i] = 0xFFFFFFFF;
 
         const arc = sceneObjHolder.modelCache.getObjectData(this.name);
         this.texture = loadBTIData(sceneObjHolder, arc, `${this.name}.bti`);
@@ -5430,18 +5472,12 @@ export class Flag extends LiveActor {
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
     }
 
+    private getColorIdx(y: number, x: number): number {
+        return y * (this.swingPointCount + 1) + x;
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
-
-        /*
-        const ctx = getDebugOverlayCanvas2D();
-        for (let i = 0; i < this.fixPoints.length; i++)
-            for (let j = 0; j < this.fixPoints[i].points.length; j++)
-                drawWorldSpacePoint(ctx, viewerInput.camera, this.fixPoints[i].points[j].position);
-
-        for (let i = 0; i < this.fixPoints.length; i++)
-            drawWorldSpacePoint(ctx, viewerInput.camera, this.fixPoints[i].position, Yellow);
-        */
 
         this.ddraw.beginDraw();
 
@@ -5453,11 +5489,13 @@ export class Flag extends LiveActor {
             const txT1 = i / (this.fixPoints.length - 1);
 
             this.ddraw.position3vec3(fp0.position);
-            this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+            colorFromRGBA8(scratchColor, this.colors[this.getColorIdx(i - 1, 0)]);
+            this.ddraw.color4color(GX.Attr.CLR0, scratchColor);
             this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, txT0);
 
             this.ddraw.position3vec3(fp1.position);
-            this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+            colorFromRGBA8(scratchColor, this.colors[this.getColorIdx(i, 0)]);
+            this.ddraw.color4color(GX.Attr.CLR0, scratchColor);
             this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, txT1);
 
             for (let j = 0; j < this.swingPointCount; j++) {
@@ -5465,11 +5503,13 @@ export class Flag extends LiveActor {
                 const txS = (j + 1) / (this.swingPointCount);
 
                 this.ddraw.position3vec3(sp0.position);
-                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+                colorFromRGBA8(scratchColor, this.colors[this.getColorIdx(i - 1, j + 1)]);
+                this.ddraw.color4color(GX.Attr.CLR0, scratchColor);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, txS, txT0);
     
                 this.ddraw.position3vec3(sp1.position);
-                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+                colorFromRGBA8(scratchColor, this.colors[this.getColorIdx(i, j + 1)]);
+                this.ddraw.color4color(GX.Attr.CLR0, scratchColor);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, txS, txT1);
             }
 
@@ -5504,7 +5544,7 @@ export class Flag extends LiveActor {
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     }
 
-    private updateFlag(): void {
+    private updateFlag(camera: Camera): void {
         vec3.cross(this.axisX, this.axisZ, this.axisY);
         vec3.normalize(this.axisX, this.axisX);
 
@@ -5513,7 +5553,7 @@ export class Flag extends LiveActor {
         // mpTranslationPtr
         // mpBaseMtx
 
-        vec3.scale(scratchVec3a, this.gravityVector, this.simGravityMul);
+        vec3.scale(scratchVec3a, this.gravityVector, this.affectGravity);
         for (let i = 0; i < this.fixPoints.length; i++) {
             const fp = this.fixPoints[i];
             for (let j = 0; j < fp.points.length; j++) {
@@ -5521,16 +5561,25 @@ export class Flag extends LiveActor {
                 sp.addAccel(scratchVec3a);
 
                 const wave = Math.abs(Math.sin(MathConstants.DEG_TO_RAD * (this.animCounter + (10.0 * i) + (10.0 * j))));
-                vec3.scale(scratchVec3b, this.axisZ, this.simAxisZConst + (wave * this.simAxisZWave));
+                vec3.scale(scratchVec3b, this.axisZ, this.affectAxisZ + (wave * this.affectAxisZWave));
                 sp.addAccel(scratchVec3b);
             }
         }
 
         if (this.vertical) {
+            if (getRandomInt(0, 2) === 0) {
+                const fpi = getRandomInt(0, this.fixPointCount);
+                const spi = getRandomInt(0, this.swingPointCount);
+
+                vec3.set(scratchVec3a, getRandomFloat(-1.0, 1.0), 0.0, getRandomFloat(-1.0, 1.0));
+                vecKillElement(scratchVec3a, scratchVec3a, this.axisY);
+                vec3.scale(scratchVec3a, scratchVec3a, getRandomFloat(this.affectRndmMin, this.affectRndmMax));
+                this.fixPoints[fpi].points[spi].addAccel(scratchVec3a);
+            }
         } else {
             for (let i = 0; i < this.fixPoints.length; i++) {
-                const scale = getRandomFloat(this.simAccelRndmMin, this.simAccelRndmMax);
-                vec3.set(scratchVec3a, scale * getRandomFloat(-1.0, 1.0), 0.0, scale * getRandomFloat(-1.0, 1.0));
+                vec3.set(scratchVec3a, getRandomFloat(-1.0, 1.0), 0.0, getRandomFloat(-1.0, 1.0));
+                vec3.scale(scratchVec3a, scratchVec3a, getRandomFloat(this.affectRndmMin, this.affectRndmMax));
                 this.fixPoints[i].points[0].addAccel(scratchVec3a);
             }
         }
@@ -5554,13 +5603,27 @@ export class Flag extends LiveActor {
             }
         }
 
-        // Update drag.
+        let colorTintMinClamp = 0.0;
+        if (!this.noColorTint) {
+            getCamPos(scratchVec3, camera);
+            const dist = vec3.distance(this.translation, scratchVec3);
+            const t = saturate(invlerp(500.0, 1000.0, dist));
+            colorTintMinClamp = lerp(120, 200, t);
+        }
+
+        // Update position & colors.
         for (let i = 0; i < this.fixPoints.length; i++) {
             const fp = this.fixPoints[i];
             for (let j = 0; j < fp.points.length; j++) {
                 const drag = lerp(this.dragMin, this.dragMax, 1.0 - (j / (fp.points.length - 1)));
                 const sp = fp.points[j];
                 sp.updatePos(drag);
+
+                if (!this.noColorTint) {
+                    const dot = vec3.dot(sp.axisY, this.axisX);
+                    const int = clamp(255.0 * ((dot + 1.0) / 1.5), colorTintMinClamp, 255.0);
+                    this.colors[this.getColorIdx(i, j + 1)] = int << 24 | int << 16 | int << 8 | 0xFF;
+                }
             }
         }
     }
@@ -5570,7 +5633,7 @@ export class Flag extends LiveActor {
 
         this.animCounter += getDeltaTimeFrames(viewerInput) * 5.0;
 
-        this.updateFlag();
+        this.updateFlag(viewerInput.camera);
     }
 
     public destroy(device: GfxDevice): void {

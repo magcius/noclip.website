@@ -265,12 +265,20 @@ export function clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(v, max));
 }
 
+export function saturate(v: number): number {
+    return clamp(v, 0.0, 1.0);
+}
+
 export function clampRange(v: number, lim: number): number {
     return clamp(v, -lim, lim);
 }
 
 export function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t;
+}
+
+export function invlerp(a: number, b: number, v: number): number {
+    return (v - a) / (b - a);
 }
 
 // https://gist.github.com/shaunlebron/8832585
