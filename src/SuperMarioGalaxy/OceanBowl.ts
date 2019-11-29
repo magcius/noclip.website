@@ -19,7 +19,7 @@ import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST } from "./ActorUtil";
+import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
@@ -272,6 +272,11 @@ export class OceanBowl extends LiveActor {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
+
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 

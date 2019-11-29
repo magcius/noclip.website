@@ -129,6 +129,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("EarthenPipeInWater",             EarthenPipe),
     _("FlagKoopaA",                     Flag),
     _("FlagKoopaB",                     Flag),
+    _("FlagKoopaCastle",                Flag),
     _("FlagPeachCastleA",               Flag),
     _("FlagPeachCastleB",               Flag),
     _("FlagPeachCastleC",               Flag),

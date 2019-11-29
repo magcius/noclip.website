@@ -3559,13 +3559,13 @@ function compareVec3(a: vec3, b: vec3): number {
 // This is kept as a separate class to make cleanup easier.
 class WarpPodPathDrawer {
     private testColor: BTIData;
-    private testMask: BTIData;
     private materialHelper: GXMaterialHelperGfx;
     private ddraw: TDDraw;
 
     constructor(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, private points: vec3[], private color: Color) {
         this.testColor = loadBTIData(sceneObjHolder, arc, `TestColor.bti`);
-        this.testMask = loadBTIData(sceneObjHolder, arc, `TestMask.bti`);
+        // This doesn't seem to be used...
+        // this.testMask = loadBTIData(sceneObjHolder, arc, `TestMask.bti`);
 
         this.ddraw = new TDDraw();
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -3648,6 +3648,7 @@ class WarpPodPathDrawer {
     }
 
     public destroy(device: GfxDevice): void {
+        this.testColor.destroy(device);
         this.ddraw.destroy(device);
     }
 }
@@ -4463,6 +4464,10 @@ export class SwingRope extends LiveActor {
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
+
         this.drawStop(sceneObjHolder, renderInstManager, viewerInput);
     }
 }
@@ -4658,6 +4663,9 @@ export class Trapeze extends LiveActor {
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
 
         this.ddraw.beginDraw();
 
@@ -4924,6 +4932,9 @@ class OceanRingPipeOutside extends LiveActor {
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
 
         const device = sceneObjHolder.modelCache.device;
 
@@ -5241,6 +5252,9 @@ export class OceanRing extends LiveActor {
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        if (!isValidDraw(this))
+            return;
+
         if (this.oceanRingDrawer !== null)
             this.oceanRingDrawer.draw(sceneObjHolder, renderInstManager, viewerInput);
     }
@@ -5340,7 +5354,10 @@ export class Flag extends LiveActor {
             this.poleHeight = fallback(getJMapInfoArg1(infoIter), 0.0);
 
             const flagName = this.name;
-            if (flagName === 'FlagKoopaA') {
+            if (flagName === 'FlagKoopaCastle') {
+                this.widthPerPoint = 1000.0 / this.swingPointCount;
+                this.heightPerPoint = 500.0 / (this.fixPointCount - 1);
+            } else if (flagName === 'FlagKoopaA') {
                 this.widthPerPoint = 450.0 / this.swingPointCount;
                 this.heightPerPoint = 275.0 / (this.fixPointCount - 1);
             } else if (flagName === 'FlagKoopaB') {
@@ -5478,6 +5495,9 @@ export class Flag extends LiveActor {
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
 
         this.ddraw.beginDraw();
 
