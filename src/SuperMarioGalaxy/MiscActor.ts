@@ -32,6 +32,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexAttribLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -3326,7 +3327,6 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         // Gravity vector
-        vec3.set(this.gravityVector, 0, -1, 0);
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
 
@@ -4292,6 +4292,28 @@ class SwingRopePoint {
         vec3.copy(this.position, position);
     }
 
+    public addAccel(v: vec3): void {
+        vec3.add(this.accel, this.accel, v);
+    }
+
+    public restrict(pos: vec3, limit: number, accel: vec3 | null): void {
+        vec3.add(scratchVec3a, this.position, this.accel);
+        vec3.sub(scratchVec3a, scratchVec3a, pos);
+        if (accel !== null)
+            vec3.sub(scratchVec3a, scratchVec3a, accel);
+
+        const mag = vec3.squaredLength(scratchVec3a);
+
+        vec3.normalize(scratchVec3b, scratchVec3a);
+        vec3.negate(this.axisY, scratchVec3b);
+
+        if (mag >= limit*limit) {
+            vec3.scale(scratchVec3b, scratchVec3b, limit);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            vec3.sub(this.accel, this.accel, scratchVec3a);
+        }
+    }
+
     public updatePos(drag: number): void {
         vec3.add(this.position, this.position, this.accel);
         vec3.scale(this.accel, this.accel, drag);
@@ -4947,6 +4969,7 @@ class OceanRingPipeOutside extends LiveActor {
 
 class OceanRingPipe extends LiveActor {
     public pointsPerSegment: number = 8;
+    public segmentCount: number;
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
@@ -4962,27 +4985,35 @@ class OceanRingPipe extends LiveActor {
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.initRailRider(sceneObjHolder, infoIter);
-        this.initPoints(sceneObjHolder);
+        const points = this.initPoints(sceneObjHolder);
 
         if (this.oceanRing.name === 'OceanRingAndFlag') {
-            // TODO(jstpierre): spawn flags
+            for (let i = 0; i < this.segmentCount; i += 7) {
+                const position = !!(i & 1) ? points[i * this.pointsPerSegment] : points[i * this.pointsPerSegment + this.pointsPerSegment - 1];
+
+                const flag = new Flag(zoneAndLayer, sceneObjHolder, null, 'FlagSurfing');
+                vec3.set(scratchVec3, 1, 0, 0);
+                flag.setInfoPos('FlagSurfing', position, scratchVec3, 500, 300, 200, 2, 3);
+                flag.init(sceneObjHolder);
+            }
         }
 
         this.outside = new OceanRingPipeOutside(zoneAndLayer, sceneObjHolder, this);
     }
 
-    private initPoints(sceneObjHolder: SceneObjHolder): void {
+    private initPoints(sceneObjHolder: SceneObjHolder): vec3[] {
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 
         // Initializes the vertex & index buffers.
 
         const railTotalLength = getRailTotalLength(this);
-        const segmentCount = ((railTotalLength / 300.0) | 0) + 1;
-        const pointCount = (segmentCount + 1) * this.pointsPerSegment;
+        this.segmentCount = ((railTotalLength / 300.0) | 0) + 1;
+        const pointCount = (this.segmentCount + 1) * this.pointsPerSegment;
+        const points: vec3[] = [];
 
         const theta = (MathConstants.TAU / 2) / (this.pointsPerSegment - 1);
-        const segmentSize = railTotalLength / segmentCount;
+        const segmentSize = railTotalLength / this.segmentCount;
 
         // POS, NRM, TEX0, TEX1
         // 3 + 3 + 2 + 2 = 10
@@ -4995,21 +5026,21 @@ class OceanRingPipe extends LiveActor {
         assert(pointCount < 0xFFFF);
         const tristripsPerSegment = this.pointsPerSegment * 2;
         const indexCountPerSegment = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, tristripsPerSegment);
-        this.indexCount = (segmentCount + 1) * indexCountPerSegment;
+        this.indexCount = (this.segmentCount + 1) * indexCountPerSegment;
         const indexData = new Uint16Array(this.indexCount);
         let io = 0;
         let ibv = 0;
 
         let tx0S = 0.0;
 
-        for (let i = 0; i < segmentCount + 1; i++) {
+        for (let i = 0; i < this.segmentCount + 1; i++) {
             // getRailPos(scratchVec3a, this);
             // calcGravityVector of rail pos
             vec3.negate(scratchVec3a, this.gravityVector);
             getRailDirection(scratchVec3b, this);
 
             // Rotation matrix around pipe.
-            mat4.fromRotation(scratchMatrix, -theta, scratchVec3b);
+            mat4.fromRotation(scratchMatrix, theta, scratchVec3b);
 
             // Right vector.
             vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
@@ -5022,9 +5053,15 @@ class OceanRingPipe extends LiveActor {
 
             for (let j = 0; j < this.pointsPerSegment; j++) {
                 // POS
-                vertexData[o++] = scratchVec3a[0] + widthRate * scratchVec3c[0];
-                vertexData[o++] = scratchVec3a[1] + widthRate * scratchVec3c[1];
-                vertexData[o++] = scratchVec3a[2] + widthRate * scratchVec3c[2];
+                const posX = scratchVec3a[0] + widthRate * scratchVec3c[0];
+                const posY = scratchVec3a[1] + widthRate * scratchVec3c[1];
+                const posZ = scratchVec3a[2] + widthRate * scratchVec3c[2];
+
+                vertexData[o++] = posX;
+                vertexData[o++] = posY;
+                vertexData[o++] = posZ;
+
+                points.push(vec3.fromValues(posX, posY, posZ));
 
                 // NRM
                 vertexData[o++] = scratchVec3c[0];
@@ -5045,7 +5082,7 @@ class OceanRingPipe extends LiveActor {
                 vec3.transformMat4(scratchVec3c, scratchVec3c, scratchMatrix);
 
                 // Fill in segment index buffer with single quad.
-                if (i < segmentCount && j < (this.pointsPerSegment - 1)) {
+                if (i < this.segmentCount && j < (this.pointsPerSegment - 1)) {
                     const vi0 = ibv;
                     const vi1 = ibv + this.pointsPerSegment;
                     const i0 = vi0 + 0, i1 = vi1 + 0, i2 = vi0 + 1, i3 = vi1 + 1;
@@ -5088,6 +5125,8 @@ class OceanRingPipe extends LiveActor {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
+
+        return points;
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -5242,10 +5281,299 @@ export class OceanRing extends LiveActor {
         const arg0 = fallback(getJMapInfoArg0(infoIter), 0);
         if (arg0 === 0) {
             sceneObjHolder.modelCache.requestObjectData('OceanRing');
+
+            if (getObjectName(infoIter) === 'OceanRingAndFlag')
+                sceneObjHolder.modelCache.requestObjectData('FlagSurfing');
         }
     }
 
     public destroy(device: GfxDevice): void {
         this.oceanRingDrawer.destroy(device);
+    }
+}
+
+class FlagFixPoints {
+    public position = vec3.create();
+    public points: SwingRopePoint[] = [];
+}
+
+export class Flag extends LiveActor {
+    public fixPoints: FlagFixPoints[] = [];
+    public fixPointCount: number;
+    public swingPointCount: number;
+    public poleHeight: number = 0.0;
+    public texture: BTIData;
+    public widthPerPoint: number = 0.0;
+    public heightPerPoint: number = 0.0;
+    public axisX: vec3 = vec3.fromValues(0, 0, 0);
+    public axisY: vec3 = vec3.fromValues(0, 1, 0);
+    public axisZ: vec3 = vec3.fromValues(0, 0, 1);
+    public vertical: boolean = false;
+    public animCounter: number = 0.0;
+
+    public simGravityMul: number = 0.1;
+    public simAxisZConst: number = 0.1;
+    public simAxisZWave: number = 10.0;
+    public simAccelRndmMin: number = 1.0;
+    public simAccelRndmMax: number = 4.0;
+    public dragMin: number = 0.6;
+    public dragMax: number = 1.0;
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, objectName: string | null = null) {
+        super(zoneAndLayer, sceneObjHolder, objectName !== null ? objectName : getObjectName(infoIter!));
+
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.FLAG);
+
+        this.fixPointCount = 10;
+        this.swingPointCount = 10;
+        this.widthPerPoint = 40.0;
+        this.heightPerPoint = 40.0;
+
+        if (infoIter !== null) {
+            initDefaultPos(sceneObjHolder, this, infoIter);
+            this.poleHeight = fallback(getJMapInfoArg1(infoIter), 0.0);
+
+            // TODO(jstpierre): Flag settings.
+            const flagName = this.name;
+
+            this.init(sceneObjHolder);
+
+            calcActorAxis(null, this.axisY, this.axisZ, this);
+        }
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder('Flag');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0x00, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public setInfoPos(name: string, position: vec3, axisZ: vec3, poleHeight: number, width: number, height: number, swingPointCount: number, fixPointCount: number): void {
+        this.name = name;
+
+        vec3.copy(this.translation, position);
+        vec3.copy(this.axisZ, axisZ);
+
+        this.poleHeight = poleHeight;
+        if (swingPointCount > 0)
+            this.swingPointCount = swingPointCount;
+        if (fixPointCount > 0)
+            this.fixPointCount = fixPointCount;
+
+        this.widthPerPoint = width / this.swingPointCount;
+        this.heightPerPoint = height / (this.fixPointCount - 1);
+    }
+
+    public init(sceneObjHolder: SceneObjHolder): void {
+        assert(this.fixPoints.length === 0);
+
+        for (let i = 0; i < this.fixPointCount; i++) {
+            const fp = new FlagFixPoints();
+
+            const pointIdxUp = this.fixPointCount - 1 - i;
+            vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, this.poleHeight + this.heightPerPoint * pointIdxUp);
+
+            vec3.copy(fp.position, scratchVec3);
+
+            for (let j = 0; j < this.swingPointCount; j++) {
+                if (this.vertical) {
+                    // TODO(jstpierre): mbVertical
+                    debugger;
+                }
+
+                const sp = new SwingRopePoint(scratchVec3);
+                fp.points.push(sp);
+            }
+
+            this.fixPoints.push(fp);
+        }
+
+        // TODO(jstpierre): Colors
+        // TODO(jstpierre): TexCoords
+
+        const arc = sceneObjHolder.modelCache.getObjectData(this.name);
+        this.texture = loadBTIData(sceneObjHolder, arc, `${this.name}.bti`);
+    }
+
+    private drawPolePoint(offsX: number, offsZ: number, top: number, g: number): void {
+        vec3.set(scratchVec3a, offsX * 5.0, 0.0, offsZ * 5.0);
+        vec3.add(scratchVec3a, this.translation, scratchVec3a);
+        vec3.scaleAndAdd(scratchVec3b, scratchVec3a, this.axisY, top);
+
+        this.ddraw.position3vec3(scratchVec3b);
+        this.ddraw.color4rgba8(GX.Attr.CLR0, 0x00, g, 0x00, 0x00);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
+
+        this.ddraw.position3vec3(scratchVec3a);
+        this.ddraw.color4rgba8(GX.Attr.CLR0, 0x00, g, 0x00, 0x00);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        /*
+        const ctx = getDebugOverlayCanvas2D();
+        for (let i = 0; i < this.fixPoints.length; i++)
+            for (let j = 0; j < this.fixPoints[i].points.length; j++)
+                drawWorldSpacePoint(ctx, viewerInput.camera, this.fixPoints[i].points[j].position);
+
+        for (let i = 0; i < this.fixPoints.length; i++)
+            drawWorldSpacePoint(ctx, viewerInput.camera, this.fixPoints[i].position, Yellow);
+        */
+
+        this.ddraw.beginDraw();
+
+        for (let i = 1; i < this.fixPoints.length; i++) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+            const fp0 = this.fixPoints[i - 1], fp1 = this.fixPoints[i];
+            const txT0 = (i - 1) / (this.fixPoints.length - 1);
+            const txT1 = i / (this.fixPoints.length - 1);
+
+            this.ddraw.position3vec3(fp0.position);
+            this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, txT0);
+
+            this.ddraw.position3vec3(fp1.position);
+            this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, txT1);
+
+            for (let j = 0; j < this.swingPointCount; j++) {
+                const sp0 = fp0.points[j], sp1 = fp1.points[j];
+                const txS = (j + 1) / (this.swingPointCount);
+
+                this.ddraw.position3vec3(sp0.position);
+                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+                this.ddraw.texCoord2f32(GX.Attr.TEX0, txS, txT0);
+    
+                this.ddraw.position3vec3(sp1.position);
+                this.ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, 0xFF);
+                this.ddraw.texCoord2f32(GX.Attr.TEX0, txS, txT1);
+            }
+
+            this.ddraw.end();
+        }
+
+        if (this.poleHeight > 0) {
+            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+            const top = this.poleHeight + this.heightPerPoint * (this.fixPointCount - 1);
+            this.drawPolePoint( 1.0, 0.0, top, 0xC8);
+            this.drawPolePoint( 0.0, 1.0, top, 0xDC);
+            this.drawPolePoint(-1.0, 0.0, top, 0xB4);
+            this.drawPolePoint( 1.0, 0.0, top, 0xC8);
+
+            this.ddraw.end();
+        }
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
+
+        const materialHelper = this.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    }
+
+    private updateFlag(): void {
+        vec3.cross(this.axisX, this.axisZ, this.axisY);
+        vec3.normalize(this.axisX, this.axisX);
+
+        // Camera fade colors
+        // Camera fade alpha
+        // mpTranslationPtr
+        // mpBaseMtx
+
+        vec3.scale(scratchVec3a, this.gravityVector, this.simGravityMul);
+        for (let i = 0; i < this.fixPoints.length; i++) {
+            const fp = this.fixPoints[i];
+            for (let j = 0; j < fp.points.length; j++) {
+                const sp = fp.points[j];
+                sp.addAccel(scratchVec3a);
+
+                const wave = Math.abs(Math.sin(MathConstants.DEG_TO_RAD * (this.animCounter + (10.0 * i) + (10.0 * j))));
+                vec3.scale(scratchVec3b, this.axisZ, this.simAxisZConst + (wave * this.simAxisZWave));
+                sp.addAccel(scratchVec3b);
+            }
+        }
+
+        if (this.vertical) {
+        } else {
+            for (let i = 0; i < this.fixPoints.length; i++) {
+                const scale = getRandomFloat(this.simAccelRndmMin, this.simAccelRndmMax);
+                vec3.set(scratchVec3a, scale * getRandomFloat(-1.0, 1.0), 0.0, scale * getRandomFloat(-1.0, 1.0));
+                this.fixPoints[i].points[0].addAccel(scratchVec3a);
+            }
+        }
+
+        // Contrain height -- iterate backwards.
+        for (let i = 0; i < this.swingPointCount; i++) {
+            for (let j = 1; j < this.fixPoints.length; j++) {
+                const p0 = this.fixPoints[j - 1].points[i], p1 = this.fixPoints[j].points[i];
+                p1.restrict(p0.position, this.heightPerPoint, p0.accel);
+            }
+        }
+
+        // Constrain width.
+        for (let i = 0; i < this.fixPoints.length; i++) {
+            const fp = this.fixPoints[i];
+            let pos = fp.position;
+            for (let j = 0; j < fp.points.length; j++) {
+                const sp = fp.points[j];
+                sp.restrict(pos, this.widthPerPoint, null);
+                pos = sp.position;
+            }
+        }
+
+        // Update drag.
+        for (let i = 0; i < this.fixPoints.length; i++) {
+            const fp = this.fixPoints[i];
+            for (let j = 0; j < fp.points.length; j++) {
+                const drag = lerp(this.dragMin, this.dragMax, 1.0 - (j / (fp.points.length - 1)));
+                const sp = fp.points[j];
+                sp.updatePos(drag);
+            }
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        this.animCounter += getDeltaTimeFrames(viewerInput) * 5.0;
+
+        this.updateFlag();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.texture.destroy(device);
     }
 }
