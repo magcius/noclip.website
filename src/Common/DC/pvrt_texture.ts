@@ -2,6 +2,7 @@
 import { PVR_TextureMeta, PVRTFormat, PVRTMask } from "./PVRT";
 
 // Port from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
+// A more complete implementation is here  https://github.com/inolen/redream/blob/master/src/guest/pvr/tex.c
 
 class Untwiddle {
     static kTwiddleTableSize = 1024;

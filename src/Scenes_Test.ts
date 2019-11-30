@@ -6,7 +6,7 @@ import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
-import * as PVRT from "./Common/GC/PVRT";
+import * as PVRT from "./Common/DC/PVRT";
 import { CtrTextureHolder } from "./oot3d/render";
 
 const id = 'test';

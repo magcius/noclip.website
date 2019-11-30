@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { assert } from "../../util";
 import { DataStream } from "./DataStream";
 import { decompressPVRT } from "./pvrt_texture";
-import { GfxDevice, GfxTextureDimension, GfxFormat, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
 import { TextureHolder, LoadedTexture, TextureBase } from "../../TextureHolder";
 import * as Viewer from '../../viewer';
 
@@ -46,9 +46,9 @@ export const enum PVRTFormat {
     RGB565      = 0x01, //
     ARGB4444    = 0x02, //
     YUV442      = 0x03, // <no planned support>
-    //Bump        = 0x04, // <no planned support>
-    //Ex4b        = 0x05, // <no planned support>
-    //Ex8b        = 0x06, // <no planned support>
+    Bump        = 0x04, // <no planned support>
+    PAL4BPP     = 0x05, // <no planned support>
+    PAL8BPP     = 0x06, // <no planned support>
 }
 
 export const enum PVRTMask {
@@ -67,6 +67,9 @@ export function getFormatName(fmt: PVRTFormat): string {
     case PVRTFormat.RGB565:     return "RGB565";
     case PVRTFormat.ARGB4444:   return "ARGB4444";
     case PVRTFormat.YUV442:     return "YUV442";
+    case PVRTFormat.Bump:       return "Bump";
+    case PVRTFormat.PAL4BPP:    return "PAL4BPP";
+    case PVRTFormat.PAL8BPP:    return "PAL8BPP";
     }
 }
 
