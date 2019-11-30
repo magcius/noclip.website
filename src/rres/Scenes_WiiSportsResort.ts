@@ -15,6 +15,7 @@ import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneContext } from "../SceneBase";
 import { DataFetcher } from "../DataFetcher";
+import { parseBLIGHT, EggLightManager } from "./Egg";
 
 class ResourceSystem {
     private mounts: U8.U8Archive[] = [];
@@ -121,10 +122,10 @@ class WS2_Renderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
     public modelInstances: MDL0ModelInstance[] = [];
     public textureHolder = new RRESTextureHolder();
-    public lightSetting = new BRRES.LightSetting();
     public scn0Animator: BRRES.SCN0Animator;
     public pmp: PMPEntry[] = [];
     public debugObjects = false;
+    public eggLightManager: EggLightManager;
 
     constructor(device: GfxDevice, private resourceSystem: ResourceSystem) {
         super(device);
@@ -132,9 +133,8 @@ class WS2_Renderer extends BasicGXRendererHelper {
         const WS2_Scene = this.resourceSystem.mountRRES(device, this.textureHolder, 'G3D/WS2_Scene.brres');
         this.scn0Animator = new BRRES.SCN0Animator(this.animationController, WS2_Scene.scn0[0]);
 
-        // TODO(jstpierre): Implement EggLightManager
-        for (let i = 0; i < this.lightSetting.lightObj.length; i++)
-            this.lightSetting.lightObj[i].space = BRRES.LightObjSpace.VIEW_SPACE;
+        const blightRes = parseBLIGHT(assertExists(resourceSystem.findFileData(`Env/WS2_omk_F0_Light.plight`)));
+        this.eggLightManager = new EggLightManager(blightRes);
     }
 
     public mountRRES(device: GfxDevice, rresName: string): BRRES.RRES {
@@ -145,7 +145,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
         const mdl0Data = this.resourceSystem.mountMDL0(device, this.getCache(), rres, modelName);
         const instance = new MDL0ModelInstance(this.textureHolder, mdl0Data);
         instance.bindRRESAnimations(this.animationController, rres);
-        instance.bindLightSetting(this.lightSetting);
+        instance.bindLightSetting(this.eggLightManager.lightSetting);
         this.modelInstances.push(instance);
         return instance;
     }
@@ -154,7 +154,6 @@ class WS2_Renderer extends BasicGXRendererHelper {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         this.scn0Animator.calcCameraClipPlanes(viewerInput.camera, 0);
-        this.scn0Animator.calcLightSetting(this.lightSetting);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);

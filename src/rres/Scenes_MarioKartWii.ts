@@ -14,7 +14,7 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, lerp, clamp } from '../MathHelpers';
+import { computeModelMatrixSRT, computeModelMatrixS, MathConstants } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
