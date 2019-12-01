@@ -13,9 +13,10 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3 } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
+import { GravityInfo, GravityTypeMask } from "./Gravity";
 
 const scratchVec3 = vec3.create();
 
@@ -527,6 +528,15 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
     }
 }
 
+export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
+    if (axisX !== null)
+        vec3.set(axisX, m[0], m[1], m[2]);
+    if (axisY !== null)
+        vec3.set(axisY, m[4], m[5], m[6]);
+    if (axisZ !== null)
+        vec3.set(axisZ, m[8], m[9], m[10]);
+}
+
 export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
     vec3.subtract(scratchVec3, actor.translation, other);
     const m = vec3.dot(actor.gravityVector, scratchVec3);
@@ -552,4 +562,30 @@ export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void
         m[12] = v[0];
         m[13] = v[1];
     }
+}
+
+export function setTrans(dst: mat4, pos: vec3): void {
+    dst[12] = pos[0];
+    dst[13] = pos[1];
+    dst[14] = pos[2];
+    dst[15] = 1.0;
+}
+
+function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
+    if (attachmentFilter === null)
+        attachmentFilter = nameObj;
+
+    sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, coord, gravityTypeMask, attachmentFilter);
+}
+
+export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
+    // Can't import GravityTypeMask without circular dependencies... TODO(jstpierre): Change this.
+    const GravityTypeMask_Normal = 0x01;
+    calcGravityVectorOrZero(sceneObjHolder, nameObj, coord, GravityTypeMask_Normal, dst, gravityInfo, attachmentFilter);
+}
+
+export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    calcGravityVector(sceneObjHolder, actor, actor.translation, scratchVec3);
+    if (!isNearZeroVec3(scratchVec3, 0.001))
+        vec3.copy(actor.gravityVector, scratchVec3);
 }

@@ -29,7 +29,8 @@ function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttach
 }
 
 function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState[]): void {
-    dst.length = src.length;
+    if (dst.length !== src.length)
+        dst.length = src.length;
     for (let i = 0; i < src.length; i++)
         dst[i] = copyAttachmentState(dst[i], src[i]);
 }

@@ -122,8 +122,10 @@ export class TDDraw extends TDDrawVtxSpec {
 
     private getOffs(v: number, attr: GX.Attr): number {
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        const attrOffs = this.loadedVertexLayout!.vertexAttributeLayouts.find((v) => v.vtxAttrib === attr)!.bufferOffset;
-        return v*stride + attrOffs;
+        for (let i = 0; i < this.loadedVertexLayout!.vertexAttributeLayouts.length; i++)
+            if (this.loadedVertexLayout!.vertexAttributeLayouts[i].vtxAttrib === attr)
+                return v*stride + this.loadedVertexLayout!.vertexAttributeLayouts[i].bufferOffset;
+        throw "whoops";
     }
 
     private writeUint8(offs: number, v: number): void {

@@ -19,7 +19,7 @@ import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck } from "./ActorUtil";
+import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
@@ -355,6 +355,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public scale = vec3.fromValues(1, 1, 1);
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
+    // calcGravity is off by default until we can feel comfortable turning it on...
+    public calcGravity: boolean = false;
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
@@ -548,6 +550,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         if (this.visibleAlive) {
             const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+            if (this.calcGravity)
+                calcGravity(sceneObjHolder, this);
 
             if (this.modelManager !== null)
                 this.modelManager.update(deltaTimeFrames);

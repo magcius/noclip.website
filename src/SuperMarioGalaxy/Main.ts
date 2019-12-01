@@ -30,13 +30,14 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, WaterPlant, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
+import { PlanetGravityManager } from './Gravity';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -773,6 +774,7 @@ class CaptureSceneDirector {
 
 export const enum SceneObj {
     SENSOR_HIT_CHECKER     = 0x00,
+    PLANET_GRAVITY_MANAGER = 0x32,
     AIR_BUBBLE_HOLDER      = 0x39,
     SWING_ROPE_GROUP       = 0x47,
     TRAPEZE_ROPE_DRAW_INIT = 0x4A,
@@ -794,6 +796,7 @@ export class SceneObjHolder {
     public messageDataHolder: MessageDataHolder | null = null;
 
     public sensorHitChecker: SensorHitChecker | null = null;
+    public planetGravityManager: PlanetGravityManager | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
@@ -815,6 +818,8 @@ export class SceneObjHolder {
     public getObj(sceneObj: SceneObj): NameObj | null {
         if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
             return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.PLANET_GRAVITY_MANAGER)
+            return this.planetGravityManager;
         else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
@@ -831,6 +836,8 @@ export class SceneObjHolder {
     private newEachObj(sceneObj: SceneObj): void {
         if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
             this.sensorHitChecker = new SensorHitChecker(this);
+        else if (sceneObj === SceneObj.PLANET_GRAVITY_MANAGER)
+            this.planetGravityManager = new PlanetGravityManager(this);
         else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
@@ -909,10 +916,19 @@ class SMGSpawner {
         return null;
     }
 
-    private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
+    private placeZones(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
         this.zones.push(zoneNode);
 
+        for (let i = 0; i < stageDataHolder.localStageDataHolders.length; i++) {
+            const subzone = this.placeZones(stageDataHolder.localStageDataHolders[i]);
+            zoneNode.subzones.push(subzone);
+        }
+
+        return zoneNode;
+    }
+
+    private placeStageData(stageDataHolder: StageDataHolder, priority: boolean): void {
         stageDataHolder.iterPlacement((infoIter, layerId) => {
             const actorTableEntry = this.getActorTableEntry(getObjectName(infoIter));
 
@@ -929,18 +945,17 @@ class SMGSpawner {
                 const infoIterCopy = copyInfoIter(infoIter);
                 this.legacySpawner.spawnObjectLegacy(zoneAndLayer, infoIterCopy, objInfoLegacy);
             }
-        });
+        }, priority);
 
-        for (let i = 0; i < stageDataHolder.localStageDataHolders.length; i++) {
-            const subzone = this.placeStageData(stageDataHolder.localStageDataHolders[i]);
-            zoneNode.subzones.push(subzone);
-        }
-
-        return zoneNode;
+        for (let i = 0; i < stageDataHolder.localStageDataHolders.length; i++)
+            this.placeStageData(stageDataHolder.localStageDataHolders[i], priority);
     }
 
     public place(): void {
-        this.placeStageData(this.sceneObjHolder.stageDataHolder);
+        const stageDataHolder = this.sceneObjHolder.stageDataHolder;
+        this.placeZones(stageDataHolder);
+        this.placeStageData(stageDataHolder, true);
+        this.placeStageData(stageDataHolder, false);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects
@@ -1073,28 +1088,39 @@ class StageDataHolder {
         }
     }
 
-    private iterPlacementDir(layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
+    private isPrioPlacementObjInfo(filename: string): boolean {
+        return (filename === 'areaobjinfo' || filename === 'planetobjinfo' || filename === 'demoobjinfo' || filename === 'cameracubeinfo');
+    }
+
+    private iterPlacementDir(priority: boolean | null, layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
         for (let i = 0; i < dir.files.length; i++) {
+            const file = dir.files[i];
+
+            const filename = file.name.toLowerCase();
+
             // The game skips any actors it doesn't recognize, and includes the sub-zones in the list.
             // We can't easily do that because we have legacy actors, so just skip StageObjInfo for now...
-            if (dir.files[i].name.toLowerCase() === 'stageobjinfo')
+            if (filename === 'stageobjinfo')
                 continue;
 
-            this.iterLayer(layerId, callback, dir.files[i].buffer);
+            if (priority !== null && (this.isPrioPlacementObjInfo(filename) !== priority))
+                continue;
+
+            this.iterLayer(layerId, callback, file.buffer);
         }
     }
 
-    public iterPlacement(callback: LayerObjInfoCallback): void {
+    public iterPlacement(callback: LayerObjInfoCallback, priority: boolean | null = null): void {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
 
             const placementDir = this.zoneArchive.findDir(`jmp/Placement/${layerDirName}`);
             if (placementDir !== null)
-                this.iterPlacementDir(i, callback, placementDir);
+                this.iterPlacementDir(priority, i, callback, placementDir);
 
             const mapPartsDir = this.zoneArchive.findDir(`jmp/MapParts/${layerDirName}`);
             if (mapPartsDir !== null)
-                this.iterPlacementDir(i, callback, mapPartsDir);
+                this.iterPlacementDir(priority, i, callback, mapPartsDir);
         }
     }
 

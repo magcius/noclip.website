@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -32,7 +32,6 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexAttribLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -118,15 +117,6 @@ export function showModel(actor: LiveActor): void {
 
 export function isHiddenModel(actor: LiveActor): boolean {
     return !actor.visibleModel;
-}
-
-export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
-    if (axisX !== null)
-        vec3.set(axisX, m[0], m[1], m[2]);
-    if (axisY !== null)
-        vec3.set(axisY, m[4], m[5], m[6]);
-    if (axisZ !== null)
-        vec3.set(axisZ, m[8], m[9], m[10]);
 }
 
 export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
@@ -235,13 +225,6 @@ function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[9] = z[1];
     dst[10] = z[2];
     dst[11] = 0.0;
-}
-
-function setTrans(dst: mat4, pos: vec3): void {
-    dst[12] = pos[0];
-    dst[13] = pos[1];
-    dst[14] = pos[2];
-    dst[15] = 1.0;
 }
 
 function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
@@ -2685,7 +2668,7 @@ export class FishGroup extends LiveActor {
         super.movement(sceneObjHolder, viewerInput);
 
         // Update up vector from gravity vector
-        // vec3.negate(this.upVec, this.gravityVector);
+        vec3.negate(this.upVec, this.gravityVector);
 
         moveCoordAndFollowTrans(this, this.railSpeed * getDeltaTimeFrames(viewerInput));
 
@@ -2734,6 +2717,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private seaGullGroup: SeaGullGroup, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
+        this.calcGravity = true;
         initDefaultPos(sceneObjHolder, this, infoIter);
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
         vec3.copy(this.upVec, this.axisY);
@@ -2763,7 +2747,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
 
     private updateHover(): void {
         if (Math.abs(this.bankRotation) > 0.01) {
-            // vec3.negate(this.upVec, this.gravityVector);
+            vec3.negate(this.upVec, this.gravityVector);
 
             this.bankRotation = clampRange(this.bankRotation, 30);
 
@@ -5013,12 +4997,15 @@ class OceanRingPipe extends LiveActor {
 
         if (this.oceanRing.name === 'OceanRingAndFlag') {
             for (let i = 0; i < this.segmentCount; i += 7) {
-                const position = !!(i & 1) ? points[i * this.pointsPerSegment] : points[i * this.pointsPerSegment + this.pointsPerSegment - 1];
+                calcGravityVector(sceneObjHolder, this, points[i * this.pointsPerSegment], scratchVec3a);
+                if (scratchVec3a[1] <= -0.9) {
+                    const position = !!(i & 1) ? points[i * this.pointsPerSegment] : points[i * this.pointsPerSegment + this.pointsPerSegment - 1];
 
-                const flag = new Flag(zoneAndLayer, sceneObjHolder, null, 'FlagSurfing');
-                vec3.set(scratchVec3, 1, 0, 0);
-                flag.setInfoPos('FlagSurfing', position, scratchVec3, 500, 300, 200, 2, 3);
-                flag.init(sceneObjHolder);
+                    const flag = new Flag(zoneAndLayer, sceneObjHolder, null, 'FlagSurfing');
+                    vec3.set(scratchVec3, 1, 0, 0);
+                    flag.setInfoPos('FlagSurfing', position, scratchVec3, 500, 300, 200, 2, 3);
+                    flag.init(sceneObjHolder);
+                }
             }
         }
 
@@ -5058,9 +5045,9 @@ class OceanRingPipe extends LiveActor {
         let tx0S = 0.0;
 
         for (let i = 0; i < this.segmentCount + 1; i++) {
-            // getRailPos(scratchVec3a, this);
-            // calcGravityVector of rail pos
-            vec3.negate(scratchVec3a, this.gravityVector);
+            getRailPos(scratchVec3a, this);
+            calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
+            vec3.negate(scratchVec3a, scratchVec3a);
             getRailDirection(scratchVec3b, this);
 
             // Rotation matrix around pipe.
@@ -5184,7 +5171,7 @@ export class OceanRing extends LiveActor {
         connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_RING);
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initRailRider(sceneObjHolder, infoIter);
-        this.initPoints();
+        this.initPoints(sceneObjHolder);
 
         const arg0 = fallback(getJMapInfoArg0(infoIter), 0);
         if (arg0 === 0) {
@@ -5207,7 +5194,7 @@ export class OceanRing extends LiveActor {
         }
     }
 
-    private initPoints(): void {
+    private initPoints(sceneObjHolder: SceneObjHolder): void {
         const railTotalLength = getRailTotalLength(this);
 
         this.segmentCount = ((railTotalLength / 200.0) | 0) + 1;
@@ -5216,9 +5203,9 @@ export class OceanRing extends LiveActor {
         const edgePointNum = 2.0;
 
         for (let i = 0; i < this.segmentCount; i++) {
-            // getRailPos(scratchVec3a, this);
-            // calcGravityVector of rail pos
-            vec3.negate(scratchVec3a, this.gravityVector);
+            getRailPos(scratchVec3a, this);
+            calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3a);
+            vec3.negate(scratchVec3a, scratchVec3a);
             getRailDirection(scratchVec3b, this);
 
             // Right vector.
