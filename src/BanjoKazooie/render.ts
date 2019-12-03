@@ -943,12 +943,10 @@ export class GeometryRenderer {
             // Skinned meshes need the parent bone as the second draw matrix.
             const animationSetup = this.animationSetup;
             if (animationSetup !== null) {
-                const parentBoneIndex = animationSetup.bones[node.boneIndex].parentIndex;
-
-                if (parentBoneIndex === -1) {
+                if (node.parentIndex === -1) {
                     // The root bone won't have a skinned DL section, so doing nothing is fine.
                 } else {
-                    drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[parentBoneIndex]);
+                    drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[node.parentIndex]);
                 }
             }
 

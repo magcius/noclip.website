@@ -195,6 +195,7 @@ export interface StateSelector {
 
 export interface GeoNode {
     boneIndex: number;
+    parentIndex: number;
     rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
@@ -211,7 +212,7 @@ interface GeoContext {
     nodeStack: GeoNode[];
 }
 
-function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
+function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
     // TODO: figure out the unreferenced vertices
     const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
     // G_TF_BILERP
@@ -222,6 +223,7 @@ function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
     )
     const geoNode: GeoNode = {
         boneIndex,
+        parentIndex,
         children: [],
         rspState,
         rspOutput: null,
@@ -287,8 +289,9 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
         } else if (cmd === 0x02) {
             // Bone.
             const boneIndex = view.getInt8(geoIdx + 0x09);
+            const parentNode = peekGeoNode(context);
 
-            pushGeoNode(context, boneIndex);
+            pushGeoNode(context, boneIndex, parentNode.boneIndex);
             runGeoLayout(context, geoIdx + view.getUint8(geoIdx + 0x08));
             popGeoNode(context);
         } else if (cmd === 0x03) {
@@ -334,16 +337,16 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             const childCount = view.getUint16(geoIdx + 0x08);
             const stateIndex = view.getUint16(geoIdx + 0x0A);
 
-            // this isn't a new bone, so preserve the current bone
-            const parentBoneIndex = context.nodeStack.length > 0 ? context.nodeStack[0].boneIndex : 0;
+            const currNode = peekGeoNode(context);
             // push a new geo node to ensure these are the only children
-            pushGeoNode(context, parentBoneIndex);
+            // this isn't a new bone, so preserve the current bones
+            pushGeoNode(context, currNode.boneIndex, currNode.parentIndex);
 
             const childArrOffs = geoIdx + 0x0C;
             for (let i = 0; i < childCount; i++) {
                 const childOffs = geoIdx + view.getUint32(childArrOffs + (i * 0x04));
 
-                const childNode = pushGeoNode(context, parentBoneIndex);
+                const childNode = pushGeoNode(context, currNode.boneIndex, currNode.parentIndex);
                 childNode.selector = { stateIndex };
                 runGeoLayout(context, childOffs);
                 popGeoNode(context);
