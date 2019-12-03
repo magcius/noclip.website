@@ -220,15 +220,12 @@ export class NoclipLegacyActorSpawner {
         switch (name) {
             case 'MeteorCannon':
             case 'Plant':
-            case 'WaterPlant':
-            case 'SwingRope':
             case 'Creeper':
             case 'TrampleStar':
             case 'Flag':
             case 'FlagKoopaC':
             case 'FlagRaceA':
             case 'FlagTamakoro':
-            case 'OceanRing':
             case 'WoodLogBridge':
             case 'SandBird':
             case 'RingBeamerAreaObj':

@@ -310,6 +310,21 @@ export class ParallelGravity extends PlanetGravity {
     }
 }
 
+export class PointGravity extends PlanetGravity {
+    public pos = vec3.create();
+
+    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+        vec3.sub(dst, this.pos, coord);
+
+        const mag = vec3.length(dst);
+        vec3.normalize(dst, dst);
+        if (!this.isInRangeDistance(mag))
+            return -1;
+
+        return mag;
+    }
+}
+
 export class SegmentGravity extends PlanetGravity {
     private gravityPoints = nArray(2, () => vec3.create());
     private sideVector = vec3.create();
@@ -403,23 +418,6 @@ export class GlobalGravityObj extends LiveActor {
     }
 }
 
-export function createGlobalPlaneGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
-    const gravity = new ParallelGravity();
-
-    // PlaneGravityCreator::settingFromSRT
-    getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
-    getJMapInfoTrans(scratchVec3b, sceneObjHolder, infoIter);
-    computeModelMatrixR(scratchMatrix, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-    calcMtxAxis(null, scratchVec3a, null, scratchMatrix);
-    gravity.setPlane(scratchVec3a, scratchVec3b);
-
-    settingGravityParamFromJMap(gravity, infoIter);
-    gravity.updateIdentityMtx();
-    registerGravity(sceneObjHolder, gravity);
-
-    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
-}
-
 function makeMtxTR(dst: mat4, translation: vec3, rotation: vec3): void {
     computeModelMatrixSRT(dst,
         1, 1, 1,
@@ -444,6 +442,23 @@ function preScaleMtx(dst: mat4, x: number, y: number, z: number): void {
     dst[8] *= z;
     dst[9] *= z;
     dst[10] *= z;
+}
+
+export function createGlobalPlaneGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new ParallelGravity();
+
+    // PlaneGravityCreator::settingFromSRT
+    getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoTrans(scratchVec3b, sceneObjHolder, infoIter);
+    computeModelMatrixR(scratchMatrix, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+    calcMtxAxis(null, scratchVec3a, null, scratchMatrix);
+    gravity.setPlane(scratchVec3a, scratchVec3b);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
 }
 
 export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
@@ -472,6 +487,21 @@ export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sce
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     if (arg1 !== -1)
         gravity.setDistanceCalcType(arg1);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalPointGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new PointGravity();
+
+    // PointGravityCreator::settingFromSRT
+    getJMapInfoTrans(gravity.pos, sceneObjHolder, infoIter);
+    getJMapInfoScale(scratchVec3a, infoIter);
+    gravity.distant = 500.0 * scratchVec3a[0];
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();
