@@ -8,7 +8,7 @@ import * as Actors from './actors';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -305,7 +305,7 @@ class ObjectData {
         }
     }
 
-    public spawnFlipbookByFileID(device: GfxDevice, fileID: number, pos: vec3, phase = 0, initialMirror = false): FlipbookRenderer | null {
+    public spawnFlipbookByFileID(device: GfxDevice, fileID: number, pos: vec3, phase = 0, initialMirror = false, scale = 1): FlipbookRenderer | null {
         const flipbookData = this.ensureFlipbookData(device, fileID);
         if (flipbookData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
@@ -315,14 +315,15 @@ class ObjectData {
         const renderer = new FlipbookRenderer(flipbookData, phase, initialMirror);
         renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
         mat4.fromTranslation(renderer.modelMatrix, pos);
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
         return renderer;
     }
 
-    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
-        return this.baseSpawnObject(device, -1 /* no object ID */, fileID, pos, yaw, pitch);
+    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
+        return this.baseSpawnObject(device, -1 /* no object ID */, fileID, pos, yaw, roll, scale);
     }
 
-    private baseSpawnObject(device: GfxDevice, objectID: number, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
+    private baseSpawnObject(device: GfxDevice, objectID: number, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
@@ -333,7 +334,8 @@ class ObjectData {
         renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
-        mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, pitch * MathConstants.DEG_TO_RAD);
+        mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, roll * MathConstants.DEG_TO_RAD);
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
         return renderer;
     }
 
@@ -443,6 +445,30 @@ function setObjectSpecificSelectors(objRenderer: GeometryRenderer, id: number, v
         objRenderer.selectorState.values[4] = turtleID;
 }
 
+interface MovementFactory {
+    new(obj: GeometryRenderer): MovementController;
+}
+
+interface MovementIndicator {
+    movementType: MovementFactory;
+    pos: vec3;
+}
+
+function searchObjects(objects: GeometryRenderer[], pos: vec3, radius = 500): GeometryRenderer | null {
+    let bestObject: GeometryRenderer | null = null;
+    let minDist = radius;
+    const scratchVec = vec3.create();
+    for (let i = 0; i < objects.length; i++) {
+        mat4.getTranslation(scratchVec, objects[i].modelMatrix);
+        const dist = vec3.dist(scratchVec, pos);
+        if (dist < minDist) {
+            bestObject = objects[i];
+            minDist = dist;
+        }
+    }
+    return bestObject;
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -463,6 +489,7 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(view.getInt16(0) === 0x0101);
         let offs = 2;
 
+        const movementIndicators: MovementIndicator[] = [];
         const bounds: number[] = [];
         for (let i = 0; i < 6; i++) {
             bounds.push(view.getInt32(offs));
@@ -485,19 +512,29 @@ class SceneDesc implements Viewer.SceneDesc {
                         const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
-
                         // skipping a couple of 0xc-bit fields
+                        offs += 0x14;
+
                         if (category === 0x06) {
-                            const objRenderers = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorValue);
-                            for (let obj of objRenderers) {
-                                if (obj instanceof GeometryRenderer) {
-                                    sceneRenderer.geoRenderers.push(obj);
-                                } else if (obj instanceof FlipbookRenderer) {
-                                    sceneRenderer.flipbookRenderers.push(obj);
+                            if (id === 0x13)
+                                movementIndicators.push({ pos: vec3.fromValues(x, y, z), movementType: Actors.SinkingBobber });
+                            else if (id === 0x37)
+                                movementIndicators.push({ pos: vec3.fromValues(x, y, z), movementType: Actors.WaterBobber });
+                            else if (id === 0x38)
+                                continue; // tumblar movement, also moves the jiggy inside based on camera position
+                            else if (id >= 0xf9 && id <= 0x100)
+                                continue; // just for handling the timed ring challenge inside Clanker
+                            else {
+                                const objRenderers = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorValue);
+                                for (let obj of objRenderers) {
+                                    if (obj instanceof GeometryRenderer) {
+                                        sceneRenderer.geoRenderers.push(obj);
+                                    } else if (obj instanceof FlipbookRenderer) {
+                                        sceneRenderer.flipbookRenderers.push(obj);
+                                    }
                                 }
                             }
                         }
-                        offs += 0x14;
                     }
 
                     assert(view.getInt8(offs++) === 0x8);
@@ -522,19 +559,17 @@ class SceneDesc implements Viewer.SceneDesc {
                                 const startFrame = view.getUint8(offs + 0x0A) >>> 3; // gets overwritten by the computed frame
                                 const phase = (view.getUint16(offs + 0x0A) >>> 6) & 0x1f;
 
-                                const flipbook = objectSetupTable.spawnFlipbookByFileID(device, fileIDBase + 0x572, vec3.fromValues(x, y, z), phase, !!initialMirror);
+                                const flipbook = objectSetupTable.spawnFlipbookByFileID(device, fileIDBase + 0x572, vec3.fromValues(x, y, z), phase, !!initialMirror, scale);
                                 if (flipbook) {
                                     flipbook.primColor = vec4.fromValues(r, g, b, 1);
-                                    mat4.scale(flipbook.modelMatrix, flipbook.modelMatrix, [scale, scale, scale]);
                                     sceneRenderer.flipbookRenderers.push(flipbook);
                                 }
                             } else if (objectType === 2) {
                                 const yaw = view.getUint8(offs + 0x02) * 2;
-                                const pitch = view.getUint8(offs + 0x03) * 2;
+                                const roll = view.getUint8(offs + 0x03) * 2;
                                 const scale = view.getUint8(offs + 0x0A) / 100.0;
-                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, fileIDBase + 0x2d1, vec3.fromValues(x, y, z), yaw, pitch);
+                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, fileIDBase + 0x2d1, vec3.fromValues(x, y, z), yaw, roll, scale);
                                 if (objRenderer !== null) {
-                                    mat4.scale(objRenderer.modelMatrix, objRenderer.modelMatrix, [scale, scale, scale]);
                                     if (objRenderer instanceof GeometryRenderer)
                                         sceneRenderer.geoRenderers.push(objRenderer);
                                     else
@@ -548,6 +583,17 @@ class SceneDesc implements Viewer.SceneDesc {
                     offs += 0x0C;
                 }
                 dataType = view.getInt8(offs++);
+            }
+        }
+
+        // set object movement types per indicators
+        for (let ind of movementIndicators) {
+            const nearestObject = searchObjects(sceneRenderer.geoRenderers, ind.pos);
+            if (nearestObject !== null) {
+                nearestObject.movementController = new ind.movementType(nearestObject);
+            } else {
+                console.warn("unpaired movement indicator", ind.pos);
+                sceneRenderer.geoRenderers.push(objectSetupTable.spawnObject(device, 648, ind.pos)[0]! as GeometryRenderer)
             }
         }
     }
@@ -604,7 +650,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 // TODO: make sure Clanker renders before the parts
                 for (let object of sceneRenderer.geoRenderers) {
                     if (object instanceof Actors.ClankerPart)
-                    object.clankerVectors = clanker.modelPointArray;
+                        object.clankerVectors = clanker.modelPointArray;
                 }
                 sceneRenderer.geoRenderers.push(clanker);
             }

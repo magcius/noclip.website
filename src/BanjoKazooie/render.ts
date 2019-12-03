@@ -869,6 +869,10 @@ function shouldDrawNode(selector: SelectorState, stateIndex: number, childIndex:
     return false;
 }
 
+export interface MovementController {
+    movement(dst: mat4, time: number): void;
+}
+
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 export class GeometryRenderer {
@@ -881,8 +885,11 @@ export class GeometryRenderer {
     public boneToModelMatrixArray: mat4[];
     public boneToParentMatrixArray: mat4[];
     public modelPointArray: vec3[];
+
     public boneAnimator: BoneAnimator | null = null;
     public animationController = new AnimationController(30);
+    public movementController: MovementController | null = null;
+
     public objectFlags = 0;
     public selectorState: SelectorState;
     private animationSetup: AnimationSetup | null;
@@ -979,7 +986,10 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
-    protected movement(): void {} // do nothing by default
+    protected movement(): void {
+        if (this.movementController !== null)
+            this.movementController.movement(this.modelMatrix, this.animationController.getTimeInSeconds());
+    }
 
     private calcAnim(): void {
         const animationSetup = this.animationSetup;
