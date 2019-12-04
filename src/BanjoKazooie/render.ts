@@ -12,7 +12,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup } from './geo';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup } from './geo';
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
@@ -524,7 +524,7 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(geometryData: RenderData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall) {
+    constructor(geometryData: RenderData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall, private textureAnimator: TextureAnimator | null = null) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -540,7 +540,7 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH , this.drawCall.DP_OtherModeL);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -618,6 +618,11 @@ class DrawCallInstance {
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
+        if (this.textureAnimator !== null) {
+            for (let i = 0; i < this.drawCall.textureIndices.length && i < this.textureMappings.length; i++) {
+                this.textureAnimator.fillTextureMapping(this.textureMappings[i], this.drawCall.textureIndices[i]);
+            }
+        }
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
@@ -873,6 +878,34 @@ export interface MovementController {
     movement(dst: mat4, time: number): void;
 }
 
+class TextureAnimator {
+    public animationController: AnimationController;
+    public textureMap: Map<number, GfxTexture[]>;
+
+    constructor(private setup: TextureAnimationSetup, gfxTextures: GfxTexture[]) {
+        this.animationController = new AnimationController(setup.speed);
+        this.textureMap = new Map<number, GfxTexture[]>();
+        for (let i = 0; i < setup.indexLists.length; i++) {
+            const key = setup.indexLists[i][0];
+            const textures: GfxTexture[] = [];
+            for (let j = 0; j < setup.blockCount; j++) {
+                textures.push(gfxTextures[setup.indexLists[i][j]]);
+            }
+            this.textureMap.set(key, textures);
+        }
+    }
+
+    public fillTextureMapping(mapping: TextureMapping, originalIndex: number): void {
+        const frameList = this.textureMap.get(originalIndex);
+        if (frameList === undefined)
+            return;
+
+        const frameIndex = (this.animationController.getTimeInFrames() % this.setup.blockCount) >>> 0;
+        // the sampler can be reused, since only the texture data address changes
+        mapping.gfxTexture = frameList[frameIndex];
+    }
+}
+
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 export class GeometryRenderer {
@@ -889,6 +922,7 @@ export class GeometryRenderer {
     public boneAnimator: BoneAnimator | null = null;
     public animationController = new AnimationController(30);
     public movementController: MovementController | null = null;
+    public textureAnimator: TextureAnimator | null = null;
 
     public objectFlags = 0;
     public selectorState: SelectorState;
@@ -907,6 +941,9 @@ export class GeometryRenderer {
         const geo = this.geometryData.geo;
         this.animationSetup = geo.animationSetup;
         this.vertexEffects = geo.vertexEffects;
+
+        if (geo.textureAnimationSetup !== null)
+            this.textureAnimator = new TextureAnimator(geo.textureAnimationSetup, geometryData.renderData.textures);
 
         if (geo.vertexBoneTable !== null) {
             const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -952,7 +989,7 @@ export class GeometryRenderer {
 
             if (node.rspOutput !== null) {
                 for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                    const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, node, drawMatrix, node.rspOutput.drawCalls[i]);
+                    const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, node, drawMatrix, node.rspOutput.drawCalls[i], this.textureAnimator);
                     geoNodeRenderer.drawCallInstances.push(drawCallInstance);
                 }
             }
@@ -1071,6 +1108,8 @@ export class GeometryRenderer {
             return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
+        if (this.textureAnimator !== null)
+            this.textureAnimator.animationController.setTimeFromViewerInput(viewerInput);
         this.movement();
         this.calcAnim();
         this.calcBoneToWorld();

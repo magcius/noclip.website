@@ -29,6 +29,12 @@ export interface VertexBoneTable {
     vertexBoneEntries: VertexBoneEntry[];
 }
 
+export interface TextureAnimationSetup {
+    speed: number;
+    blockCount: number;
+    indexLists: number[][];
+}
+
 export interface ModelPoint {
     boneID: number;
     offset: vec3;
@@ -37,6 +43,7 @@ export interface ModelPoint {
 export interface Geometry {
     animationSetup: AnimationSetup | null;
     vertexBoneTable: VertexBoneTable | null;
+    textureAnimationSetup: TextureAnimationSetup | null;
     vertexEffects: VertexAnimationEffect[];
     modelPoints: ModelPoint[];
     sharedOutput: F3DEX.RSPSharedOutput;
@@ -490,6 +497,48 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
     const rootNode2 = popGeoNode(geoContext);
     assert(rootNode === rootNode2);
 
+    let textureAnimationSetup: TextureAnimationSetup | null = null;
+    const textureAnimationSetupOffs = view.getInt32(0x2c);
+    if (textureAnimationSetupOffs > 0) {
+        let offs = textureAnimationSetupOffs;
+        const blockSize = view.getUint16(offs + 0x00);
+        const blockCount = view.getUint16(offs + 0x02);
+        const speed = view.getFloat32(offs + 0x04);
+
+        const indexLists: number[][] = [];
+        const baseTextureCount = sharedOutput.textureCache.textures.length;
+        for (let i = 0; i < baseTextureCount; i++) {
+            const tex = sharedOutput.textureCache.textures[i];
+            let addr = tex.dramAddr;
+            let palAddr = tex.dramPalAddr;
+            // seems like all of the animations are just rgba8
+            const animate = tex.dramAddr >>> 24 === 0xf;
+            const animatePalette = tex.dramPalAddr !== 0 && tex.dramPalAddr >>> 24 === 0xf;
+            if (!animate && !animatePalette) {
+                continue;
+            }
+
+            // first texture is the one we already have
+            const textureFrames: number[] = [i];
+            for (let j = 1; j < blockCount; j++) {
+                if (animate)
+                    addr += blockSize;
+                if (animatePalette)
+                    palAddr += blockSize;
+                textureFrames.push(sharedOutput.textureCache.translateTileTexture(segmentBuffers, addr, palAddr, tex.tile));
+            }
+
+            indexLists.push(textureFrames);
+        }
+
+        // while the code supports up to 4 animated texture segments (f,e,d,c),
+        // only one ever gets used
+        const nextBlockSize = view.getUint16(offs + 0x08);
+        assert(nextBlockSize === 0);
+
+        textureAnimationSetup = { blockCount, speed, indexLists };
+    }
+
     const effectSetupOffs = view.getUint32(0x24);
     const vertexEffects: VertexAnimationEffect[] = [];
     if (effectSetupOffs > 0) {
@@ -550,7 +599,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         }
     }
 
-    return { animationSetup, vertexBoneTable, vertexEffects, rootNode, sharedOutput, modelPoints };
+    return { animationSetup, vertexBoneTable, vertexEffects, textureAnimationSetup, rootNode, sharedOutput, modelPoints };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {
