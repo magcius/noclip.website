@@ -57,6 +57,7 @@ export const enum PVRTMask {
     TwiddledMipMaps                         = 0x02,
     VectorQuantized                         = 0x03,
     VectorQuantizedMipMaps                  = 0x04,
+    NonSquare                               = 0x09,
     VectorQuantizedCustomCodeBook           = 0x10,
     VectorQuantizedCustomCodeBookMipMaps    = 0x11,
 }
@@ -79,6 +80,7 @@ export function getMaskName(mask: PVRTMask): string {
         case PVRTMask.TwiddledMipMaps:                      return "Twiddled (mips)";
         case PVRTMask.VectorQuantized:                      return "Vector Quantized";
         case PVRTMask.VectorQuantizedMipMaps:               return "Vector Quantized (mips)";
+        case PVRTMask.NonSquare:                            return "Non-Square";
         case PVRTMask.VectorQuantizedCustomCodeBook:        return "Vector Quantized (custom)";
         case PVRTMask.VectorQuantizedCustomCodeBookMipMaps: return "Vector Quantized (custom)(mips)";
     }
@@ -174,13 +176,8 @@ export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
 
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
     
-        let levels: Uint8Array[] = [];        
-        for(let i = 0; i < textureEntry.levels.length; i++) {
-            levels.push(textureEntry.levels[i].data);
-        }
-
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, levels);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, textureEntry.levels.map((level) => level.data));
         device.submitPass(hostAccessPass);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
@@ -334,15 +331,20 @@ function decideParams(mask: PVRTMask, width: number): UnpackedParams {
         params.vqCompressed = true;
         params.codeBookSize = 256;
         break;
+    case PVRTMask.VectorQuantizedCustomCodeBook:
+        params.vqCompressed = true;
+        break;
     case PVRTMask.VectorQuantizedCustomCodeBookMipMaps:
         params.mipMaps = true;
+        params.vqCompressed = true;
+        break;
+    case PVRTMask.NonSquare:
         break;
     default:
         throw new Error(`Unhandled mask ${mask}`);
-        break;
     }
 
-    if (mask == PVRTMask.VectorQuantizedCustomCodeBookMipMaps || mask == PVRTMask.VectorQuantizedCustomCodeBook) {
+    if (mask === PVRTMask.VectorQuantizedCustomCodeBook || mask === PVRTMask.VectorQuantizedCustomCodeBookMipMaps ) {
         if (width < 16) {
             params.codeBookSize = 16;
         } else if (width == 64) {
