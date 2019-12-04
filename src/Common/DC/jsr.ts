@@ -2,11 +2,11 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { assert } from "../../util";
 import { DataStream } from "./DataStream";
-import * as GC_PVRT from './PVRT';
+import * as DC_PVRT from './PVRT';
 
 export interface AFSContainer {
     name: string;
-    textures: GC_PVRT.PVR_Texture[];
+    textures: DC_PVRT.PVR_Texture[];
 }
 
 interface AFSChunkHeader {
@@ -64,7 +64,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
     const stream = new DataStream(buffer);
  
     const header = readDataHeader(stream);
-    let textures: GC_PVRT.PVR_Texture[] = [];
+    let textures: DC_PVRT.PVR_Texture[] = [];
 
     for(let i=0; i<header.datas.length; ++i) {
 
@@ -91,8 +91,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
             console.log(`parsing ${uniqueName} at ${stream.offs}`);
 
             try {
-            const texture = GC_PVRT.parseFromStream(stream, uniqueName);
-            textures.push(texture);
+                const texture = DC_PVRT.parseFromStream(stream, uniqueName);
+                textures.push(texture);
             } catch (e) {
                 console.warn(`File ${uniqueName} failed to parse:`, e);
             }

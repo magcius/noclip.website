@@ -2,12 +2,14 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { assert } from "../../util";
 import { DataStream } from "./DataStream";
-import { decompressPVRT } from "./pvrt_texture";
 import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
 import { TextureHolder, LoadedTexture, TextureBase } from "../../TextureHolder";
 import * as Viewer from '../../viewer';
 
-// Port from https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
+// Ported for JSR to TS from
+//  https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
+// A more complete PVRT implementation is can be found here:
+//  https://github.com/inolen/redream/blob/master/src/guest/pvr/tex.c
 
 // wrapper for chunked data prefixed with a 4-char magic
 interface ChunkData {
@@ -23,22 +25,20 @@ function readChunk(stream: DataStream, lengthOverride?: number): ChunkData {
 }
 
 export interface PVR_Texture extends TextureBase {
-    name: string;
-    meta: PVR_TextureMeta;
-    data: Uint8Array;
-}
-
-export interface PVR_TextureMeta {
     format: PVRTFormat;
     mask: PVRTMask;
+
+    levels: PVR_TextureLevel[];
+}
+
+export interface PVR_TextureLevel {
+    width: number;
+    height: number;
+    data: Uint8Array;
 }
 
 export interface PVR_GlobalIndex {
     id: number;
-}
-
-export interface PPVR {
-    textures: PVR_Texture[];
 }
 
 export const enum PVRTFormat {
@@ -46,7 +46,7 @@ export const enum PVRTFormat {
     RGB565      = 0x01, //
     ARGB4444    = 0x02, //
     YUV442      = 0x03, // <no planned support>
-    Bump        = 0x04, // <no planned support>
+    BUMPMAP     = 0x04, // <no planned support>
     PAL4BPP     = 0x05, // <no planned support>
     PAL8BPP     = 0x06, // <no planned support>
 }
@@ -67,7 +67,7 @@ export function getFormatName(fmt: PVRTFormat): string {
     case PVRTFormat.RGB565:     return "RGB565";
     case PVRTFormat.ARGB4444:   return "ARGB4444";
     case PVRTFormat.YUV442:     return "YUV442";
-    case PVRTFormat.Bump:       return "Bump";
+    case PVRTFormat.BUMPMAP:    return "BUMPMAP";
     case PVRTFormat.PAL4BPP:    return "PAL4BPP";
     case PVRTFormat.PAL8BPP:    return "PAL8BPP";
     }
@@ -84,7 +84,7 @@ export function getMaskName(mask: PVRTMask): string {
     }
 }
 
-function readGlobalIndexHeader(stream: DataStream): PVR_GlobalIndex {
+function readGlobalIndex(stream: DataStream): PVR_GlobalIndex {
     
     const chunk = readChunk(stream);
     assert(chunk.magic === "GBIX");
@@ -93,7 +93,7 @@ function readGlobalIndexHeader(stream: DataStream): PVR_GlobalIndex {
     return {id: index};
 }
 
-function readImageDataHeader(stream: DataStream, length?: number): PVR_Texture {
+function readTexture(stream: DataStream, length?: number): PVR_Texture {
     
     const chunk = readChunk(stream, length);
     assert(chunk.magic === "PVRT");
@@ -102,21 +102,22 @@ function readImageDataHeader(stream: DataStream, length?: number): PVR_Texture {
 
     const format = view.getUint8(0x00);
     const mask = view.getUint8(0x01);
-
     const width = view.getUint16(0x04, true);
     const height = view.getUint16(0x06, true);
 
-    const imageDataView = chunk.data.createDataView(8);
+    const dataView = chunk.data.slice(8).createDataView();
 
-    const meta = {format, mask};
+    const params = decideParams(mask, width);
+    const levels = decideLevels(width, height, params);
 
+    let texture: PVR_Texture = {name: "", width: width, height: height, format: format, mask: mask, levels: []};
 
-    
-    console.log(`${width}x${height}: ${getFormatName(format)}/${getMaskName(mask)}`);
+    for(let i = 0; i < levels.length; i++) {
+        const level = extractLevel(dataView, format, mask, params, levels[i]);
+        texture.levels.push(level);
+    }
 
-    let result = decompressPVRT(imageDataView, meta, width, height);
-
-    return {name: "", meta, data: result, width: width, height: height};
+    return texture;
 }
 
 export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
@@ -127,44 +128,41 @@ export function parse(buffer: ArrayBufferSlice, name: string): PVR_Texture {
 }
 
 export function parseFromStream(buffer: DataStream, name: string): PVR_Texture {
-    const index = readGlobalIndexHeader(buffer);
+    const index = readGlobalIndex(buffer);
 
-    switch(index.id)
-    {
+    let lengthOverride: number | undefined;
+
+    // todo: investigate why this header is wrong
+    switch(index.id) {
         case 12009:
-        {
-            let imageData = readImageDataHeader(buffer, 18440);
-            imageData.name = name;
-            
-            return imageData;
-        }
-
-        default:
-        {
-            let imageData = readImageDataHeader(buffer);
-            imageData.name = name;
-            
-            return imageData;
-        }
+            lengthOverride = 18440;
+            break;
     }
+
+    let imageData = readTexture(buffer, lengthOverride);
+    imageData.name = name;
+    
+    return imageData;
 }
 
-function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
-
+function surfaceToCanvas(textureLevel: PVR_TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
-
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    canvas.width = textureLevel.width;
+    canvas.height = textureLevel.height;
 
     const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.data);
+    imgData.data.set(textureLevel.data);
     ctx.putImageData(imgData, 0, 0);
-        
-    const surfaces = [canvas];
+    
+    return canvas;
+}
+
+function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
+    const surfaces = texture.levels.map((textureLevel) => surfaceToCanvas(textureLevel));
 
     const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatName(texture.meta.format));
+    extraInfo.set('Format', getFormatName(texture.format));
 
     return { name: texture.name, surfaces, extraInfo };
 }
@@ -172,10 +170,17 @@ function textureToCanvas(texture: PVR_Texture): Viewer.Texture {
 export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
     public loadTexture(device: GfxDevice, textureEntry: PVR_Texture): LoadedTexture {
 
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, 1));
-        
+        //console.log(textureEntry);
+
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
+    
+        let levels: Uint8Array[] = [];        
+        for(let i = 0; i < textureEntry.levels.length; i++) {
+            levels.push(textureEntry.levels[i].data);
+        }
+
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [textureEntry.data]);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, levels);
         device.submitPass(hostAccessPass);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
@@ -183,3 +188,288 @@ export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
         return { gfxTexture, viewerTexture };
     }
 }
+
+class Untwiddle {
+    static kTwiddleTableSize = 1024;
+    twittleTable = new Uint32Array(Untwiddle.kTwiddleTableSize);
+
+    constructor() {
+        this.genTwiddleTable();    
+    }
+
+    genTwiddleTable() : void {
+        for(let i =0; i < Untwiddle.kTwiddleTableSize; i++) {
+            this.twittleTable[i] = this.untwiddleValue( i );
+        }
+    }
+
+    untwiddleValue(value: number) : number {
+        let untwiddled = 0;
+    
+        for (let i = 0; i < 10; i++) {
+            const shift = Math.pow(2, i);
+            if (value & shift) {
+                untwiddled |= (shift << i);
+            }
+        }
+        
+        return untwiddled;
+    }
+
+    public getUntwiddledTexelPosition(x: number, y: number) : number {
+        let pos = 0;
+        
+        if(x >= Untwiddle.kTwiddleTableSize || y >= Untwiddle.kTwiddleTableSize) {
+            pos = this.untwiddleValue(y) | this.untwiddleValue(x) << 1;
+        }
+        else {
+            pos = this.twittleTable[y] | this.twittleTable[x] << 1;
+        }
+        
+        return pos;
+    }
+}
+
+function unpackTexelToRGBA(srcTexel: number, srcFormat: PVRTFormat, dst: Uint8Array, dstOffs: number): void
+{
+    switch( srcFormat )
+    {
+        case PVRTFormat.RGB565:
+        {
+            const a = 0xFF;
+            const r = (srcTexel & 0xF800) >>> 8;
+            const g = (srcTexel & 0x07E0) >>> 3;
+            const b = (srcTexel & 0x001F) << 3;
+
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
+
+            break;
+        }
+            
+        case PVRTFormat.ARGB1555:
+        {
+            const a = (srcTexel & 0x8000) ? 0xFF : 0x00;
+            const r = (srcTexel & 0x7C00) >>> 7;
+            const g = (srcTexel & 0x03E0) >>> 2;
+            const b = (srcTexel & 0x001F) << 3;
+
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
+            
+            break;
+        }
+            
+        case PVRTFormat.ARGB4444:
+        {
+            const a = (srcTexel & 0xF000) >>> 8;
+            const r = (srcTexel & 0x0F00) >>> 4;
+            const g = (srcTexel & 0x00F0);
+            const b = (srcTexel & 0x000F) << 4;
+
+            dst[dstOffs + 0] = r;
+            dst[dstOffs + 1] = g;
+            dst[dstOffs + 2] = b;
+            dst[dstOffs + 3] = a;
+            
+            break;
+        }
+    }
+}
+
+function MipMapsCountFromWidth(width: number) : number
+{
+    let mipMapsCount = 0;
+    while( width > 0 )
+    {
+        ++mipMapsCount;
+        width >>= 1;
+    }
+
+    return mipMapsCount;
+}
+
+interface UnpackedLevel
+{
+    width: number;
+    height: number;
+    size: number;
+    offset: number;
+}
+
+interface UnpackedParams
+{
+    numCodedComponents: number;
+    kSrcStride: number;
+    kDstStride: number;
+
+    twiddled: boolean;
+    mipMaps: boolean;
+    vqCompressed: boolean;
+    codeBookSize: number;
+}
+
+function decideParams(mask: PVRTMask, width: number): UnpackedParams {
+
+    let params: UnpackedParams = {numCodedComponents: 4, kSrcStride: 2, kDstStride: 4, twiddled: false, mipMaps: false, vqCompressed: false, codeBookSize: 0};
+
+    switch (mask)
+    {
+    case PVRTMask.TwiddledMipMaps:
+        params.mipMaps = true;
+        break;
+    case PVRTMask.Twiddled:
+        params.twiddled = true;
+        break;
+    case PVRTMask.VectorQuantizedMipMaps:
+        params.mipMaps = true;
+        params.vqCompressed = true;
+        params.codeBookSize = 256;
+        break;
+    case PVRTMask.VectorQuantized:
+        params.vqCompressed = true;
+        params.codeBookSize = 256;
+        break;
+    case PVRTMask.VectorQuantizedCustomCodeBookMipMaps:
+        params.mipMaps = true;
+        break;
+    default:
+        throw new Error(`Unhandled mask ${mask}`);
+        break;
+    }
+
+    if (mask == PVRTMask.VectorQuantizedCustomCodeBookMipMaps || mask == PVRTMask.VectorQuantizedCustomCodeBook) {
+        if (width < 16) {
+            params.codeBookSize = 16;
+        } else if (width == 64) {
+            params.codeBookSize = 128;
+        } else {
+            params.codeBookSize = 256;
+        }
+    }
+
+    return params;
+}
+
+function decideLevels(width: number, height: number, params: UnpackedParams): UnpackedLevel[] {
+    let levels: UnpackedLevel[] = [];
+
+    let srcOffset = 0;
+
+    if (params.vqCompressed == true) {
+        const vqSize = params.numCodedComponents * params.kSrcStride * params.codeBookSize;
+        srcOffset += vqSize;
+    }
+
+    let mipMapCount = (params.mipMaps) ? MipMapsCountFromWidth(width) : 1;
+    while (mipMapCount > 0)
+    {
+        const mipWidth = (width >> (mipMapCount - 1));
+        const mipHeight = (height >> (mipMapCount - 1));
+        const mipSize = mipWidth * mipHeight;
+
+        const level: UnpackedLevel = {width: mipWidth, height: mipHeight, size: mipSize, offset: srcOffset};
+        levels.push(level);
+
+        mipMapCount--;
+        if (mipMapCount > 0) {
+            if (params.vqCompressed) {
+                if (params.mipMaps) {
+                    if (mipSize == 1) {
+                        srcOffset += 1;
+                    }
+                    else {
+                        srcOffset += Math.floor(mipSize / 4);
+                    }
+                }
+                else {
+                    srcOffset += Math.floor(mipSize / 4);
+                }
+            }
+            else {
+                srcOffset += (params.kSrcStride * mipSize);
+            }
+        }
+    }
+
+    return levels;
+}
+
+function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, params: UnpackedParams, level: UnpackedLevel): PVR_TextureLevel {
+
+    //console.log(params);
+    //console.log(level);
+
+    // Size of RGBA output
+    let dstData = new Uint8Array(level.width * level.height * 4);
+
+    let untwiddler = new Untwiddle();
+
+    let mipWidth = level.width;
+    let mipHeight = level.height;
+    let mipSize = level.size;
+
+    // Compressed textures processes only half-size
+    if (params.vqCompressed)
+    {
+        mipWidth /= 2;
+        mipHeight /= 2;
+        mipSize = mipWidth * mipHeight;
+    }
+    
+    //extract image data
+    let x = 0;
+    let y = 0;
+    
+    let proccessed = 0;
+    while(proccessed < mipSize)
+    {
+        if (params.vqCompressed)
+        {
+            const codebookIndex = untwiddler.getUntwiddledTexelPosition(x, y);
+
+            // Index of codebook * numbers of 2x2 block components
+            let vqIndex = srcData.getUint8(level.offset + codebookIndex) * params.numCodedComponents;
+
+            // Bypass elements in 2x2 block
+            for (let yoffset = 0; yoffset < 2; ++yoffset)
+            {
+                for (let xoffset = 0; xoffset < 2; ++xoffset)
+                {   
+                    const srcPos = (vqIndex + (xoffset * 2 + yoffset)) * params.kSrcStride;
+                    const srcTexel = srcData.getUint16(srcPos, true);
+                                    
+                    const dstPos = ((y * 2 + yoffset) * 2 * mipWidth + (x * 2 + xoffset)) * params.kDstStride;
+
+                    unpackTexelToRGBA(srcTexel, format, dstData, dstPos);
+                }
+            }
+
+            if (++x >= mipWidth)
+            {
+                x = 0;
+                ++y;
+            }
+        }
+        else
+        {
+            x = proccessed % mipWidth;
+            y = Math.floor(proccessed / mipWidth);
+            
+            const srcPos = (params.twiddled ? untwiddler.getUntwiddledTexelPosition(x, y) : proccessed) * params.kSrcStride;
+            const srcTexel = srcData.getUint16(level.offset + srcPos, true);
+            const dstPos = proccessed * params.kDstStride;
+
+            unpackTexelToRGBA(srcTexel, format, dstData, dstPos);
+        }
+        
+        ++proccessed;
+    }
+
+    return {width: level.width, height: level.height, data: dstData};
+}
+
