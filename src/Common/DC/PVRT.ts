@@ -58,6 +58,7 @@ export const enum PVRTMask {
     VectorQuantized                         = 0x03,
     VectorQuantizedMipMaps                  = 0x04,
     NonSquare                               = 0x09,
+    TwiddledNonSquare                       = 0x0D,
     VectorQuantizedCustomCodeBook           = 0x10,
     VectorQuantizedCustomCodeBookMipMaps    = 0x11,
 }
@@ -81,6 +82,7 @@ export function getMaskName(mask: PVRTMask): string {
         case PVRTMask.VectorQuantized:                      return "Vector Quantized";
         case PVRTMask.VectorQuantizedMipMaps:               return "Vector Quantized (mips)";
         case PVRTMask.NonSquare:                            return "Non-Square";
+        case PVRTMask.TwiddledNonSquare:                    return "Twiddled Non-Square";
         case PVRTMask.VectorQuantizedCustomCodeBook:        return "Vector Quantized (custom)";
         case PVRTMask.VectorQuantizedCustomCodeBookMipMaps: return "Vector Quantized (custom)(mips)";
     }
@@ -331,6 +333,9 @@ function decideParams(mask: PVRTMask, width: number): UnpackedParams {
         params.vqCompressed = true;
         params.codeBookSize = 256;
         break;
+    case PVRTMask.TwiddledNonSquare:
+        params.twiddled = true;
+        break;
     case PVRTMask.VectorQuantizedCustomCodeBook:
         params.vqCompressed = true;
         break;
@@ -381,15 +386,10 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
         if (mipMapCount > 0) {
             if (params.vqCompressed) {
                 if (params.mipMaps) {
-                    if (mipSize == 1) {
-                        srcOffset += 1;
-                    }
-                    else {
-                        srcOffset += Math.floor(mipSize / 4);
-                    }
+                    srcOffset += Math.max(1, mipSize / 4);
                 }
                 else {
-                    srcOffset += Math.floor(mipSize / 4);
+                    srcOffset += mipSize / 4;
                 }
             }
             else {
