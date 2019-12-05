@@ -78,6 +78,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
             stream.offs += 4096;
         }
 
+        let blobIndex = 0;
+
         while (stream.offs < textureBlobEnd) {
             // Align current file offset to 32-bits
             stream.offs = (stream.offs + 31) & ~31;
@@ -85,15 +87,16 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
             if (peekParser(stream) !== ChunkType.GBIX)
                 break;
         
-            const uniqueName = `${name}_${textures.length}`;
+            const uniqueName = `${name}_${i}_${blobIndex}`;
 
             console.log(`parsing ${uniqueName} at ${stream.offs}`);
+            ++blobIndex;
 
             try {
                 const texture = DC_PVRT.parseFromStream(stream, uniqueName);
                 textures.push(texture);
             } catch (e) {
-                console.warn(`File ${uniqueName} failed to parse:`, e);
+                console.warn(`Failed to parse ${uniqueName}:`, e);
             }
         }
     }

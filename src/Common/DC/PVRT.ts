@@ -117,6 +117,9 @@ function readTexture(stream: DataStream, length?: number): PVR_Texture {
     let texture: PVR_Texture = {name: "", width: width, height: height, format: format, mask: mask, levels: []};
 
     for(let i = 0; i < levels.length; i++) {
+        if (levels[i].offset > dataView.byteLength)
+            throw new Error(`Corrupted data or incorrect texture level ${i} (offset=${levels[i].offset}/ size=${dataView.byteLength})`);
+
         const level = extractLevel(dataView, format, mask, params, levels[i]);
         texture.levels.push(level);
     }
@@ -177,7 +180,7 @@ export class PVRTextureHolder extends TextureHolder<PVR_Texture> {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, textureEntry.width, textureEntry.height, textureEntry.levels.length));
     
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, textureEntry.levels.map((level) => level.data));
+        hostAccessPass.uploadTextureData(gfxTexture, 0, textureEntry.levels.reverse().map((level) => level.data));
         device.submitPass(hostAccessPass);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(textureEntry);
@@ -342,9 +345,6 @@ function decideLevels(width: number, height: number, params: UnpackedParams): Un
 }
 
 function extractLevel(srcData: DataView, format: PVRTFormat, mask: PVRTMask, params: UnpackedParams, level: UnpackedLevel): PVR_TextureLevel {
-
-    //console.log(params);
-    //console.log(level);
 
     // Size of RGBA output
     let dstData = new Uint8Array(level.width * level.height * 4);
