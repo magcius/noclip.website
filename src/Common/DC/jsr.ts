@@ -50,13 +50,12 @@ function peekParser(stream: DataStream): ChunkType | null {
     // Verify the magic bytes without updating the internal offset
     const magic = stream.readString(4, 0);
 
-    switch(magic)
-    {
-        case "GBIX": return ChunkType.GBIX;
-        case "PTEX": return ChunkType.PTEX;
-    }
-
-    return null;
+    if (magic === "GBIX")
+        return ChunkType.GBIX;
+    else if (magic == "PTEX") 
+        return ChunkType.PTEX;
+    else
+        return null;
 }
 
 export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
@@ -66,7 +65,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
     const header = readDataHeader(stream);
     let textures: DC_PVRT.PVR_Texture[] = [];
 
-    for(let i=0; i<header.datas.length; ++i) {
+    for (let i=0; i<header.datas.length; ++i) {
 
         const textureBlobOffset = header.datas[i].offset;
         const textureBlobSize = header.datas[i].size;
@@ -74,16 +73,16 @@ export function parse(buffer: ArrayBufferSlice, name: string): AFSContainer {
 
         stream.offs = textureBlobOffset;
 
-        if(peekParser(stream) === ChunkType.PTEX ) {
+        if (peekParser(stream) === ChunkType.PTEX) {
             // todo: parse initial ptex chunk
             stream.offs += 4096;
         }
 
-        while(stream.offs < textureBlobEnd) {
+        while (stream.offs < textureBlobEnd) {
             // Align current file offset to 32-bits
             stream.offs = (stream.offs + 31) & ~31;
 
-            if(peekParser(stream) !== ChunkType.GBIX)
+            if (peekParser(stream) !== ChunkType.GBIX)
                 break;
         
             const uniqueName = `${name}_${textures.length}`;
