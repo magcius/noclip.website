@@ -40,7 +40,12 @@ export interface ModelPoint {
     offset: vec3;
 }
 
+export const enum GeoFlags {
+    ComputeLookAt = 0x04,
+}
+
 export interface Geometry {
+    geoFlags: number;
     animationSetup: AnimationSetup | null;
     vertexBoneTable: VertexBoneTable | null;
     textureAnimationSetup: TextureAnimationSetup | null;
@@ -400,6 +405,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
     assert(view.getUint32(0x00) == 0x0B);
     const geoOffs = view.getUint32(0x04);
+    const geoFlags = view.getUint16(0x0A);
 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);
@@ -599,7 +605,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         }
     }
 
-    return { animationSetup, vertexBoneTable, vertexEffects, textureAnimationSetup, rootNode, sharedOutput, modelPoints };
+    return { geoFlags, animationSetup, vertexBoneTable, vertexEffects, textureAnimationSetup, rootNode, sharedOutput, modelPoints };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {

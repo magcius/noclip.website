@@ -12,8 +12,8 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup } from './geo';
-import { clamp, lerp, MathConstants } from '../MathHelpers';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags } from './geo';
+import { clamp, lerp, MathConstants, computeMatrixWithoutTranslation } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
@@ -33,6 +33,9 @@ precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+#ifdef TEXTURE_GEN
+    vec4 u_LookAtVectors[2];
+#endif
 };
 
 layout(row_major, std140) uniform ub_DrawParams {
@@ -88,8 +91,9 @@ void main() {
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
-    // shift and rescale to tex coordinates - straight towards the camera is the center
+    t_Normal.xy = vec2(dot(t_Normal, u_LookAtVectors[0]), dot(t_Normal, u_LookAtVectors[1]));
 
+    // shift and rescale to tex coordinates - straight towards the camera is the center
 #   ifdef TEXTURE_GEN_LINEAR
         v_TexCoord.xy = acos(t_Normal.xy)/radians(180.0);
 #   else
@@ -908,6 +912,9 @@ class TextureAnimator {
 
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
+const lookatScratch = vec3.create();
+const vec3up = vec3.fromValues(0, 1, 0);
+const vec3Zero = vec3.create();
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -1126,9 +1133,22 @@ export class GeometryRenderer {
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
         template.sortKey = this.sortKeyBase;
 
-        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
+        const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
+
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+        if (computeLookAt) {
+            // compute lookat X and Y in view space, since that's the transform the shader will have
+            mat4.getTranslation(lookatScratch, this.modelMatrix);
+            vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
+
+            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+            offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
+            offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
+        }
 
         // TODO: make sure the underlying vertex data gets modified only once per frame
         let reuploadVertices = false;
