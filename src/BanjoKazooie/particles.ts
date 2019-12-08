@@ -39,13 +39,13 @@ export class Particle {
     }
 
     // maybe turn this into a piecewise linear function?
-    private static sparkleDimensions = [10,10,15,20,25,30,35,40,45,50,54,58,62,66,70,74,76,78,80,40,20];
+    private static sparkleDimensions = [10, 10, 15, 20, 25, 30, 35, 40, 45, 50, 54, 58, 62, 66, 70, 74, 76, 78, 80, 40, 20];
 
     public init(manager: EmitterManager, type: Type, matrix: mat4, particleIndex = 0): void {
         this.type = type;
         mat4.copy(this.modelMatrix, matrix);
-        vec3.set(this.velocity, 0,0,0);
-        vec4.set(this.flipbook.primColor, 1,1,1,1);
+        vec3.set(this.velocity, 0, 0, 0);
+        vec4.set(this.flipbook.primColor, 1, 1, 1, 1);
 
         switch (this.type) {
             case Type.Sparkle:
@@ -82,7 +82,7 @@ export class Particle {
         this.motion(deltaSeconds);
         mat4.copy(this.flipbook.modelMatrix, this.modelMatrix);
         const baseFlipbook = this.flipbook.flipbookData.flipbook;
-        vec3.set(particleScratch, this.scaleX/baseFlipbook.width, this.scaleY/baseFlipbook.height, 1);
+        vec3.set(particleScratch, this.scaleX / baseFlipbook.width, this.scaleY / baseFlipbook.height, 1);
         mat4.scale(this.flipbook.modelMatrix, this.flipbook.modelMatrix, particleScratch);
 
         this.timer -= 30 * deltaSeconds;
@@ -93,7 +93,7 @@ export class Particle {
         if (this.timer < 0)
             return;
 
-        this.update(viewerInput.deltaTime/1000);
+        this.update(viewerInput.deltaTime / 1000);
         if (this.flipbook !== null)
             this.flipbook.prepareToRender(device, renderInstManager, viewerInput)
     }
@@ -138,7 +138,7 @@ export class Sparkler extends Emitter {
         const newParticle = manager.getParticle();
         if (newParticle === null)
             return;
-        newParticle.init(manager, Type.Sparkle, this.modelMatrix, 6);
+        newParticle.init(manager, Type.Sparkle, this.modelMatrix, this.sparkleColor);
     }
 }
 
@@ -152,7 +152,7 @@ export class EmitterManager {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         for (let i = 0; i < this.emitters.length; i++)
-            this.emitters[i].update(this, viewerInput.time/1000, viewerInput.deltaTime/1000);
+            this.emitters[i].update(this, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
         for (let i = 0; i < this.maxParticles; i++)
             this.particlePool[i].prepareToRender(device, renderInstManager, viewerInput);
     }
