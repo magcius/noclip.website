@@ -682,12 +682,12 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(gar, `anim/df_flygue.csab`));
             b.setVertexColorScale(characterLightScale);
         }
-        //else if (actor.actorId === ActorId.En_Daiku) {
-        //    const gar = await fetchArchive(`zelda_daiku.gar.lzs`);
-        //    const b = buildModel(gar, `model/disciple.cmb`);     
-        //    b.bindCSAB(parseCSAB(gar, `anim/dk2_hansai.csab`));
-        //    b.setVertexColorScale(characterLightScale);
-        //}
+        else if (actor.actorId === ActorId.En_Daiku) {
+            const gar = await fetchArchive(`zelda_daiku.gar.lzs`);
+            const b = buildModel(gar, `model/disciple.cmb`);     
+            // b.bindCSAB(parseCSAB(gar, `anim/dk2_hansai.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
                 // causes error
         else if (actor.actorId === ActorId.En_Karebaba) { // Assembled Deku Baba
             const gar = await fetchArchive('zelda_dekubaba.gar.lzs');

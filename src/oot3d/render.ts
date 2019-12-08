@@ -22,6 +22,7 @@ import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/help
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -684,13 +685,20 @@ function translateDataType(dataType: CMB.DataType, size: number, normalized: boo
     return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
 }
 
+class PrmsData {
+    constructor(public prms: CMB.Prms, public indexBufferOffset: number) {
+    }
+}
+
 class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
     public useVertexColor: boolean = false;
+    public indexBuffer: GfxBuffer;
+    public prmsData: PrmsData[] = [];
 
-    constructor(device: GfxDevice, vertexBuffer: GfxBuffer, indexBuffer: GfxBuffer, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
+    constructor(device: GfxDevice, vertexBuffer: GfxBuffer, indexDataSlice: ArrayBufferSlice, vatr: CMB.VatrChunk, public sepd: CMB.Sepd) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         const perInstanceBufferData = new Float32Array(32);
@@ -741,11 +749,29 @@ class SepdData {
             { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneWeights
         ];
 
-        for (let i = 1; i < sepd.prms.length; i++)
-            assert(sepd.prms[i].prm.indexType === sepd.prms[0].prm.indexType);
+        let indexBufferCount = 0;
+        for (let i = 0; i < this.sepd.prms.length; i++) {
+            const prms = sepd.prms[i];
+            assert(prms.prm.indexType === CMB.DataType.UShort || prms.prm.indexType === CMB.DataType.UByte);
+            indexBufferCount += prms.prm.count;
+        }
 
-        const indexType = sepd.prms[0].prm.indexType;
-        const indexBufferFormat = translateDataType(indexType, 1, false);
+        const indexData = new Uint16Array(indexBufferCount);
+        let indexBufferOffs = 0;
+        for (let i = 0; i < this.sepd.prms.length; i++) {
+            const prms = sepd.prms[i];
+            this.prmsData.push(new PrmsData(prms, indexBufferOffs));
+
+            if (prms.prm.indexType === CMB.DataType.UShort)
+                indexData.set(indexDataSlice.createTypedArray(Uint16Array, prms.prm.offset, prms.prm.count), indexBufferOffs);
+            else if (prms.prm.indexType === CMB.DataType.UByte)
+                indexData.set(indexDataSlice.createTypedArray(Uint8Array, prms.prm.offset, prms.prm.count), indexBufferOffs);
+
+            indexBufferOffs += prms.prm.count;
+        }
+
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+        const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
@@ -759,28 +785,16 @@ class SepdData {
             { buffer: vertexBuffer, byteOffset: vatr.texCoord2ByteOffset },
             { buffer: vertexBuffer, byteOffset: vatr.boneIndicesByteOffset },
             { buffer: vertexBuffer, byteOffset: vatr.boneWeightsByteOffset },
-        ], { buffer: indexBuffer, byteOffset: 0 });
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
     public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.indexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         if (this.perInstanceBuffer !== null)
             device.destroyBuffer(this.perInstanceBuffer);
     }
-}
-
-function getFirstIndex(prm: CMB.Prm): number {
-    if (prm.indexType === CMB.DataType.UByte) {
-        return prm.offset;
-    } else if (prm.indexType === CMB.DataType.UShort) {
-        assert((prm.offset & 0x01) === 0);
-        return prm.offset >>> 1;
-    } else if (prm.indexType === CMB.DataType.UInt) {
-        assert((prm.offset & 0x03) === 0);
-        return prm.offset >>> 2;
-    }
-    throw new Error();
 }
 
 class ShapeInstance {
@@ -800,10 +814,10 @@ class ShapeInstance {
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, materialTemplate, textureHolder);
 
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
-            const prms = this.sepdData.sepd.prms[i];
+            const prmsData = this.sepdData.prmsData[i];
+            const prms = prmsData.prms;
             const renderInst = renderInstManager.pushRenderInst();
-            const firstIndex = getFirstIndex(prms.prm);
-            renderInst.drawIndexes(prms.prm.count, firstIndex);
+            renderInst.drawIndexes(prms.prm.count, prmsData.indexBufferOffset);
 
             let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+4*2);
             const prmParamsMapped = renderInst.mapUniformBufferF32(DMPProgram.ub_PrmParams);
@@ -841,16 +855,14 @@ export class CmbData {
     public inverseBindPoseMatrices: mat4[] = [];
 
     private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, public cmb: CMB.CMB) {
         this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, cmb.vatrChunk.dataBuffer);
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, cmb.indexBuffer);
 
         const vatrChunk = cmb.vatrChunk;
 
         for (let i = 0; i < this.cmb.sepds.length; i++)
-            this.sepdData[i] = new SepdData(device, this.vertexBuffer, this.indexBuffer, vatrChunk, this.cmb.sepds[i]);
+            this.sepdData[i] = new SepdData(device, this.vertexBuffer, cmb.indexBuffer, vatrChunk, this.cmb.sepds[i]);
 
         const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
@@ -869,7 +881,6 @@ export class CmbData {
         for (let i = 0; i < this.sepdData.length; i++)
             this.sepdData[i].destroy(device);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyBuffer(this.indexBuffer);
     }
 }
 
