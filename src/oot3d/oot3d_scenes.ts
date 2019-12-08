@@ -1703,10 +1703,19 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
             b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Kakasi2) {
+            const zar = await fetchArchive(`zelda_ka.zar`);
+            const b = buildModel(zar, `model/strawman.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Kakasi3) {
             const zar = await fetchArchive(`zelda_ka.zar`);
             const b = buildModel(zar, `model/strawman.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
+            b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Bubble) {
+            const zar = await fetchArchive(`zelda_bubble.zar`);
+            const b = buildModel(zar, `model/syabom.cmb`, 1);
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Daiku_Kakariko) {
             const zar = await fetchArchive('zelda_daiku.zar');
