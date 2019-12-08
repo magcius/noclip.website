@@ -159,7 +159,7 @@ export default class InputManager {
         this.callScrollListeners();
     };
 
-    public onMotion (dx: number, dy: number) {
+    public onMotion(dx: number, dy: number) {
         this.dx += dx;
         this.dy += dy;
     }
