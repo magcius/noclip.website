@@ -278,30 +278,16 @@ function extractObjectLoad(fs: FS) {
         extractFileAndAppend(fileTable, fs, i);
     }
 
-    // flipbooks
-    extractFileAndAppend(fileTable, fs, 0x41a);
-    extractFileAndAppend(fileTable, fs, 0x580);
-    extractFileAndAppend(fileTable, fs, 0x5b7);
-    extractFileAndAppend(fileTable, fs, 0x5b8);
-    extractFileAndAppend(fileTable, fs, 0x5b9);
-    extractFileAndAppend(fileTable, fs, 0x5c2);
-    extractFileAndAppend(fileTable, fs, 0x5d7);
-    extractFileAndAppend(fileTable, fs, 0x5d8);
-    extractFileAndAppend(fileTable, fs, 0x648);
-    extractFileAndAppend(fileTable, fs, 0x68c);
-    extractFileAndAppend(fileTable, fs, 0x693);
-    extractFileAndAppend(fileTable, fs, 0x6b1);
-    extractFileAndAppend(fileTable, fs, 0x6b2);
-    extractFileAndAppend(fileTable, fs, 0x6b3);
-    extractFileAndAppend(fileTable, fs, 0x6b7);
-    extractFileAndAppend(fileTable, fs, 0x6d1);
-    extractFileAndAppend(fileTable, fs, 0x6d2);
-    extractFileAndAppend(fileTable, fs, 0x6d3);
-    extractFileAndAppend(fileTable, fs, 0x6d4);
-    extractFileAndAppend(fileTable, fs, 0x6d5);
-    extractFileAndAppend(fileTable, fs, 0x6d6);
-    extractFileAndAppend(fileTable, fs, 0x6d7);
-    extractFileAndAppend(fileTable, fs, 0x6d8);
+    const flipbookIDs = [
+        0x41a, 580, 0x5b7, 0x5b8, 0x5b9, 0x5c2, 0x5d7, 0x5d8, 0x648, 0x68c, 0x693,
+        0x6b1, 0x6b2, 0x6b3, 0x6b7,
+        0x6d1, 0x6d2, 0x6d3, 0x6d4, 0x6d5, 0x6d6, 0x6d7, 0x6d8];
+    for (let id of flipbookIDs)
+        extractFileAndAppend(fileTable, fs, id);
+
+    // particles
+    for (let id = 0x70d; id <= 0x71b; id++)
+        extractFileAndAppend(fileTable, fs, id);
 
     const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/objectSetup_arc.crg1`, Buffer.from(data));

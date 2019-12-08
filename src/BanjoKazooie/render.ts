@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, CCMUX, OtherModeH_Layout, ACMUX } from "./f3dex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, CCMUX, OtherModeH_Layout, ACMUX, CombineParams } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -13,11 +13,11 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags } from './geo';
-import { clamp, lerp, MathConstants, computeMatrixWithoutTranslation } from '../MathHelpers';
+import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { Flipbook, LoopMode, ReverseMode, MirrorMode } from './flipbook';
+import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -1028,7 +1028,7 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
-    protected movement(): void {
+    protected movement(deltaSeconds: number): void {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, this.animationController.getTimeInSeconds());
     }
@@ -1117,7 +1117,7 @@ export class GeometryRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         if (this.textureAnimator !== null)
             this.textureAnimator.animationController.setTimeFromViewerInput(viewerInput);
-        this.movement();
+        this.movement(viewerInput.deltaTime / 1000);
         this.calcAnim();
         this.calcBoneToWorld();
         this.calcModelPoints();
@@ -1191,25 +1191,23 @@ export class GeometryRenderer {
     }
 }
 
+const defaultFlipbookCombine: CombineParams = {
+    c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+    c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+    a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+    a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+};
+
+const baseFlipbookOtherModeH = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
+const baseFlipbookOtherModeL = 1 << OtherModeL_Layout.Z_CMP
+
 export class FlipbookData {
     public renderData: RenderData;
-    public drawCall: DrawCall;
+    public mode: FlipbookMode;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public flipbook: Flipbook) {
+        this.mode = flipbook.renderMode;
         this.renderData = new RenderData(device, cache, flipbook.sharedOutput);
-        // TODO: handle this nicely
-        const drawCall = new DrawCall();
-        drawCall.DP_OtherModeH =
-            (OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE) |
-            (TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
-        drawCall.DP_OtherModeL = (1 << OtherModeL_Layout.Z_CMP) | (1 << OtherModeL_Layout.Z_UPD) | 1 /* alpha test */;
-        drawCall.DP_Combine = {
-            c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
-            c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
-            a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
-            a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
-        };
-        this.drawCall = drawCall;
     }
 }
 
@@ -1235,6 +1233,8 @@ export class FlipbookRenderer {
     public modelMatrix = mat4.create();
     public animationController: AnimationController;
     public sortKeyBase: number;
+    public rotationAngle = 0;
+    public mode: FlipbookMode;
 
     public primColor = vec4.fromValues(1, 1, 1, 1);
     private animationParams: FlipbookAnimationParams;
@@ -1248,6 +1248,8 @@ export class FlipbookRenderer {
             this.textureMappings[i].gfxSampler = renderData.samplers[i];
         }
         setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
+        this.mode = flipbookData.mode;
+        this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
 
         this.animationController = new AnimationController(flipbookData.flipbook.frameRate);
@@ -1259,24 +1261,36 @@ export class FlipbookRenderer {
         };
     }
 
+    public changeData(data: FlipbookData, modeOverride?: FlipbookMode) {
+        this.flipbookData = data;
+        for (let i = 0; i < data.renderData.textures.length; i++) {
+            this.textureEntry[i] = data.renderData.sharedOutput.textureCache.textures[i];
+            if (i >= this.textureMappings.length)
+                this.textureMappings.push(new TextureMapping());
+            this.textureMappings[i].gfxTexture = data.renderData.textures[i];
+            this.textureMappings[i].gfxSampler = data.renderData.samplers[i];
+        }
+        this.mode = modeOverride !== undefined ? modeOverride : data.mode;
+        this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
+        this.createProgram();
+        this.animationController.fps = data.flipbook.frameRate;
+        this.animationController.phaseFrames = 0;
+    }
+
     private createProgram(): void {
-        const program = new F3DEX_Program(this.flipbookData.drawCall.DP_OtherModeH, this.flipbookData.drawCall.DP_OtherModeL);
+        let otherModeH = baseFlipbookOtherModeH;
+        let otherModeL = baseFlipbookOtherModeL;
+        if (this.mode === FlipbookMode.AlphaTest)
+            otherModeL |= 1; // alpha test against blend
+        const program = new F3DEX_Program(otherModeH, otherModeL);
+
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
         if (this.texturesEnabled)
             program.defines.set('USE_TEXTURE', '1');
 
-        const shade = (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
-        if (this.vertexColorsEnabled && shade)
+        if (this.vertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
-
-        if (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
-            program.defines.set('TEXTURE_GEN', '1');
-
-        // many display lists seem to set this flag without setting texture_gen,
-        // despite this one being dependent on it
-        if (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN_LINEAR)
-            program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
@@ -1289,8 +1303,7 @@ export class FlipbookRenderer {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.flipbookData.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
-        this.megaStateFlags.cullMode = cullMode;
+        this.megaStateFlags.cullMode = GfxCullMode.NONE;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -1379,12 +1392,14 @@ export class FlipbookRenderer {
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
         J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+        mat4.rotateZ(modelViewScratch, modelViewScratch, this.rotationAngle);
+
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, this.flipbookData.drawCall.DP_Combine);
+        offs += fillCombineParams(comb, offs, defaultFlipbookCombine);
         offs += fillVec4v(comb, offs, this.primColor);
     }
 }

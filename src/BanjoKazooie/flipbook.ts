@@ -32,8 +32,17 @@ export const enum MirrorMode {
     Always = 2,
 }
 
+export const enum FlipbookMode {
+    Opaque,
+    Translucent,
+    AlphaTest,
+}
+
 export interface Flipbook {
     sharedOutput: RSPSharedOutput;
+
+    width: number;
+    height: number;
 
     frameRate: number;
     frameSequence: number[];
@@ -41,6 +50,7 @@ export interface Flipbook {
     loopMode: LoopMode;
     reverseMode: ReverseMode;
     mirrorMode: MirrorMode;
+    renderMode: FlipbookMode;
 }
 
 function computeFrames(rawFrames: number, loopMode: LoopMode): number[] {
@@ -80,13 +90,13 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
     const frameSequence = computeFrames(frameCount, loopMode);
     const reverseMode: ReverseMode = (view.getUint16(0x0c) >>> 7) & 0x03;
     const mirrorMode: MirrorMode = (view.getUint16(0x0c) >>> 5) & 0x03;
+    const renderMode = (flags & 0xB00) ? FlipbookMode.Opaque : FlipbookMode.AlphaTest;
 
     assert(reverseMode !== ReverseMode.IfMirrored); // haven't implemented this yet
 
     const headerSize = 4 * frameCount + 0x10;
     const sharedOutput = new RSPSharedOutput();
     let firstFrameX = 0, firstFrameY = 0;
-
     for (let i = 0; i < frameCount; i++) {
         const frameOffset = view.getInt32(0x10 + 4 * i) + headerSize;
         const frameX = view.getInt16(frameOffset + 0x00);
@@ -96,8 +106,8 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
         const panelCount = view.getUint16(frameOffset + 0x08);
         if (i === 0) {
             // TODO: align frames correctly in space
-            firstFrameX = frameX * width/imageWidth;
-            firstFrameY = height - (frameY * height/imageHeight); // might be wrong
+            firstFrameX = frameX * width / imageWidth;
+            firstFrameY = height - (frameY * height / imageHeight); // might be wrong
         }
 
         let offs = frameOffset + 0x14;
@@ -176,5 +186,5 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
     sharedOutput.indices.push(0, 1, 3);
     sharedOutput.indices.push(0, 3, 2);
 
-    return {sharedOutput, frameRate, rawFrames: frameCount, frameSequence, loopMode, reverseMode, mirrorMode};
+    return { sharedOutput, width, height, frameRate, rawFrames: frameCount, frameSequence, loopMode, reverseMode, mirrorMode, renderMode };
 }
