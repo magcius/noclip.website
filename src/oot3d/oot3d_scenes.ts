@@ -93,7 +93,7 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
-        
+
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
@@ -101,42 +101,17 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
 
-        const enableVertexNormals = new UI.Checkbox('Enable Vertex Normals', false);
+        const enableVertexNormals = new UI.Checkbox('Show Vertex Normals', false);
         enableVertexNormals.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setVertexNormalsEnabled(enableVertexNormals.checked);
+                this.roomRenderers[i].setShowVertexNormals(enableVertexNormals.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexNormals.elem);
 
-        const enableLighting = new UI.Checkbox('Enable Lighting', false);
-        enableLighting.onchanged = () => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setLightingEnabled(enableLighting.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableLighting.elem);
-
-        // NOTE(quade): hacky and currently unused environment settings menu 
-        //let environmentSettingPresets = [ 
-        //    `index0`,
-        //    `index1`,
-        //    `index2`,
-        //    `index3`,
-        //    `index4`,
-        //    `index5`,
-        //];
-        //
-        //const lightingIndex = new UI.SingleSelect();
-        //lightingIndex.setStrings(environmentSettingPresets);
-        //lightingIndex.onselectionchange = (index: number) => {
-        //    for (let i = 0; i < this.roomRenderers.length; i++)
-        //        this.roomRenderers[i].setEnvironmentIndex(index);
-        //};
-        //renderHacksPanel.contents.appendChild(lightingIndex.elem);
-
-        const enableUV = new UI.Checkbox('Enable UV', false);
+        const enableUV = new UI.Checkbox('Show Texture Coordinates', false);
         enableUV.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setUVEnabled(enableUV.checked);
+                this.roomRenderers[i].setShowTextureCoordinates(enableUV.checked);
         };
         renderHacksPanel.contents.appendChild(enableUV.elem);
 

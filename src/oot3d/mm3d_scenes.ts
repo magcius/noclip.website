@@ -762,14 +762,14 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(zar, `model/kanban_bo_bottom_model.cmb`);
             buildModel(zar, `model/kanban_bo_center_model.cmb`);
             buildModel(zar, `model/kanban_bo_top_model.cmb`);
-            buildModel(zar, `model/kanban_eff_modelT.cmb`);
-            buildModel(zar, `kanban_L_bottom_R_model.cmb`);
-            buildModel(zar, `kanban_L_top_L_model.cmb`);
-            buildModel(zar, `kanban_L_top_R_model.cmb`);
-            buildModel(zar, `kanban_R_bottom_L_model.cmb`);
-            buildModel(zar, `kanban_R_bottom_R_model.cmb`);
-            buildModel(zar, `kanban_R_top_L_model.cmb`);
-            buildModel(zar, `kanban_R_top_R_model.cmb`);
+            buildModel(zar, `model/kanban_L_bottom_L_model.cmb`);
+            buildModel(zar, `model/kanban_L_bottom_R_model.cmb`);
+            buildModel(zar, `model/kanban_L_top_L_model.cmb`);
+            buildModel(zar, `model/kanban_L_top_R_model.cmb`);
+            buildModel(zar, `model/kanban_R_bottom_L_model.cmb`);
+            buildModel(zar, `model/kanban_R_bottom_R_model.cmb`);
+            buildModel(zar, `model/kanban_R_top_L_model.cmb`);
+            buildModel(zar, `model/kanban_R_top_R_model.cmb`);
         }
             // only the signpost is showing up, causes error
 

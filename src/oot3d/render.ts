@@ -8,9 +8,9 @@ import * as Viewer from '../viewer';
 
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
@@ -94,10 +94,12 @@ layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_MatMisc[1];
 };
 
-#define u_DepthOffset    (u_MatMisc[0].x)
+// xyz are used by GenerateTextureCoord
+#define u_DepthOffset      (u_MatMisc[0].w)
 
 layout(row_major, std140) uniform ub_PrmParams {
     Mat4x3 u_BoneMatrix[16];
+    Mat4x3 u_ViewMatrix;
     vec4 u_PrmMisc[2];
 };
 
@@ -274,8 +276,6 @@ in vec3 v_Lighting;
 in vec3 v_FogColor;
 in vec3 v_Normal;
 in float v_Depth;
-in float v_DrawDistance;
-in float v_FogStart;
 
 void main() {
     ${this.generateTextureEnvironment(this.material.textureEnvironment)}
@@ -285,21 +285,12 @@ void main() {
 
     vec4 t_ResultColor = t_CmbOut;
 
-    #ifdef USE_LIGHTING
-        // NOTE(quade): 0.15 is a magic number
-        // fog in these games never seems to be totally opaque
-        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.15, 1.0);
-        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
-    #endif
-
     #ifdef USE_VERTEX_NORMAL
-        t_ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
+        t_ResultColor.rgba = vec4((v_Normal * 0.5 + 0.5), 1.0);
     #endif
 
     #ifdef USE_UV
-        t_ResultColor.r = v_TexCoord0.x;
-        t_ResultColor.g = v_TexCoord0.y;
-        t_ResultColor.b = 1.0;
+        t_ResultColor.rgba = vec4(v_TexCoord0.xy, 1.0, 1.0);
     #endif
 
     gl_FragColor = t_ResultColor;
@@ -311,25 +302,12 @@ void main() {
 }
 
 class OoT3DProgram extends DMPProgram {
-    private texMtx = [0, 1, 2];
-    private texAttrib = [0, 1, 2];
+    constructor(material: CMB.Material, materialHacks: DMPMaterialHacks) {
+        super(material, materialHacks);
 
-    public setTexCoordGen(dstChannel: number, srcMtx: number, srcAttrib: number): void {
-        this.texMtx[dstChannel] = srcMtx;
-        this.texAttrib[dstChannel] = srcAttrib;
-    }
-
-    private generateVertexCoord(channel: number): string {
-        const mtxIndex = this.texMtx[channel];
-        const attribIndex = this.texAttrib[channel];
-        return `Mul(u_TexMtx[${mtxIndex}], vec4(a_TexCoord${attribIndex} * u_TexCoord${attribIndex}Scale, 0.0, 1.0)).st`;
-    }
-
-    public generateVertexShader(additionalProperties: string): void {
         this.vert = `
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
-${additionalProperties}
 
 layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
 layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
@@ -354,6 +332,64 @@ out float v_FogStart;
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
     return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
+ivec4 UnpackParams(float t_Param) {
+    int t_Int = int(t_Param);
+    ivec4 t_Params;
+    t_Params.x = (t_Int >> 12) & 0x0F;
+    t_Params.y = (t_Int >>  8) & 0x0F;
+    t_Params.z = (t_Int >>  4) & 0x0F;
+    t_Params.w = (t_Int >>  0) & 0x0F;
+    return t_Params;
+}
+
+vec2 CalcTextureSrc(in int t_TexSrcIdx) {
+    if (t_TexSrcIdx == 0)
+        return a_TexCoord0 * u_TexCoord0Scale;
+    else if (t_TexSrcIdx == 1)
+        return a_TexCoord1 * u_TexCoord1Scale;
+    else if (t_TexSrcIdx == 2)
+        return a_TexCoord2 * u_TexCoord2Scale;
+    else
+        // Should not be possible.
+        return vec2(0.0, 0.0);
+}
+
+vec2 CalcTextureCoordRaw(in int t_Idx) {
+    ivec4 t_Params = UnpackParams(u_MatMisc[0][t_Idx]);
+    int t_MappingMode = t_Params.x;
+
+    if (t_MappingMode == 0) {
+        // No mapping, should be illegal.
+        return vec2(0.0, 0.0);
+    } else if (t_MappingMode == 1) {
+        // UV mapping.
+        vec2 t_TexSrc = CalcTextureSrc(t_Params.y);
+        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0)).st;
+    } else if (t_MappingMode == 2) {
+        // Cube env mapping.
+        // Not implemented yet.
+        return vec2(0.0, 0.0);
+    } else if (t_MappingMode == 3) {
+        // Sphere env mapping.
+        // Convert view-space normal to proper place.
+        vec2 t_TexSrc = (v_Normal.xy * 0.5) + 0.5;
+        return Mul(u_TexMtx[t_Idx], vec4(t_TexSrc, 0.0, 1.0)).st;
+    } else if (t_MappingMode == 4) {
+        // Projection mapping.
+        // Not implemented yet.
+        return vec2(0.0, 0.0);
+    } else {
+        // Should not be possible.
+        return vec2(0.0, 0.0);
+    }
+}
+
+vec2 CalcTextureCoord(in int t_Idx) {
+    vec2 t_Coords = CalcTextureCoordRaw(t_Idx);
+    t_Coords.t = 1.0 - t_Coords.t;
+    return t_Coords;
 }
 
 void main() {
@@ -383,51 +419,31 @@ void main() {
         t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
     }
 
-    vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
+    vec4 t_LocalPosition = vec4(a_Position * u_PosScale, 1.0);
+    vec4 t_ModelPosition = Mul(_Mat4x4(t_BoneMatrix), t_LocalPosition);
+    vec4 t_ViewPosition = Mul(_Mat4x4(u_ViewMatrix), t_ModelPosition);
+    gl_Position = Mul(u_Projection, t_ViewPosition);
+
+    // TODO(jstpierre): Use a separate normal matrix to determine the view-space normal.
+    vec3 t_ModelNormal = Mul(_Mat4x4(t_BoneMatrix), vec4(a_Normal, 0.0)).xyz;
+    v_Normal = normalize(Mul(_Mat4x4(u_ViewMatrix), vec4(t_ModelNormal, 0.0)).xyz);
 
     if (u_UseVertexColor > 0.0)
         v_Color = a_Color;
     else
-        v_Color = vec4(1);
+        v_Color = vec4(1.0);
 
-    v_Normal = a_Normal;
     v_Depth = gl_Position.w;
-    v_FogColor = FOG_COLOR;
-
-    // NOTE(quade): 4.0 is a magic number
-    // haven't fully figured out these values yet
-    v_DrawDistance = DRAW_DISTANCE / 4.0;
-    v_FogStart = FOG_START / 4.0;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-#ifdef USE_LIGHTING
-    // NOTE(quade): 2.0 is a magic number
-    // ambient colour appears to have a higher intensity 
-    vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
-    t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
-    t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
-
-    v_Color.rgb *= t_Lighting;
-#endif
-
     v_Color.rgb *= VERTEX_COLOR_SCALE;
 
-    v_TexCoord0 = ${this.generateVertexCoord(0)};
-    v_TexCoord0.t = 1.0 - v_TexCoord0.t;
-
-    v_TexCoord1 = ${this.generateVertexCoord(1)};
-    v_TexCoord1.t = 1.0 - v_TexCoord1.t;
-
-    v_TexCoord2 = ${this.generateVertexCoord(2)};
-    v_TexCoord2.t = 1.0 - v_TexCoord2.t;
-
-    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    // Disable normals for now until I can solve them.
-    // v_LightIntensity = 1.0;
+    v_TexCoord0 = CalcTextureCoord(0);
+    v_TexCoord1 = CalcTextureCoord(1);
+    v_TexCoord2 = CalcTextureCoord(2);
 }
 `;
     }
@@ -439,7 +455,8 @@ export function fillSceneParamsDataOnTemplate(template: GfxRenderInst, camera: C
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
-const scratchTexMatrix = mat4.create();
+const scratchMatrix = mat4.create();
+const scratchVec4 = vec4.create();
 const scratchColor = colorNew(0, 0, 0, 1);
 class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
@@ -455,7 +472,6 @@ class MaterialInstance {
     public monochromeVertexColorsEnabled: boolean = false;
 
     private vertexNormalsEnabled: boolean = false;
-    private lightingEnabled: boolean = false;
     private uvEnabled: boolean = false;
     private vertexColorScale = 1;
     private program: DMPProgram | null = null;
@@ -516,11 +532,6 @@ class MaterialInstance {
         this.createProgram();
     }
 
-    public setLightingEnabled(v: boolean): void {
-        this.lightingEnabled = v;
-        this.createProgram();
-    }
-
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         this.environmentSettings.copy(environmentSettings);
         this.createProgram();
@@ -533,29 +544,11 @@ class MaterialInstance {
 
     private createProgram(): void {
         const program = new OoT3DProgram(this.material, this);
-        program.setTexCoordGen(0, 0, 0);
-        program.setTexCoordGen(1, 1, 0);
-        program.setTexCoordGen(2, 2, 0);
-
-        let additionalParameters = "";
-
-        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${this.environmentSettings.ambientLightColor});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${this.environmentSettings.primaryLightColor});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${this.environmentSettings.primaryLightDir});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${this.environmentSettings.secondaryLightColor});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${this.environmentSettings.secondaryLightDir});\n`;
-        additionalParameters += `vec3 FOG_COLOR = vec3(${this.environmentSettings.fogColor});\n`;
-        additionalParameters += `float FOG_START = ${program.generateFloat(this.environmentSettings.fogStart)};\n`;
-        additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(this.environmentSettings.drawDistance)};\n`;
-
-        program.generateVertexShader(additionalParameters);
 
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
         if (this.vertexNormalsEnabled)
             program.defines.set('USE_VERTEX_NORMAL', '1');
-        if (this.lightingEnabled)
-            program.defines.set('USE_LIGHTING', '1');
         if (this.uvEnabled)
             program.defines.set('USE_UV', '1');
 
@@ -563,6 +556,20 @@ class MaterialInstance {
 
         this.program = program;
         this.gfxProgram = null;
+    }
+
+    private calcTexMtx(dst: mat4, i: number, textureCoordinator: CMB.TextureCoordinator): void {
+        // Compute SRT matrix.
+        if (this.srtAnimators[i]) {
+            this.srtAnimators[i].calcTexMtx(dst);
+            mat4.mul(dst, dst, textureCoordinator.textureMatrix);
+        } else {
+            mat4.copy(dst, textureCoordinator.textureMatrix);
+        }
+    }
+
+    private packTexCoordParams(textureCoordinator: CMB.TextureCoordinator) {
+        return (textureCoordinator.mappingMethod << 12) | (textureCoordinator.sourceCoordinate << 8);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, template: GfxRenderInst, textureHolder: CtrTextureHolder): void {
@@ -596,22 +603,21 @@ class MaterialInstance {
                     const texture = this.cmb.textures[binding.textureIdx];
                     textureHolder.fillTextureMapping(this.textureMappings[i], texture.name);
                 }
-    
-                if (this.srtAnimators[i]) {
-                    this.srtAnimators[i].calcTexMtx(scratchTexMatrix);
-                    mat4.mul(scratchTexMatrix, scratchTexMatrix,this.material.textureMatrices[i]);
-                } else {
-                    mat4.copy(scratchTexMatrix, this.material.textureMatrices[i]);
-                }
+
+                scratchVec4[i] = this.packTexCoordParams(this.material.textureCoordinators[i]);
+                this.calcTexMtx(scratchMatrix, i, this.material.textureCoordinators[i]);
             } else {
-                mat4.identity(scratchTexMatrix);
+                scratchVec4[i] = 0.0;
+                mat4.identity(scratchMatrix);
             }
 
-            offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
+            offs += fillMatrix4x3(mapped, offs, scratchMatrix);
         }
 
         const depthOffset = reverseDepthForDepthOffset(this.material.polygonOffset);
-        offs += fillVec4(mapped, offs, depthOffset);
+        scratchVec4[3] = depthOffset;
+
+        offs += fillVec4v(mapped, offs, scratchVec4);
 
         template.setSamplerBindingsFromTextureMappings(this.textureMappings);
     }
@@ -819,24 +825,25 @@ class ShapeInstance {
             const renderInst = renderInstManager.pushRenderInst();
             renderInst.drawIndexes(prms.prm.count, prmsData.indexBufferOffset);
 
-            let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+4*2);
+            let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12+4*2);
             const prmParamsMapped = renderInst.mapUniformBufferF32(DMPProgram.ub_PrmParams);
 
             for (let i = 0; i < 16; i++) {
                 if (i < prms.boneTable.length) {
                     const boneId = prms.boneTable[i];
                     if (prms.skinningMode === CMB.SkinningMode.SMOOTH_SKINNING) {
-                        mat4.mul(scratchTexMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
-                        mat4.mul(scratchTexMatrix, viewMatrix, scratchTexMatrix);
+                        mat4.mul(scratchMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
                     } else {
-                        mat4.mul(scratchTexMatrix, viewMatrix, boneMatrices[boneId]);
+                        mat4.copy(scratchMatrix, boneMatrices[boneId]);
                     }
                 } else {
-                    mat4.identity(scratchTexMatrix);
+                    mat4.identity(scratchMatrix);
                 }
 
-                offs += fillMatrix4x3(prmParamsMapped, offs, scratchTexMatrix);
+                offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
             }
+
+            offs += fillMatrix4x3(prmParamsMapped, offs, viewMatrix);
 
             offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
             offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0);
@@ -940,11 +947,6 @@ export class CmbInstance {
     public setUVEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setUVEnabled(v);
-    }
-
-    public setLightingEnabled(v: boolean): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setLightingEnabled(v);
     }
 
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
@@ -1097,7 +1099,7 @@ export class RoomRenderer {
             this.objectRenderers[i].setMonochromeVertexColorsEnabled(v);
     }
 
-    public setVertexNormalsEnabled(v: boolean): void {
+    public setShowVertexNormals(v: boolean): void {
         if (this.opaqueMesh !== null)
             this.opaqueMesh.setVertexNormalsEnabled(v);
         if (this.transparentMesh !== null)
@@ -1106,16 +1108,7 @@ export class RoomRenderer {
             this.objectRenderers[i].setVertexNormalsEnabled(v);
     }
 
-    public setLightingEnabled(v: boolean): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setLightingEnabled(v);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setLightingEnabled(v);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setLightingEnabled(v);
-    }
-
-    public setUVEnabled(v: boolean): void {
+    public setShowTextureCoordinates(v: boolean): void {
         if (this.opaqueMesh !== null)
             this.opaqueMesh.setUVEnabled(v);
         if (this.transparentMesh !== null)
