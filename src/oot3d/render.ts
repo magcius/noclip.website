@@ -399,12 +399,14 @@ void main() {
     vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
 
     // Mask off bone dimension.
-    if (u_BoneDimension == 0.0)
-        t_BoneWeights.xyzw = vec4(0.0);
-    else if (u_BoneDimension == 1.0)
-        t_BoneWeights.yzw  = vec3(0.0);
-    else if (u_BoneDimension == 2.0)
-        t_BoneWeights.zw   = vec2(0.0);
+    if (u_BoneDimension < 4.0)
+        t_BoneWeights.w = 0.0;
+    if (u_BoneDimension < 3.0)
+        t_BoneWeights.z = 0.0;
+    if (u_BoneDimension < 2.0)
+        t_BoneWeights.y = 0.0;
+    if (u_BoneDimension < 1.0)
+        t_BoneWeights.x = 0.0;
 
     if ((t_BoneWeights.x + t_BoneWeights.y + t_BoneWeights.z + t_BoneWeights.w) > 0.0) {
         t_BoneMatrix = _Mat4x3(0.0);

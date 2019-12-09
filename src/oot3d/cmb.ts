@@ -289,26 +289,25 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             bindingOffs += 0x18;
         }
 
-        let matricesOffs = offs + 0x58;
+        let coordinatorsOffs = offs + 0x58;
         const textureCoordinators: TextureCoordinator[] = [];
         for (let j = 0; j < 3; j++) {
             // TODO(jstpierre): Unsure about how these are packed...
-            const matrixMode = view.getUint8(matricesOffs + 0x00);
-            const referenceCamera = view.getUint8(matricesOffs + 0x01);
-            const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(matricesOffs + 0x02);
-            const sourceCoordinate = view.getUint8(matricesOffs + 0x03);
+            const matrixMode = view.getUint8(coordinatorsOffs + 0x00);
+            const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
+            const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
+            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x03);
             if (sourceCoordinate !== 0 || referenceCamera !== 0 || matrixMode !== 0)
                 debugger;
-            const flags = view.getUint32(matricesOffs + 0x00, true);
-            const scaleS = view.getFloat32(matricesOffs + 0x04, true);
-            const scaleT = view.getFloat32(matricesOffs + 0x08, true);
-            const translationS = view.getFloat32(matricesOffs + 0x0C, true);
-            const translationT = view.getFloat32(matricesOffs + 0x10, true);
-            const rotation = view.getFloat32(matricesOffs + 0x14, true);
+            const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
+            const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
+            const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
+            const translationT = view.getFloat32(coordinatorsOffs + 0x10, true);
+            const rotation = view.getFloat32(coordinatorsOffs + 0x14, true);
             const textureMatrix = mat4.create();
             calcTexMtx(textureMatrix, scaleS, scaleT, rotation, translationS, translationT);
             textureCoordinators.push({ sourceCoordinate, mappingMethod, referenceCamera, matrixMode, textureMatrix });
-            matricesOffs += 0x18;
+            coordinatorsOffs += 0x18;
         }
 
         const unkColor0 = view.getUint32(offs + 0xB0, true);
