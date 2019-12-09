@@ -685,10 +685,9 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Daiku) {
             const gar = await fetchArchive(`zelda_daiku.gar.lzs`);
             const b = buildModel(gar, `model/disciple.cmb`);     
-            // b.bindCSAB(parseCSAB(gar, `anim/dk2_hansai.csab`));
+            b.bindCSAB(parseCSAB(gar, `anim/dk2_turuwait.csab`));
             b.setVertexColorScale(characterLightScale);
         }
-                // causes error
         else if (actor.actorId === ActorId.En_Karebaba) { // Assembled Deku Baba
             const gar = await fetchArchive('zelda_dekubaba.gar.lzs');
             const head = buildModel(gar, `model/dekubaba.cmb`, 0.01);
@@ -723,7 +722,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
         else if (actor.actorId === ActorId.En_Firefly) {
             const gar = await fetchArchive(`zelda_ff.gar.lzs`);
-            const b = buildModel(gar, `model/keith.cmb`, 0.03);
+            const b = buildModel(gar, `model/keith.cmb`,);
             b.bindCSAB(parseCSAB(gar, `anim/firefly_wait.csab`));
             b.setVertexColorScale(characterLightScale);
         }
@@ -771,7 +770,93 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(zar, `model/kanban_R_top_L_model.cmb`);
             buildModel(zar, `model/kanban_R_top_R_model.cmb`);
         }
-            // only the signpost is showing up, causes error
+        else if (actor.actorId === ActorId.Obj_Lightswitch) {
+            const gar = await fetchArchive(`zelda_lightswitch.gar.lzs`);
+            const b = buildModel(gar, `model/switch_8_model.cmb`,0.1);
+            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.csab`));
+            b.setVertexColorScale(characterLightScale);
+            //buildModel(gar, `model/switch_8_fire1_model.cmb`,0.1);
+            //buildModel(gar, `model/switch_8_fire2_model.cmb`,0.1);
+            //the sun parts around the sun switch don't show up?
+        }
+        else if (actor.actorId === ActorId.En_Ms) {
+            const gar = await fetchArchive(`zelda_ms.gar.lzs`);
+            const b = buildModel(gar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/ms_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Niw) {
+            const gar = await fetchArchive(`zelda_nw.gar.lzs`);
+            const b = buildModel(gar, `model/chicken.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/nw_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Peehat) {
+            const gar = await fetchArchive(`zelda_ph.gar.lzs`);
+            const b = buildModel(gar, `model/peehat.cmb`);
+            b.setVertexColorScale(characterLightScale);
+            const t = buildModel(gar, `model/peehat_tail.cmb`);
+            t.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Poh) {
+            const gar = await fetchArchive(`zelda_po.gar.lzs`);
+            const p = buildModel(gar, `model/poh.cmb`);
+            p.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
+            p.setVertexColorScale(characterLightScale);
+            const l = buildModel(gar, `model/kantera.cmb`);
+            l.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
+            l.setVertexColorScale(characterLightScale);
+            const s = buildModel(gar, `model/poh_soul_modelT.cmb`);
+            s.bindCMAB(parseCMAB(gar, `anim/poh_soul_modelT.cmab`));
+            s.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Rr) {
+            const gar = await fetchArchive(`zelda_rr.gar.lzs`);
+            const b = buildModel(gar, `model/likelike.cmb`,0.02);
+            b.bindCMAB(parseCMAB(gar, `misc/likelike.cmab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Sb) {
+            const gar = await fetchArchive(`zelda_sb.gar.lzs`);
+            const b = buildModel(gar, `model/shellblade.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/sb_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_St) {
+            const gar = await fetchArchive(`zelda_st.gar.lzs`);
+            const b = buildModel(gar, `model/staltula.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/st_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.Obj_Makekinsuta) {
+            const gar = await fetchArchive(`zelda_st.gar.lzs`);
+            const b = buildModel(gar, `model/staltula_gold.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/st_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        //else if (actor.actorId === ActorId.En_Si) {
+        ///    const gar = await fetchArchive(`zelda_st.gar.lzs`);
+        //    const b = buildModel(gar, `model/gi_sutaru_coin_model.cmb`);
+        //    b.bindCSAB(parseCSAB(gar, `anim/sb_matsu.csab`));
+        //    b.setVertexColorScale(characterLightScale);
+        //}   
+        //    Gold skulltula token, probably something spawned in and not normally part of a scene
+
+        else if (actor.actorId === ActorId.Obj_Syokudai) {
+            const gar = await fetchArchive(`zelda_syokudai.gar.lzs`);
+            buildModel(gar, `model/syokudai_model.cmb`);
+        } // Golden torch stand, are the other torch models used somewhere else?
+        else if (actor.actorId === ActorId.Obj_Tsubo) {
+            const gar = await fetchArchive(`zelda_tsubo.gar.lzs`);
+            buildModel(gar, `model/tubo2_model.cmb`,0.15);
+        }
+        else if (actor.actorId === ActorId.En_Tite) {
+            const gar = await fetchArchive(`zelda_tt.gar.lzs`);
+            const b = buildModel(gar, `model/tectite.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/tt_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+
 
 
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 2)} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
