@@ -731,7 +731,7 @@ const sceneDescs = [
     "Bubblegloop Swamp",
     new SceneDesc(`0D`, "Bubblegloop Swamp"),
     new SceneDesc(`10`, "Mr. Vile"),
-    new SceneDesc(`11`, "TipTup Chior"),
+    new SceneDesc(`11`, "Tip-Tup Choir"),
     new SceneDesc(`47`, "Mumbo's Skull"),
 
     "Freezeezy Peak",
