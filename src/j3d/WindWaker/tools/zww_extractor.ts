@@ -130,6 +130,9 @@ function main() {
     extractSymbol(datas, framework, 'd_grass.o', 'l_vtxAttrFmtList$4529');
     extractSymbol(datas, framework, 'd_grass.o', 'l_vtxDescList$4528');
 
+    // d_stage.o
+    extractSymbol(datas, framework, `d_stage.o`, `l_objectName`);
+
     const crg1 = {
         SymbolData: datas,
     };

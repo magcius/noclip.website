@@ -36,6 +36,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 import { AGrass, FlowerPacket, TreePacket, GrassPacket } from './Grass';
+import { getTextDecoder } from '../../util';
 
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
@@ -1171,6 +1172,7 @@ class SceneDesc {
             const mult = stageDzsHeaders.get('MULT');
             
             const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
+            const objectNameTable = this.createObjectNameTable(symbolMap);
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
@@ -1250,6 +1252,26 @@ class SceneDesc {
                 break;
             }
         }
+    }
+
+    private createObjectNameTable(symbolMap: SymbolMap) {
+        const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
+        const data = entry.Data;
+        const bytes = data.createTypedArray(Uint8Array);
+        const textDecoder = getTextDecoder('utf8') as TextDecoder;
+
+        // The object table consists of null-terminated ASCII strings of length 12.
+        // @NOTE: None are longer than 7 characters
+        const kNameLength = 12;
+        const objectCount = data.byteLength / kNameLength;
+        const objectNames = [];
+        for (let i = 0; i < objectCount; i++) {
+            const offset = i * kNameLength;
+            const end = bytes.indexOf(0, offset); 
+            objectNames[i] = textDecoder.decode(bytes.subarray(offset, end));
+        }
+
+        return objectNames;
     }
 
     private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
