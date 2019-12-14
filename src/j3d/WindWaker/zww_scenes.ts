@@ -2527,24 +2527,9 @@ class SceneDesc {
 
             switch (type) {
                 case FoliageType.Grass:
-
                 break;
 
                 case FoliageType.Tree:
-                    for (let j = 0; j < count; j++) {
-                        const objectRenderer = buildWhiteFlowerModel(symbolMap);
-    
-                        const x = offsets[j][0];
-                        const y = offsets[j][1];
-                        const z = offsets[j][2];
-                        const offset = vec3.set(scratchVec3a, x, y, z);
-    
-                        setModelMatrix(objectRenderer.modelMatrix);
-                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
-                        setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
-                        roomRenderer.objectRenderers.push(objectRenderer);
-                        objectRenderer.layer = layer;
-                    }
                 break;
 
                 case FoliageType.WhiteFlower:
