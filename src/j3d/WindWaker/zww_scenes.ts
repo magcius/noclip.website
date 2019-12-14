@@ -2520,6 +2520,9 @@ class SceneDesc {
             const offsets = kGrassSpawnOffsets[pattern.group];
             const count = pattern.count;
 
+            setModelMatrix(scratchMatrix);
+            const patchPos = mat4.getTranslation(vec3.create(), scratchMatrix);
+
             switch (type) {
                 case FoliageType.Grass:
 
@@ -2551,9 +2554,10 @@ class SceneDesc {
                         const z = offsets[j][2];
                         const offset = vec3.set(scratchVec3a, x, y, z);
                         
-                        setModelMatrix(objectRenderer.modelMatrix);
-                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
-                        // setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+                        // Flowers spawn patterns do not observe actor rotation
+                        mat4.fromTranslation(objectRenderer.modelMatrix, vec3.add(scratchVec3a, patchPos, offset));
+                        setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+
                         roomRenderer.objectRenderers.push(objectRenderer);
                         objectRenderer.layer = layer;
                     }
@@ -2568,9 +2572,10 @@ class SceneDesc {
                         const z = offsets[j][2];
                         const offset = vec3.set(scratchVec3a, x, y, z);
     
-                        setModelMatrix(objectRenderer.modelMatrix);
-                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
+                        // Flowers spawn patterns do not observe actor rotation
+                        mat4.fromTranslation(objectRenderer.modelMatrix, vec3.add(scratchVec3a, patchPos, offset));
                         setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+
                         roomRenderer.objectRenderers.push(objectRenderer);
                         objectRenderer.layer = layer;
                     }
