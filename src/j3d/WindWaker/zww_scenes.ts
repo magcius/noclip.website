@@ -1258,6 +1258,7 @@ class SceneDesc {
         const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
         const data = entry.Data;
         const bytes = data.createTypedArray(Uint8Array);
+        const dataView = data.createDataView();
         const textDecoder = getTextDecoder('utf8') as TextDecoder;
 
         // The object table consists of null-terminated ASCII strings of length 12.
@@ -1265,10 +1266,16 @@ class SceneDesc {
         const kNameLength = 12;
         const objectCount = data.byteLength / kNameLength;
         const objectNames = [];
+        const objectTable = {} as { [name: string]: { type: number, subtype: number, unknown1: number } };
         for (let i = 0; i < objectCount; i++) {
             const offset = i * kNameLength;
             const end = bytes.indexOf(0, offset); 
-            objectNames[i] = textDecoder.decode(bytes.subarray(offset, end));
+            const name = textDecoder.decode(bytes.subarray(offset, end));
+            const type = dataView.getUint16(offset + 8, false);
+            const subtype = bytes[offset + 10];
+            const unknown1 = bytes[offset + 11];
+            objectNames[i] = name;
+            objectTable[name] = { type, subtype, unknown1 };
         }
 
         return objectNames;
