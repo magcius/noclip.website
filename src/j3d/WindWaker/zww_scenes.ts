@@ -37,6 +37,101 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 
+const kGrassSpawnPatterns = [
+    { group: 0, count: 1},
+    { group: 0, count: 7},
+    { group: 1, count: 15},
+    { group: 2, count: 3},
+    { group: 3, count: 7},
+    { group: 4, count: 11},
+    { group: 5, count: 7},
+    { group: 6, count: 5},
+]
+
+const kGrassSpawnOffsets = [
+    [
+        [0,0,0],
+        [3,0,-0x32],
+        [-2,0,0x32],
+        [0x32,0,0x1b],
+        [0x34,0,-0x19],
+        [-0x32,0,0x16],
+        [-0x32,0,-0x1d],
+    ],
+    [
+        [-0x12,0,0x4c],
+        [-0xf,0,0x1a],
+        [0x85,0,0],
+        [0x50,0,0x17],
+        [0x56,0,-0x53],
+        [0x21,0,-0x38],
+        [0x53,0,-0x1b],
+        [-0x78,0,-0x1a],
+        [-0x12,0,-0x4a],
+        [-0x14,0,-0x15],
+        [-0x49,0,1],
+        [-0x43,0,-0x66],    
+        [-0x15,0,0x7e],
+        [-0x78,0,-0x4e],
+        [-0x46,0,-0x31],
+        [0x20,0,0x67],
+        [0x22,0,0x33],
+        [-0x48,0,0x62],
+        [-0x44,0,0x2f],
+        [0x21,0,-5],
+        [0x87,0,-0x35],
+    ],
+    [
+        [-0x4b,0,-0x32],
+        [0x4b,0,-0x19],
+        [0xe,0,0x6a],
+    ],
+    [
+        [-0x18,0,-0x1c],
+        [0x1b,0,-0x1c],
+        [-0x15,0,0x21],
+        [-0x12,0,-0x22],
+        [0x2c,0,-4],
+        [0x29,0,10],
+        [0x18,0,0x27],
+    ],
+    [
+        [-0x37,0,-0x16],
+        [-0x1c,0,-0x32],
+        [-0x4d,0,0xb],
+        [0x37,0,-0x2c],
+        [0x53,0,-0x47],
+        [0xb,0,-0x30],
+        [0x61,0,-0x22],
+        [-0x4a,0,-0x39],
+        [0x1f,0,0x3a],
+        [0x3b,0,0x1e],
+        [0xd,0,0x17],
+        [-0xc,0,0x36],
+        [0x37,0,0x61],
+        [10,0,0x5c],
+        [0x21,0,-10],
+        [-99,0,-0x1b],
+        [0x28,0,-0x57],
+    ],
+    [
+        [0,0,3],
+        [-0x1a,0,-0x1d],
+        [7,0,-0x19],
+        [0x1f,0,-5],
+        [-7,0,0x28],
+        [-0x23,0,0xf],
+        [0x17,0,0x20],
+    ],
+    [
+        [-0x28,0,0],
+        [0,0,0],
+        [0x50,0,0],
+        [-0x50,0,0],
+        [0x28,0,0],
+    ]
+]
+
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
     return v < 0.5 ? a : 1.0 - a;
@@ -1253,7 +1348,7 @@ class SceneDesc {
                 dstMatrix[13] = scratchVec3b[1];
         }
 
-        function buildPinkFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
+        function buildPinkFlowerModel(symbolMap: SymbolMap): FlowerObjectRenderer {
             let flowerData: FlowerData;
             // This is a thing that the game *actually* checks, believe it or not, in dFlower_packet_c::setData.
             if (stageName === 'sea' && roomIdx === 33) {
@@ -1278,7 +1373,7 @@ class SceneDesc {
             return objectRenderer;
         }
 
-        function buildWhiteFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
+        function buildWhiteFlowerModel(symbolMap: SymbolMap): FlowerObjectRenderer {
             let flowerData: FlowerData = modelCache.extraCache.get('Ohana') as FlowerData;
             if (flowerData === undefined) {
                 flowerData = new WhiteFlowerData(device, symbolMap, cache);
@@ -1286,10 +1381,6 @@ class SceneDesc {
             }
 
             const objectRenderer = new FlowerObjectRenderer(flowerData);
-            setModelMatrix(objectRenderer.modelMatrix);
-            setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
-            roomRenderer.objectRenderers.push(objectRenderer);
-            objectRenderer.layer = layer;
             return objectRenderer;
         }
 
@@ -2408,7 +2499,7 @@ class SceneDesc {
         // https://github.com/LagoLunatic/WW-Hacking-Docs/blob/6e1ecdadbdf5124e7f6ff037106deb29a5f7238b/Entity%20DZx%20Formats.txt#L695
         else if (
             name === 'kusax1' || name === 'kusax7'  || name === 'kusax21' ||
-            name === 'flower' || name === 'flwr7'   || name === 'flr17' ||
+            name === 'flower' || name === 'flwr7'   || name === 'flwr17' ||
             name === 'pflower'|| name === 'pflwrx7' || 
             name === 'swood'  || name === 'swood3'  || name === 'swood5'
         ) {
@@ -2419,9 +2510,15 @@ class SceneDesc {
                 PinkFlower
             };
 
+            const symbolMap = await fetchExtraSymbols();
+
             const spawnPatternId = (parameters & 0x00F) >> 0;
             const type: FoliageType = (parameters & 0x030) >> 4;
             const itemIdx = (parameters & 0xFC0) >> 6; // Determines which item spawns when this is cut down
+
+            const pattern = kGrassSpawnPatterns[spawnPatternId];
+            const offsets = kGrassSpawnOffsets[pattern.group];
+            const count = pattern.count;
 
             switch (type) {
                 case FoliageType.Grass:
@@ -2429,15 +2526,54 @@ class SceneDesc {
                 break;
 
                 case FoliageType.Tree:
-
+                    for (let j = 0; j < count; j++) {
+                        const objectRenderer = buildWhiteFlowerModel(symbolMap);
+    
+                        const x = offsets[j][0];
+                        const y = offsets[j][1];
+                        const z = offsets[j][2];
+                        const offset = vec3.set(scratchVec3a, x, y, z);
+    
+                        setModelMatrix(objectRenderer.modelMatrix);
+                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
+                        setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+                        roomRenderer.objectRenderers.push(objectRenderer);
+                        objectRenderer.layer = layer;
+                    }
                 break;
 
                 case FoliageType.WhiteFlower:
-                    fetchExtraSymbols().then((symbolMap) => buildWhiteFlowerModel(symbolMap));
+                    for (let j = 0; j < count; j++) {
+                        const objectRenderer = buildWhiteFlowerModel(symbolMap);
+    
+                        const x = offsets[j][0];
+                        const y = offsets[j][1];
+                        const z = offsets[j][2];
+                        const offset = vec3.set(scratchVec3a, x, y, z);
+                        
+                        setModelMatrix(objectRenderer.modelMatrix);
+                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
+                        // setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+                        roomRenderer.objectRenderers.push(objectRenderer);
+                        objectRenderer.layer = layer;
+                    }
                 break;
 
                 case FoliageType.PinkFlower:
-                    fetchExtraSymbols().then((symbolMap) => buildPinkFlowerModel(symbolMap));
+                    for (let j = 0; j < count; j++) {
+                        const objectRenderer = buildPinkFlowerModel(symbolMap);
+    
+                        const x = offsets[j][0];
+                        const y = offsets[j][1];
+                        const z = offsets[j][2];
+                        const offset = vec3.set(scratchVec3a, x, y, z);
+    
+                        setModelMatrix(objectRenderer.modelMatrix);
+                        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
+                        setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
+                        roomRenderer.objectRenderers.push(objectRenderer);
+                        objectRenderer.layer = layer;
+                    }
                 break;
             }
             return;
