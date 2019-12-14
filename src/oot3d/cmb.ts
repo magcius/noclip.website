@@ -297,8 +297,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
             const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
             const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x03);
-            if (sourceCoordinate !== 0 || referenceCamera !== 0 || matrixMode !== 0)
-                debugger;
             const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
             const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
             const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
@@ -326,7 +324,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const bufferColorA = view.getFloat32(offs + 0xD8, true);
 
         const bumpTextureIndex = view.getUint16(offs + 0xDC, true);
-        const lightEnvBumpUsage = view.getUint16(offs + 0xDE, true);
+        const bumpMode = view.getUint16(offs + 0xDE, true);
 
         // Fragment lighting table.
         const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
