@@ -37,6 +37,8 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 
+// Here are the original offset positions for all flowers/grass/trees directly from the top of the daGrass_create() function in d_a_grass.rel
+// They are split into 8 different spawn patterns, which is selected by the lowest byte of the grass actor params.
 const kGrassSpawnPatterns = [
     { group: 0, count: 1},
     { group: 0, count: 7},
