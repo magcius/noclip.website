@@ -2533,26 +2533,11 @@ class SceneDesc {
                 break;
 
                 case FoliageType.WhiteFlower:
-                    for (let j = 0; j < count; j++) {
-                        const objectRenderer = buildWhiteFlowerModel(symbolMap);
-    
-                        const x = offsets[j][0];
-                        const y = offsets[j][1];
-                        const z = offsets[j][2];
-                        const offset = vec3.set(scratchVec3a, x, y, z);
-                        
-                        // Flowers spawn patterns do not observe actor rotation
-                        mat4.fromTranslation(objectRenderer.modelMatrix, vec3.add(scratchVec3a, patchPos, offset));
-                        setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
-
-                        roomRenderer.objectRenderers.push(objectRenderer);
-                        objectRenderer.layer = layer;
-                    }
-                break;
-
                 case FoliageType.PinkFlower:
                     for (let j = 0; j < count; j++) {
-                        const objectRenderer = buildPinkFlowerModel(symbolMap);
+                        const objectRenderer = (type == FoliageType.WhiteFlower) 
+                            ? buildWhiteFlowerModel(symbolMap) 
+                            : buildPinkFlowerModel(symbolMap);
     
                         const x = offsets[j][0];
                         const y = offsets[j][1];
