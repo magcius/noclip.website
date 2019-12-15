@@ -20,6 +20,7 @@ import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 import { Emitter, EmitterManager } from './particles';
+import { RailRider } from '../SuperMarioGalaxy/RailRider';
 
 const pathBase = `BanjoKazooie`;
 
@@ -28,6 +29,7 @@ class BKRenderer implements Viewer.SceneGfx {
     public flipbookRenderers: FlipbookRenderer[] = [];
     public geoDatas: RenderData[] = [];
     public emitterManager: EmitterManager;
+    public rails: Actors.Rail[] = [];
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
@@ -419,6 +421,10 @@ class ObjectData {
         return allObjects;
     }
 
+    public spawnDebugSphere(device: GfxDevice, emitters: Emitter[], pos: vec3): GeometryRenderer {
+        return this.spawnObject(device, emitters, 0x288, pos)[0]! as GeometryRenderer;
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.geoData.length; i++) {
             const data = this.geoData[i];
@@ -505,7 +511,9 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(view.getInt16(0) === 0x0101);
         let offs = 2;
 
+        const railNodes: (Actors.RailNode | undefined)[] = [];
         const movementIndicators: MovementIndicator[] = [];
+
         const bounds: number[] = [];
         for (let i = 0; i < 6; i++) {
             bounds.push(view.getInt32(offs));
@@ -521,28 +529,37 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (groupSize > 0)
                         assert(view.getInt8(offs++) === 0x0B);
                     for (let j = 0; j < groupSize; j++) {
-                        const x = view.getInt16(offs + 0x00);
-                        const y = view.getInt16(offs + 0x02);
-                        const z = view.getInt16(offs + 0x04);
+                        const pos = vec3.fromValues(
+                            view.getInt16(offs + 0x00),
+                            view.getInt16(offs + 0x02),
+                            view.getInt16(offs + 0x04),
+                        );
                         const selectorValue = (view.getUint16(offs + 0x06) >>> 7) & 0x1ff;
                         const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
-                        // skipping a couple of 0xc-bit fields
+
+                        const railIndex = view.getUint16(offs + 0x10) >>> 4;
+                        if (railIndex > 0) {
+                            const next = view.getUint16(offs + 0x11) & 0xfff;
+                            const isKeyframe = !!(view.getUint8(offs + 0x07) & 1);
+                            const time = isKeyframe ? view.getFloat32(offs + 0x00) : 0;
+                            railNodes[railIndex] = { pos, next, isKeyframe, time };
+                        }
+
                         offs += 0x14;
 
                         if (category === 0x06) {
                             if (id === 0x13)
-                                movementIndicators.push({ pos: vec3.fromValues(x, y, z), movementType: Actors.SinkingBobber });
+                                movementIndicators.push({ pos, movementType: Actors.SinkingBobber });
                             else if (id === 0x37)
-                                movementIndicators.push({ pos: vec3.fromValues(x, y, z), movementType: Actors.WaterBobber });
+                                movementIndicators.push({ pos, movementType: Actors.WaterBobber });
                             else if (id === 0x38)
                                 continue; // tumblar movement, also moves the jiggy inside based on camera position
                             else if (id >= 0xf9 && id <= 0x100)
                                 continue; // just for handling the timed ring challenge inside Clanker
                             else {
-                                const objRenderers = objectSetupTable.spawnObject(device, sceneRenderer.emitterManager.emitters,
-                                    id, vec3.fromValues(x, y, z), yaw, selectorValue);
+                                const objRenderers = objectSetupTable.spawnObject(device, sceneRenderer.emitterManager.emitters, id, pos, yaw, selectorValue);
                                 for (let obj of objRenderers) {
                                     if (obj instanceof GeometryRenderer) {
                                         sceneRenderer.geoRenderers.push(obj);
@@ -561,9 +578,11 @@ class SceneDesc implements Viewer.SceneDesc {
 
                         for (let i = 0; i < structCount; i++) {
                             const fileIDBase = view.getUint16(offs + 0x00) >>> 4;
-                            const x = view.getInt16(offs + 0x04);
-                            const y = view.getInt16(offs + 0x06);
-                            const z = view.getInt16(offs + 0x08);
+                            const pos = vec3.fromValues(
+                                view.getInt16(offs + 0x04),
+                                view.getInt16(offs + 0x06),
+                                view.getInt16(offs + 0x08),
+                            );
 
                             const objectType = view.getUint8(offs + 0x0B) & 0x03;
                             if (objectType === 0) {
@@ -577,7 +596,7 @@ class SceneDesc implements Viewer.SceneDesc {
                                 const phase = (view.getUint16(offs + 0x0A) >>> 6) & 0x1f;
 
                                 const flipbook = objectSetupTable.spawnFlipbookByFileID(device, sceneRenderer.emitterManager.emitters,
-                                    fileIDBase + 0x572, vec3.fromValues(x, y, z), phase, !!initialMirror, scale);
+                                    fileIDBase + 0x572, pos, phase, !!initialMirror, scale);
                                 if (flipbook) {
                                     flipbook.primColor = vec4.fromValues(r, g, b, 1);
                                     sceneRenderer.flipbookRenderers.push(flipbook);
@@ -587,7 +606,7 @@ class SceneDesc implements Viewer.SceneDesc {
                                 const roll = view.getUint8(offs + 0x03) * 2;
                                 const scale = view.getUint8(offs + 0x0A) / 100.0;
                                 const objRenderer = objectSetupTable.spawnObjectByFileID(device, sceneRenderer.emitterManager.emitters,
-                                    fileIDBase + 0x2d1, vec3.fromValues(x, y, z), yaw, roll, scale);
+                                    fileIDBase + 0x2d1, pos, yaw, roll, scale);
                                 if (objRenderer !== null) {
                                     if (objRenderer instanceof GeometryRenderer)
                                         sceneRenderer.geoRenderers.push(objRenderer);
@@ -612,6 +631,13 @@ class SceneDesc implements Viewer.SceneDesc {
                 nearestObject.movementController = new ind.movementType(nearestObject);
             } else {
                 console.warn("unpaired movement indicator", ind.pos);
+            }
+        }
+
+        sceneRenderer.rails = Actors.buildRails(railNodes);
+        for (let obj of sceneRenderer.geoRenderers) {
+            if (obj instanceof Actors.RailRider) {
+                obj.setRail(sceneRenderer.rails);
             }
         }
     }
