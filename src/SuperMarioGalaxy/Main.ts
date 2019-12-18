@@ -740,6 +740,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
+        this.cache.destroy(device);
         for (const resourceHolder of this.archiveResourceHolder.values())
             resourceHolder.destroy(device);
     }
