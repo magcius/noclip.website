@@ -1,10 +1,12 @@
 
 import { assert } from "../../util";
-import { GfxVendorInfo, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice } from "../platform/GfxPlatform";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
-export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: Map<string, string> | null = null): string {
+type DefineMap = Map<string, string>;
+
+export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 'frag', source: string, defines: DefineMap | null = null): string {
     // Garbage WebGL2 shader compiler until I get something better down the line...
     const lines = source.split('\n').map((n) => {
         // Remove comments.
@@ -104,8 +106,22 @@ ${rest}
 `.trim();
 }
 
-export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: Map<string, string> | null = null): GfxProgramDescriptorSimple {
+export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimple {
     const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', vert, defines);
     const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', frag, defines);
     return { preprocessedVert, preprocessedFrag };
+}
+
+export interface GfxProgramObjBag {
+    both?: string;
+    vert: string;
+    frag: string;
+    defines?: DefineMap;
+}
+
+export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimple {
+    const defines = obj.defines !== undefined ? obj.defines : null;
+    const vert = obj.both !== undefined ? obj.both + obj.vert : obj.vert;
+    const frag = obj.both !== undefined ? obj.both + obj.frag : obj.frag;
+    return preprocessProgram_GLSL(device.queryVendorInfo(), vert, frag, defines);
 }

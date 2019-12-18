@@ -595,7 +595,7 @@ void main() {
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
     gl_Position.zw = vec2(1, 1);
 }
-    `;
+`;
         const fullscreenFS: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
@@ -970,12 +970,16 @@ void main() {
         return program;
     }
 
-    public createProgram(descriptor: GfxProgramDescriptor): GfxProgram {
-        descriptor.ensurePreprocessed(this.queryVendorInfo());
+    public createProgramSimple(descriptor: GfxProgramDescriptor): GfxProgramP_GL {
         const program = this._createProgram(descriptor);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(program);
         return program;
+    }
+
+    public createProgram(descriptor: GfxProgramDescriptor): GfxProgram {
+        descriptor.ensurePreprocessed(this.queryVendorInfo());
+        return this.createProgramSimple(descriptor);
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {

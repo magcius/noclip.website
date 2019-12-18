@@ -1,7 +1,7 @@
 
 import { DeviceProgram } from "../Program";
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -17,8 +17,9 @@ import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlan
 import { parseVector3, parseQuaternion } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 
-class FezProgram extends DeviceProgram {
+class FezProgram {
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
@@ -34,7 +35,7 @@ layout(row_major, std140) uniform ub_ShapeParams {
 };
 `;
 
-    public vert = `
+    public vert: string = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec2 a_TexCoord;
 
@@ -46,7 +47,7 @@ void main() {
 }
 `;
 
-    public frag = `
+    public frag: string = `
 in vec2 v_TexCoord;
 
 uniform sampler2D u_Texture[1]; 
@@ -67,7 +68,7 @@ const modelViewScratch = mat4.create();
 const gc_orientations = [180, 270, 0, 90];
 
 export class FezRenderer implements Viewer.SceneGfx {
-    private program: FezProgram;
+    private program: GfxProgramDescriptorSimple;
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
     private modelMatrix: mat4 = mat4.create();
@@ -78,7 +79,7 @@ export class FezRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, levelDocument: Document, public trilesetData: TrilesetData, public artObjectDatas: ArtObjectData[], public backgroundPlaneDatas: BackgroundPlaneData[]) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.program = new FezProgram();
+        this.program = preprocessProgramObj_GLSL(device, new FezProgram());
 
         mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
 
@@ -143,7 +144,7 @@ export class FezRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgramSimple(device, this.program);
         template.setGfxProgram(gfxProgram);
 
         let offs = template.allocateUniformBuffer(FezProgram.ub_SceneParams, 16);
