@@ -189,7 +189,8 @@ export class FlowerPacket {
     }
 
     calc() {
-
+        // @TODO: Idle animation updates
+        // @TODO: Hit checks
     }
 
     update() {
@@ -214,20 +215,7 @@ export class FlowerPacket {
         for (let i = 0; i < kMaxFlowerDatas; i++) {
             const data = this.datas[i];
             if (!data) continue;
-
-            // if (!this.visible)
-            // return;
-
-            // Do some basic distance culling.
-            // mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
-            // mat4.getTranslation(scratchVec3b, this.modelMatrix);
-
-            // // If we're too far, just kill us entirely.
-            // const distSq = vec3.squaredDistance(scratchVec3a, scratchVec3b);
-            // const maxDist = 5000;
-            // const maxDistSq = maxDist*maxDist;
-            // if (distSq >= maxDistSq)
-            //     return;
+            if (data.flags & FlowerFlags.isFrustumCulled) continue; 
 
             // @TODO: Kyanko colors
             materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
