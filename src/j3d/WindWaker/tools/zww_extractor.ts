@@ -65,11 +65,13 @@ function main() {
     // d_flower.o
     extractSymbol(datas, framework, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
     extractSymbol(datas, framework, `d_flower.o`, `l_pos3`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_color3`);
     extractSymbol(datas, framework, `d_flower.o`, `l_texCoord3`);
     extractSymbol(datas, framework, `d_flower.o`, `l_QbsafDL`);
     extractSymbol(datas, framework, `d_flower.o`, `l_QbsfwDL`);
     extractSymbol(datas, framework, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
     extractSymbol(datas, framework, `d_flower.o`, `l_pos`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_color`);
     extractSymbol(datas, framework, `d_flower.o`, `l_texCoord`);
     extractSymbol(datas, framework, `d_flower.o`, `l_OhanaDL`);
     extractSymbol(datas, framework, `d_flower.o`, `l_Ohana_gutDL`);
