@@ -55,7 +55,6 @@ interface GfxSamplerP_GL extends GfxSampler {
 interface GfxProgramP_GL extends GfxProgram {
     glProgram: WebGLProgram | null;
     compileDirty: boolean;
-    bindDirty: boolean;
     descriptor: GfxProgramDescriptorSimple;
 }
 
@@ -570,10 +569,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GfxDevice
     private _currentActiveTexture: GLenum | null = null;
     private _currentBoundVAO: WebGLVertexArrayObject | null = null;
-    private _currentProgram: WebGLProgram | null = null;
+    private _currentProgram: GfxProgramP_GL | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
-    private _dummyCompilerVAO: WebGLVertexArrayObject;
     // TODO(jstpierre): Investigate removing in favor of high-level code?
     private _programCache = new Map<string, WebGLProgram>();
 
@@ -629,7 +627,6 @@ void main() {
 
         const fullscreenProgramDescriptor = preprocessProgram_GLSL(this.queryVendorInfo(), fullscreenVS, fullscreenFS);
         this._fullscreenCopyProgram = this._createProgram(fullscreenProgramDescriptor);
-        this._tryCompileProgram(this._fullscreenCopyProgram);
 
         this._resolveReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._resolveDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -638,8 +635,6 @@ void main() {
         this._blackTexture = this.ensureResourceExists(gl.createTexture());
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-
-        this._dummyCompilerVAO = gl.createVertexArray()!;
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
 
@@ -848,10 +843,9 @@ void main() {
     }
 
     private _useProgram(program: GfxProgramP_GL): void {
-        if (this._currentProgram !== program.glProgram) {
+        if (this._currentProgram !== program) {
             this.gl.useProgram(program.glProgram);
-            this._tryBindProgram(program);
-            this._currentProgram = program.glProgram;
+            this._currentProgram = program;
         }
     }
 
@@ -988,8 +982,10 @@ void main() {
 
     private _createProgram(descriptor: GfxProgramDescriptorSimple): GfxProgramP_GL {
         const glProgram: WebGLProgram | null = null;
-        const bindDirty = true, compileDirty = true;
-        return { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, bindDirty, compileDirty, glProgram };
+        const compileDirty = true;
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, glProgram };
+        this._tryCompileProgram(program);
+        return program;
     }
 
     public createProgram(descriptor: GfxProgramDescriptor): GfxProgram {
@@ -1068,52 +1064,6 @@ void main() {
         return inputState;
     }
 
-    private _tryCompileRenderPipeline(pipeline: GfxRenderPipelineP_GL): void {
-        // Start compiling the pipeline. ANGLE compiles a separate underlying program for each InputLayout
-        // it is used in. For that reason, when we call compileShader, we set up a dummy VAO with the right
-        // formats and attributes so that it does not need to dynamically recompile shaders at useProgram time.
-
-        const inputLayout = pipeline.inputLayout;
-        const program = pipeline.program;
-
-        // TODO(jstpierre): How to prevent stalls when the program is already compiled?
-        if (!program.compileDirty)
-            return;
-
-        const gl = this.gl;
-        if (inputLayout !== null) {
-            gl.bindVertexArray(this._dummyCompilerVAO);
-
-            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-                const attr = inputLayout.vertexAttributeDescriptors[i];
-                const { size, type, normalized } = translateVertexFormat(attr.format);
-                const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex];
-                if (inputLayoutBuffer === null)
-                    continue;
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-                gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
-
-                if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
-                    gl.vertexAttribDivisor(attr.location, 1);
-                }
-    
-                gl.enableVertexAttribArray(attr.location);
-            }
-        }
-
-        this._tryCompileProgram(program);
-
-        if (inputLayout !== null) {
-            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-                const attr = inputLayout.vertexAttributeDescriptors[i];
-                gl.disableVertexAttribArray(attr.location);
-            }
-            gl.bindVertexArray(this._currentBoundVAO);
-        }
-    }
-
     public createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
         const bindingLayouts = createBindingLayouts(descriptor.bindingLayouts);
         const drawMode = translatePrimitiveTopology(descriptor.topology);
@@ -1123,7 +1073,6 @@ void main() {
         const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(pipeline);
-        this._tryCompileRenderPipeline(pipeline);
         return pipeline;
     }
 
@@ -1263,31 +1212,31 @@ void main() {
 
     public queryPipelineReady(o: GfxRenderPipeline): boolean {
         const pipeline = o as GfxRenderPipelineP_GL;
-        if (pipeline.ready) {
+        if (pipeline.ready)
             return true;
-        } else {
-            if (pipeline.program.glProgram === null)
-                return false;
 
-            if (this._KHR_parallel_shader_compile !== null) {
-                const gl = this.gl;
-                const prog = pipeline.program.glProgram;
-                pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+        if (pipeline.program.glProgram === null)
+            return false;
 
-                if (pipeline.ready) {
-                    if (IS_DEVELOPMENT && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-                        const descriptor = pipeline.program.descriptor as GfxProgramDescriptor;
-                        descriptor.oncompileerror(gl.getProgramInfoLog(prog));
-                        gl.deleteProgram(prog);
-                        pipeline.program.glProgram = null;
-                    }
-                }
-            } else {
-                pipeline.ready = true;
+        if (this._KHR_parallel_shader_compile !== null) {
+            // With asynchronous pipeline compilation, we need to ask whether the pipeline is ready...
+            const gl = this.gl;
+            const prog = pipeline.program.glProgram;
+            pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+
+            // Check for errors.
+            if (pipeline.ready && SHADER_DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                const descriptor = pipeline.program.descriptor as GfxProgramDescriptor;
+                descriptor.oncompileerror(gl.getProgramInfoLog(prog));
+                gl.deleteProgram(prog);
+                pipeline.program.glProgram = null;
             }
-
-            return pipeline.ready;
+        } else {
+            // With synchronous pipeline compilation, pipelines are ready as soon as they're created...
+            pipeline.ready = true;
         }
+
+        return pipeline.ready;
     }
 
     public queryPlatformAvailable(): boolean {
@@ -1488,29 +1437,12 @@ void main() {
         return prog;
     }
 
-    private _tryCompileProgram(program: GfxProgramP_GL): void {
-        assert(program.compileDirty);
-
-        const descriptor = program.descriptor;
-        const newProg = this._tryCompileProgramInCache(descriptor.preprocessedVert, descriptor.preprocessedFrag);
-
-        if (newProg !== null && newProg !== program.glProgram) {
-            program.glProgram = newProg;
-            program.bindDirty = true;
-        }
-
-        program.compileDirty = false;
-    }
-
     private _tryBindProgram(program: GfxProgramP_GL): void {
-        if (!program.bindDirty)
-            return;
-
-        const gl = this.gl;
-        const prog = program.glProgram!;
+        const gl = this.gl, prog = program.glProgram!;
         const deviceProgram = program.descriptor;
 
-        // TODO(jstpierre): Remove this reflection, or at least move it to the compilation stage.
+        // The program needs to be bound for samplers to be bound correctly, unfortunately...
+        this._useProgram(program);
 
         const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
         for (let i = 0; i < uniformBlocks.length; i++) {
@@ -1528,8 +1460,20 @@ void main() {
             gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
             samplerIndex += arraySize;
         }
+    }
 
-        program.bindDirty = false;
+    private _tryCompileProgram(program: GfxProgramP_GL): void {
+        assert(program.compileDirty);
+
+        const descriptor = program.descriptor;
+        const newProg = this._tryCompileProgramInCache(descriptor.preprocessedVert, descriptor.preprocessedFrag);
+
+        if (newProg !== null || newProg !== program.glProgram) {
+            program.glProgram = newProg;
+            this._tryBindProgram(program);
+        }
+
+        program.compileDirty = false;
     }
 
     private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
