@@ -144,6 +144,14 @@ export interface GfxBindingsDescriptor {
     samplerBindings: GfxSamplerBinding[];
 }
 
+export interface GfxShaderModuleDescriptor {
+    ensurePreprocessed(device: GfxDevice): void;
+    vert: string;
+    frag: string;
+    preprocessedVert: string;
+    preprocessedFrag: string;
+}
+
 export interface GfxInputLayoutDescriptor {
     vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
@@ -226,15 +234,6 @@ export interface GfxDeviceLimits {
     uniformBufferMaxPageWordSize: number;
 }
 
-export interface GfxProgramReflection {
-    name: string;
-    uniqueKey: number;
-}
-
-export interface GfxRenderPipelineReflection {
-    uniqueHash: number;
-}
-
 export interface GfxDebugGroup {
     name: string;
     drawCallCount: number;
@@ -293,7 +292,7 @@ export interface GfxDevice {
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
-    createProgram(program: DeviceProgram): GfxProgram;
+    createProgram(program: GfxShaderModuleDescriptor): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;

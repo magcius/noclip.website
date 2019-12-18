@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxColorAttachment, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxDepthStencilAttachment, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxColorAttachment, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxDepthStencilAttachment, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition, GfxShaderModuleDescriptor } from "./GfxPlatform";
 import { _T, GfxResource } from "./GfxPlatformImpl";
 import { DeviceProgram } from "../../Program";
 import { assertExists, assert, leftPad, align } from "../../util";
@@ -33,7 +33,7 @@ interface GfxSamplerP_WebGPU extends GfxSampler {
 }
 
 interface GfxProgramP_WebGPU extends GfxProgram {
-    deviceProgram: DeviceProgram;
+    deviceProgram: GfxShaderModuleDescriptor;
     vertexStage: GPUProgrammableStageDescriptor | null;
     fragmentStage: GPUProgrammableStageDescriptor | null;
 }
@@ -615,7 +615,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         program.fragmentStage = await this._createShaderStage(deviceProgram.preprocessedFrag, 'fragment');
     }
 
-    public createProgram(deviceProgram: DeviceProgram): GfxProgram {
+    public createProgram(deviceProgram: GfxShaderModuleDescriptor): GfxProgram {
         deviceProgram.ensurePreprocessed(this);
 
         const vertexStage: GPUProgrammableStageDescriptor | null = null;
