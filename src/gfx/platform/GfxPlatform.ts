@@ -5,8 +5,6 @@
 
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { DeviceProgram } from "../../Program";
-import { Color } from "../../Color";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -192,7 +190,7 @@ export interface GfxAttachmentState {
 
 export interface GfxMegaStateDescriptor {
     attachmentsState: GfxAttachmentState[];
-    blendConstant: Color;
+    blendConstant: GfxColor;
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;
@@ -217,11 +215,18 @@ export interface GfxRenderPipelineDescriptor {
     sampleCount: number;
 }
 
+export interface GfxColor {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
     colorAttachment: GfxColorAttachment | null;
     colorLoadDisposition: GfxLoadDisposition;
-    colorClearColor: Color;
+    colorClearColor: GfxColor;
     depthStencilAttachment: GfxDepthStencilAttachment | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
