@@ -976,7 +976,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // Grass/Flowers/Trees
         if (this.context.flowerPacket) this.context.flowerPacket.calc();
         if (this.context.flowerPacket) this.context.flowerPacket.update();
-        if (this.context.flowerPacket) this.context.flowerPacket.draw(); 
+        if (this.context.flowerPacket) this.context.flowerPacket.draw(renderInstManager, viewerInput, device);
 
         {
             this.effectSystem.calc(viewerInput);

@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { SymbolMap, FlowerObjectRenderer } from './Actors';
+import { SymbolMap } from './Actors';
 import { Actor } from './Actors';
 import { WwContext } from './zww_scenes';
 
@@ -17,6 +17,10 @@ import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataC
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import * as GX_Material from '../../gx/gx_material';
 import { TextureMapping } from '../../TextureHolder';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { ViewerRenderInput } from '../../viewer';
+import { computeViewMatrix } from '../../Camera';
+import { colorCopy, White } from '../../Color';
 
 // @TODO: This belongs somewhere else
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
@@ -26,6 +30,8 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const packetParams = new PacketParams();
+const materialParams = new MaterialParams();
 
 let gFlowerPacket: FlowerPacket;
 
@@ -45,8 +51,6 @@ interface FlowerData {
     pos: vec3,
     modelMatrix: mat4,
     nextData: FlowerData,
-    
-    objectRenderer: FlowerObjectRenderer,
 }
 
 interface FlowerModel {
@@ -153,8 +157,12 @@ export class FlowerPacket {
     flowerModelPink: FlowerModel;
     flowerModelBessou: FlowerModel;
 
+    private materialHelper: GXMaterialHelperGfx;
+
     constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         this.flowerModelWhite = new WhiteFlowerData(device, symbolMap, cache);
+
+        this.materialHelper = new GXMaterialHelperGfx(this.flowerModelWhite.gxMaterial);
     }
 
     newData(pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
@@ -171,11 +179,8 @@ export class FlowerPacket {
             itemIdx,
             particleLifetime: 0,
             pos,
-            modelMatrix: mat4.create(),
+            modelMatrix: mat4.fromTranslation(mat4.create(), pos),
             nextData: null!,
-
-            // @HACK
-            objectRenderer: new FlowerObjectRenderer(this.flowerModelWhite),
         }
     }
 
@@ -187,8 +192,42 @@ export class FlowerPacket {
 
     }
 
-    draw() {
+    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+        for (let i = 0; i < kMaxFlowerDatas; i++) {
+            const data = this.datas[i];
+            if (!data) continue;
 
+            // if (!this.visible)
+            // return;
+
+            // Do some basic distance culling.
+            // mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+            // mat4.getTranslation(scratchVec3b, this.modelMatrix);
+
+            // // If we're too far, just kill us entirely.
+            // const distSq = vec3.squaredDistance(scratchVec3a, scratchVec3b);
+            // const maxDist = 5000;
+            // const maxDistSq = maxDist*maxDist;
+            // if (distSq >= maxDistSq)
+            //     return;
+
+            // @TODO: Kyanko colors
+            materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
+            colorCopy(materialParams.u_Color[ColorKind.C0], White);
+            colorCopy(materialParams.u_Color[ColorKind.C1], White);
+
+            const renderInst = this.flowerModelWhite.shapeHelperMain.pushRenderInst(renderInstManager);
+
+            const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
+            this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
+            this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+            const m = packetParams.u_PosMtx[0];
+            computeViewMatrix(m, viewerInput.camera);
+            mat4.mul(m, m, data.modelMatrix);
+            this.flowerModelWhite.shapeHelperMain.fillPacketParams(packetParams, renderInst);
+        }
     }
 }
 
@@ -342,9 +381,6 @@ export class AGrass {
                     const pos = vec3.add(scratchVec3a, offset, actor.pos); 
 
                     const data = context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
-
-                    context.roomRenderer.objectRenderers.push(data.objectRenderer);
-                    mat4.fromTranslation(data.objectRenderer.modelMatrix, pos);
                 }
             break;
         }
