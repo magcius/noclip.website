@@ -304,11 +304,13 @@ export class FlowerPacket {
     draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
         // @TODO: Set up the vertex pipeline and shared material 
         // @TODO: Render flowers in all rooms
+        // @NOTE: It appears that flowers are drawn for all rooms all the time
         // @TODO: Set the kyanko colors for each room
         colorCopy(materialParams.u_Color[ColorKind.C0], White);
         colorCopy(materialParams.u_Color[ColorKind.C1], White);
 
         // Draw pink flowers
+        // @TODO: Only loop over flowers in this room (using the linked list)
         materialParams.m_TextureMapping[0].copy(this.flowerModelPink.textureMapping);
         for (let i = 0; i < kMaxFlowerDatas; i++) {
             const data = this.datas[i];
@@ -328,6 +330,7 @@ export class FlowerPacket {
         }
 
         // Draw white flowers
+        // @TODO: Only loop over flowers in this room (using the linked list)
         materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
         for (let i = 0; i < kMaxFlowerDatas; i++) {
             const data = this.datas[i];
