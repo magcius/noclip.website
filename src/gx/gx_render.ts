@@ -19,7 +19,6 @@ import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, 
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
-import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
@@ -386,16 +385,15 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
 
         const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
         const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
-        const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
 
         if (attrib !== undefined) {
             const bufferByteOffset = attrib.bufferOffset;
             const bufferIndex = attrib.bufferIndex;
-            vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, usesIntInShader });
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset });
         } else if (wantZeroBuffer) {
             const bufferByteOffset = 0;
             const bufferIndex = loadedVertexLayout.vertexBufferStrides.length;
-            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset, usesIntInShader });
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset });
             usesZeroBuffer = true;
         }
     }

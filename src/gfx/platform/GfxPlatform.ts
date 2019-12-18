@@ -84,7 +84,6 @@ export interface GfxVertexAttributeDescriptor {
     format: GfxFormat;
     bufferIndex: number;
     bufferByteOffset: number;
-    usesIntInShader?: boolean;
 }
 
 export interface GfxInputLayoutBufferDescriptor {

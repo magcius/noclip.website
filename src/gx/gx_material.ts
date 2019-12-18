@@ -243,10 +243,10 @@ interface VertexAttributeGenDef {
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.Attr.POS,        name: "Position",      format: GfxFormat.F32_RGB },
-    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.U8_R },
+    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.F32_R },
     // These are packed separately since we would run out of attribute space otherwise.
-    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.U8_RGBA },
-    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.F32_RGBA },
+    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.F32_RGBA },
     { attrib: GX.Attr.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
     { attrib: GX.Attr.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
     { attrib: GX.Attr.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
@@ -512,14 +512,14 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
-        if (index === GX.TexCoordID.TEXCOORD0) return `a_TexMtx0123Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD1) return `a_TexMtx0123Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD2) return `a_TexMtx0123Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD3) return `a_TexMtx0123Idx.w`;
-        if (index === GX.TexCoordID.TEXCOORD4) return `a_TexMtx4567Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD5) return `a_TexMtx4567Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD6) return `a_TexMtx4567Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD7) return `a_TexMtx4567Idx.w`;
+        if (index === GX.TexCoordID.TEXCOORD0) return `uint(a_TexMtx0123Idx.x)`;
+        if (index === GX.TexCoordID.TEXCOORD1) return `uint(a_TexMtx0123Idx.y)`;
+        if (index === GX.TexCoordID.TEXCOORD2) return `uint(a_TexMtx0123Idx.z)`;
+        if (index === GX.TexCoordID.TEXCOORD3) return `uint(a_TexMtx0123Idx.w)`;
+        if (index === GX.TexCoordID.TEXCOORD4) return `uint(a_TexMtx4567Idx.x)`;
+        if (index === GX.TexCoordID.TEXCOORD5) return `uint(a_TexMtx4567Idx.y)`;
+        if (index === GX.TexCoordID.TEXCOORD6) return `uint(a_TexMtx4567Idx.z)`;
+        if (index === GX.TexCoordID.TEXCOORD7) return `uint(a_TexMtx4567Idx.w)`;
         throw "whoops";
     }
 
@@ -1069,8 +1069,7 @@ export class GX_Program extends DeviceProgram {
 
     private generateAttributeStorageType(fmt: GfxFormat): string {
         switch (fmt) {
-        case GfxFormat.U8_R:     return 'uint';
-        case GfxFormat.U8_RGBA:  return 'uvec4';
+        case GfxFormat.F32_R:    return 'float';
         case GfxFormat.F32_RG:   return 'vec2';
         case GfxFormat.F32_RGB:  return 'vec3';
         case GfxFormat.F32_RGBA: return 'vec4';
@@ -1089,7 +1088,7 @@ export class GX_Program extends DeviceProgram {
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Position, 1.0)`;
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1100,7 +1099,7 @@ export class GX_Program extends DeviceProgram {
         const src = `vec4(a_Normal, 0.0)`;
         // TODO(jstpierre): Move to a normal matrix calculated on the CPU
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }

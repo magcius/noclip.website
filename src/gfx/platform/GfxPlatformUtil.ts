@@ -131,8 +131,7 @@ export function gfxVertexAttributeDescriptorEquals(a: GfxVertexAttributeDescript
         a.bufferIndex === b.bufferIndex &&
         a.bufferByteOffset === b.bufferByteOffset &&
         a.location === b.location &&
-        a.format === b.format &&
-        a.usesIntInShader === b.usesIntInShader
+        a.format === b.format
     );
 }
 

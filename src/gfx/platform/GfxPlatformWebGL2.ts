@@ -1039,12 +1039,7 @@ void main() {
             gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
             const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
-            // TODO(jstpierre): How do we support glVertexAttribIPointer without too much insanity?
-            if (attr.usesIntInShader) {
-                gl.vertexAttribIPointer(attr.location, size, type, inputLayoutBuffer.byteStride, bufferOffset);
-            } else {
-                gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
-            }
+            gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
                 gl.vertexAttribDivisor(attr.location, 1);
@@ -1098,11 +1093,7 @@ void main() {
 
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-                if (attr.usesIntInShader) {
-                    gl.vertexAttribIPointer(attr.location, size, type, 0, 0);
-                } else {
-                    gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
-                }
+                gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
 
                 if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
                     gl.vertexAttribDivisor(attr.location, 1);

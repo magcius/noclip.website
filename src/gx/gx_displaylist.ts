@@ -759,10 +759,12 @@ class VtxLoaderImpl implements VtxLoader {
             };
         }
 
+        type DrawCall = { primType: number, vertexFormat: GfxFormat, srcOffs: number, vertexCount: number };
+
         // Parse display list.
         const dlView = srcBuffer.createDataView();
-        const drawCalls = [];
-        const packets = [];
+        const drawCalls: DrawCall[] = [];
+        const packets: LoadedVertexPacket[] = [];
         let totalVertexCount = 0;
         let totalIndexCount = 0;
         let drawCallIdx = 0;
