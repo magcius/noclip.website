@@ -574,83 +574,6 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     return shader;
 }
 
-interface ProgramKey {
-    vert: string;
-    frag: string;
-}
-
-abstract class MemoizeCache<TKey, TRes> {
-    private cache = new Map<string, TRes>();
-
-    protected abstract make(key: TKey): TRes | null;
-    protected abstract makeKey(key: TKey): string;
-
-    public get(key: TKey): TRes | null {
-        const keyStr = this.makeKey(key);
-        if (this.cache.has(keyStr)) {
-            return assertExists(this.cache.get(keyStr));
-        } else {
-            const obj = this.make(key);
-            if (obj !== null)
-                this.cache.set(keyStr, obj);
-            return obj;
-        }
-    }
-
-    public clear(): void {
-        this.cache.clear();
-    }
-}
-
-interface ProgramWithKey extends WebGLProgram {
-    uniqueKey: number;
-}
-
-// TODO(jstpierre): Remove this in favor of higher-level code.
-class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
-    private _uniqueKey: number = 0;
-
-    constructor(private gl: WebGL2RenderingContext) {
-        super();
-    }
-
-    protected make(key: ProgramKey): ProgramWithKey | null {
-        const gl = this.gl;
-        const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
-        if (!vertShader || !fragShader)
-            return null;
-        const prog = gl.createProgram() as ProgramWithKey;
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
-        if (SHADER_DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error(key.vert);
-            console.error(key.frag);
-            console.error(gl.getProgramInfoLog(prog));
-            gl.deleteProgram(prog);
-            return null;
-        }
-        prog.uniqueKey = ++this._uniqueKey;
-        return prog;
-    }
-
-    protected destroy(obj: ProgramWithKey) {
-        const gl = this.gl;
-        gl.deleteProgram(obj);
-    }
-
-    protected makeKey(key: ProgramKey): string {
-        return `${key.vert}$${key.frag}`;
-    }
-
-    public compileProgram(vert: string, frag: string) {
-        return this.get({ vert, frag });
-    }
-}
-
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
@@ -674,7 +597,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
     private _dummyCompilerVAO: WebGLVertexArrayObject;
-    private _programCache: ProgramCache;
+    // TODO(jstpierre): Investigate removing in favor of high-level code?
+    private _programCache = new Map<string, WebGLProgram>();
 
     // Pass Execution
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
@@ -699,18 +623,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public explicitBindingLocations = false;
     public separateSamplerTextures = false;
 
-    constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
+    constructor(public gl: WebGL2RenderingContext) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
-
-        if (programCache !== null) {
-            this._programCache = programCache;
-        } else {
-            this._programCache = new ProgramCache(gl);
-        }
 
         this._fullscreenCopyProgram = this._createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
         this._tryCompileProgram(this._fullscreenCopyProgram);
@@ -1071,7 +989,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _createProgram(deviceProgram: GfxProgramDescriptor): GfxProgram {
-        deviceProgram.ensurePreprocessed(this);
         const glProgram: WebGLProgram | null = null;
         const bindDirty = true, compileDirty = true;
         const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram, bindDirty, compileDirty, glProgram };
@@ -1362,6 +1279,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     if (IS_DEVELOPMENT && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
                         const deviceProgram = pipeline.program.deviceProgram;
                         deviceProgram.oncompileerror(gl.getProgramInfoLog(prog));
+                        gl.deleteProgram(prog);
+                        pipeline.program.glProgram = null;
                     }
                 }
             } else {
@@ -1549,14 +1468,35 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._debugGroupStack[i].triangleCount += count;
     }
 
+    private _tryCompileProgramInCache(vert: string, frag: string): WebGLProgram | null {
+        const key = `${vert}$${frag}`;
+        const existing = this._programCache.get(key);
+        if (existing !== undefined)
+            return existing;
+
+        const gl = this.gl;
+        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
+        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
+        if (!vertShader || !fragShader)
+            return null;
+        const prog = this.ensureResourceExists(gl.createProgram());
+        gl.attachShader(prog, vertShader);
+        gl.attachShader(prog, fragShader);
+        gl.linkProgram(prog);
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
+        this._programCache.set(key, prog);
+        return prog;
+    }
+
     private _tryCompileProgram(program: GfxProgramP_GL): void {
         if (!program.compileDirty)
             return;
 
         const deviceProgram = program.deviceProgram;
-        deviceProgram.ensurePreprocessed(this);
+        deviceProgram.ensurePreprocessed(this.queryVendorInfo());
 
-        const newProg = this._programCache.compileProgram(deviceProgram.preprocessedVert, deviceProgram.preprocessedFrag);
+        const newProg = this._tryCompileProgramInCache(deviceProgram.preprocessedVert, deviceProgram.preprocessedFrag);
         if (newProg !== null && newProg !== program.glProgram) {
             program.glProgram = newProg;
             program.bindDirty = true;
