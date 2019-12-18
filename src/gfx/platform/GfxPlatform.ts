@@ -149,7 +149,6 @@ export interface GfxProgramDescriptorSimple {
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
-    oncompileerror(infoLog: string | null): void;
 }
 
 export interface GfxInputLayoutDescriptor {

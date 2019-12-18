@@ -49,12 +49,6 @@ export class DeviceProgram {
         }
     }
 
-    public oncompileerror(infoLog: string): void {
-        console.error(this.vert);
-        console.error(this.frag);
-        console.error(infoLog);
-    }
-
     private _editShader(n: 'vert' | 'frag' | 'both') {
         const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
         const init = () => {

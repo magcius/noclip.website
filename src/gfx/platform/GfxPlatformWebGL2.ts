@@ -53,7 +53,9 @@ interface GfxSamplerP_GL extends GfxSampler {
 }
 
 interface GfxProgramP_GL extends GfxProgram {
-    glProgram: WebGLProgram | null;
+    gl_program: WebGLProgram | null;
+    gl_shader_vert: WebGLShader | null;
+    gl_shader_frag: WebGLShader | null;
     compileDirty: boolean;
     descriptor: GfxProgramDescriptorSimple;
 }
@@ -531,25 +533,6 @@ function prependLineNo(str: string, lineStart: number = 1) {
     return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
 }
 
-function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
-    const shader: WebGLShader = assertExists(gl.createShader(type));
-
-    gl.shaderSource(shader, str);
-    gl.compileShader(shader);
-
-    if (SHADER_DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(prependLineNo(str));
-        const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
-        if (debug_shaders)
-            console.error(debug_shaders.getTranslatedShaderSource(shader));
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-    }
-
-    return shader;
-}
-
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
@@ -572,8 +555,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentProgram: GfxProgramP_GL | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
-    // TODO(jstpierre): Investigate removing in favor of high-level code?
-    private _programCache = new Map<string, WebGLProgram>();
 
     // Pass Execution
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
@@ -844,7 +825,7 @@ void main() {
 
     private _useProgram(program: GfxProgramP_GL): void {
         if (this._currentProgram !== program) {
-            this.gl.useProgram(program.glProgram);
+            this.gl.useProgram(program.gl_program);
             this._currentProgram = program;
         }
     }
@@ -852,7 +833,6 @@ void main() {
     private ensureResourceExists<T>(resource: T | null): T {
         if (resource === null) {
             const error = this.gl.getError();
-            // TODO(jstpierre): Add minimal leak tracking.
             throw new Error(`Created resource is null; GL error encountered: ${error}`);
         } else {
             return resource;
@@ -981,9 +961,11 @@ void main() {
     }
 
     private _createProgram(descriptor: GfxProgramDescriptorSimple): GfxProgramP_GL {
-        const glProgram: WebGLProgram | null = null;
+        const gl_program: WebGLProgram | null = null;
+        const gl_shader_vert: WebGLShader | null = null;
+        const gl_shader_frag: WebGLShader | null = null;
         const compileDirty = true;
-        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, glProgram };
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, gl_program, gl_shader_vert, gl_shader_frag };
         this._tryCompileProgram(program);
         return program;
     }
@@ -1113,6 +1095,10 @@ void main() {
     }
 
     public destroyProgram(o: GfxProgram): void {
+        const program = o as GfxProgramP_GL;
+        this.gl.deleteProgram(program.gl_program);
+        this.gl.deleteShader(program.gl_shader_vert);
+        this.gl.deleteShader(program.gl_shader_frag);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1215,26 +1201,23 @@ void main() {
         if (pipeline.ready)
             return true;
 
-        if (pipeline.program.glProgram === null)
+        if (pipeline.program.gl_program === null)
             return false;
+
+        const gl = this.gl;
+        const prog = pipeline.program.gl_program;
 
         if (this._KHR_parallel_shader_compile !== null) {
             // With asynchronous pipeline compilation, we need to ask whether the pipeline is ready...
-            const gl = this.gl;
-            const prog = pipeline.program.glProgram;
             pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
-
-            // Check for errors.
-            if (pipeline.ready && SHADER_DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-                const descriptor = pipeline.program.descriptor as GfxProgramDescriptor;
-                descriptor.oncompileerror(gl.getProgramInfoLog(prog));
-                gl.deleteProgram(prog);
-                pipeline.program.glProgram = null;
-            }
         } else {
             // With synchronous pipeline compilation, pipelines are ready as soon as they're created...
             pipeline.ready = true;
         }
+
+        // Check for errors.
+        if (pipeline.ready && SHADER_DEBUG)
+            this._checkProgramCompilationForErrors(pipeline.program);
 
         return pipeline.ready;
     }
@@ -1416,29 +1399,8 @@ void main() {
             this._debugGroupStack[i].triangleCount += count;
     }
 
-    private _tryCompileProgramInCache(vert: string, frag: string): WebGLProgram | null {
-        const key = `${vert}$${frag}`;
-        const existing = this._programCache.get(key);
-        if (existing !== undefined)
-            return existing;
-
-        const gl = this.gl;
-        const vertShader = compileShader(gl, vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, frag, gl.FRAGMENT_SHADER);
-        if (!vertShader || !fragShader)
-            return null;
-        const prog = this.ensureResourceExists(gl.createProgram());
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
-        this._programCache.set(key, prog);
-        return prog;
-    }
-
     private _tryBindProgram(program: GfxProgramP_GL): void {
-        const gl = this.gl, prog = program.glProgram!;
+        const gl = this.gl, prog = program.gl_program!;
         const deviceProgram = program.descriptor;
 
         // The program needs to be bound for samplers to be bound correctly, unfortunately...
@@ -1462,16 +1424,59 @@ void main() {
         }
     }
 
+    private _compileShader(contents: string, type: GLenum): WebGLShader {
+        const gl = this.gl;
+        const shader: WebGLShader = this.ensureResourceExists(gl.createShader(type));
+        gl.shaderSource(shader, contents);
+        gl.compileShader(shader);
+        return shader;
+    }
+
+    private _reportShaderError(shader: WebGLShader, str: string): boolean {
+        const gl = this.gl;
+        const status = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+        if (!status) {
+            console.error(prependLineNo(str));
+            const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
+            if (debug_shaders)
+                console.error(debug_shaders.getTranslatedShaderSource(shader));
+            console.error(gl.getShaderInfoLog(shader));
+        }
+        return status;
+    }
+
+    private _checkProgramCompilationForErrors(program: GfxProgramP_GL): void {
+        const gl = this.gl;
+
+        const prog = program.gl_program!;
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            const descriptor = program.descriptor as GfxProgramDescriptor;
+
+            if (this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
+                return;
+
+            if (this._reportShaderError(program.gl_shader_frag!, descriptor.preprocessedFrag))
+                return;
+
+            // Neither shader had an error, report the program info log.
+            console.error(gl.getProgramInfoLog(program.gl_program!));
+            debugger;
+        }
+    }
+
     private _tryCompileProgram(program: GfxProgramP_GL): void {
         assert(program.compileDirty);
 
         const descriptor = program.descriptor;
-        const newProg = this._tryCompileProgramInCache(descriptor.preprocessedVert, descriptor.preprocessedFrag);
 
-        if (newProg !== null || newProg !== program.glProgram) {
-            program.glProgram = newProg;
-            this._tryBindProgram(program);
-        }
+        const gl = this.gl;
+        program.gl_shader_vert = this._compileShader(descriptor.preprocessedVert, gl.VERTEX_SHADER);
+        program.gl_shader_frag = this._compileShader(descriptor.preprocessedFrag, gl.FRAGMENT_SHADER);
+        const prog = this.ensureResourceExists(gl.createProgram());
+        gl.attachShader(prog, program.gl_shader_vert);
+        gl.attachShader(prog, program.gl_shader_frag);
+        gl.linkProgram(prog);
+        program.gl_program = prog;
 
         program.compileDirty = false;
     }
@@ -1603,6 +1608,7 @@ void main() {
         }
 
         this._useProgram(this._currentPipeline.program);
+        this._tryBindProgram(program);
     }
 
     private setInputState(inputState_: GfxInputState | null): void {
