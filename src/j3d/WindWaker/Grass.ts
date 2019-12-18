@@ -43,6 +43,10 @@ enum FlowerType {
     PINK 
 };
 
+enum FlowerFlags {
+    isFrustumCulled = 1 << 0,
+}
+
 interface FlowerData {
     flags: number,
     animIdx: number,
@@ -178,8 +182,8 @@ export class FlowerPacket {
             animIdx,
             itemIdx,
             particleLifetime: 0,
-            pos,
-            modelMatrix: mat4.fromTranslation(mat4.create(), pos),
+            pos: vec3.clone(pos),
+            modelMatrix: mat4.create(),
             nextData: null!,
         }
     }
@@ -189,7 +193,21 @@ export class FlowerPacket {
     }
 
     update() {
+        // @TODO: Update all animation matrices
 
+        for (let i = 0; i < kMaxFlowerDatas; i++) {
+            const data = this.datas[i];
+            if (!data) continue;
+
+            // @TODO: Perform ground checks for some limited number of flowers
+            // @TODO: Frustum culling
+
+            if (!(data.flags & FlowerFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                // @TODO: Include anim rotation matrix
+                mat4.fromTranslation(data.modelMatrix, data.pos);
+            }
+        }
     }
 
     draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
