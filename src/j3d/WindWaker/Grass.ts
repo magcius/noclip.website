@@ -266,6 +266,7 @@ export class FlowerPacket {
     setData(index: number, pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
         const animIdx = Math.floor(Math.random() * 8);
         const flags = type === FlowerType.PINK ? FlowerFlags.isPink : 0; 
+        // @TODO: Check for stage 'sea' and roomIdx 0x21 to use Bessou flower
         return this.datas[index] = {
             flags,
             animIdx,
