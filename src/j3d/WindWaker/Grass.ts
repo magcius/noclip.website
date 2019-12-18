@@ -68,6 +68,92 @@ interface FlowerModel {
 
 const kMaxFlowerDatas = 200;
 
+class PinkFlowerData {
+    public textureMapping = new TextureMapping();
+    public textureData: BTIData;
+    public shapeHelperMain: GXShapeHelperGfx;
+    public gxMaterial: GX_Material.GXMaterial;
+    public bufferCoalescer: GfxBufferCoalescerCombo;
+
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
+        const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
+        const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
+        const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
+        const l_texCoord2 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord2`);
+        const l_Ohana_highDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_highDL`);
+        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
+
+        const matRegisters = new DisplayListRegisters();
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL2);
+
+        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
+        const numTexGens = (genMode >>> 0) & 0x0F;
+        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+        const numInds = ((genMode >>> 16) & 0x07);
+
+        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
+        this.gxMaterial.cullMode = cullMode;
+
+        const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
+        const width  = ((image0 >>>  0) & 0x3FF) + 1;
+        const height = ((image0 >>> 10) & 0x3FF) + 1;
+        const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
+
+        const texture: BTI_Texture = {
+            name: 'l_Txo_ob_flower_pink_64x64TEX',
+            width, height, format,
+            data: l_Txo_ob_flower_pink_64x64TEX,
+            // TODO(jstpierre): do we have mips?
+            mipCount: 1,
+            paletteFormat: GX.TexPalette.RGB565,
+            paletteData: null,
+            wrapS, wrapT,
+            minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
+            minLOD: 1, maxLOD: 1, lodBias: 0,
+        };
+        this.textureData = new BTIData(device, cache, texture);
+        this.textureData.fillTextureMapping(this.textureMapping);
+
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX8 };
+        const vtxLoader = compileVtxLoader(vatFormat, vcd);
+
+        const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_Ohana_highDL);
+
+        // TODO(jstpierre): light channels
+        this.gxMaterial.lightChannels.push({
+            colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+            alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+        });
+
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_OhanaDL ]);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
+        this.shapeHelperMain.destroy(device);
+        this.textureData.destroy(device);
+    }
+}
+
 class WhiteFlowerData {
     public textureMapping = new TextureMapping();
     public textureData: BTIData;
@@ -166,6 +252,7 @@ export class FlowerPacket {
 
     constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         this.flowerModelWhite = new WhiteFlowerData(device, symbolMap, cache);
+        this.flowerModelPink = new PinkFlowerData(device, symbolMap, cache);
 
         this.materialHelper = new GXMaterialHelperGfx(this.flowerModelWhite.gxMaterial);
     }
@@ -178,8 +265,9 @@ export class FlowerPacket {
 
     setData(index: number, pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
         const animIdx = Math.floor(Math.random() * 8);
+        const flags = type === FlowerType.PINK ? FlowerFlags.isPink : 0; 
         return this.datas[index] = {
-            flags: 0,
+            flags,
             animIdx,
             itemIdx,
             particleLifetime: 0,
@@ -219,7 +307,24 @@ export class FlowerPacket {
         colorCopy(materialParams.u_Color[ColorKind.C0], White);
         colorCopy(materialParams.u_Color[ColorKind.C1], White);
 
-        // @TODO: Draw pink flowers
+        // Draw pink flowers
+        materialParams.m_TextureMapping[0].copy(this.flowerModelPink.textureMapping);
+        for (let i = 0; i < kMaxFlowerDatas; i++) {
+            const data = this.datas[i];
+            if (!data) continue;
+            if (data.flags & FlowerFlags.isFrustumCulled || !(data.flags & FlowerFlags.isPink)) continue;
+
+            const renderInst = this.flowerModelPink.shapeHelperMain.pushRenderInst(renderInstManager);
+            const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
+            this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
+            this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+            const m = packetParams.u_PosMtx[0];
+            computeViewMatrix(m, viewerInput.camera);
+            mat4.mul(m, m, data.modelMatrix);
+            this.flowerModelPink.shapeHelperMain.fillPacketParams(packetParams, renderInst);
+        }
 
         // Draw white flowers
         materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
