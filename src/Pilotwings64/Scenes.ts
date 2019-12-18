@@ -2332,7 +2332,7 @@ class DataHolder {
     public uven: UVEN[] = [];
     public uvtp: UVTP[] = [];
     public splineData = new Map<number, SPTH>();
-    public gfxRenderCache = new GfxRenderCache(true);
+    public gfxRenderCache = new GfxRenderCache();
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)

@@ -674,7 +674,7 @@ export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
-    public cache = new GfxRenderCache(true);
+    public cache = new GfxRenderCache();
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
