@@ -268,7 +268,7 @@ function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
 
 class ObjectData {
     public geoData: (GeometryData | FlipbookData | null)[] = [];
-    public gfxCache = new GfxRenderCache(true);
+    public gfxCache = new GfxRenderCache();
 
     constructor(private objectSetupData: ObjectSetupData) {
     }
