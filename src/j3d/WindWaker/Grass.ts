@@ -45,6 +45,7 @@ enum FlowerType {
 
 enum FlowerFlags {
     isFrustumCulled = 1 << 0,
+    isPink = 1 << 1,
 }
 
 interface FlowerData {
@@ -212,18 +213,22 @@ export class FlowerPacket {
     }
 
     draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+        // @TODO: Set up the vertex pipeline and shared material 
+        // @TODO: Render flowers in all rooms
+        // @TODO: Set the kyanko colors for each room
+        colorCopy(materialParams.u_Color[ColorKind.C0], White);
+        colorCopy(materialParams.u_Color[ColorKind.C1], White);
+
+        // @TODO: Draw pink flowers
+
+        // Draw white flowers
+        materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
         for (let i = 0; i < kMaxFlowerDatas; i++) {
             const data = this.datas[i];
             if (!data) continue;
-            if (data.flags & FlowerFlags.isFrustumCulled) continue; 
-
-            // @TODO: Kyanko colors
-            materialParams.m_TextureMapping[0].copy(this.flowerModelWhite.textureMapping);
-            colorCopy(materialParams.u_Color[ColorKind.C0], White);
-            colorCopy(materialParams.u_Color[ColorKind.C1], White);
+            if (data.flags & FlowerFlags.isFrustumCulled || data.flags & FlowerFlags.isPink) continue;
 
             const renderInst = this.flowerModelWhite.shapeHelperMain.pushRenderInst(renderInstManager);
-
             const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
             this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
             this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
