@@ -3115,7 +3115,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        createSceneObj(sceneObjHolder, SceneObj.AIR_BUBBLE_HOLDER);
+        createSceneObj(sceneObjHolder, SceneObj.AirBubbleHolder);
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'AirBubbleGenerator');
@@ -3909,7 +3909,7 @@ export class WaterPlant extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        sceneObjHolder.create(SceneObj.WATER_PLANT_DRAW_INIT);
+        sceneObjHolder.create(SceneObj.WaterPlantDrawInit);
 
         connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.WATER_PLANT);
         initDefaultPos(sceneObjHolder, this, infoIter);
@@ -4364,7 +4364,7 @@ export class SwingRope extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        sceneObjHolder.create(SceneObj.SWING_ROPE_GROUP);
+        sceneObjHolder.create(SceneObj.SwingRopeGroup);
         connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.SWING_ROPE);
         initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.copy(this.pos, this.translation);
@@ -4510,7 +4510,7 @@ export class Trapeze extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        sceneObjHolder.create(SceneObj.TRAPEZE_ROPE_DRAW_INIT);
+        sceneObjHolder.create(SceneObj.TrapezeRopeDrawInit);
         connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.TRAPEZE);
         initDefaultPos(sceneObjHolder, this, infoIter);
         makeMtxTRFromActor(scratchMatrix, this);
