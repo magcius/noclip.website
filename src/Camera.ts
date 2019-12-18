@@ -353,6 +353,8 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
+        keyMovement[2] += -inputManager.getDoubleTouchDeltaDist();
+
         if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
             keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {

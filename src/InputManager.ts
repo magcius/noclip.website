@@ -1,6 +1,7 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
+import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -46,6 +47,10 @@ export default class InputManager {
     private isSingleTouching: boolean = false;
     private prevSingleTouchX: number = 0;
     private prevSingleTouchY: number = 0;
+
+    private isDoubleTouching: boolean = false;
+    private prevDoubleTouchDist: number = 0;
+    private dDoubleTouchDist: number = 0;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -100,6 +105,10 @@ export default class InputManager {
         return this.dy;
     }
 
+    public getDoubleTouchDeltaDist(): number {
+        return this.isDoubleTouching ? this.dDoubleTouchDist : 0;
+    }
+
     public isKeyDownEventTriggered(key: string): boolean {
         return !!this.keysDown.get(key);
     }
@@ -116,6 +125,7 @@ export default class InputManager {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
+        this.dDoubleTouchDist = 0;
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
@@ -174,10 +184,17 @@ export default class InputManager {
         e.preventDefault();
         if (e.touches.length == 1) {
             this.isSingleTouching = true;
+            this.isDoubleTouching = false;
             this.prevSingleTouchX = e.touches[0].clientX;
             this.prevSingleTouchY = e.touches[0].clientY;
+        } else if (e.touches.length == 2) {
+            this.isDoubleTouching = true;
+            this.isSingleTouching = false;
+            this.prevDoubleTouchDist = vec2.dist([e.touches[0].clientX, e.touches[0].clientY], [e.touches[1].clientX, e.touches[1].clientY]);
+            this.dDoubleTouchDist = 0;
         } else {
             this.isSingleTouching = false;
+            this.isDoubleTouching = false;
         }
     };
 
@@ -187,11 +204,19 @@ export default class InputManager {
         e.preventDefault();
         if (e.touches.length == 1) {
             this.isSingleTouching = true;
+            this.isDoubleTouching = false;
             this.onMotion(e.touches[0].clientX - this.prevSingleTouchX, e.touches[0].clientY - this.prevSingleTouchY);
             this.prevSingleTouchX = e.touches[0].clientX;
             this.prevSingleTouchY = e.touches[0].clientY;
+        } else if (e.touches.length == 2) {
+            this.isDoubleTouching = true;
+            this.isSingleTouching = false;
+            const newDist = vec2.dist([e.touches[0].clientX, e.touches[0].clientY], [e.touches[1].clientX, e.touches[1].clientY]);
+            this.dDoubleTouchDist = newDist - this.prevDoubleTouchDist;
+            this.prevDoubleTouchDist = newDist;
         } else {
             this.isSingleTouching = false;
+            this.isDoubleTouching = false;
         }
         // TODO: handle pinch gesture
     }
