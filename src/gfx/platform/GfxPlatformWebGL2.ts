@@ -57,6 +57,7 @@ interface GfxProgramP_GL extends GfxProgram {
     gl_shader_vert: WebGLShader | null;
     gl_shader_frag: WebGLShader | null;
     compileDirty: boolean;
+    bindDirty: boolean;
     descriptor: GfxProgramDescriptorSimple;
 }
 
@@ -965,7 +966,8 @@ void main() {
         const gl_shader_vert: WebGLShader | null = null;
         const gl_shader_frag: WebGLShader | null = null;
         const compileDirty = true;
-        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, gl_program, gl_shader_vert, gl_shader_frag };
+        const bindDirty = true;
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, bindDirty, gl_program, gl_shader_vert, gl_shader_frag };
         this._tryCompileProgram(program);
         return program;
     }
@@ -1403,31 +1405,6 @@ void main() {
             this._debugGroupStack[i].triangleCount += count;
     }
 
-    private _tryBindProgram(program: GfxProgramP_GL): void {
-        const gl = this.gl, prog = program.gl_program!;
-        const deviceProgram = program.descriptor;
-
-        // The program needs to be bound for samplers to be bound correctly, unfortunately...
-        this._useProgram(program);
-
-        const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
-        for (let i = 0; i < uniformBlocks.length; i++) {
-            const [m, blockName, contents] = uniformBlocks[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
-        }
-
-        const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
-        let samplerIndex = 0;
-        for (let i = 0; i < samplers.length; i++) {
-            const [m, name, arraySizeStr] = samplers[i];
-            const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
-            // Assign identities in order.
-            const samplerUniformLocation = gl.getUniformLocation(prog, name);
-            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
-            samplerIndex += arraySize;
-        }
-    }
-
     private _compileShader(contents: string, type: GLenum): WebGLShader {
         const gl = this.gl;
         const shader: WebGLShader = this.ensureResourceExists(gl.createShader(type));
@@ -1456,10 +1433,10 @@ void main() {
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
             const descriptor = program.descriptor as GfxProgramDescriptor;
 
-            if (this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
+            if (!this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
                 return;
 
-            if (this._reportShaderError(program.gl_shader_frag!, descriptor.preprocessedFrag))
+            if (!this._reportShaderError(program.gl_shader_frag!, descriptor.preprocessedFrag))
                 return;
 
             // Neither shader had an error, report the program info log.
@@ -1483,6 +1460,7 @@ void main() {
         program.gl_program = prog;
 
         program.compileDirty = false;
+        program.bindDirty = true;
     }
 
     private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
@@ -1611,8 +1589,31 @@ void main() {
             this._tryCompileProgram(program);
         }
 
-        this._useProgram(this._currentPipeline.program);
-        this._tryBindProgram(program);
+        this._useProgram(program);
+
+        if (program.bindDirty) {
+            const gl = this.gl, prog = program.gl_program!;
+            const deviceProgram = program.descriptor;
+
+            const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
+            for (let i = 0; i < uniformBlocks.length; i++) {
+                const [m, blockName, contents] = uniformBlocks[i];
+                gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
+            }
+
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
+            let samplerIndex = 0;
+            for (let i = 0; i < samplers.length; i++) {
+                const [m, name, arraySizeStr] = samplers[i];
+                const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
+                // Assign identities in order.
+                const samplerUniformLocation = gl.getUniformLocation(prog, name);
+                gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
+                samplerIndex += arraySize;
+            }
+
+            program.bindDirty = false;
+        }
     }
 
     private setInputState(inputState_: GfxInputState | null): void {

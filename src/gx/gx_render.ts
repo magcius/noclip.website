@@ -330,7 +330,8 @@ export class GXMaterialHelperGfx {
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
+            const descriptor = this.program.generateShaders(device);
+            this.gfxProgram = cache.createProgramSimple(device, descriptor);
             this.programKey = this.gfxProgram.ResourceUniqueId;
         }
     }

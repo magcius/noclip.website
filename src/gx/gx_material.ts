@@ -6,13 +6,14 @@ import * as GX from './gx_enum';
 import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
+import { preprocessProgram_GLSL, preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -363,15 +364,15 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export class GX_Program extends DeviceProgram {
+export class GX_Program {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
+    public name: string;
+
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
-        super();
         this.name = material.name;
-        this.generateShaders();
     }
 
     private generateFloat(v: number): string {
@@ -1104,10 +1105,10 @@ export class GX_Program extends DeviceProgram {
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateShaders() {
+    public generateShaders(device: GfxDevice): GfxProgramDescriptorSimple {
         const bindingsDefinition = generateBindingsDefinition(this.material);
 
-        this.both = `
+        const both = `
 // ${this.material.name}
 precision mediump float;
 ${bindingsDefinition}
@@ -1125,7 +1126,10 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        this.vert = `
+        const vendorInfo = device.queryVendorInfo();
+
+        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', `
+${both}
 ${this.generateVertAttributeDefs()}
 
 Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
@@ -1154,11 +1158,10 @@ ${this.generateLightChannels()}
 ${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
-`;
+`);
 
-        const alphaTest = this.material.alphaTest;
-
-        this.frag = `
+        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', `
+${both}
 ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
@@ -1200,7 +1203,9 @@ ${this.generateTevStagesLastMinuteFixup()}
 ${this.generateAlphaTest()}
     gl_FragColor = t_TevOutput;
 }
-`;
+`);
+
+        return { preprocessedVert, preprocessedFrag };
     }
 }
 // #endregion
