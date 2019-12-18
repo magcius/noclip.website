@@ -1,5 +1,5 @@
 
-import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass, makeTextureDescriptor2D } from "../platform/GfxPlatform";
+import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 

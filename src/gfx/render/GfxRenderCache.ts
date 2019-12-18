@@ -1,12 +1,8 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler } from "../platform/GfxPlatform";
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
-import { DeviceProgram } from "../../Program";
+import { DeviceProgram, deviceProgramEqual } from "../../Program";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformUtil';
-
-function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
-    return DeviceProgram.equals(a, b);
-}
 
 function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
     let hash = 0;
@@ -30,7 +26,7 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64, 4);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash, 16, 4);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEqual, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
     constructor(private outlivesScene: boolean = false) {

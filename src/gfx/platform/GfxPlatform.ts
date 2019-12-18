@@ -105,6 +105,7 @@ export interface GfxTextureDescriptor {
     numLevels: number;
 }
 
+// TODO(jstpierre): Should this be moved to ../helpers?
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     return { dimension, pixelFormat, width, height, depth, numLevels };

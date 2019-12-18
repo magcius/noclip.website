@@ -18,7 +18,6 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
 import { LoadedVertexPacket } from '../gx/gx_displaylist';
 import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -143,6 +142,15 @@ function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.Light
     const colorChannel = colorChannelCopy(o.colorChannel);
     const alphaChannel = colorChannelCopy(o.alphaChannel);
     return { colorChannel, alphaChannel };
+}
+
+type CopyFunc<T> = (a: T) => T;
+
+function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
+    const b = Array(a.length);
+    for (let i = 0; i < a.length; i++)
+        b[i] = copyFunc(a[i]);
+    return b;
 }
 
 const materialParams = new MaterialParams();

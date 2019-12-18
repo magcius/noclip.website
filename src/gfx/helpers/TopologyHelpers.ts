@@ -1,3 +1,4 @@
+
 import { assert } from "../../util";
 
 export const enum GfxTopology {

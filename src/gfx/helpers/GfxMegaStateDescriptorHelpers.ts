@@ -2,10 +2,7 @@
 import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxColorWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform";
 import { colorCopy, colorNewCopy, TransparentBlack } from "../../Color";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers";
-
-function resolveField<T>(v: T | undefined, parentV: T): T {
-    return v !== undefined ? v : parentV;
-}
+import { fallbackUndefined } from "../../util";
 
 function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
     dst.blendDstFactor = src.blendDstFactor;
@@ -44,14 +41,14 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
     if (src.blendConstant !== undefined)
         colorCopy(dst.blendConstant, src.blendConstant);
 
-    dst.depthCompare = resolveField(src.depthCompare, dst.depthCompare);
-    dst.depthWrite = resolveField(src.depthWrite, dst.depthWrite);
-    dst.stencilCompare = resolveField(src.stencilCompare, dst.stencilCompare);
-    dst.stencilWrite = resolveField(src.stencilWrite, dst.stencilWrite);
-    dst.stencilPassOp = resolveField(src.stencilPassOp, dst.stencilPassOp);
-    dst.cullMode = resolveField(src.cullMode, dst.cullMode);
-    dst.frontFace = resolveField(src.frontFace, dst.frontFace);
-    dst.polygonOffset = resolveField(src.polygonOffset, dst.polygonOffset);
+    dst.depthCompare = fallbackUndefined(src.depthCompare, dst.depthCompare);
+    dst.depthWrite = fallbackUndefined(src.depthWrite, dst.depthWrite);
+    dst.stencilCompare = fallbackUndefined(src.stencilCompare, dst.stencilCompare);
+    dst.stencilWrite = fallbackUndefined(src.stencilWrite, dst.stencilWrite);
+    dst.stencilPassOp = fallbackUndefined(src.stencilPassOp, dst.stencilPassOp);
+    dst.cullMode = fallbackUndefined(src.cullMode, dst.cullMode);
+    dst.frontFace = fallbackUndefined(src.frontFace, dst.frontFace);
+    dst.polygonOffset = fallbackUndefined(src.polygonOffset, dst.polygonOffset);
 }
 
 export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescriptor {

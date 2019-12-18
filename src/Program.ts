@@ -1,16 +1,30 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists, assert } from "./util";
-import { GfxDevice, GfxVendorInfo } from "./gfx/platform/GfxPlatform";
+import { GfxVendorInfo } from "./gfx/platform/GfxPlatform";
 
-function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
-    if (a.defines.size !== b.defines.size)
+type DefineMap = Map<string, string>;
+
+function definesEqual(a: DefineMap, b: DefineMap): boolean {
+    if (a.size !== b.size)
         return false;
 
-    for (const [k, v] of a.defines.entries())
-        if (b.defines.get(k) !== v)
+    for (const [k, v] of a.entries())
+        if (b.get(k) !== v)
             return false;
 
+    return true;
+}
+
+export function deviceProgramEqual(a: DeviceProgram, b: DeviceProgram): boolean {
+    if (a.both !== b.both)
+        return false;
+    if (a.vert !== b.vert)
+        return false;
+    if (a.frag !== b.frag)
+        return false;
+    if (!definesEqual(a.defines, b.defines))
+        return false;
     return true;
 }
 
@@ -26,18 +40,6 @@ export class DeviceProgram {
     public vert: string = '';
     public frag: string = '';
     public defines = new Map<string, string>();
-
-    public static equals(a: DeviceProgram, b: DeviceProgram): boolean {
-        if (a.both !== b.both)
-            return false;
-        if (a.vert !== b.vert)
-            return false;
-        if (a.frag !== b.frag)
-            return false;
-        if (!definesEqual(a, b))
-            return false;
-        return true;
-    }
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
