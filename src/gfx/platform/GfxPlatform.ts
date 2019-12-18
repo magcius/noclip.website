@@ -143,11 +143,14 @@ export interface GfxBindingsDescriptor {
     samplerBindings: GfxSamplerBinding[];
 }
 
-export interface GfxProgramDescriptor {
-    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
-    oncompileerror(infoLog: string | null): void;
+export interface GfxProgramDescriptorSimple {
     preprocessedVert: string;
     preprocessedFrag: string;
+}
+
+export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
+    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    oncompileerror(infoLog: string | null): void;
 }
 
 export interface GfxInputLayoutDescriptor {

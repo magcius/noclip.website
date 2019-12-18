@@ -1,6 +1,6 @@
 
 import { assert } from "../../util";
-import { GfxVendorInfo } from "../platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
@@ -102,4 +102,10 @@ ${definesString}
 ${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
 ${rest}
 `.trim();
+}
+
+export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: Map<string, string> | null = null): GfxProgramDescriptorSimple {
+    const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', vert, defines);
+    const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', frag, defines);
+    return { preprocessedVert, preprocessedFrag };
 }
