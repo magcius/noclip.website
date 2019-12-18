@@ -239,10 +239,7 @@ class BaseRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        if (this.gfxProgram !== undefined)
-            device.destroyProgram(this.gfxProgram);
         if (this.atlas !== undefined)
             this.atlas.destroy(device);
     }
@@ -275,7 +272,8 @@ export class SkyRenderer extends BaseRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        if (viewerInput.camera.isOrthographic) return;
+        if (viewerInput.camera.isOrthographic)
+            return;
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
     }
