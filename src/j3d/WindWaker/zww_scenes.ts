@@ -28,7 +28,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/Unifo
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData, settingTevStruct, LightTevColorType } from './Actors';
+import { Actor, ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData, settingTevStruct, LightTevColorType } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
@@ -36,6 +36,15 @@ import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
+import { AGrass, FlowerPacket } from './Grass';
+
+export interface WwContext {
+    device: GfxDevice, 
+    symbolMap: SymbolMap, 
+    cache: GfxRenderCache,
+
+    flowerPacket: FlowerPacket,
+};
 
 // Here are the original offset positions for all flowers/grass/trees directly from the top of the daGrass_create() function in d_a_grass.rel
 // They are split into 8 different spawn patterns, which is selected by the lowest byte of the grass actor params.
@@ -842,15 +851,22 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public roomRenderers: WindWakerRoomRenderer[] = [];
     public effectSystem: SimpleEffectSystem;
     public extraTextures: ZWWExtraTextures;
+    public context: WwContext;
 
     private timeOfDayColors: KyankoColors[] = [];
     private dstColors: KyankoColors;
 
     public onstatechanged!: () => void;
 
-    constructor(device: GfxDevice, public modelCache: ModelCache, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public modelCache: ModelCache, symbolMap: SymbolMap, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
         const cache = this.renderHelper.renderInstManager.gfxRenderCache;
+        this.context = {
+            device,
+            symbolMap,
+            cache,
+            flowerPacket: null!,
+        };
 
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, cache);
@@ -953,6 +969,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.skyEnvironment.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+
+        // Grass/Flowers/Trees
+        if (this.context.flowerPacket) this.context.flowerPacket.calc();
+        if (this.context.flowerPacket) this.context.flowerPacket.update();
+        if (this.context.flowerPacket) this.context.flowerPacket.draw(); 
 
         {
             this.effectSystem.calc(viewerInput);
@@ -1216,7 +1237,11 @@ class SceneDesc {
             const roomIdx = Math.abs(this.rooms[i]);
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
         }
-
+        
+        modelCache.fetchFileData(`${pathBase}/framework.map`);
+       
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`);
+        
         return modelCache.waitForLoad().then(() => {
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
 
@@ -1224,10 +1249,12 @@ class SceneDesc {
             const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
             const stageDzsHeaders = parseDZSHeaders(stageDzs);
             const mult = stageDzsHeaders.get('MULT');
+            
+            const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
-            const renderer = new WindWakerRenderer(device, modelCache, isSea, stageRarc);
+            const renderer = new WindWakerRenderer(device, modelCache, symbolMap, isSea, stageRarc);
             context.destroyablePool.push(renderer);
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
@@ -1301,7 +1328,7 @@ class SceneDesc {
         }
     }
 
-    private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4): Promise<void> {
+    private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
         // TODO(jstpierre): Better actor implementations
 
         const modelCache = renderer.modelCache;
@@ -1323,6 +1350,8 @@ class SceneDesc {
 
             return _extraSymbols;
         }
+        
+        const context = renderer.context;
 
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, cache, rarc, modelPath);
@@ -2628,7 +2657,16 @@ class SceneDesc {
             const localModelMatrix = mat4.create();
             computeModelMatrixSRT(localModelMatrix, 1, 1, 1, 0, rotY, 0, posX, posY, posZ);
 
-            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layerIndex, localModelMatrix, worldModelMatrix);
+            const actor: Actor = {
+                name,
+                parameters,
+                roomIndex: roomRenderer.roomIdx,
+                pos: vec3.fromValues(posX, posY, posZ),
+                scale: vec3.fromValues(1, 1, 1),
+                rotationY: rotY
+            };
+
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layerIndex, localModelMatrix, worldModelMatrix, actor);
 
             actrTableIdx += 0x20;
         }
@@ -2659,7 +2697,16 @@ class SceneDesc {
             const localModelMatrix = mat4.create();
             computeModelMatrixSRT(localModelMatrix, scaleX, scaleY, scaleZ, 0, rotY, 0, posX, posY, posZ);
 
-            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layer, localModelMatrix, worldModelMatrix);
+            const actor: Actor = {
+                name,
+                parameters,
+                roomIndex: roomRenderer.roomIdx,
+                pos: vec3.fromValues(posX, posY, posZ),
+                scale: vec3.fromValues(scaleX, scaleY, scaleZ),
+                rotationY: rotY,
+            };
+
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layer, localModelMatrix, worldModelMatrix, actor);
 
             actrTableIdx += 0x24;
         }
