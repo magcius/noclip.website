@@ -4,13 +4,14 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { SymbolMap } from './Actors';
+import { SymbolMap, FlowerObjectRenderer } from './Actors';
 import { Actor } from './Actors';
 import { WwContext } from './zww_scenes';
 
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
-import { DisplayListRegisters, displayListRegistersRun, parseMaterialEntry, displayListRegistersInitGX } from '../../rres/brres';
+import { parseMaterial } from '../../gx/gx_material';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
@@ -43,7 +44,9 @@ interface FlowerData {
     particleLifetime: number,
     pos: vec3,
     modelMatrix: mat4,
-    nextData: FlowerData
+    nextData: FlowerData,
+    
+    objectRenderer: FlowerObjectRenderer,
 }
 
 interface FlowerModel {
@@ -83,7 +86,7 @@ class WhiteFlowerData {
         const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
         const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
 
-        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
+        this.gxMaterial = parseMaterial(matRegisters, 0, 'l_matDL');
         this.gxMaterial.cullMode = cullMode;
 
         const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
@@ -170,6 +173,9 @@ export class FlowerPacket {
             pos,
             modelMatrix: mat4.create(),
             nextData: null!,
+
+            // @HACK
+            objectRenderer: new FlowerObjectRenderer(this.flowerModelWhite),
         }
     }
 
@@ -333,9 +339,12 @@ export class AGrass {
 
                     // @NOTE: Flowers do not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
-                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos); 
 
-                    context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
+                    const data = context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
+
+                    context.roomRenderer.objectRenderers.push(data.objectRenderer);
+                    mat4.fromTranslation(data.objectRenderer.modelMatrix, pos);
                 }
             break;
         }
