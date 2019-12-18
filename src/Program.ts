@@ -1,7 +1,7 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists, assert } from "./util";
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
+import { GfxDevice, GfxVendorInfo } from "./gfx/platform/GfxPlatform";
 
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
     if (a.defines.size !== b.defines.size)
@@ -39,18 +39,20 @@ export class DeviceProgram {
         return true;
     }
 
-    public ensurePreprocessed(device: GfxDevice): void {
+    public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
-            this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
-            this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
+            this.preprocessedVert = this.preprocessShader(vendorInfo, this.both + this.vert, 'vert');
+            this.preprocessedFrag = this.preprocessShader(vendorInfo, this.both + this.frag, 'frag');
         }
     }
 
-    protected preprocessShader(device: GfxDevice, source: string, type: "vert" | "frag"): string {
-        const vendorInfo = device.queryVendorInfo();
+    public oncompileerror(infoLog: string): void {
+        console.error(this.vert);
+        console.error(this.frag);
+        console.error(infoLog);
+    }
 
-        const bugDefines = vendorInfo.programBugDefines;
-
+    protected preprocessShader(vendorInfo: GfxVendorInfo, source: string, type: "vert" | "frag"): string {
         // Garbage WebGL2 shader compiler until I get something better down the line...
         const lines = source.split('\n').map((n) => {
             // Remove comments.
@@ -99,17 +101,9 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
             });
         }
 
-        return `
-${vendorInfo.glslVersion}
-${bugDefines}
-${precision}
-#define ${type.toUpperCase()}
-#define attribute in
-#define varying ${type === 'vert' ? 'out' : 'in'}
-#define main${type === 'vert' ? 'VS' : 'PS'} main
-#define gl_FragColor o_color
-
-#ifdef _BUG_AMD_ROW_MAJOR
+        let matrixDefines: string;
+        if (vendorInfo.bugQuirks.rowMajorMatricesBroken) {
+            matrixDefines = `
 struct Mat4x4 { vec4 _m[4]; };
 struct Mat4x3 { vec4 _m[3]; };
 struct Mat4x2 { vec4 _m[2]; };
@@ -127,7 +121,9 @@ Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[
 Mat4x4 _Mat4x4(float n) { Mat4x4 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; o._m[3].w = n; return o; }
 Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; return o; }
 Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; return o; }
-#else
+`;
+        } else {
+            matrixDefines = `
 #define Mat4x4 mat4x4
 #define Mat4x3 mat4x3
 #define Mat4x2 mat4x2
@@ -135,16 +131,22 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 #define _Mat4x3 mat4x3
 #define Mul(A, B) (A * B)
 #define Fma(D, M, S) (D += (M) * (S))
-#endif
+`;
+        }
 
+        return `
+${vendorInfo.glslVersion}
+${precision}
+#define ${type.toUpperCase()}
+#define attribute in
+#define varying ${type === 'vert' ? 'out' : 'in'}
+#define main${type === 'vert' ? 'VS' : 'PS'} main
+#define gl_FragColor o_color
+${matrixDefines}
 ${defines}
 ${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
 ${rest}
 `.trim();
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        // XXX(jstpierre): Should we have refcounting in the program cache?
     }
 
     private _editShader(n: 'vert' | 'frag' | 'both') {

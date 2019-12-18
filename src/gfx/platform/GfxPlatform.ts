@@ -142,10 +142,9 @@ export interface GfxBindingsDescriptor {
     samplerBindings: GfxSamplerBinding[];
 }
 
-export interface GfxShaderModuleDescriptor {
-    ensurePreprocessed(device: GfxDevice): void;
-    vert: string;
-    frag: string;
+export interface GfxProgramDescriptor {
+    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    oncompileerror(infoLog: string | null): void;
     preprocessedVert: string;
     preprocessedFrag: string;
 }
@@ -247,8 +246,12 @@ export interface GfxDebugGroup {
     triangleCount: number;
 }
 
+export interface GfxBugQuirks {
+    rowMajorMatricesBroken: boolean;
+}
+
 export interface GfxVendorInfo {
-    programBugDefines: string;
+    bugQuirks: GfxBugQuirks;
     glslVersion: string;
     explicitBindingLocations: boolean;
     separateSamplerTextures: boolean;
@@ -297,7 +300,7 @@ export interface GfxDevice {
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
-    createProgram(program: GfxShaderModuleDescriptor): GfxProgram;
+    createProgram(program: GfxProgramDescriptor): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;

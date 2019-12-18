@@ -1,6 +1,6 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxShaderModuleDescriptor } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { assert, assertExists, leftPad } from '../../util';
@@ -79,7 +79,7 @@ interface GfxProgramP_GL extends GfxProgram {
     glProgram: WebGLProgram | null;
     compileDirty: boolean;
     bindDirty: boolean;
-    deviceProgram: GfxShaderModuleDescriptor;
+    deviceProgram: GfxProgramDescriptor;
 }
 
 interface GfxBindingsP_GL extends GfxBindings {
@@ -606,6 +606,7 @@ interface ProgramWithKey extends WebGLProgram {
     uniqueKey: number;
 }
 
+// TODO(jstpierre): Remove this in favor of higher-level code.
 class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
     private _uniqueKey: number = 0;
 
@@ -692,6 +693,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _blackTexture!: WebGLTexture;
 
     // GfxVendorInfo
+    public bugQuirks = new GfxBugQuirksImpl();
     public programBugDefines: string = '';
     public glslVersion = `#version 300 es`;
     public explicitBindingLocations = false;
@@ -733,7 +735,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
             // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
             if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
-                this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
+                this.bugQuirks.rowMajorMatricesBroken = true;
         }
 
         if (TRACK_RESOURCES)
@@ -1068,7 +1070,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return depthStencilAttachment;
     }
 
-    private _createProgram(deviceProgram: GfxShaderModuleDescriptor): GfxProgram {
+    private _createProgram(deviceProgram: GfxProgramDescriptor): GfxProgram {
         deviceProgram.ensurePreprocessed(this);
         const glProgram: WebGLProgram | null = null;
         const bindDirty = true, compileDirty = true;
@@ -1359,9 +1361,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 if (pipeline.ready) {
                     if (IS_DEVELOPMENT && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
                         const deviceProgram = pipeline.program.deviceProgram;
-                        console.error(deviceProgram.vert);
-                        console.error(deviceProgram.frag);
-                        console.error(gl.getProgramInfoLog(prog));
+                        deviceProgram.oncompileerror(gl.getProgramInfoLog(prog));
                     }
                 }
             } else {
