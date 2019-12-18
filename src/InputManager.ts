@@ -43,6 +43,10 @@ export default class InputManager {
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
 
+    private isSingleTouching: boolean = false;
+    private prevSingleTouchX: number = 0;
+    private prevSingleTouchY: number = 0;
+
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
 
@@ -63,6 +67,11 @@ export default class InputManager {
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
         });
+
+        this.toplevel.addEventListener('touchstart', this._onTouchChange);
+        this.toplevel.addEventListener('touchend', this._onTouchChange);
+        this.toplevel.addEventListener('touchcancel', this._onTouchChange);
+        this.toplevel.addEventListener('touchmove', this._onTouchMove);
 
         this.afterFrame();
 
@@ -100,7 +109,7 @@ export default class InputManager {
     }
 
     public isDragging(): boolean {
-        return GlobalGrabManager.hasGrabListener(this);
+        return this.isSingleTouching || GlobalGrabManager.hasGrabListener(this);
     }
 
     public afterFrame() {
@@ -158,6 +167,34 @@ export default class InputManager {
         this.dz += Math.sign(e.deltaY) * -4;
         this.callScrollListeners();
     };
+
+    private _onTouchChange = (e: TouchEvent) => { // start, end or cancel a touch
+        if (!this.isInteractive)
+            return;
+        e.preventDefault();
+        if (e.touches.length == 1) {
+            this.isSingleTouching = true;
+            this.prevSingleTouchX = e.touches[0].clientX;
+            this.prevSingleTouchY = e.touches[0].clientY;
+        } else {
+            this.isSingleTouching = false;
+        }
+    };
+
+    private _onTouchMove = (e: TouchEvent) => {
+        if (!this.isInteractive)
+            return;
+        e.preventDefault();
+        if (e.touches.length == 1) {
+            this.isSingleTouching = true;
+            this.onMotion(e.touches[0].clientX - this.prevSingleTouchX, e.touches[0].clientY - this.prevSingleTouchY);
+            this.prevSingleTouchX = e.touches[0].clientX;
+            this.prevSingleTouchY = e.touches[0].clientY;
+        } else {
+            this.isSingleTouching = false;
+        }
+        // TODO: handle pinch gesture
+    }
 
     public onMotion(dx: number, dy: number) {
         this.dx += dx;
