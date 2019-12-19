@@ -6,7 +6,7 @@ import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilter
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -710,11 +710,15 @@ function sampleAnimationTrackLinear(track: AnimationTrack, frame: number): numbe
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class BoneAnimator {
-    constructor(private animFile: AnimationFile) {
+    constructor(private animFile: AnimationFile, public duration: number) {
     }
 
-    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number): void {
-        timeInFrames = getAnimFrame(this.animFile, timeInFrames);
+    public frames(): number {
+        return this.animFile.endFrame - this.animFile.startFrame;
+    }
+
+    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
+        timeInFrames = getAnimFrame(this.animFile, timeInFrames, mode);
 
         mat4.identity(scratchMatrix);
 
@@ -773,10 +777,17 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
-function getAnimFrame(anim: AnimationFile, frame: number): number {
+function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): number {
     const lastFrame = anim.endFrame - anim.startFrame;
-    while (frame > lastFrame)
-        frame -= lastFrame;
+    switch (mode) {
+    case AnimationMode.Loop:
+        while (frame > lastFrame)
+            frame -= lastFrame;
+        break;
+    case AnimationMode.Once:
+        if (frame > lastFrame)
+            frame = lastFrame;
+    }
     return frame + anim.startFrame;
 }
 
@@ -909,6 +920,12 @@ class TextureAnimator {
     }
 }
 
+export const enum AnimationMode {
+    None,
+    Once,
+    Loop,
+}
+
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
@@ -925,7 +942,11 @@ export class GeometryRenderer {
     public boneToParentMatrixArray: mat4[];
     public modelPointArray: vec3[];
 
-    public boneAnimator: BoneAnimator | null = null;
+    public currAnimation = 0;
+    public animationMode = AnimationMode.Loop;
+    private animFrames = 0;
+
+    public boneAnimators: BoneAnimator[] = [];
     public animationController = new AnimationController(30);
     public movementController: MovementController | null = null;
     public textureAnimator: TextureAnimator | null = null;
@@ -1033,13 +1054,34 @@ export class GeometryRenderer {
     }
 
     private calcAnim(): void {
-        const animationSetup = this.animationSetup;
-        if (this.boneAnimator !== null && animationSetup !== null) {
-            const bones = animationSetup.bones;
+        this.animFrames = this.animationController.getTimeInFrames();
+        const animator = this.boneAnimators[this.currAnimation];
+        if (animator === undefined || this.animationSetup === null)
+            return;
+        const bones = this.animationSetup.bones;
+        const scale = this.animationSetup.translationScale;
 
-            for (let i = 0; i < bones.length; i++)
-                this.boneAnimator.calcBoneToParentMtx(this.boneToParentMatrixArray[i], animationSetup.translationScale, bones[i], this.animationController.getTimeInFrames());
-        }
+        for (let i = 0; i < bones.length; i++)
+            animator.calcBoneToParentMtx(this.boneToParentMatrixArray[i], scale, bones[i], this.animFrames, this.animationMode);
+    }
+
+    public changeAnimation(newIndex: number, mode: AnimationMode) {
+        this.currAnimation = newIndex;
+        this.animationMode = mode;
+        const animator = this.boneAnimators[newIndex];
+        if (animator === undefined)
+            throw `bad animation index ${newIndex}`;
+        this.animationController.adjustTimeToNewFPS(animator.frames()/animator.duration);
+        this.animationController.setPhaseToCurrent();
+        this.animFrames = 0;
+    }
+
+    public animationPhaseTrigger(phase: number): boolean {
+        const total = this.boneAnimators[this.currAnimation].frames();
+        const currFrame = this.animationController.getTimeInFrames()/total;
+        const oldFrame = this.animFrames/total;
+        // assume forward for now
+        return (oldFrame <= phase && phase < currFrame) || (currFrame < oldFrame && (phase < currFrame || oldFrame <= phase));
     }
 
     private calcBonesRelativeToMatrix(array: mat4[], base: mat4): void {
@@ -1233,6 +1275,7 @@ export class FlipbookRenderer {
     public animationController: AnimationController;
     public sortKeyBase: number;
     public rotationAngle = 0;
+    public screenOffset = vec2.create();
     public mode: FlipbookMode;
 
     public primColor = vec4.fromValues(1, 1, 1, 1);
@@ -1260,7 +1303,7 @@ export class FlipbookRenderer {
         };
     }
 
-    public changeData(data: FlipbookData, modeOverride?: FlipbookMode) {
+    public changeData(data: FlipbookData, modeOverride?: FlipbookMode, mirror = false) {
         this.flipbookData = data;
         for (let i = 0; i < data.renderData.textures.length; i++) {
             this.textureEntry[i] = data.renderData.sharedOutput.textureCache.textures[i];
@@ -1274,6 +1317,8 @@ export class FlipbookRenderer {
         this.createProgram();
         this.animationController.fps = data.flipbook.frameRate;
         this.animationController.phaseFrames = 0;
+        this.animationParams.initialMirror = mirror;
+        this.animationParams.mirrored = mirror;
     }
 
     private createProgram(): void {
@@ -1391,7 +1436,10 @@ export class FlipbookRenderer {
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
         J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+        // apply screen transformations after billboarding
         mat4.rotateZ(modelViewScratch, modelViewScratch, this.rotationAngle);
+        modelViewScratch[12] += this.screenOffset[0];
+        modelViewScratch[13] += this.screenOffset[1];
 
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);

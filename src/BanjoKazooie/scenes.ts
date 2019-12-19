@@ -144,11 +144,6 @@ class BKRenderer implements Viewer.SceneGfx {
 }
 
 interface AnimationEntry {
-    id: number;
-    duration: number;
-}
-
-interface AnimationEntry {
     FileID: number;
     Duration: number;
 }
@@ -383,6 +378,14 @@ class ObjectData {
         return this.spawnObject(device, emitters, pairedID, pos, yaw);
     }
 
+    private getObjectAnimations(spawnEntry: ObjectLoadEntry): number[] {
+        const indices: number[] = [];
+        switch (spawnEntry.SpawnID) {
+            case 0x0e6: return [2, 4]; // gloop
+        }
+        return [spawnEntry.AnimationStartIndex];
+    }
+
     public spawnObject(device: GfxDevice, emitters: Emitter[], id: number, pos: vec3, yaw = 0, selector = 0): (GeometryRenderer | FlipbookRenderer)[] {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
@@ -391,6 +394,7 @@ class ObjectData {
         }
 
         const allObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
+        objectPositionOverrides(pos, id);
         // if this object has a model file, make a renderer
         const renderer = spawnEntry.GeoFileID !== 0 ? this.baseSpawnObject(device, emitters, id, spawnEntry.GeoFileID, pos, yaw) : null;
         if (renderer !== null) {
@@ -400,18 +404,21 @@ class ObjectData {
                 renderer.objectFlags = spawnEntry.Flags;
                 setObjectSpecificSelectors(renderer, id, selector);
             }
-
-            const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
-            if (animEntry !== undefined) {
+            if (spawnEntry.AnimationTable.length > 0) {
                 if (renderer instanceof GeometryRenderer) {
-                    const file = findFileByID(this.objectSetupData, animEntry.FileID);
-                    if (file !== null) {
+                    const indices = this.getObjectAnimations(spawnEntry);
+                    for (let i = 0; i < indices.length; i++) {
+                        const animEntry = spawnEntry.AnimationTable[indices[i]];
+                        if (animEntry === undefined)
+                            continue;
+                        const file = findFileByID(this.objectSetupData, animEntry.FileID);
+                        if (file === null)
+                            continue;
                         const animFile = parseAnimationFile(file.Data);
-                        renderer.boneAnimator = new BoneAnimator(animFile);
+                        renderer.boneAnimators.push(new BoneAnimator(animFile, animEntry.Duration));
                     }
-                } else {
+                } else
                     console.warn(`animation data for flipbook object ${hexzero(id, 4)}`)
-                }
             }
             allObjects.push(renderer);
         }
@@ -437,7 +444,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=7`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=8`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -465,6 +472,13 @@ function setObjectSpecificSelectors(objRenderer: GeometryRenderer, id: number, v
     const turtleID = id - 0x27a;
     if (turtleID >= 1 && turtleID <= 6)
         objRenderer.selectorState.values[4] = turtleID;
+}
+
+function objectPositionOverrides(dst: vec3, id: number): void {
+    switch (id) {
+        case 0x3c:
+            vec3.set(dst, 5700, -2620, -20); break;
+    }
 }
 
 interface MovementFactory {
@@ -699,7 +713,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (object instanceof Actors.ClankerBolt)
                         object.clankerVector = assertExists(clanker.modelPointArray[5]);
                     else if (object instanceof Actors.ClankerTooth)
-                        object.movementController = new Actors.ModelPin(assertExists(clanker.modelPointArray[object.index]));
+                        object.movementController = new Actors.ModelPin(clanker.modelPointArray, object.index);
                 }
                 sceneRenderer.geoRenderers.push(clanker);
             }

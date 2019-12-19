@@ -286,7 +286,7 @@ function extractObjectLoad(fs: FS) {
         extractFileAndAppend(fileTable, fs, id);
 
     // particles
-    for (let id = 0x70d; id <= 0x71b; id++)
+    for (let id = 0x700; id <= 0x71b; id++)
         extractFileAndAppend(fileTable, fs, id);
 
     const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);

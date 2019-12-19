@@ -34,6 +34,12 @@ export default class AnimationController {
     public setPhaseToCurrent(): void {
         this.phaseFrames = -this.timeInFrames;
     }
+
+    public adjustTimeToNewFPS(newFPS: number): void {
+        this.timeInFrames *= newFPS / this.fps;
+        this.phaseFrames *= newFPS / this.fps;
+        this.fps = newFPS;
+    }
 }
 
 export function getTimeInFrames(milliseconds: number, fps: number): number {

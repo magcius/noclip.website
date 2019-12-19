@@ -1,9 +1,9 @@
-import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController } from './render';
+import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode } from './render';
 import { vec3, mat4 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
 import { MathConstants } from '../MathHelpers';
-import { Sparkler, Emitter, SparkleColor } from './particles';
 import { getPointHermite } from '../Spline';
+import { Emitter, Sparkler, SparkleColor, ParticleType } from './particles';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(geometryData: GeometryData, public index: number) {
@@ -67,11 +67,11 @@ export class ClankerBolt extends GeometryRenderer {
 }
 
 class ShinyObject extends GeometryRenderer {
-    constructor(geometryData: GeometryData, emitters: Emitter[], sparkleRate: number, private turnRate: number = 0, sparkleColor: number = 3) {
+    constructor(geometryData: GeometryData, emitters: Emitter[], sparkleRate: number, private turnRate: number = 0, sparkleColor = SparkleColor.Yellow) {
         super(geometryData);
         for (let i = 0; i < 4; i++) {
             const sparkler = new Sparkler(sparkleRate, sparkleColor);
-            sparkler.movementController = new ModelPin(assertExists(this.modelPointArray[i + 5]));
+            sparkler.movementController = new ModelPin(this.modelPointArray, i + 5);
             emitters.push(sparkler);
         }
     }
@@ -97,12 +97,6 @@ interface RailLerp {
     yaw?: [number, number];
     pitch?: [number, number];
     speed?: [number, number];
-}
-
-const enum AnimationMode {
-    None,
-    Once,
-    Loop,
 }
 
 const enum AngleUpdate {
@@ -522,6 +516,10 @@ export class RailRider extends GeometryRenderer {
             this.railYaw = false;
         else if (keyframe.yawUpdate === AngleUpdate.Rail)
             this.railYaw = true;
+
+        if (keyframe.animMode !== AnimationMode.None)
+            this.animationMode = keyframe.animMode;
+
         this.waitTimer = keyframe.waitTime;
         if (keyframe.waitIndex > 0)
             this.waitTimer = 1 / 30; // pause might be incidental, stores the index somewhere
@@ -579,6 +577,35 @@ export class RailRider extends GeometryRenderer {
     }
 }
 
+const enum GloopState {
+    Swim,
+    Bubble,
+}
+
+class Gloop extends RailRider {
+    private bubbler = new Emitter(ParticleType.AirBubble);
+
+    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+        super(geometryData);
+        this.bubbler.movementController = new ModelPin(this.modelPointArray, 5);
+        emitters.push(this.bubbler);
+    }
+
+    protected movement(deltaSeconds: number): void {
+        super.movement(deltaSeconds);
+        let anim = GloopState.Swim;
+        let mode = AnimationMode.Loop;
+        if (this.waitTimer > 0) {
+            anim = GloopState.Bubble;
+            mode = AnimationMode.Once;
+        }
+        if (anim === GloopState.Bubble && this.animationPhaseTrigger(0.6))
+            this.bubbler.shouldEmit = true;
+        if (anim !== this.currAnimation)
+            this.changeAnimation(anim, mode);
+    }
+}
+
 class MagicCarpet extends RailRider {
     protected applyKeyframe(keyframe: RailKeyframe): void {
         super.applyKeyframe(keyframe);
@@ -599,9 +626,8 @@ export function createRenderer(emitters: Emitter[], objectID: number, geometryDa
         case 0x1d9: return new ShinyObject(geometryData, emitters, 1 / 60, 0, SparkleColor.Red);
         case 0x1da: return new ShinyObject(geometryData, emitters, 1 / 60);
 
-        case 0x0e6:     //gloop
-        case 0x0f1:     //swamp leaf
-            return new RailRider(geometryData);
+        case 0x0e6: return new Gloop(geometryData, emitters);
+        case 0x0f1: return new RailRider(geometryData); //swamp leaf
         case 0x123: return new MagicCarpet(geometryData);
     }
     return new GeometryRenderer(geometryData);
@@ -663,7 +689,10 @@ export class WaterBobber extends Bobber {
 }
 
 export class ModelPin implements MovementController {
-    constructor(private modelVector: vec3) { }
+    private modelVector: vec3;
+    constructor(points: vec3[], index: number){
+        this.modelVector = assertExists(points[index]);
+    }
 
     public movement(dst: mat4, _: number): void {
         mat4.fromTranslation(dst, this.modelVector);

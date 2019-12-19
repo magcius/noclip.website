@@ -1,14 +1,15 @@
-import { mat4, vec4, vec3 } from "gl-matrix";
+import { mat4, vec4, vec3, vec2 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { FlipbookRenderer, MovementController, FlipbookData } from "./render";
 import { nArray } from "../util";
-import { lerp, clamp, MathConstants } from "../MathHelpers";
+import { MathConstants } from "../MathHelpers";
 import { FlipbookMode } from "./flipbook";
 
-export const enum Type {
+export const enum ParticleType {
     Sparkle,
+    AirBubble, // actually an object in the game
 }
 
 const enum MotionType {
@@ -19,17 +20,21 @@ const enum MotionType {
     BounceOnCollision,
 }
 
+const sparkleOffset = 0x10;
+
 const particleScratch = vec3.create();
 export class Particle {
     public timer = 0; // number of 30fps frames this particle has left
     public modelMatrix = mat4.create();
     public velocity = vec3.create();
+    public targetVelocity = vec3.create();
     public gravity = 0;
     public maxAccel = 0;
+    public sinceUpdate = 0;
 
-    public type: Type;
-    public scaleX = 1;
-    public scaleY = 1;
+    public type: ParticleType;
+    public scaleX = 0;
+    public scaleY = 0;
     public rotationSpeed = 0;
     public motionType = MotionType.Static;
     public flipbook: FlipbookRenderer;
@@ -41,18 +46,33 @@ export class Particle {
     // maybe turn this into a piecewise linear function?
     private static sparkleDimensions = [10, 10, 15, 20, 25, 30, 35, 40, 45, 50, 54, 58, 62, 66, 70, 74, 76, 78, 80, 40, 20];
 
-    public init(manager: EmitterManager, type: Type, matrix: mat4, particleIndex = 0): void {
+    public init(manager: EmitterManager, type: ParticleType, matrix: mat4, particleIndex = 0): void {
         this.type = type;
         mat4.copy(this.modelMatrix, matrix);
         vec3.set(this.velocity, 0, 0, 0);
+        vec3.set(this.targetVelocity, 0, 0, 0);
+
+        this.scaleX = 0;
+        this.scaleY = 0;
+        this.flipbook.rotationAngle = 0;
         vec4.set(this.flipbook.primColor, 1, 1, 1, 1);
+        vec2.set(this.flipbook.screenOffset, 0, 0);
 
         switch (this.type) {
-            case Type.Sparkle:
+            case ParticleType.Sparkle:
                 this.timer = 20;
                 this.motionType = MotionType.Static;
                 this.rotationSpeed = 7 * MathConstants.DEG_TO_RAD * 30;
-                this.flipbook.changeData(manager.getFlipbook(particleIndex), FlipbookMode.Translucent);
+                vec4.set(this.flipbook.primColor, 1, 1, 1, 180 / 255);
+                this.flipbook.changeData(manager.getFlipbook(sparkleOffset + particleIndex), FlipbookMode.Translucent);
+                break;
+            case ParticleType.AirBubble:
+                this.timer = 10 * 30; // time based, rather than frame
+                this.motionType = MotionType.ConstantVelocity;
+                vec3.set(this.targetVelocity, 0, 80, 0)
+                vec4.set(this.flipbook.primColor, 180 / 255, 240 / 255, 160 / 255, 160 / 255);
+                this.flipbook.changeData(manager.getFlipbook(4), FlipbookMode.Opaque, true);
+                this.sinceUpdate = 1;
         }
     }
 
@@ -72,11 +92,30 @@ export class Particle {
 
     public update(deltaSeconds: number): boolean {
         switch (this.type) {
-            case Type.Sparkle:
+            case ParticleType.Sparkle:
                 this.scaleX = Particle.sparkleDimensions[this.timer >>> 0];
                 this.scaleY = this.scaleX;
-                this.flipbook.primColor[3] = 180 / 255;
                 this.flipbook.rotationAngle += this.rotationSpeed * deltaSeconds;
+                break;
+            case ParticleType.AirBubble:
+                const commonStep = deltaSeconds * 230
+                this.scaleX = Math.min(200, this.scaleX + commonStep);
+                this.scaleY = this.scaleX;
+                vec2.set(this.flipbook.screenOffset, -this.scaleX / 2, this.scaleY / 2);
+                for (let i = 0; i < 3; i++) {
+                    if (this.velocity[i] < this.targetVelocity[i])
+                        this.velocity[i] = Math.min(this.velocity[i] + 10 * commonStep, this.targetVelocity[i]);
+                    else
+                        this.velocity[i] = Math.max(this.velocity[i] - 10 * commonStep, this.targetVelocity[i]);
+                }
+                // game has some logic to update at random intervals,
+                // but the constants are such that it always updates every other frame
+                this.sinceUpdate += deltaSeconds;
+                if (this.sinceUpdate > 1 / 15) {
+                    this.sinceUpdate = 0;
+                    this.targetVelocity[0] = 100 * Math.random() - 50;
+                    this.targetVelocity[2] = 100 * Math.random() - 50;
+                }
         }
 
         this.motion(deltaSeconds);
@@ -100,12 +139,23 @@ export class Particle {
 }
 
 export class Emitter {
+    public shouldEmit = false;
     public modelMatrix = mat4.create();
     public movementController: MovementController | null = null
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    constructor(private type: ParticleType, private sparkleColor = SparkleColor.Yellow) { }
+
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, time);
+        if (!this.shouldEmit)
+            return false;
+        this.shouldEmit = false;
+        const newParticle = manager.getParticle();
+        if (newParticle === null)
+            return false;
+        newParticle.init(manager, this.type, this.modelMatrix, this.sparkleColor);
+        return true;
     }
 
 }
@@ -126,19 +176,14 @@ export const enum SparkleColor {
 }
 
 export class Sparkler extends Emitter {
-    constructor(private sparkleRate: number, private sparkleColor = SparkleColor.Yellow) {
-        super();
+    constructor(private sparkleRate: number, sparkleColor: SparkleColor = SparkleColor.Yellow) {
+        super(ParticleType.Sparkle, sparkleColor);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
-        super.update(manager, time, deltaSeconds);
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
         // Poisson process in this time interval, assuming base rate is for a 30 fps frame
-        if (Math.random() < Math.exp(-this.sparkleRate * deltaSeconds * 30))
-            return;
-        const newParticle = manager.getParticle();
-        if (newParticle === null)
-            return;
-        newParticle.init(manager, Type.Sparkle, this.modelMatrix, this.sparkleColor);
+        this.shouldEmit = Math.random() > Math.exp(-this.sparkleRate * deltaSeconds * 30);
+        return super.update(manager, time, deltaSeconds);
     }
 }
 
@@ -147,7 +192,7 @@ export class EmitterManager {
     public particlePool: Particle[] = [];
 
     constructor(public maxParticles: number, private flipbooks: FlipbookData[]) {
-        this.particlePool = nArray(maxParticles, () => new Particle(flipbooks[0]));
+        this.particlePool = nArray(maxParticles, () => new Particle(flipbooks[sparkleOffset]));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {

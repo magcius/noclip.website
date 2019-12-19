@@ -1,12 +1,12 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { RSPSharedOutput, TileState, Texture, Vertex } from "./f3dex";
 import { align, assert, hexzero } from "../util";
-import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_IA16 } from "../Common/N64/Image";
+import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_I8 } from "../Common/N64/Image";
 
 const enum Flags {
     CI4 = 0x001,
     CI8 = 0x004,
-    IA16 = 0X040,
+    I8 = 0X040,
     RGBA16 = 0x400,
     RGBA32 = 0x800,
 }
@@ -92,7 +92,7 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
     const mirrorMode: MirrorMode = (view.getUint16(0x0c) >>> 5) & 0x03;
     const renderMode = (flags & 0xB00) ? FlipbookMode.Opaque : FlipbookMode.AlphaTest;
 
-    assert(reverseMode !== ReverseMode.IfMirrored); // haven't implemented this yet
+    assert(reverseMode !== ReverseMode.IfMirrored);
 
     const headerSize = 4 * frameCount + 0x10;
     const sharedOutput = new RSPSharedOutput();
@@ -143,9 +143,9 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
                 bytesPerPixel = 1;
                 const palette = new Uint8Array(256 * 4);
                 parseTLUT(palette, view, paletteStart, ImageSize.G_IM_SIZ_8b, TextureLUT.G_TT_RGBA16);
-            } else if (flags & Flags.IA16) {
+            } else if (flags & Flags.I8) {
                 bytesPerPixel = 2;
-                decodeTex_IA16(panelPixels, view, imageStart, panelWidth, panelHeight);
+                decodeTex_I8(panelPixels, view, imageStart, panelWidth, panelHeight);
             } else {
                 throw `bad frame format ${flags.toString(16)}`;
             }
