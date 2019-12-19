@@ -20,7 +20,6 @@ import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 import { Emitter, EmitterManager } from './particles';
-import { RailRider } from '../SuperMarioGalaxy/RailRider';
 
 const pathBase = `BanjoKazooie`;
 
@@ -38,8 +37,10 @@ class BKRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         // load all particle files
         const particleData: FlipbookData[] = [];
-        for (let i = 0x710; i <= 0x71b; i++)
-            particleData.push(objectData.ensureFlipbookData(device, i)!);
+        for (let i = 0x0d; i <= 0x1b; i++)
+            particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
+        for (let i of [0x03, 0x04, 0x05, 0x08, 0x0a, 0x0b])
+            particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
         this.emitterManager = new EmitterManager(40, particleData);
     }
 
@@ -291,7 +292,6 @@ class ObjectData {
             const view = geoData.createDataView();
             const magic = view.getUint32(0x00);
 
-            // TODO: figure out what these other files are
             if (magic === 0x0000000B) {
                 // TODO: find if models can set different Z/opacity modes
                 const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, true);
@@ -539,15 +539,18 @@ class SceneDesc implements Viewer.SceneDesc {
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
 
+                        let isKeyframe = false;
                         const railIndex = view.getUint16(offs + 0x10) >>> 4;
                         if (railIndex > 0) {
+                            isKeyframe = !!(view.getUint16(offs + 0x06) & 1);
                             const next = view.getUint16(offs + 0x11) & 0xfff;
-                            const isKeyframe = !!(view.getUint8(offs + 0x07) & 1);
-                            const time = isKeyframe ? view.getFloat32(offs + 0x00) : 0;
-                            railNodes[railIndex] = { pos, next, isKeyframe, time };
+                            const data = isKeyframe ? Actors.buildKeyframeData(view, offs) : pos;
+                            railNodes[railIndex] = { next, data };
                         }
 
                         offs += 0x14;
+                        if (isKeyframe)
+                            continue;
 
                         if (category === 0x06) {
                             if (id === 0x13)

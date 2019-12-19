@@ -225,7 +225,6 @@ interface GeoContext {
 }
 
 function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
-    // TODO: figure out the unreferenced vertices
     const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
     // G_TF_BILERP
     rspState.gDPSetOtherModeH(12, 2, 0x2000);

@@ -86,7 +86,6 @@ void main() {
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
-    // TODO: figure out whether to use lookat vectors instead, and find where the light direction gets set
 
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
