@@ -353,6 +353,8 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
+        keyMovement[2] += -inputManager.getPinchDeltaDist();
+
         if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
             keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
@@ -362,6 +364,8 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
+        keyMovement[0] += -inputManager.getTouchDeltaX();
+
         if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
@@ -370,6 +374,8 @@ export class FPSCameraController implements CameraController {
             keyMovement[1] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
         }
+
+        keyMovement[1] += inputManager.getTouchDeltaY();
 
         const worldUp = scratchVec3b;
         // Instead of getting the camera up, instead use world up. Feels more natural.
