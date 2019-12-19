@@ -44,6 +44,7 @@ export interface WwContext {
     symbolMap: SymbolMap, 
     cache: GfxRenderCache,
     roomRenderer: WindWakerRoomRenderer,
+    stage: string,
 
     flowerPacket: FlowerPacket,
 };
@@ -1266,6 +1267,7 @@ class SceneDesc {
             renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
             renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
+            renderer.context.stage = this.stageDir;
 
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
