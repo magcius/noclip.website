@@ -11,7 +11,7 @@ import { decompress } from "../Common/Compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -2294,7 +2294,7 @@ class SnowRenderer {
             if (this.snowShift[i] < 0)
                 this.snowShift[i] += this.flakeBounds;
         }
-        fillVec3(d, offs, this.snowShift, this.flakeScale);
+        fillVec3v(d, offs, this.snowShift, this.flakeScale);
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));

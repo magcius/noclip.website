@@ -3,9 +3,9 @@ import * as Viewer from '../viewer';
 import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec2 } from "gl-matrix";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
+import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
 import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
@@ -18,6 +18,7 @@ import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { ModelCache } from "./Scenes_Fez";
+import { SkyRenderer, SkyData } from './Sky';
 
 class FezProgram {
     public static ub_SceneParams = 0;
@@ -30,31 +31,47 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ShapeParams {
     Mat4x3 u_BoneMatrix[1];
+    vec4 u_LightDirection;
     vec4 u_TexScaleBiasPre;
     vec4 u_TexScaleBiasPost;
+    vec4 u_Misc[1];
 };
+
+#define u_BaseDiffuse (u_Misc[0].x)
+#define u_BaseAmbient (u_Misc[0].y)
 `;
 
     public vert: string = `
 layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec2 a_TexCoord;
+layout(location = 1) in vec3 a_Normal;
+layout(location = 2) in vec2 a_TexCoord;
 
+out vec3 v_Normal;
 out vec2 v_TexCoord;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Normal, 0.0)).xyz);
     v_TexCoord = a_TexCoord.xy * u_TexScaleBiasPre.xy + u_TexScaleBiasPre.zw;
 }
 `;
 
     public frag: string = `
 in vec2 v_TexCoord;
+in vec3 v_Normal;
 
-uniform sampler2D u_Texture[1]; 
+uniform sampler2D u_Texture[1];
+
 void main() {
     vec2 t_TexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
     t_TexCoord = t_TexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
-    gl_FragColor = texture(u_Texture[0], t_TexCoord.xy);
+    vec4 t_DiffuseMapColor = texture(u_Texture[0], t_TexCoord.xy);
+
+    float t_LightFalloff = clamp(dot(u_LightDirection.xyz, v_Normal.xyz), 0.0, 1.0);
+    float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
+
+    gl_FragColor.rgb = t_Illum * t_DiffuseMapColor.rgb;
+    gl_FragColor.a = t_DiffuseMapColor.a;
 }
 `;
 }
@@ -65,7 +82,13 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 const modelViewScratch = mat4.create();
 
-const gc_orientations = [180, 270, 0, 90];
+const orientations = [180, 270, 0, 90];
+
+class FezLevelRenderData {
+    public lightDirection = vec4.create();
+    public baseDiffuse: number = 1.0;
+    public baseAmbient: number = 0.0;
+}
 
 export class FezRenderer implements Viewer.SceneGfx {
     private program: GfxProgramDescriptorSimple;
@@ -73,9 +96,13 @@ export class FezRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;
     private modelMatrix: mat4 = mat4.create();
     private backgroundPlaneStaticData: BackgroundPlaneStaticData;
+    private skyData: SkyData;
+    private skyRenderer: SkyRenderer;
+    private levelRenderData = new FezLevelRenderData();
     public trileRenderers: FezObjectRenderer[] = [];
     public artObjectRenderers: FezObjectRenderer[] = [];
     public backgroundPlaneRenderers: BackgroundPlaneRenderer[] = [];
+    public lightDirection = vec4.fromValues(1, 1, 1, 0);
 
     constructor(device: GfxDevice, modelCache: ModelCache, levelDocument: Document) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -85,7 +112,12 @@ export class FezRenderer implements Viewer.SceneGfx {
 
         const trileInstances = levelDocument.querySelectorAll('TrileInstance');
 
-        const trilesetID = levelDocument.querySelector('Level')!.getAttribute('trileSetName')!.toLowerCase();
+        const level = levelDocument.querySelector('Level')!;
+
+        this.levelRenderData.baseDiffuse = Number(level.getAttribute('baseDiffuse')!);
+        this.levelRenderData.baseAmbient = Number(level.getAttribute('baseAmbient')!);
+
+        const trilesetID = level.getAttribute('trileSetName')!.toLowerCase();
         const trilesetData = assertExists(modelCache.trilesetDatas.find((td) => td.name === trilesetID));
 
         for (let i = 0; i < trileInstances.length; i++) {
@@ -97,7 +129,7 @@ export class FezRenderer implements Viewer.SceneGfx {
 
             const position = parseVector3(trileInstances[i].querySelector('Position Vector3')!);
             const orientation = Number(trileInstances[i].getAttribute('orientation'));
-            const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
+            const rotateY = orientations[orientation] * MathConstants.DEG_TO_RAD;
 
             const trileData = trilesetData.triles.find((trileData) => trileData.key === trileId)!;
 
@@ -107,6 +139,10 @@ export class FezRenderer implements Viewer.SceneGfx {
             mat4.mul(trileRenderer.modelMatrix, this.modelMatrix, trileRenderer.modelMatrix);
             this.trileRenderers.push(trileRenderer);
         }
+
+        const skyID = level.getAttribute('skyName')!.toLowerCase();
+        this.skyData = assertExists(modelCache.skyDatas.find((sd) => sd.name === skyID));
+        this.skyRenderer = new SkyRenderer(this.skyData);
 
         const artObjectInstances = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance');
         for (let i = 0; i < artObjectInstances.length; i++) {
@@ -155,12 +191,16 @@ export class FezRenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(FezProgram.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
+        this.skyRenderer.prepareToRender(renderInstManager, viewerInput);
+        vec4.transformMat4(this.levelRenderData.lightDirection, this.lightDirection, viewerInput.camera.viewMatrix);
+
+        template.sortKey = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, gfxProgram.ResourceUniqueId);
         for (let i = 0; i < this.trileRenderers.length; i++)
-            this.trileRenderers[i].prepareToRender(renderInstManager, viewerInput);
+            this.trileRenderers[i].prepareToRender(this.levelRenderData, renderInstManager, viewerInput);
         for (let i = 0; i < this.artObjectRenderers.length; i++)
-            this.artObjectRenderers[i].prepareToRender(renderInstManager, viewerInput);
+            this.artObjectRenderers[i].prepareToRender(this.levelRenderData, renderInstManager, viewerInput);
         for (let i = 0; i < this.backgroundPlaneRenderers.length; i++)
-            this.backgroundPlaneRenderers[i].prepareToRender(renderInstManager, viewerInput);
+            this.backgroundPlaneRenderers[i].prepareToRender(this.levelRenderData, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
 
@@ -209,7 +249,7 @@ export class FezObjectRenderer {
         this.megaStateFlags.cullMode = GfxCullMode.BACK;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         bboxScratch.transform(this.data.bbox, this.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
@@ -219,13 +259,15 @@ export class FezObjectRenderer {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+4+4);
+        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+16);
         const d = renderInst.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
+        offs += fillVec4v(d, offs, levelRenderData.lightDirection);
         offs += fillVec4(d, offs, 1, 1, 0, 0);
         offs += fillVec4(d, offs, 1, 1, 0, 0);
+        offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.data.indexCount);
     }
@@ -307,22 +349,25 @@ export class BackgroundPlaneRenderer {
         this.textureMapping[0].gfxSampler = this.sampler;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
+        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+16);
         const d = renderInst.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
+
         const timeInSeconds = viewerInput.time / 1000;
         this.planeData.calcTexMatrix(texMatrixScratch, timeInSeconds);
 
+        offs += fillVec4v(d, offs, levelRenderData.lightDirection);
         offs += fillVec4(d, offs, this.rawScale[0], this.rawScale[1], 0, 0);
         offs += fillVec4(d, offs, texMatrixScratch[0], texMatrixScratch[5], texMatrixScratch[12], texMatrixScratch[13]);
+        offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.staticData.indexCount);
     }

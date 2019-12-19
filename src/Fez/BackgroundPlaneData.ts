@@ -89,10 +89,11 @@ export class BackgroundPlaneStaticData {
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vertexData = Float32Array.from([
-            -0.5,  0.5, 0, 0, 0,
-             0.5,  0.5, 0, 1, 0,
-             0.5, -0.5, 0, 1, 1,
-            -0.5, -0.5, 0, 0, 1,
+            // position     normal    texcoord
+            -0.5,  0.5, 0,  0, 0, 1,  0, 0,
+             0.5,  0.5, 0,  0, 0, 1,  1, 0,
+             0.5, -0.5, 0,  0, 0, 1,  1, 1,
+            -0.5, -0.5, 0,  0, 0, 1,  0, 1,
         ]);
 
         const indexData = Uint16Array.from([
@@ -103,10 +104,11 @@ export class BackgroundPlaneStaticData {
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, }, // Position
-            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 3*0x04, }, // TexCoord
+            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3*0x04, }, // Position
+            { location: 2, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 6*0x04, }, // TexCoord
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 5*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U16_R,

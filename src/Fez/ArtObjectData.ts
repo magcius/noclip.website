@@ -17,7 +17,8 @@ const gc_normals = [
 ];
 
 export class ArtObjectData {
-    private vertexBuffer: GfxBuffer;
+    private positionBuffer: GfxBuffer;
+    private normalBuffer: GfxBuffer;
     private texcoordBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     public indexCount: number;
@@ -51,17 +52,21 @@ export class ArtObjectData {
         this.indexCount = indices.length;
 
         const posF32A = Float32Array.from(flat(positions));
+        const normalF32A = Float32Array.from(flat(normals));
         const texcoordF32A = Float32Array.from(flat(texcoords));
         const indicesI32A = Uint32Array.from(indices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX,posF32A.buffer);
-        this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX,texcoordF32A.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,indicesI32A.buffer);
+        this.positionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posF32A.buffer);
+        this.normalBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, normalF32A.buffer);
+        this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texcoordF32A.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indicesI32A.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position
-            { location: 1, bufferIndex: 1, format: GfxFormat.F32_RG,  bufferByteOffset: 0, }, // TexCoord
+            { location: 1, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Normal
+            { location: 2, bufferIndex: 2, format: GfxFormat.F32_RG,  bufferByteOffset: 0, }, // TexCoord
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
             { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
             { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
@@ -71,8 +76,10 @@ export class ArtObjectData {
             vertexBufferDescriptors,
         });
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, },
-            { buffer: this.texcoordBuffer, byteOffset: 0 }],
+            { buffer: this.positionBuffer, byteOffset: 0, },
+            { buffer: this.normalBuffer, byteOffset: 0, },
+            { buffer: this.texcoordBuffer, byteOffset: 0, },
+        ],
         { buffer: this.indexBuffer, byteOffset: 0 });
 
         this.texture = makeTextureFromImageData(device, texImageData);
@@ -88,7 +95,7 @@ export class ArtObjectData {
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
-        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.positionBuffer);
         device.destroyBuffer(this.texcoordBuffer);
         device.destroyInputState(this.inputState);
         device.destroyTexture(this.texture);

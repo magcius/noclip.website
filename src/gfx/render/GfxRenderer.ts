@@ -141,6 +141,8 @@ const enum GfxRenderInstFlags {
     TEMPLATE_RENDER_INST = 1 << 0,
     DRAW_RENDER_INST = 1 << 1,
     DRAW_INDEXED = 1 << 2,
+
+    INHERITED_FLAGS = (DRAW_INDEXED),
 }
 
 interface GfxRendererTransientState {
@@ -195,11 +197,15 @@ export class GfxRenderInst {
         this._renderPipeline = o._renderPipeline;
         this._inputState = o._inputState;
         this._uniformBuffer = o._uniformBuffer;
+        this._drawCount = o._drawCount;
+        this._drawStart = o._drawStart;
+        this._drawInstanceCount = o._drawInstanceCount;
+        this._flags = (o._flags & GfxRenderInstFlags.INHERITED_FLAGS);
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
         if (o._bindingDescriptors[0].bindingLayout !== null)
             this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
-        for (let i = 0; i < o._bindingDescriptors[0].uniformBufferBindings.length; i++)
+        for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)

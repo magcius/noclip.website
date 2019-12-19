@@ -4,7 +4,7 @@
 import { mat4, mat2d, vec3, vec4 } from "gl-matrix";
 import { GfxColor } from "../platform/GfxPlatform";
 
-export function fillVec3(d: Float32Array, offs: number, v: vec3, v3: number = 0): number {
+export function fillVec3v(d: Float32Array, offs: number, v: vec3, v3: number = 0): number {
     d[offs + 0] = v[0];
     d[offs + 1] = v[1];
     d[offs + 2] = v[2];
