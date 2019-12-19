@@ -200,7 +200,7 @@ export class GfxRenderInst {
         this._drawCount = o._drawCount;
         this._drawStart = o._drawStart;
         this._drawInstanceCount = o._drawInstanceCount;
-        this._flags = (o._flags & GfxRenderInstFlags.INHERITED_FLAGS);
+        this._flags = (this._flags & ~GfxRenderInstFlags.INHERITED_FLAGS) | (o._flags & GfxRenderInstFlags.INHERITED_FLAGS);
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
         const tbd = this._bindingDescriptors[0], obd = o._bindingDescriptors[0];
