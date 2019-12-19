@@ -329,6 +329,9 @@ export class FlowerPacket {
         colorCopy(materialParams.u_Color[ColorKind.C0], White);
         colorCopy(materialParams.u_Color[ColorKind.C1], White);
 
+        // @TODO: This should probably be precomputed and stored in the context
+        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
+
         // Draw white flowers
         // @TODO: Only loop over flowers in this room (using the linked list)
         materialParams.m_TextureMapping[0].copy(this.flowerModel.whiteTextureMapping);
@@ -343,9 +346,7 @@ export class FlowerPacket {
             this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-            const m = packetParams.u_PosMtx[0];
-            computeViewMatrix(m, viewerInput.camera);
-            mat4.mul(m, m, data.modelMatrix);
+            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
             this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
         }
 
@@ -363,9 +364,7 @@ export class FlowerPacket {
             this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-            const m = packetParams.u_PosMtx[0];
-            computeViewMatrix(m, viewerInput.camera);
-            mat4.mul(m, m, data.modelMatrix);
+            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
             this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
         }
 
@@ -383,9 +382,7 @@ export class FlowerPacket {
             this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-            const m = packetParams.u_PosMtx[0];
-            computeViewMatrix(m, viewerInput.camera);
-            mat4.mul(m, m, data.modelMatrix);
+            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
             this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
         }
     }
