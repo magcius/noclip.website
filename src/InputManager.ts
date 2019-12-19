@@ -1,7 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
-import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -27,6 +26,12 @@ function isModifier(key: string) {
 
 export type Listener = (inputManager: InputManager) => void;
 
+const enum TouchGesture {
+    None,
+    Scroll, // 1-finger scroll and pan
+    Pinch, // 2-finger pinch in and out
+}
+
 export default class InputManager {
     public invertY = false;
     public invertX = false;
@@ -44,13 +49,13 @@ export default class InputManager {
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
 
-    private isSingleTouching: boolean = false;
-    private prevSingleTouchX: number = 0;
-    private prevSingleTouchY: number = 0;
-
-    private isDoubleTouching: boolean = false;
-    private prevDoubleTouchDist: number = 0;
-    private dDoubleTouchDist: number = 0;
+    private touchGesture: TouchGesture = TouchGesture.None;
+    private prevTouchX: number = 0; // When scrolling, contains finger X; when pinching, contains midpoint X
+    private prevTouchY: number = 0; // When scrolling, contains finger Y; when pinching, contains midpoint Y
+    private prevPinchDist: number = 0;
+    private dTouchX: number = 0;
+    private dTouchY: number = 0;
+    private dPinchDist: number = 0;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -105,8 +110,8 @@ export default class InputManager {
         return this.dy;
     }
 
-    public getDoubleTouchDeltaDist(): number {
-        return this.isDoubleTouching ? this.dDoubleTouchDist : 0;
+    public getPinchDeltaDist(): number {
+        return this.touchGesture == TouchGesture.Pinch ? this.dPinchDist : 0;
     }
 
     public isKeyDownEventTriggered(key: string): boolean {
@@ -118,14 +123,14 @@ export default class InputManager {
     }
 
     public isDragging(): boolean {
-        return this.isSingleTouching || GlobalGrabManager.hasGrabListener(this);
+        return this.touchGesture != TouchGesture.None || GlobalGrabManager.hasGrabListener(this);
     }
 
     public afterFrame() {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
-        this.dDoubleTouchDist = 0;
+        this.dPinchDist = 0;
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
@@ -183,18 +188,21 @@ export default class InputManager {
             return;
         e.preventDefault();
         if (e.touches.length == 1) {
-            this.isSingleTouching = true;
-            this.isDoubleTouching = false;
-            this.prevSingleTouchX = e.touches[0].clientX;
-            this.prevSingleTouchY = e.touches[0].clientY;
+            this.touchGesture = TouchGesture.Scroll;
+            this.prevTouchX = e.touches[0].clientX;
+            this.prevTouchY = e.touches[0].clientY;
+            this.dTouchX = 0;
+            this.dTouchY = 0;
         } else if (e.touches.length == 2) {
-            this.isDoubleTouching = true;
-            this.isSingleTouching = false;
-            this.prevDoubleTouchDist = vec2.dist([e.touches[0].clientX, e.touches[0].clientY], [e.touches[1].clientX, e.touches[1].clientY]);
-            this.dDoubleTouchDist = 0;
+            this.touchGesture = TouchGesture.Pinch;
+            this.prevTouchX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            this.prevTouchY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            this.prevPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            this.dTouchX = 0;
+            this.dTouchY = 0;
+            this.dPinchDist = 0;
         } else {
-            this.isSingleTouching = false;
-            this.isDoubleTouching = false;
+            this.touchGesture = TouchGesture.None;
         }
     };
 
@@ -203,22 +211,26 @@ export default class InputManager {
             return;
         e.preventDefault();
         if (e.touches.length == 1) {
-            this.isSingleTouching = true;
-            this.isDoubleTouching = false;
-            this.onMotion(e.touches[0].clientX - this.prevSingleTouchX, e.touches[0].clientY - this.prevSingleTouchY);
-            this.prevSingleTouchX = e.touches[0].clientX;
-            this.prevSingleTouchY = e.touches[0].clientY;
+            this.touchGesture = TouchGesture.Scroll;
+            this.dTouchX = e.touches[0].clientX - this.prevTouchX;
+            this.dTouchY = e.touches[0].clientY - this.prevTouchY;
+            this.onMotion(this.dTouchX, this.dTouchY);
+            this.prevTouchX = e.touches[0].clientX;
+            this.prevTouchY = e.touches[0].clientY;
         } else if (e.touches.length == 2) {
-            this.isDoubleTouching = true;
-            this.isSingleTouching = false;
-            const newDist = vec2.dist([e.touches[0].clientX, e.touches[0].clientY], [e.touches[1].clientX, e.touches[1].clientY]);
-            this.dDoubleTouchDist = newDist - this.prevDoubleTouchDist;
-            this.prevDoubleTouchDist = newDist;
+            this.touchGesture = TouchGesture.Pinch;
+            const newX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const newY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            this.dTouchX = newX - this.prevTouchX;
+            this.dTouchY = newY - this.prevTouchY;
+            this.dPinchDist = newDist - this.prevPinchDist;
+            this.prevTouchX = newX;
+            this.prevTouchY = newY;
+            this.prevPinchDist = newDist;
         } else {
-            this.isSingleTouching = false;
-            this.isDoubleTouching = false;
+            this.touchGesture = TouchGesture.None;
         }
-        // TODO: handle pinch gesture
     }
 
     public onMotion(dx: number, dy: number) {
