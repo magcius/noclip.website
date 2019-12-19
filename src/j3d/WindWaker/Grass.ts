@@ -174,7 +174,7 @@ class FlowerModel {
         this.pinkTextureData = createTextureData(l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
         this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping);
 
-        this.bessouMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL2));
+        this.bessouMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL3));
         this.bessouTextureData = createTextureData(l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
 
