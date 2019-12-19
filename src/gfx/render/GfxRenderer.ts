@@ -205,7 +205,7 @@ export class GfxRenderInst {
         this.filterKey = o.filterKey;
         if (o._bindingDescriptors[0].bindingLayout !== null)
             this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
-        for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
+        for (let i = 0; i < this._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
@@ -309,7 +309,7 @@ export class GfxRenderInst {
     }
 
     public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
-        for (let i = 0; i < m.length; i++) {
+        for (let i = 0; i < this._bindingDescriptors[0].bindingLayout.numSamplers; i++) {
             const dst = this._bindingDescriptors[0].samplerBindings[i]!;
             if (m[i] !== null) {
                 dst.gfxTexture = m[i]!.gfxTexture;
