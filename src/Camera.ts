@@ -601,6 +601,7 @@ export class OrthoCameraController implements CameraController {
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
     private farPlane = 100000;
+    private nearPlane = 0;
 
     constructor() {
     }
@@ -747,7 +748,7 @@ export class OrthoCameraController implements CameraController {
         vec3.add(eyePos, eyePos, this.translation);
         mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
         mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
-        this.camera.setOrthographic(this.z * 10, this.camera.aspect, 0, this.farPlane);
+        this.camera.setOrthographic(this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();
 
         return updated;
