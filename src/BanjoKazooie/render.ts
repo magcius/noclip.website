@@ -1216,7 +1216,7 @@ interface FlipbookAnimationParams {
     reversed: boolean;
 }
 
-const texMappingScratch = [new TextureMapping()];
+const texMappingScratch = [new TextureMapping(), null];
 export class FlipbookRenderer {
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
