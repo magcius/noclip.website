@@ -1,23 +1,23 @@
 
-import { DeviceProgram } from "../Program";
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxProgramDescriptorSimple } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, quat, vec2 } from "gl-matrix";
+import { mat4, vec3, vec2 } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
-import { nArray, assert, assertExists } from "../util";
+import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-import { TrilesetData, TrileData } from "./TrileData";
+import { TrileData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
 import { parseVector3, parseQuaternion } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
+import { ModelCache } from "./Scenes_Fez";
 
 class FezProgram {
     public static ub_SceneParams = 0;
@@ -77,14 +77,18 @@ export class FezRenderer implements Viewer.SceneGfx {
     public artObjectRenderers: FezObjectRenderer[] = [];
     public backgroundPlaneRenderers: BackgroundPlaneRenderer[] = [];
 
-    constructor(device: GfxDevice, levelDocument: Document, public trilesetData: TrilesetData, public artObjectDatas: ArtObjectData[], public backgroundPlaneDatas: BackgroundPlaneData[]) {
+    constructor(device: GfxDevice, modelCache: ModelCache, levelDocument: Document) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new FezProgram());
 
         mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
 
         const trileInstances = levelDocument.querySelectorAll('TrileInstance');
-        for(var i = 0; i < trileInstances.length; i++) {
+
+        const trilesetID = levelDocument.querySelector('Level')!.getAttribute('trileSetName')!.toLowerCase();
+        const trilesetData = assertExists(modelCache.trilesetDatas.find((td) => td.name === trilesetID));
+
+        for (let i = 0; i < trileInstances.length; i++) {
             const trileId = Number(trileInstances[i].getAttribute('trileId'));
 
             // No clue WTF this means. Seen in globe.xml.
@@ -95,7 +99,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             const orientation = Number(trileInstances[i].getAttribute('orientation'));
             const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
 
-            const trileData = this.trilesetData.triles.find((trileData) => trileData.key === trileId)!;
+            const trileData = trilesetData.triles.find((trileData) => trileData.key === trileId)!;
 
             const trileRenderer = new FezObjectRenderer(trileData);
             mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
@@ -107,7 +111,7 @@ export class FezRenderer implements Viewer.SceneGfx {
         const artObjectInstances = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance');
         for (let i = 0; i < artObjectInstances.length; i++) {
             const artObjectName = artObjectInstances[i].getAttribute('name')!.toLowerCase();
-            const artObjectData = assertExists(this.artObjectDatas.find((artObject) => artObject.name === artObjectName));
+            const artObjectData = assertExists(modelCache.artObjectDatas.find((artObject) => artObject.name === artObjectName));
 
             const position = parseVector3(artObjectInstances[i].querySelector('Position Vector3')!);
             // All art objects seem to have this offset applied to them for some reason?
@@ -129,12 +133,12 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.artObjectRenderers.push(renderer);
         }
 
-        this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device);
+        this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device, modelCache.gfxRenderCache);
 
         const backgroundPlanes = levelDocument.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
         for (let i = 0; i < backgroundPlanes.length; i++) {
             const backgroundPlaneName = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
-            const backgroundPlaneData = assertExists(this.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlaneName));
+            const backgroundPlaneData = assertExists(modelCache.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlaneName));
             const renderer = new BackgroundPlaneRenderer(device, backgroundPlanes[i], backgroundPlaneData, this.backgroundPlaneStaticData);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
             this.backgroundPlaneRenderers.push(renderer);
@@ -178,11 +182,6 @@ export class FezRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.trilesetData.destroy(device);
-        for (let i = 0; i < this.artObjectDatas.length; i++)
-            this.artObjectDatas[i].destroy(device);
-        for (let i = 0; i < this.backgroundPlaneDatas.length; i++)
-            this.backgroundPlaneDatas[i].destroy(device);
         for (let i = 0; i < this.backgroundPlaneRenderers.length; i++)
             this.backgroundPlaneRenderers[i].destroy(device);
         this.backgroundPlaneStaticData.destroy(device);

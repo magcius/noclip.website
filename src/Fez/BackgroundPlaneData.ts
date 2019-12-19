@@ -4,6 +4,7 @@ import { makeTextureFromImageData } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
 import { assert } from "../util";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 interface Frame {
     time: number;
@@ -86,7 +87,7 @@ export class BackgroundPlaneStaticData {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vertexData = Float32Array.from([
             -0.5,  0.5, 0, 0, 0,
              0.5,  0.5, 0, 1, 0,
@@ -107,7 +108,7 @@ export class BackgroundPlaneStaticData {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 5*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -120,7 +121,6 @@ export class BackgroundPlaneStaticData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }

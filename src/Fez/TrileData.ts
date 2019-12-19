@@ -6,6 +6,7 @@ import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, Gfx
 import { makeTextureFromImageData } from './Texture';
 import { parseVector3, parseVector2 } from './DocumentHelpers';
 import { AABB } from '../Geometry';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0),
@@ -82,7 +83,6 @@ export class TrileData {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.texcoordBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }
@@ -104,10 +104,10 @@ export class TrilesetData {
     public texture: GfxTexture;
     public sampler: GfxSampler;
 
-    constructor(device: GfxDevice, file: Document, texImageData: ImageData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, file: Document, texImageData: ImageData) {
         this.texture = makeTextureFromImageData(device, texImageData);
 
-        this.sampler = device.createSampler({
+        this.sampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.POINT,
@@ -123,7 +123,6 @@ export class TrilesetData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.texture);
-        device.destroySampler(this.sampler);
 
         for (let i = 0; i < this.triles.length; i++)
             this.triles[i].destroy(device);

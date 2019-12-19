@@ -5,6 +5,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTextureFromImageData } from "./Texture";
 import { parseVector3, parseVector2 } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0), 
@@ -26,7 +27,7 @@ export class ArtObjectData {
     public inputState: GfxInputState;
     public bbox = new AABB();
 
-    constructor(device: GfxDevice, public name: string, file: Document, texImageData: ImageData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, file: Document, texImageData: ImageData) {
         const positions: vec3[] = [];
         const normals: vec3[] = [];
         const texcoords: vec2[] = [];
@@ -64,7 +65,7 @@ export class ArtObjectData {
             { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
             { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
             vertexBufferDescriptors,
@@ -75,7 +76,7 @@ export class ArtObjectData {
         { buffer: this.indexBuffer, byteOffset: 0 });
 
         this.texture = makeTextureFromImageData(device, texImageData);
-        this.sampler = device.createSampler({
+        this.sampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.POINT,
@@ -89,10 +90,8 @@ export class ArtObjectData {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.texcoordBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         device.destroyTexture(this.texture);
-        device.destroySampler(this.sampler);
     }
 }
 

@@ -8,6 +8,7 @@ import { FezRenderer } from './FezRenderer';
 import { TrilesetData } from './TrileData';
 import { ArtObjectData } from './ArtObjectData';
 import { BackgroundPlaneData } from './BackgroundPlaneData';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = 'Fez';
 
@@ -36,11 +37,12 @@ function fetchPNG(path: string): Promise<ImageData> {
     return p;
 }
 
-class ModelCache {
+export class ModelCache {
     public promiseCache = new Map<string, Promise<void>>();
     public trilesetDatas: TrilesetData[] = [];
     public artObjectDatas: ArtObjectData[] = [];
     public backgroundPlaneDatas: BackgroundPlaneData[] = [];
+    public gfxRenderCache = new GfxRenderCache();
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -54,7 +56,7 @@ class ModelCache {
             fetchXML(this.dataFetcher, `${pathBase}/trile sets/${path}.xml`),
             fetchPNG(`${pathBase}/trile sets/${path}.png`),
         ]);
-        this.trilesetDatas.push(new TrilesetData(device, xml, png));
+        this.trilesetDatas.push(new TrilesetData(device, this.gfxRenderCache, path, xml, png));
     }
 
     private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {
@@ -62,7 +64,7 @@ class ModelCache {
             fetchXML(this.dataFetcher, `${pathBase}/art objects/${path}.xml`),
             fetchPNG(`${pathBase}/art objects/${path}.png`),
         ]);
-        this.artObjectDatas.push(new ArtObjectData(device, path, xml, png));
+        this.artObjectDatas.push(new ArtObjectData(device, this.gfxRenderCache, path, xml, png));
     }
 
     private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
@@ -92,6 +94,16 @@ class ModelCache {
         if (!this.promiseCache.has(path))
             this.promiseCache.set(path, this.fetchBackgroundPlaneInternal(device, path, isAnimated));
     }
+
+    public destroy(device: GfxDevice): void {
+        this.gfxRenderCache.destroy(device);
+        for (let i = 0; i < this.trilesetDatas.length; i++)
+            this.trilesetDatas[i].destroy(device);
+        for (let i = 0; i < this.artObjectDatas.length; i++)
+            this.artObjectDatas[i].destroy(device);
+        for (let i = 0; i < this.backgroundPlaneDatas.length; i++)
+            this.backgroundPlaneDatas[i].destroy(device);
+    }
 }
 
 function parseBoolean(str: string): boolean {
@@ -108,11 +120,13 @@ class FezSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const cache = new ModelCache(context.dataFetcher);
+        const cache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
+            return new ModelCache(context.dataFetcher);
+        });
         const levelDocument = await fetchXML(context.dataFetcher, `${pathBase}/levels/${this.id}.xml`);
 
         const trilesetID = levelDocument.querySelector('Level')!.getAttribute('trileSetName')!.toLowerCase();
-        const trilesetPromise = cache.fetchTrileset(device, trilesetID);
+        cache.fetchTrileset(device, trilesetID);
 
         const artObjectsXml = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance')!;
         for (let i = 0; i < artObjectsXml.length; i++) {
@@ -129,13 +143,7 @@ class FezSceneDesc implements Viewer.SceneDesc {
 
         await cache.waitForLoad();
 
-        assert(cache.trilesetDatas.length === 1);
-        const trilesetData = cache.trilesetDatas[0];
-
-        const artObjectDatas = cache.artObjectDatas;
-        const backgroundPlaneDatas = cache.backgroundPlaneDatas;
-
-        return new FezRenderer(device, levelDocument, trilesetData, artObjectDatas, backgroundPlaneDatas);
+        return new FezRenderer(device, cache, levelDocument);
     }
 }
 
