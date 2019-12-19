@@ -110,6 +110,16 @@ export default class InputManager {
         return this.dy;
     }
 
+    public getTouchDeltaX(): number {
+        // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
+        return this.touchGesture == TouchGesture.Pinch ? this.dTouchX : 0;
+    }
+
+    public getTouchDeltaY(): number {
+        // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
+        return this.touchGesture == TouchGesture.Pinch ? this.dTouchY : 0;
+    }
+
     public getPinchDeltaDist(): number {
         return this.touchGesture == TouchGesture.Pinch ? this.dPinchDist : 0;
     }
@@ -130,6 +140,8 @@ export default class InputManager {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
+        this.dTouchX = 0;
+        this.dTouchY = 0;
         this.dPinchDist = 0;
 
         // Go through and mark all keys as non-event-triggered.
