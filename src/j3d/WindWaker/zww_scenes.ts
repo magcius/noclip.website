@@ -1398,14 +1398,6 @@ class SceneDesc {
             return objectRenderer;
         }
 
-        function setToNearestFloor(dstMatrix: mat4, localModelMatrix: mat4) {
-            mat4.getTranslation(scratchVec3a, localModelMatrix);
-            vec3.set(scratchVec3b, 0, -1, 0);
-            const found = DZB.raycast(scratchVec3b, roomRenderer.dzb, scratchVec3a, scratchVec3b);
-            if (found)
-                dstMatrix[13] = scratchVec3b[1];
-        }
-
         function createEmitter(resourceId: number): JPA.JPABaseEmitter {
             const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
             // TODO(jstpierre): Scale, Rotation
@@ -2687,6 +2679,7 @@ const sceneDescs = [
 
     "Outset Island",
     new SceneDesc("sea", "Outset Island", [44]),
+    new SceneDesc("sea", "Outset Island", [33]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),

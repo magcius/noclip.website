@@ -7,6 +7,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { SymbolMap } from './Actors';
 import { Actor } from './Actors';
 import { WwContext } from './zww_scenes';
+import * as DZB from './DZB';
 
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
@@ -41,6 +42,15 @@ function uShortTo2PI(x: number) {
     return x * kUshortTo2PI;
 }
 
+// @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
+function checkGroundY(context: WwContext, pos: vec3) {
+    const dzb = context.roomRenderer.dzb;
+
+    const down = vec3.set(scratchVec3b, 0, -1, 0);
+    const hit = DZB.raycast(scratchVec3b, dzb, pos, down);
+    return hit ? scratchVec3b[1] : pos[1];
+}
+
 // ---------------------------------------------
 // Flower Packet
 // ---------------------------------------------
@@ -52,6 +62,7 @@ enum FlowerType {
 
 enum FlowerFlags {
     isFrustumCulled = 1 << 0,
+    needsGroundCheck = 2 << 0,
 }
 
 interface FlowerData {
@@ -73,6 +84,7 @@ interface FlowerAnim {
 }
 
 const kMaxFlowerDatas = 200;
+const kMaxGroundChecksPerFrame = 8;
 const kDynamicAnimCount = 0; // The game uses 8 idle anims, and 64 dynamic anims for things like cutting
 
 class FlowerModel {
@@ -278,7 +290,7 @@ export class FlowerPacket {
         }
 
         return this.datas[index] = {
-            flags: 0,
+            flags: FlowerFlags.needsGroundCheck,
             type,
             animIdx,
             itemIdx,
@@ -300,7 +312,9 @@ export class FlowerPacket {
     }
 
     update() {
-        // @TODO: Update all animation matrices
+        let groundChecksThisFrame = 0;
+
+        // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             mat4.fromYRotation(this.anims[i].matrix, this.anims[i].rotationY);
             mat4.rotateX(this.anims[i].matrix, this.anims[i].matrix, this.anims[i].rotationX);
@@ -311,7 +325,13 @@ export class FlowerPacket {
             const data = this.datas[i];
             if (!data) continue;
 
-            // @TODO: Perform ground checks for some limited number of flowers
+            // Perform ground checks for some limited number of flowers
+            if (data.flags & FlowerFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.flags &= ~FlowerFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
             // @TODO: Frustum culling
 
             if (!(data.flags & FlowerFlags.isFrustumCulled)) {
