@@ -14,6 +14,7 @@ import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1';
 import * as Scenes_SuperMarioGalaxy2 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy2';
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes';
+import * as Scenes_Zelda_OcarinaOfTime from './zelview/scenes';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
@@ -106,6 +107,7 @@ const sceneGroups = [
     Scenes_BanjoKazooie.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime.sceneGroup,
     "PlayStation 2",
     Scenes_GTA.sceneGroup.iii,
     Scenes_KatamariDamacy.sceneGroup,
