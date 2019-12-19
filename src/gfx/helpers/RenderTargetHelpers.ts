@@ -121,7 +121,7 @@ export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: Norm
     renderPass.setScissor(x, y, w, h);
 }
 
-export const identityViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
+export const IdentityViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
 export class BasicRenderTarget {
     public colorAttachment = new ColorAttachment();

@@ -91,7 +91,6 @@ class BackgroundBillboardRenderer {
         // Set our texture bindings.
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        // Upload new buffer data.
         let offs = renderInst.getUniformBufferOffset(BackgroundBillboardProgram.ub_Params);
         const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
 
