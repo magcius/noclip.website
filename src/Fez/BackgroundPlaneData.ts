@@ -11,6 +11,10 @@ interface Frame {
     texMatrix: mat4;
 }
 
+function timeSpanToSeconds(n: number): number {
+    return n / 10000000;
+}
+
 export class BackgroundPlaneData {
     public texture: GfxTexture;
     public sampler: GfxSampler;
@@ -32,7 +36,7 @@ export class BackgroundPlaneData {
             let time = 0;
             for (let i = 0; i < framePCs.length; i++) {
                 const framePC = framePCs[i];
-                const duration = Number(framePC.getAttribute('duration'));
+                const duration = timeSpanToSeconds(Number(framePC.getAttribute('duration')));
                 const rectangle = framePC.querySelector('Rectangle')!;
                 const x = Number(rectangle.getAttribute('x')!);
                 const y = Number(rectangle.getAttribute('y')!);
@@ -64,7 +68,7 @@ export class BackgroundPlaneData {
         if (this.frames.length === 1) {
             mat4.copy(dst, this.frames[0].texMatrix);
         } else {
-            const time = (timeInSeconds * 10000000) % this.duration;
+            const time = timeInSeconds % this.duration;
             // Find the first frame to the right of this.
             let i = 0;
             for (; i < this.frames.length; i++)

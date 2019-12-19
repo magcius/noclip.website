@@ -308,6 +308,7 @@ function parseBoolean(str: string): boolean {
 const scratchVec3 = vec3.create();
 export class BackgroundPlaneRenderer {
     public modelMatrix = mat4.create();
+    public phaseInSeconds: number;
     private textureMapping = new TextureMapping();
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private rawScale = vec2.create();
@@ -370,6 +371,8 @@ export class BackgroundPlaneRenderer {
 
         this.textureMapping.gfxTexture = this.planeData.texture;
         this.textureMapping.gfxSampler = this.sampler;
+
+        this.phaseInSeconds = (Math.random() * this.planeData.duration);
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -386,7 +389,7 @@ export class BackgroundPlaneRenderer {
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
 
-        const timeInSeconds = viewerInput.time / 1000;
+        const timeInSeconds = (viewerInput.time / 1000) + this.phaseInSeconds;
         this.planeData.calcTexMatrix(texMatrixScratch, timeInSeconds);
 
         offs += fillVec4v(d, offs, levelRenderData.lightDirection);
