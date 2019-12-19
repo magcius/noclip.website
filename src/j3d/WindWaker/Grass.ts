@@ -16,11 +16,9 @@ import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInit
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
-import * as GX_Material from '../../gx/gx_material';
 import { TextureMapping } from '../../TextureHolder';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../../viewer';
-import { computeViewMatrix } from '../../Camera';
 import { colorCopy, White } from '../../Color';
 
 // @TODO: This belongs somewhere else
@@ -178,9 +176,13 @@ class FlowerModel {
         this.bessouTextureData = createTextureData(l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
 
+        // @TODO: These two symbols are being extracted as all 0. Need to investigate
+        const l_colorData = new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xB2, 0xB2, 0xB2, 0xFF]);
+        const l_color3Data = new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0xFF]);
+
         // White
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
-        const l_color = findSymbol(symbolMap, `d_flower.o`, `l_color`);
+        const l_color = new ArrayBufferSlice(l_colorData.buffer);
         const l_texCoord = findSymbol(symbolMap, `d_flower.o`, `l_texCoord`);
 
         // Pink
@@ -190,7 +192,7 @@ class FlowerModel {
         
         // Bessou
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
-        const l_color3 = findSymbol(symbolMap, `d_flower.o`, `l_color3`);
+        const l_color3 = new ArrayBufferSlice(l_color3Data.buffer);
         const l_texCoord3 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord3`);
 
         const l_Ohana_highDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_highDL`);
@@ -346,7 +348,8 @@ export class FlowerPacket {
         // @TODO: Render flowers in all rooms
         // @NOTE: It appears that flowers are drawn for all rooms all the time
         // @TODO: Set the kyanko colors for each room
-        colorCopy(materialParams.u_Color[ColorKind.C0], White);
+
+        // @NOTE: Flowers leave C0 as unset, and assume it is black
         colorCopy(materialParams.u_Color[ColorKind.C1], White);
 
         // @TODO: This should probably be precomputed and stored in the context
