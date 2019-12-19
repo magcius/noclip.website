@@ -30,8 +30,16 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchMat4a = mat4.create();
 const packetParams = new PacketParams();
 const materialParams = new MaterialParams();
+
+// The game uses unsigned shorts to index into cos/sin tables.
+// The max short value (2^16-1 = 65535) corresponds to 2PI
+const kUshortTo2PI = Math.PI * 2.0 / 65535.0;
+function uShortTo2PI(x: number) {
+    return x * kUshortTo2PI;
+}
 
 // ---------------------------------------------
 // Flower Packet
@@ -57,7 +65,15 @@ interface FlowerData {
     nextData: FlowerData,
 }
 
+interface FlowerAnim {
+    active: boolean,
+    rotationX: number,
+    rotationY: number,
+    matrix: mat4,
+}
+
 const kMaxFlowerDatas = 200;
+const kDynamicAnimCount = 0; // The game uses 8 idle anims, and 64 dynamic anims for things like cutting
 
 class FlowerModel {
     public pinkTextureMapping = new TextureMapping();
@@ -227,11 +243,24 @@ class FlowerModel {
 export class FlowerPacket {
     datas: FlowerData[] = new Array(kMaxFlowerDatas);
     dataCount: number = 0;
+
+    anims: FlowerAnim[] = new Array(8 + kDynamicAnimCount);
     
     private flowerModel: FlowerModel;
 
     constructor(private context: WwContext) {
         this.flowerModel = new FlowerModel(context.device, context.symbolMap, context.cache);
+
+        // Random starting rotation for each idle anim
+        const dy = 2.0 * Math.PI / 8.0;
+        for (let i = 0; i < 8; i++) {
+            this.anims[i] = {
+                active: true,
+                rotationX: 0,
+                rotationY: i * dy,
+                matrix: mat4.create(),
+            }
+        }
     }
 
     newData(pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
@@ -260,13 +289,23 @@ export class FlowerPacket {
         }
     }
 
-    calc() {
-        // @TODO: Idle animation updates
+    calc() {        
+        // Idle animation updates
+        for (let i = 0; i < 8; i++) {
+            const theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
+            this.anims[i].rotationX = uShortTo2PI(1000.0 + 1000.0 * theta);
+        }
+
         // @TODO: Hit checks
     }
 
     update() {
         // @TODO: Update all animation matrices
+        for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
+            mat4.fromYRotation(this.anims[i].matrix, this.anims[i].rotationY);
+            mat4.rotateX(this.anims[i].matrix, this.anims[i].matrix, this.anims[i].rotationX);
+            mat4.rotateY(this.anims[i].matrix, this.anims[i].matrix, -this.anims[i].rotationY);
+        }
 
         for (let i = 0; i < kMaxFlowerDatas; i++) {
             const data = this.datas[i];
@@ -277,8 +316,7 @@ export class FlowerPacket {
 
             if (!(data.flags & FlowerFlags.isFrustumCulled)) {
                 // Update model matrix for all non-culled objects
-                // @TODO: Include anim rotation matrix
-                mat4.fromTranslation(data.modelMatrix, data.pos);
+                mat4.mul(data.modelMatrix, mat4.fromTranslation(scratchMat4a, data.pos), this.anims[data.animIdx].matrix);
             }
         }
     }

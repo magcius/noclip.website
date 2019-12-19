@@ -45,6 +45,8 @@ export interface WwContext {
     cache: GfxRenderCache,
     roomRenderer: WindWakerRoomRenderer,
     stage: string,
+    time: number // In milliseconds, affected by pause and time scaling
+    frameCount: number, // Assumes 33 FPS, affected by pause and time scaling
 
     flowerPacket: FlowerPacket,
 };
@@ -962,6 +964,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        this.context.time = viewerInput.time;
+        this.context.frameCount = viewerInput.time / 1000.0 * 33;
+
         this.extraTextures.prepareToRender(device);
 
         template.filterKey = WindWakerPass.MAIN;
@@ -1397,7 +1402,7 @@ class SceneDesc {
             if (found)
                 dstMatrix[13] = scratchVec3b[1];
         }
-        
+
         function createEmitter(resourceId: number): JPA.JPABaseEmitter {
             const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
             // TODO(jstpierre): Scale, Rotation
