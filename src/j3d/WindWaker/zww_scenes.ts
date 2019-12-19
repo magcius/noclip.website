@@ -1397,43 +1397,7 @@ class SceneDesc {
             if (found)
                 dstMatrix[13] = scratchVec3b[1];
         }
-
-        function buildPinkFlowerModel(symbolMap: SymbolMap): FlowerObjectRenderer {
-            let flowerData: FlowerData;
-            // This is a thing that the game *actually* checks, believe it or not, in dFlower_packet_c::setData.
-            if (stageName === 'sea' && roomIdx === 33) {
-                flowerData = modelCache.extraCache.get('Obessou') as FlowerData;
-                if (flowerData === undefined) {
-                    flowerData = new BessouFlowerData(device, symbolMap, cache);
-                    modelCache.extraCache.set('Obessou', flowerData);
-                }
-            } else {
-                flowerData = modelCache.extraCache.get('Ohana_high') as FlowerData;
-                if (flowerData === undefined) {
-                    flowerData = new PinkFlowerData(device, symbolMap, cache);
-                    modelCache.extraCache.set('Ohana_high', flowerData);
-                }
-            }
-
-            const objectRenderer = new FlowerObjectRenderer(flowerData);
-            setModelMatrix(objectRenderer.modelMatrix);
-            setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
-            roomRenderer.objectRenderers.push(objectRenderer);
-            objectRenderer.layer = layer;
-            return objectRenderer;
-        }
-
-        function buildWhiteFlowerModel(symbolMap: SymbolMap): FlowerObjectRenderer {
-            let flowerData: FlowerData = modelCache.extraCache.get('Ohana') as FlowerData;
-            if (flowerData === undefined) {
-                flowerData = new WhiteFlowerData(device, symbolMap, cache);
-                modelCache.extraCache.set('Ohana', flowerData);
-            }
-
-            const objectRenderer = new FlowerObjectRenderer(flowerData);
-            return objectRenderer;
-        }
-
+        
         function createEmitter(resourceId: number): JPA.JPABaseEmitter {
             const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
             // TODO(jstpierre): Scale, Rotation
