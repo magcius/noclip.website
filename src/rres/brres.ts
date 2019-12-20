@@ -671,10 +671,20 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     for (let i = 0; i < numColors; i++) {
         const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
         const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
-        lightChannels.push({ 
-            colorChannel: parseColorChannelControlRegister(colorCntrl), 
-            alphaChannel: parseColorChannelControlRegister(alphaCntrl), 
-        });
+        const colorChannel = parseColorChannelControlRegister(colorCntrl); 
+        const alphaChannel = parseColorChannelControlRegister(alphaCntrl);
+        lightChannels.push({ colorChannel, alphaChannel });
+
+        const colorUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        const alphaUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        if (colorUsesReg || alphaUsesReg)
+            console.warn(`CommandList ${name} uses register color values, but these are not yet supported`);
     }
 
     const gxMaterial: GX_Material.GXMaterial = {
