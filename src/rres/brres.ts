@@ -401,7 +401,12 @@ export interface MDL0_MaterialEntry {
     colorConstants: Color[];
 }
 
-export function parseMaterialEntry(r: DisplayListRegisters, index: number, name: string, numTexGens: number, numTevs: number, numInds: number): GX_Material.GXMaterial {
+export function parseMaterialEntry(r: DisplayListRegisters, index: number, name: string): GX_Material.GXMaterial {
+    const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
+    const numTexGens = (genMode >>> 0) & 0x0F;
+    const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+    const numInds = ((genMode >>> 16) & 0x07);
+
     // TexGens.
     const texGens: GX_Material.TexGen[] = [];
 
@@ -687,9 +692,13 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
             console.warn(`CommandList ${name} uses register color values, but these are not yet supported`);
     }
 
+    // Cull Mode
+    const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+    const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
     const gxMaterial: GX_Material.GXMaterial = {
         name,
-        lightChannels, cullMode: GX.CullMode.NONE,
+        lightChannels, cullMode,
         tevStages, texGens,
         indTexStages, alphaTest, ropInfo,
     };
@@ -768,8 +777,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
 
     // Now combine the whole thing.
-    const gxMaterial = parseMaterialEntry(r, index, name, numTexGens, numTevs, numInds);
-    gxMaterial.cullMode = cullMode;
+    const gxMaterial = parseMaterialEntry(r, index, name);
 
     const indTexMatrices: Float32Array[] = [];
     for (let i = 0; i < 3; i++) {
