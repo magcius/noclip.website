@@ -51,7 +51,7 @@ export class ZELVIEW0 {
 export class Mesh {
     public opaque: (RSPOutput | null)[] = [];
     public transparent: (RSPOutput | null)[] = [];
-    public bg: Render.RenderFunc;
+    //public bg: Render.RenderFunc;
     public textures: Viewer.Texture[];
 }
 

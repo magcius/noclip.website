@@ -5,12 +5,15 @@ import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
-import { readZELVIEW0 } from './zelview0';
+import { readZELVIEW0, Headers } from './zelview0';
+import { ZelviewMeshRenderer } from './render';
 
 const pathBase = `zelview`;
 
 class ZelviewRenderer implements Viewer.SceneGfx {
     private clearRenderPassDescriptor: GfxRenderPassDescriptor;
+
+    public meshRenderers: ZelviewMeshRenderer[] = [];
 
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
@@ -22,6 +25,9 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
+
+        for (let i = 0; i < this.meshRenderers.length; i++)
+            this.meshRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -43,6 +49,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
+        for (let i = 0; i < this.meshRenderers.length; i++)
+            this.meshRenderers[i].destroy(device);
     }
 }
 
@@ -58,7 +66,26 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
 
         const zelview = readZELVIEW0(zelviewData);
         const headers = zelview.loadMainScene();
-        console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
+        //console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
+
+        function createRenderer(headers: Headers) {
+            if (headers.mesh) {
+                for (let i = 0; i < headers.mesh.opaque.length; i++) {
+                    if (headers.mesh.opaque[i]) {
+                        console.log(`Loading ${headers.filename} mesh ${i}...`);
+                        const meshRenderer = new ZelviewMeshRenderer(device, headers.mesh.opaque[i]!);
+                        renderer.meshRenderers.push(meshRenderer);
+                    }
+                }
+            } else {
+                for (let i = 0; i < headers.rooms.length; i++) {
+                    console.log(`Loading ${headers.filename} room ${i}...`);
+                    createRenderer(headers.rooms[i]);
+                }
+            }
+        }
+
+        createRenderer(headers);
 
         return renderer;
     }
