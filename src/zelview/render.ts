@@ -136,8 +136,10 @@ export class ZelviewMeshRenderer {
             const mappedF32 = template.mapUniformBufferF32(ZelviewProgram.ub_DrawParams);
 
             // TODO: Model matrix goes here
-            const identity = mat4.create();
-            offs += fillMatrix4x3(mappedF32, offs, identity);
+            const modelMatrix = mat4.create();
+            const modelViewScratch = mat4.create();
+            mat4.mul(modelViewScratch, viewerInput.camera.viewMatrix, modelMatrix);
+            offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
             for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++) {
                 const drawCall = this.n64Data.rspOutput.drawCalls[i];
