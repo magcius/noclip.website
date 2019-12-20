@@ -190,7 +190,10 @@ export class WhiteFlowerData {
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
         const l_texCoord = findSymbol(symbolMap, `d_flower.o`, `l_texCoord`);
         const l_OhanaDL = findSymbol(symbolMap, `d_flower.o`, `l_OhanaDL`);
-        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
+        
+        // @NOTE: The 'l_color' symbol data is extracted as all zero. This needs more investigation. For now, just hardcode.
+        // const l_color = findSymbol(symbolMap, `d_flower.o`, `l_color`);
+        const l_color = new ArrayBufferSlice(new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xB2, 0xB2, 0xB2, 0xFF]).buffer)
 
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
@@ -226,7 +229,7 @@ export class WhiteFlowerData {
         vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
         vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
         const vcd: GX_VtxDesc[] = [];
         vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
@@ -342,7 +345,10 @@ export class BessouFlowerData {
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
         const l_texCoord3 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord3`);
         const l_QbsfwDL = findSymbol(symbolMap, `d_flower.o`, `l_QbsfwDL`);
-        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
+        
+        // @NOTE: The 'l_color3' symbol data is extracted as all zero. This needs more investigation. For now, just hardcode.
+        // const l_color3 = findSymbol(symbolMap, `d_flower.o`, `l_color3`);
+        const l_color3 = new ArrayBufferSlice(new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0xFF]).buffer)
 
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
@@ -378,7 +384,7 @@ export class BessouFlowerData {
         vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS]  = { buffer: l_pos3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: l_color2, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
         vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord3, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
         const vcd: GX_VtxDesc[] = [];
         vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
@@ -444,7 +450,6 @@ export class FlowerObjectRenderer implements ObjectRenderer {
             return;
 
         materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.k0);
 
         const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderInstManager);
