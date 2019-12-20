@@ -1,6 +1,7 @@
 
 import { nArray, assert } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { Rom } from "./zelview0";
 
 export class Vertex {
     public x: number = 0;
@@ -87,9 +88,6 @@ export class RSPState {
 
     private SP_GeometryMode: number = 0;
 
-    public ramBuffer: ArrayBufferSlice;
-    public ramAddrBase: number;
-
     public finish(): RSPOutput {
         return this.output;
     }
@@ -109,15 +107,15 @@ export class RSPState {
         this._setGeometryMode(this.SP_GeometryMode & ~mask);
     }
 
-    public gSPVertex(dramAddr: number, n: number, v0: number): void {
-        // TODO: load data correctly
+    public gSPVertex(rom: Rom, dramAddr: number, n: number, v0: number): void {
         console.log(`gSPVertex 0x${dramAddr.toString(16)}`);
-        const view = this.ramBuffer.createDataView();
+        const lkup = rom.lookupAddress(dramAddr);
+        const view = lkup.buffer.createDataView();
+        let offs = lkup.offs;
 
-        let addrIdx = (dramAddr - this.ramAddrBase);
         for (let i = 0; i < n; i++) {
-            this.vertexCache[v0 + i].setFromView(view, addrIdx);
-            addrIdx += 0x10;
+            this.vertexCache[v0 + i].setFromView(view, offs);
+            offs += 0x10;
         }
     }
 
@@ -186,11 +184,12 @@ const enum F3DEX2_GBI {
     G_TEXRECT           = 0xE4,
 }
 
-export function runDL_F3DEX2(state: RSPState, addr: number): void {
-    const view = state.ramBuffer.createDataView();
+export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
+    const lkup = rom.lookupAddress(addr);
+    const view = lkup.buffer.createDataView();
 
     outer:
-    for (let i = (addr & 0x00FFFFFF); ; i += 0x08) {
+    for (let i = lkup.offs; ; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
@@ -210,7 +209,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             const v0w = (w0 >>> 1) & 0xFF;
             const n = (w0 >>> 12) & 0xFF;
             const v0 = v0w - n;
-            state.gSPVertex(w1, n, v0);
+            state.gSPVertex(rom, w1, n, v0);
         } break;
 
         case F3DEX2_GBI.G_TRI1: {
