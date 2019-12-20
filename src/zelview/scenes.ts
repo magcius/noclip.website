@@ -1,10 +1,50 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
 import { readZELVIEW0 } from './zelview0';
 
 const pathBase = `zelview`;
+
+class ZelviewRenderer implements Viewer.SceneGfx {
+    private clearRenderPassDescriptor: GfxRenderPassDescriptor;
+
+    private renderTarget = new BasicRenderTarget();
+    private renderHelper: GfxRenderHelper;
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GfxRenderHelper(device);
+        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+    }
+
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.pushTemplateRenderInst();
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy(device);
+        this.renderTarget.destroy(device);
+    }
+}
 
 class ZelviewSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
@@ -14,11 +54,13 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const zelviewData = await dataFetcher.fetchData(`${pathBase}/${this.id}.zelview0`);
 
+        const renderer = new ZelviewRenderer(device);
+
         const zelview = readZELVIEW0(zelviewData);
         const headers = zelview.loadMainScene();
         console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
 
-        throw Error(`Zelview not implemented`);
+        return renderer;
     }
 }
 
