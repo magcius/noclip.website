@@ -22,8 +22,10 @@ import { ViewerRenderInput } from '../../viewer';
 import { colorCopy, White } from '../../Color';
 
 // @TODO: This belongs somewhere else
+export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
+export type SymbolMap = { SymbolData: SymbolData[] };
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
-    const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === filename && e.SymbolName === symbolName));
+    const entry = assertExists(symbolMap.SymbolData.find((e: SymbolData) => e.Filename === filename && e.SymbolName === symbolName));
     return entry.Data;
 }
 
@@ -115,27 +117,10 @@ class FlowerModel {
 
         const matRegisters = new DisplayListRegisters();
 
-        const materialFromDL = (displayList: ArrayBufferSlice) => {
+        const materialFromDL = (displayList: ArrayBufferSlice, name: string) => {
             displayListRegistersInitGX(matRegisters);
             displayListRegistersRun(matRegisters, displayList);
-    
-            const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
-            const numTexGens = (genMode >>> 0) & 0x0F;
-            const numTevs = ((genMode >>> 10) & 0x0F) + 1;
-            const numInds = ((genMode >>> 16) & 0x07);
-    
-            const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
-            const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
-    
-            const gxMaterial = parseMaterial(matRegisters, 'l_matDL');
-            gxMaterial.cullMode = cullMode;
-            
-            // TODO(jstpierre): light channels
-            gxMaterial.lightChannels.push({
-                colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
-                alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
-            });
-
+            const gxMaterial = parseMaterial(matRegisters, name);
             return gxMaterial;
         }
 
@@ -164,15 +149,15 @@ class FlowerModel {
             return new BTIData(device, cache, texture);
         }
 
-        this.whiteMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL));
+        this.whiteMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL, 'l_matDL'));
         this.whiteTextureData = createTextureData(l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
         this.whiteTextureData.fillTextureMapping(this.whiteTextureMapping);
 
-        this.pinkMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL2));
+        this.pinkMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL2, 'l_matDL2'));
         this.pinkTextureData = createTextureData(l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
         this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping);
 
-        this.bessouMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL3));
+        this.bessouMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL3, 'l_matDL3'));
         this.bessouTextureData = createTextureData(l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
 
