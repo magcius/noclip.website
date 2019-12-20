@@ -667,6 +667,15 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     }
 
     const lightChannels: GX_Material.LightChannelControl[] = [];
+    const numColors = r.xfg(GX.XFRegister.XF_NUMCOLORS_ID);
+    for (let i = 0; i < numColors; i++) {
+        const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
+        const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
+        lightChannels.push({ 
+            colorChannel: parseColorChannelControlRegister(colorCntrl), 
+            alphaChannel: parseColorChannelControlRegister(alphaCntrl), 
+        });
+    }
 
     const gxMaterial: GX_Material.GXMaterial = {
         name,
