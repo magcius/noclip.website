@@ -124,12 +124,12 @@ export class ZelviewMeshRenderer {
         offs += fillVec4(mappedF32, offs, viewerInput.backbufferWidth, viewerInput.backbufferHeight, lodBias);
 
         {
-            if (this.gfxProgram === null) {
+            if (this.gfxProgram === null)
                 this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
-            }
 
             const template = renderInstManager.pushTemplateRenderInst();
 
+            template.setGfxProgram(this.gfxProgram);
             template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
 
             let offs = template.allocateUniformBuffer(ZelviewProgram.ub_DrawParams, 12 + 8*2);
@@ -153,7 +153,6 @@ export class ZelviewMeshRenderer {
             renderInstManager.popTemplateRenderInst();
         }
 
-
         renderInstManager.popTemplateRenderInst();
     }
     
@@ -163,6 +162,8 @@ export class ZelviewMeshRenderer {
     
     private createProgram(): void {
         const program = new ZelviewProgram();
+
+        program.defines.set(`USE_TEXTFILT_POINT`, '1');
 
         this.gfxProgram = null;
         this.program = program;
