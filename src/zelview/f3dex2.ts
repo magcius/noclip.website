@@ -110,9 +110,8 @@ export class RSPState {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
-        const segment = (dramAddr >>> 24);
-        assert(segment === 0x80);
-
+        // TODO: load data correctly
+        console.log(`gSPVertex 0x${dramAddr.toString(16)}`);
         const view = this.ramBuffer.createDataView();
 
         let addrIdx = (dramAddr - this.ramAddrBase);

@@ -32,7 +32,7 @@ export class ZELVIEW0 {
         for (const entry of this.entries)
             if (entry.pStart === pStart)
                 return entry;
-        throw Error(`File ${pStart} not found`);
+        throw Error(`File containing 0x${pStart.toString(16)} not found`);
         //return null;
     }
     public lookupAddress(banks: RomBanks, addr: number): number {
@@ -252,6 +252,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
         const rooms = [];
         for (let i = 0; i < nRooms; i++) {
             const pStart = loadAddress(roomTableAddr);
+            console.log(`room ${i} pStart 0x${pStart.toString(16)}`);
             const file = rom.lookupFile(pStart);
             const room = readRoom(file);
             room.filename = file.filename;
@@ -347,16 +348,18 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
         const mesh = new Mesh();
 
         function readDL(addr: number): RSPOutput | null {
-            const dlStart = loadAddress(addr);
-            if (dlStart === 0)
+            const dlAddr = loadAddress(addr);
+            if (dlAddr === 0)
                 return null;
 
-            console.log(`Reading DL from offset 0x${dlStart.toString(16)}`);
+
+            const dlStart = rom.lookupAddress(banks, dlAddr);
+            console.log(`Reading DL from address 0x${dlAddr.toString(16)} => offset 0x${dlStart.toString(16)}`);
 
             const rspState = new RSPState();
-            rspState.ramAddrBase = rom.lookupAddress(banks, dlStart & 0xFF000000); // TODO
-            rspState.ramBuffer = rom.buffer; // TODO
-            runDL_F3DEX2(rspState, dlStart); // TODO
+            rspState.ramAddrBase = 0; // TODO?
+            rspState.ramBuffer = rom.buffer;
+            runDL_F3DEX2(rspState, dlStart);
             rspState.finish();
             const rspOutput = rspState.finish();
 
@@ -401,6 +404,8 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
     headers.mesh = null;
 
     const startOffs = offs;
+
+    console.log(`Starting parsing at 0x${offs.toString(16)}`);
 
     while (true) {
         const cmd1 = rom.view.getUint32(offs, false);
