@@ -863,10 +863,10 @@ class PartsModel extends LiveActor {
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAnim(sceneObjHolder, viewerInput);
-
         if (this.fixedPosition !== null)
             this.fixedPosition.calc();
+
+        super.calcAnim(sceneObjHolder, viewerInput);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
