@@ -259,6 +259,7 @@ export class FlowerPacket {
     datas: FlowerData[] = new Array(kMaxFlowerDatas);
     dataCount: number = 0;
 
+    rooms: FlowerData[] = [];
     anims: FlowerAnim[] = new Array(8 + kDynamicAnimCount);
     
     private flowerModel: FlowerModel;
@@ -292,7 +293,7 @@ export class FlowerPacket {
             type = FlowerType.BESSOU;
         }
 
-        return this.datas[index] = {
+        const data = this.datas[index] = {
             flags: FlowerFlags.needsGroundCheck,
             type,
             animIdx,
@@ -300,8 +301,13 @@ export class FlowerPacket {
             particleLifetime: 0,
             pos: vec3.clone(pos),
             modelMatrix: mat4.create(),
-            nextData: null!,
+            nextData: this.rooms[roomIdx],
         }
+
+        // Append to the linked list for this room
+        this.rooms[roomIdx] = data;
+
+        return data;
     }
 
     calc() {        
@@ -345,69 +351,79 @@ export class FlowerPacket {
     }
 
     draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
-        // @TODO: Set up the vertex pipeline and shared material 
-        // @TODO: Render flowers in all rooms
-        // @NOTE: It appears that flowers are drawn for all rooms all the time
-        // @TODO: Set the kyanko colors for each room
-
-        // @NOTE: Flowers leave C0 as unset, and assume it is black
-        colorCopy(materialParams.u_Color[ColorKind.C1], White);
+        const kRoomCount = 64;
 
         // @TODO: This should probably be precomputed and stored in the context
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
 
         // Draw white flowers
-        // @TODO: Only loop over flowers in this room (using the linked list)
         materialParams.m_TextureMapping[0].copy(this.flowerModel.whiteTextureMapping);
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
-            const data = this.datas[i];
-            if (!data) continue;
-            if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
+        for (let i = 0; i < kRoomCount; i++) {
+            let data = this.rooms[i]; 
+            if (!data) continue; 
 
-            const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
-            const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.whiteMaterial.materialParamsBufferSize);
-            this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
-            this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-            this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
+            // @NOTE: Flowers leave C0 as unset, and assume it is black
+            // @TODO: Set the kyanko colors for each room
+            colorCopy(materialParams.u_Color[ColorKind.C1], White);
+            
+            do {
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
+                
+                const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
+                const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.whiteMaterial.materialParamsBufferSize);
+                this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
+                this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+    
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
+            } while (data = data.nextData);
         }
 
         // Draw pink flowers
-        // @TODO: Only loop over flowers in this room (using the linked list)
         materialParams.m_TextureMapping[0].copy(this.flowerModel.pinkTextureMapping);
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
-            const data = this.datas[i];
-            if (!data) continue;
-            if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
+        for (let i = 0; i < kRoomCount; i++) {
+            let data = this.rooms[i]; 
+            if (!data) continue; 
 
-            const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
-            const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.pinkMaterial.materialParamsBufferSize);
-            this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
-            this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+            // @NOTE: Flowers leave C0 as unset, and assume it is black
+            colorCopy(materialParams.u_Color[ColorKind.C1], White);
+            
+            do {
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
+                
+                const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
+                const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.pinkMaterial.materialParamsBufferSize);
+                this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
+                this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-            this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
+            } while (data = data.nextData);
         }
 
         // Draw bessou flowers
-        // @TODO: Only loop over flowers in this room (using the linked list)
-        materialParams.m_TextureMapping[0].copy(this.flowerModel.pinkTextureMapping);
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
-            const data = this.datas[i];
-            if (!data) continue;
-            if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
+        materialParams.m_TextureMapping[0].copy(this.flowerModel.bessouTextureMapping);
+        for (let i = 0; i < kRoomCount; i++) {
+            let data = this.rooms[i]; 
+            if (!data) continue; 
 
-            const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
-            const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.bessouMaterial.materialParamsBufferSize);
-            this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
-            this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-            mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-            this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
+            // @NOTE: Flowers leave C0 as unset, and assume it is black
+            colorCopy(materialParams.u_Color[ColorKind.C1], White);
+            
+            do {
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
+    
+                const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
+                const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.bessouMaterial.materialParamsBufferSize);
+                this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
+                this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+    
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
+            } while (data = data.nextData);
         }
     }
 }
