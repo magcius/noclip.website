@@ -3467,12 +3467,12 @@ export class LightSet {
         const chan0 = assertExists(lightChannels[0]);
         let changed = false;
 
-        if (!chan0.colorChannel.lightingEnabled) {
+        if (!chan0.colorChannel.lightingEnabled && maskc0 !== 0) {
             chan0.colorChannel.lightingEnabled = true;
             changed = true;
         }
 
-        if (!chan0.alphaChannel.lightingEnabled) {
+        if (!chan0.alphaChannel.lightingEnabled && maska0 !== 0) {
             chan0.alphaChannel.lightingEnabled = true;
             changed = true;
         }

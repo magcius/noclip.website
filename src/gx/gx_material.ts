@@ -3,7 +3,6 @@
 
 import * as GX from './gx_enum';
 
-import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -13,7 +12,7 @@ import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
-import { preprocessProgram_GLSL, preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
+import { preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
