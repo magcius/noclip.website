@@ -6,7 +6,7 @@ import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { SymbolMap } from './Actors';
 import { Actor } from './Actors';
-import { WwContext } from './zww_scenes';
+import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
 
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
@@ -22,8 +22,6 @@ import { ViewerRenderInput } from '../../viewer';
 import { colorCopy, White } from '../../Color';
 
 // @TODO: This belongs somewhere else
-export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
-export type SymbolMap = { SymbolData: SymbolData[] };
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
     const entry = assertExists(symbolMap.SymbolData.find((e: SymbolData) => e.Filename === filename && e.SymbolName === symbolName));
     return entry.Data;
@@ -85,8 +83,9 @@ function uShortTo2PI(x: number) {
 }
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
-function checkGroundY(context: WwContext, pos: vec3) {
-    const dzb = context.roomRenderer.dzb;
+function checkGroundY(context: WindWakerRenderer, pos: vec3) {
+    // @TODO: This is using the last loaded room. It needs to use the room that this flower is in.
+    const dzb = context.loadingRoomRenderer.dzb;
 
     const down = vec3.set(scratchVec3b, 0, -1, 0);
     const hit = DZB.raycast(scratchVec3b, dzb, pos, down);
@@ -264,8 +263,8 @@ export class FlowerPacket {
     
     private flowerModel: FlowerModel;
 
-    constructor(private context: WwContext) {
-        this.flowerModel = new FlowerModel(context.device, context.symbolMap, context.cache);
+    constructor(private context: WindWakerRenderer) {
+        this.flowerModel = new FlowerModel(context.device, context.symbolMap, context.renderCache);
 
         // Random starting rotation for each idle anim
         const dy = 2.0 * Math.PI / 8.0;
@@ -512,7 +511,7 @@ const kGrassSpawnOffsets = [
 ];
 
 export class AGrass {
-    static create(context: WwContext, actor: Actor) {
+    static create(context: WindWakerRenderer, actor: Actor) {
         enum FoliageType {
             Grass,
             Tree,

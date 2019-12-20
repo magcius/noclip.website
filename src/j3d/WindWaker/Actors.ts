@@ -170,3 +170,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].destroy(device);
     }
 }
+
+export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
+export type SymbolMap = { SymbolData: SymbolData[] };
