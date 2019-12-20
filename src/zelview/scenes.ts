@@ -2,12 +2,22 @@
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
+import { readZELVIEW0 } from './zelview0';
+
+const pathBase = `zelview`;
 
 class ZelviewSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const zelviewData = await dataFetcher.fetchData(`${pathBase}/${this.id}.zelview0`);
+
+        const zelview = readZELVIEW0(zelviewData);
+        const headers = zelview.loadMainScene();
+        console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
+
         throw Error(`Zelview not implemented`);
     }
 }

@@ -1,12 +1,11 @@
 
 import { mat4 } from 'gl-matrix';
 
-import * as F3DEX2 from './f3dex2';
+import { runDL_F3DEX2, RSPOutput, RSPState } from './f3dex2';
 import * as Render from './render';
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString } from '../util';
-import { RenderState } from '../render';
 
 // Loads the ZELVIEW0 format.
 
@@ -33,7 +32,8 @@ export class ZELVIEW0 {
         for (const entry of this.entries)
             if (entry.pStart === pStart)
                 return entry;
-        return null;
+        throw Error(`File ${pStart} not found`);
+        //return null;
     }
     public lookupAddress(banks: RomBanks, addr: number): number {
         const bankIdx = addr >>> 24;
@@ -41,33 +41,38 @@ export class ZELVIEW0 {
         function findBank() {
             switch (bankIdx) {
                 case 0x02: return banks.scene;
-                case 0x03: return banks.room;
-                default: return null;
+                case 0x03:
+                    if (banks.room === undefined)
+                        throw Error(`room is undefined`);
+                    return banks.room;
+                default: throw Error(`bank not found`);
             }
         }
         const bank = findBank();
         if (bank === null)
-            return null;
+            throw Error(`null bank`);
+            //return null;
         const absOffs = bank.vStart + offs;
         if (absOffs > bank.vEnd)
-            return null;
+            throw Error(`absOffs out of range`);
+            //return null;
         return absOffs;
     }
     public loadAddress(banks: RomBanks, addr: number): number {
         const offs = this.lookupAddress(banks, addr);
         return this.view.getUint32(offs);
     }
-    public loadScene(gl: WebGL2RenderingContext, scene: VFSEntry): Headers {
-        return readScene(gl, this, scene);
+    public loadScene(scene: VFSEntry): Headers {
+        return readScene(this, scene);
     }
-    public loadMainScene(gl: WebGL2RenderingContext) {
-        return this.loadScene(gl, this.sceneFile);
+    public loadMainScene() {
+        return this.loadScene(this.sceneFile);
     }
 }
 
 export class Mesh {
-    public opaque: F3DEX2.DL[] = [];
-    public transparent: F3DEX2.DL[] = [];
+    public opaque: (RSPOutput | null)[] = [];
+    public transparent: (RSPOutput | null)[] = [];
     public bg: Render.RenderFunc;
     public textures: Viewer.Texture[];
 }
@@ -75,7 +80,7 @@ export class Mesh {
 export class Headers {
     public filename: string;
     public collision: any;
-    public mesh: Mesh;
+    public mesh: Mesh | null;
     public rooms: Headers[] = [];
 }
 
@@ -139,7 +144,7 @@ enum HeaderCommands {
     End = 0x14,
 }
 
-function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
+function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
     const headers = new Headers();
 
     function loadAddress(addr: number): number {
@@ -240,7 +245,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
 
     function readRoom(file: VFSEntry): Headers {
         const banks2: RomBanks = { scene: banks.scene, room: file };
-        return readHeaders(gl, rom, file.vStart, banks2);
+        return readHeaders(rom, file.vStart, banks2);
     }
 
     function readRooms(nRooms: number, roomTableAddr: number): Headers[] {
@@ -256,82 +261,82 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         return rooms;
     }
 
-    function loadImage(gl: WebGL2RenderingContext, src: string) {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+    // function loadImage(gl: WebGL2RenderingContext, src: string) {
+    //     const canvas = document.createElement('canvas');
+    //     const ctx = canvas.getContext('2d')!;
 
-        const texId = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texId);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    //     const texId = gl.createTexture();
+    //     gl.bindTexture(gl.TEXTURE_2D, texId);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        const img = document.createElement('img');
-        img.src = src;
+    //     const img = document.createElement('img');
+    //     img.src = src;
 
-        const aspect = 1;
+    //     const aspect = 1;
 
-        img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
+    //     img.onload = () => {
+    //         canvas.width = img.width;
+    //         canvas.height = img.height;
+    //         ctx.drawImage(img, 0, 0);
 
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    //         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData.data);
-        };
+    //         gl.bindTexture(gl.TEXTURE_2D, texId);
+    //         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, imgData.width, imgData.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgData.data);
+    //     };
 
-        // XXX: Should pull this dynamically at runtime.
-        const imgWidth = 320;
-        const imgHeight = 240;
+    //     // XXX: Should pull this dynamically at runtime.
+    //     const imgWidth = 320;
+    //     const imgHeight = 240;
 
-        const imgAspect = imgWidth / imgHeight;
-        // const viewportAspect = gl.viewportWidth / gl.viewportHeight;
+    //     const imgAspect = imgWidth / imgHeight;
+    //     // const viewportAspect = gl.viewportWidth / gl.viewportHeight;
 
-        const x = imgAspect;
+    //     const x = imgAspect;
 
-        const vertData = new Float32Array([
-            /* x   y   z   u  v */
-              -x, -1,  0,  0, 1,
-               x, -1,  0,  1, 1,
-              -x,  1,  0,  0, 0,
-               x,  1,  0,  1, 0,
-        ]);
+    //     const vertData = new Float32Array([
+    //         /* x   y   z   u  v */
+    //           -x, -1,  0,  0, 1,
+    //            x, -1,  0,  1, 1,
+    //           -x,  1,  0,  0, 0,
+    //            x,  1,  0,  1, 0,
+    //     ]);
 
-        const vertBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
+    //     const vertBuffer = gl.createBuffer();
+    //     gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+    //     gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
 
-        const idxData = new Uint8Array([
-            0, 1, 2, 3,
-        ]);
+    //     const idxData = new Uint8Array([
+    //         0, 1, 2, 3,
+    //     ]);
 
-        const idxBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
+    //     const idxBuffer = gl.createBuffer();
+    //     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+    //     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxData, gl.STATIC_DRAW);
 
-        // 3 pos + 2 uv
-        const VERTEX_SIZE = 5;
-        const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
+    //     // 3 pos + 2 uv
+    //     const VERTEX_SIZE = 5;
+    //     const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
-        return (renderState: RenderState) => {
-            const gl = renderState.gl;
-            const prog = (<Render.BillboardBGProgram> renderState.currentProgram);
-            gl.disable(gl.BLEND);
-            gl.disable(gl.DEPTH_TEST);
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-            gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
-            gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
-            gl.enableVertexAttribArray(prog.positionLocation);
-            gl.enableVertexAttribArray(prog.uvLocation);
-            gl.bindTexture(gl.TEXTURE_2D, texId);
-            gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_BYTE, 0);
-        };
-    }
+    //     return (renderState: RenderState) => {
+    //         const gl = renderState.gl;
+    //         const prog = (<Render.BillboardBGProgram> renderState.currentProgram);
+    //         gl.disable(gl.BLEND);
+    //         gl.disable(gl.DEPTH_TEST);
+    //         gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
+    //         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
+    //         gl.vertexAttribPointer(prog.positionLocation, 3, gl.FLOAT, false, VERTEX_BYTES, 0);
+    //         gl.vertexAttribPointer(prog.uvLocation, 2, gl.FLOAT, false, VERTEX_BYTES, 3 * Float32Array.BYTES_PER_ELEMENT);
+    //         gl.enableVertexAttribArray(prog.positionLocation);
+    //         gl.enableVertexAttribArray(prog.uvLocation);
+    //         gl.bindTexture(gl.TEXTURE_2D, texId);
+    //         gl.drawElements(gl.TRIANGLE_STRIP, 4, gl.UNSIGNED_BYTE, 0);
+    //     };
+    // }
 
     function readMesh(meshAddr: number): Mesh {
         const hdr = loadAddress(meshAddr);
@@ -341,12 +346,21 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
 
         const mesh = new Mesh();
 
-        function readDL(addr: number): F3DEX2.DL {
+        function readDL(addr: number): RSPOutput | null {
             const dlStart = loadAddress(addr);
             if (dlStart === 0)
                 return null;
 
-            return F3DEX2.readDL(gl, rom, banks, dlStart);
+            console.log(`Reading DL from offset 0x${dlStart.toString(16)}`);
+
+            const rspState = new RSPState();
+            rspState.ramAddrBase = rom.lookupAddress(banks, dlStart & 0xFF000000); // TODO
+            rspState.ramBuffer = rom.buffer; // TODO
+            runDL_F3DEX2(rspState, dlStart); // TODO
+            rspState.finish();
+            const rspOutput = rspState.finish();
+
+            return rspOutput;
         }
 
         if (type === 0) {
@@ -362,9 +376,9 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
             const bg = loadAddress(meshAddr + (lastEntry * 0x0C) + 0x08);
             const bgOffs = rom.lookupAddress(banks, bg);
             const buffer = rom.buffer.slice(bgOffs);
-            const blob = new Blob([buffer.castToBuffer()], { type: 'image/jpeg' });
-            const url = window.URL.createObjectURL(blob);
-            mesh.bg = loadImage(gl, url);
+            //const blob = new Blob([buffer.castToBuffer()], { type: 'image/jpeg' });
+            //const url = window.URL.createObjectURL(blob);
+            //mesh.bg = loadImage(gl, url);
         } else if (type === 2) {
             for (let i = 0; i < nEntries; i++) {
                 mesh.opaque.push(readDL(entriesAddr + 8));
@@ -377,8 +391,8 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
         mesh.transparent = mesh.transparent.filter((dl) => !!dl);
 
         mesh.textures = [];
-        mesh.opaque.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
-        mesh.transparent.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
+        //mesh.opaque.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
+        //mesh.transparent.forEach((dl) => { mesh.textures = mesh.textures.concat(dl.textures); });
 
         return mesh;
     }
@@ -414,7 +428,7 @@ function readHeaders(gl: WebGL2RenderingContext, rom: ZELVIEW0, offs: number, ba
     return headers;
 }
 
-function readScene(gl: WebGL2RenderingContext, zelview0: ZELVIEW0, file: VFSEntry): Headers {
+function readScene(zelview0: ZELVIEW0, file: VFSEntry): Headers {
     const banks: RomBanks = { scene: file };
-    return readHeaders(gl, zelview0, file.vStart, banks);
+    return readHeaders(zelview0, file.vStart, banks);
 }
