@@ -125,6 +125,16 @@ class FlowerModel {
         }
 
         const createTextureData = (data: ArrayBufferSlice, name: string) => {
+            const minFilterTable = [
+                GX.TexFilter.NEAR,
+                GX.TexFilter.NEAR_MIP_NEAR,
+                GX.TexFilter.NEAR_MIP_LIN,
+                GX.TexFilter.NEAR,
+                GX.TexFilter.LINEAR,
+                GX.TexFilter.LIN_MIP_NEAR,
+                GX.TexFilter.LIN_MIP_LIN,
+            ];
+
             const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
             const width  = ((image0 >>>  0) & 0x3FF) + 1;
             const height = ((image0 >>> 10) & 0x3FF) + 1;
@@ -132,18 +142,25 @@ class FlowerModel {
             const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
             const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
             const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
+            const magFilter: GX.TexFilter = (mode0 >>> 4) & 0x01;
+            const minFilter: GX.TexFilter = minFilterTable[(mode0 >>> 5) & 0x07];
+            const lodBias = (mode0 >>> 9) & 0x05;
+            const mode1 = matRegisters.bp[GX.BPRegister.TX_SETMODE1_I0_ID];
+            const minLOD = (mode1 >>> 0) & 0xF;
+            const maxLOD = (mode1 >>> 8) & 0xF;
+            console.assert(minLOD === 0);
+            console.assert(lodBias === 0, 'Non-zero LOD bias. This is untested');
     
             const texture: BTI_Texture = {
                 name,
                 width, height, format,
                 data,
-                // TODO(jstpierre): do we have mips?
-                mipCount: 1,
+                mipCount: 1 + maxLOD - minLOD,
                 paletteFormat: GX.TexPalette.RGB565,
                 paletteData: null,
                 wrapS, wrapT,
-                minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
-                minLOD: 1, maxLOD: 1, lodBias: 0,
+                minFilter, magFilter,
+                minLOD, maxLOD, lodBias,
             };
 
             return new BTIData(device, cache, texture);
