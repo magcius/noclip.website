@@ -29,6 +29,48 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
     return entry.Data;
 }
 
+const createTexture = (r: DisplayListRegisters, data: ArrayBufferSlice, name: string): BTI_Texture => {
+    const minFilterTable = [
+        GX.TexFilter.NEAR,
+        GX.TexFilter.NEAR_MIP_NEAR,
+        GX.TexFilter.NEAR_MIP_LIN,
+        GX.TexFilter.NEAR,
+        GX.TexFilter.LINEAR,
+        GX.TexFilter.LIN_MIP_NEAR,
+        GX.TexFilter.LIN_MIP_LIN,
+    ];
+
+    const image0 = r.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
+    const width  = ((image0 >>>  0) & 0x3FF) + 1;
+    const height = ((image0 >>> 10) & 0x3FF) + 1;
+    const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+    const mode0 = r.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+    const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+    const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
+    const magFilter: GX.TexFilter = (mode0 >>> 4) & 0x01;
+    const minFilter: GX.TexFilter = minFilterTable[(mode0 >>> 5) & 0x07];
+    const lodBias = (mode0 >>> 9) & 0x05;
+    const mode1 = r.bp[GX.BPRegister.TX_SETMODE1_I0_ID];
+    const minLOD = (mode1 >>> 0) & 0xF;
+    const maxLOD = (mode1 >>> 8) & 0xF;
+    console.assert(minLOD === 0);
+    console.assert(lodBias === 0, 'Non-zero LOD bias. This is untested');
+
+    const texture: BTI_Texture = {
+        name,
+        width, height, format,
+        data,
+        mipCount: 1 + maxLOD - minLOD,
+        paletteFormat: GX.TexPalette.RGB565,
+        paletteData: null,
+        wrapS, wrapT,
+        minFilter, magFilter,
+        minLOD, maxLOD, lodBias,
+    };
+
+    return texture;
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchMat4a = mat4.create();
@@ -116,66 +158,24 @@ class FlowerModel {
         const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);        
 
         const matRegisters = new DisplayListRegisters();
-
-        const materialFromDL = (displayList: ArrayBufferSlice, name: string) => {
-            displayListRegistersInitGX(matRegisters);
-            displayListRegistersRun(matRegisters, displayList);
-            const gxMaterial = parseMaterial(matRegisters, name);
-            return gxMaterial;
-        }
-
-        const createTextureData = (data: ArrayBufferSlice, name: string) => {
-            const minFilterTable = [
-                GX.TexFilter.NEAR,
-                GX.TexFilter.NEAR_MIP_NEAR,
-                GX.TexFilter.NEAR_MIP_LIN,
-                GX.TexFilter.NEAR,
-                GX.TexFilter.LINEAR,
-                GX.TexFilter.LIN_MIP_NEAR,
-                GX.TexFilter.LIN_MIP_LIN,
-            ];
-
-            const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
-            const width  = ((image0 >>>  0) & 0x3FF) + 1;
-            const height = ((image0 >>> 10) & 0x3FF) + 1;
-            const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
-            const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
-            const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
-            const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
-            const magFilter: GX.TexFilter = (mode0 >>> 4) & 0x01;
-            const minFilter: GX.TexFilter = minFilterTable[(mode0 >>> 5) & 0x07];
-            const lodBias = (mode0 >>> 9) & 0x05;
-            const mode1 = matRegisters.bp[GX.BPRegister.TX_SETMODE1_I0_ID];
-            const minLOD = (mode1 >>> 0) & 0xF;
-            const maxLOD = (mode1 >>> 8) & 0xF;
-            console.assert(minLOD === 0);
-            console.assert(lodBias === 0, 'Non-zero LOD bias. This is untested');
-    
-            const texture: BTI_Texture = {
-                name,
-                width, height, format,
-                data,
-                mipCount: 1 + maxLOD - minLOD,
-                paletteFormat: GX.TexPalette.RGB565,
-                paletteData: null,
-                wrapS, wrapT,
-                minFilter, magFilter,
-                minLOD, maxLOD, lodBias,
-            };
-
-            return new BTIData(device, cache, texture);
-        }
-
-        this.whiteMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL, 'l_matDL'));
-        this.whiteTextureData = createTextureData(l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
+        displayListRegistersInitGX(matRegisters);
+        
+        displayListRegistersRun(matRegisters, l_matDL);
+        this.whiteMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL'));
+        const whiteTex = createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
+        this.whiteTextureData = new BTIData(device, cache, whiteTex);
         this.whiteTextureData.fillTextureMapping(this.whiteTextureMapping);
 
-        this.pinkMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL2, 'l_matDL2'));
-        this.pinkTextureData = createTextureData(l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
+        displayListRegistersRun(matRegisters, l_matDL2);
+        this.pinkMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL2'));
+        const pinkTex = createTexture(matRegisters, l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
+        this.pinkTextureData = new BTIData(device, cache, pinkTex);
         this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping);
 
-        this.bessouMaterial = new GXMaterialHelperGfx(materialFromDL(l_matDL3, 'l_matDL3'));
-        this.bessouTextureData = createTextureData(l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
+        displayListRegistersRun(matRegisters, l_matDL3);
+        this.bessouMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL3'));
+        const bessouTexture = createTexture(matRegisters, l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
+        this.bessouTextureData = new BTIData(device, cache, bessouTexture);
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
 
         // @TODO: These two symbols are being extracted as all 0. Need to investigate
