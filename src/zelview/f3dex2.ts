@@ -613,7 +613,7 @@ export class RSPState {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
-    private vertexCache = nArray(64, () => 0);
+    private vertexCache = nArray(64, () => new StagingVertex());
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new TextureState();
@@ -658,14 +658,13 @@ export class RSPState {
     }
 
     public gSPVertex(rom: Rom, dramAddr: number, n: number, v0: number): void {
-        const view = rom.lookupAddress(dramAddr).buffer.createDataView();
+        const lkup = rom.lookupAddress(dramAddr);
+        const view = lkup.buffer.createDataView();
+        let offs = lkup.offs;
 
-        const addrIdx = dramAddr & 0x00FFFFFF;
-        const baseIndex = (addrIdx / 0x10) >>> 0;
         for (let i = 0; i < n; i++) {
-            const vertexIndex = baseIndex + i;
-
-            this.vertexCache[v0 + i] = vertexIndex;
+            this.vertexCache[v0 + i].setFromView(view, offs);
+            offs += 0x10;
         }
     }
 
@@ -743,7 +742,13 @@ export class RSPState {
             console.log('EXEC TRI');
         this._flushDrawCall();
 
-        this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);
+        this.sharedOutput.loadVertex(this.vertexCache[i0]);
+        this.sharedOutput.loadVertex(this.vertexCache[i1]);
+        this.sharedOutput.loadVertex(this.vertexCache[i2]);
+        const baseIndex = this.sharedOutput.indices.length;
+        this.sharedOutput.indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
+        // TODO: load indices
+        //this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);
         this.output.currentDrawCall.indexCount += 3;
     }
 

@@ -536,36 +536,6 @@ class DrawCallInstance {
     }
 }
 
-export const enum AnimationTrackType {
-    RotationX,
-    RotationY,
-    RotationZ,
-    ScaleX,
-    ScaleY,
-    ScaleZ,
-    TranslationX,
-    TranslationY,
-    TranslationZ,
-}
-
-export interface AnimationKeyframe {
-    unk: number;
-    time: number;
-    value: number;
-}
-
-export interface AnimationTrack {
-    boneID: number;
-    trackType: AnimationTrackType;
-    frames: AnimationKeyframe[];
-}
-
-export interface AnimationFile {
-    startFrame: number;
-    endFrame: number;
-    tracks: AnimationTrack[];
-}
-
 export const enum BKPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
@@ -591,10 +561,7 @@ export class MeshData {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    constructor(private mesh: Mesh) {
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, childIndex: number = 0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
     }
@@ -625,33 +592,6 @@ class MeshRenderer {
     }
 }
 
-const enum ObjectFlags {
-    Blink = 0x100,
-}
-
-const enum BlinkState {
-    Open,
-    Closing,
-    Opening,
-}
-
-interface SelectorState {
-    // we leave unknown entries undefined, so everything gets rendered
-    values: (number | undefined)[];
-    lastFrame: number;
-    blinkState: BlinkState;
-}
-
-export interface MovementController {
-    movement(dst: mat4, time: number): void;
-}
-
-export const enum AnimationMode {
-    None,
-    Once,
-    Loop,
-}
-
 const lookatScratch = vec3.create();
 const vec3up = vec3.fromValues(0, 1, 0);
 const vec3Zero = vec3.create();
@@ -662,14 +602,7 @@ export class RootMeshRenderer {
     public sortKeyBase: number;
     public modelMatrix = mat4.create();
 
-    public currAnimation = 0;
-    public animationMode = AnimationMode.Loop;
-
-    public animationController = new AnimationController(30);
-    public movementController: MovementController | null = null;
-
     public objectFlags = 0;
-    public selectorState: SelectorState;
     private rootNodeRenderer: MeshRenderer;
 
     constructor(private geometryData: MeshData) {
@@ -682,26 +615,18 @@ export class RootMeshRenderer {
 
         const geo = this.geometryData.mesh;
 
-        this.selectorState = {
-            lastFrame: 0,
-            blinkState: 0,
-            values: [],
-        };
-
         // Traverse the node tree.
         this.rootNodeRenderer = this.buildGeoNodeRenderer(geo);
     }
 
     private buildGeoNodeRenderer(node: Mesh): MeshRenderer {
-        const geoNodeRenderer = new MeshRenderer(node);
+        const geoNodeRenderer = new MeshRenderer();
 
         if (node.rspOutput !== null) {
-            if (node.rspOutput !== null) {
-                for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                    const drawMatrix = [mat4.create()];
-                    const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, drawMatrix, node.rspOutput.drawCalls[i]);
-                    geoNodeRenderer.drawCallInstances.push(drawCallInstance);
-                }
+            for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
+                const drawMatrix = [mat4.create()];
+                const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, drawMatrix, node.rspOutput.drawCalls[i]);
+                geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
 
@@ -728,50 +653,9 @@ export class RootMeshRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
-    protected movement(deltaSeconds: number): void {
-        if (this.movementController !== null)
-            this.movementController.movement(this.modelMatrix, this.animationController.getTimeInSeconds());
-    }
-
-    private calcSelectorState(): void {
-        const currFrame = Math.floor(this.animationController.getTimeInFrames());
-        if (currFrame === this.selectorState.lastFrame)
-            return; // too soon to update
-        this.selectorState.lastFrame = currFrame;
-        if (this.objectFlags & ObjectFlags.Blink) {
-            let eyePos = this.selectorState.values[1];
-            if (eyePos === undefined)
-                eyePos = 1;
-            switch (this.selectorState.blinkState) {
-                case BlinkState.Open:
-                    if (Math.random() < 0.03)
-                        this.selectorState.blinkState = BlinkState.Closing;
-                    break;
-                case BlinkState.Closing:
-                    if (eyePos < 4)
-                        eyePos++;
-                    else
-                        this.selectorState.blinkState = BlinkState.Opening;
-                    break;
-                case BlinkState.Opening:
-                    if (eyePos > 1)
-                        eyePos--;
-                    else
-                        this.selectorState.blinkState = BlinkState.Open;
-                    break;
-            }
-            this.selectorState.values[1] = eyePos;
-            this.selectorState.values[2] = eyePos;
-        }
-    }
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
-
-        this.animationController.setTimeFromViewerInput(viewerInput);
-        this.movement(viewerInput.deltaTime / 1000);
-        this.calcSelectorState();
 
         const renderData = this.geometryData.renderData;
 
@@ -800,7 +684,7 @@ export class RootMeshRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
 
         renderInstManager.popTemplateRenderInst();
     }
