@@ -745,10 +745,7 @@ export class RSPState {
         this.sharedOutput.loadVertex(this.vertexCache[i0]);
         this.sharedOutput.loadVertex(this.vertexCache[i1]);
         this.sharedOutput.loadVertex(this.vertexCache[i2]);
-        const baseIndex = this.sharedOutput.indices.length;
-        this.sharedOutput.indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
-        // TODO: load indices
-        //this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);
+        this.sharedOutput.indices.push(this.vertexCache[i0].outputIndex, this.vertexCache[i1].outputIndex, this.vertexCache[i2].outputIndex);
         this.output.currentDrawCall.indexCount += 3;
     }
 

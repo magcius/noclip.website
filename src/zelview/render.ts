@@ -241,8 +241,8 @@ void main() {
 
 ${this.generateAlphaTest()}
 
+    gl_FragColor = v_Color.rgba;
     //gl_FragColor = t_Color;
-    gl_FragColor = vec4(1.0);
 }
 `;
     }
