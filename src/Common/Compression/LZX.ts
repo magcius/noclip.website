@@ -148,35 +148,24 @@ function buildHuffTable(tbl: HuffmanTable): void {
     }
     assert(tbl.nbits >= 1 && tbl.nbits <= tbl.maxnbits);
 
-    // TODO(jstpierre): Faster implementation of this.
-    const cwn: number[][] = nArray(tbl.nbits + 1, () => []);
-
-    // Bucket our lengths.
-    for (let sym = 0; sym < tbl.maxSymbols; sym++) {
-        const len = tbl.len[sym];
-        if (len === 0)
-            continue;
-        cwn[len].push(sym);
-    }
-
     const m = (1 << tbl.nbits);
-
-    // Now go through and assign codes to each bucket.
     let code = 0;
-    assert(cwn[0].length === 0);
     const cw = tbl.cw;
+
+    // Bucket & assign codes.
     for (let len = 1; len <= tbl.nbits; len++) {
-        const cwe = cwn[len];
-
-        // Fill our codewords table with all matching combinations.
-        // To make reading faster, we pad things out to nbits, so if nbits is 6, we pad to 01xxxx.
-        // That way the reader can just read nbits bits. Once they have the symbol, they can use
-        // the len table to advance the proper amount.
-
         const nv = (m >>> len);
 
-        for (let i = 0; i < cwe.length; i++) {
-            cw.fill(cwe[i], code, code + nv);
+        for (let sym = 0; sym < tbl.maxSymbols; sym++) {
+            if (len !== tbl.len[sym])
+                continue;
+
+            // Fill our codewords table with all matching combinations.
+            // To make reading faster, we pad things out to nbits, so if nbits is 6, we pad to 01xxxx.
+            // That way the reader can just read nbits bits. Once they have the symbol, they can use
+            // the len table to advance the proper amount.
+
+            cw.fill(sym, code, code + nv);
             code += nv;
             assert((code & (nv - 1)) === 0);
         }
