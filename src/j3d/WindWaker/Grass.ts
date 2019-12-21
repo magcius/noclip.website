@@ -369,8 +369,7 @@ export class FlowerPacket {
                 if (!data) continue; 
     
                 // @NOTE: Flowers leave C0 as unset, and assume it is black
-                // @TODO: Set the kyanko colors for each room
-                colorCopy(materialParams.u_Color[ColorKind.C1], White);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
@@ -394,7 +393,7 @@ export class FlowerPacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
     
-                colorCopy(materialParams.u_Color[ColorKind.C1], White);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
@@ -418,7 +417,7 @@ export class FlowerPacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
     
-                colorCopy(materialParams.u_Color[ColorKind.C1], White);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;

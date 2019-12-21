@@ -17,7 +17,7 @@ import { BMD, BTK, BRK, BCK, LoopMode, BMT } from '../../Common/JSYSTEM/J3D/J3DL
 import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
-import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
+import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy, OpaqueBlack } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
@@ -189,6 +189,196 @@ function kyankoColorsLerp(dst: KyankoColors, a: KyankoColors, b: KyankoColors, t
         colorLerp(dst.virtColors.vr_kasumi_mae, aVirt.vr_kasumi_mae, bVirt.vr_kasumi_mae, t);
         colorLerp(dst.virtColors.vr_sky, aVirt.vr_sky, bVirt.vr_sky, t);
         colorLerp(dst.virtColors.vr_uso_umi, aVirt.vr_uso_umi, bVirt.vr_uso_umi, t);
+    }
+}
+
+
+enum Weather {
+    CLEAR,
+    RAIN,
+    SNOW,
+    UNKNOWN
+};
+
+interface KyankoTable {
+    a: number[],
+    b: number[],
+}
+
+class Kyanko {
+    public roomColors: KyankoColors[] = [];
+
+    constructor(private colorSets: KyankoColors[], private roomTable: KyankoTable[], private todTable: KyankoTable[]) {
+        for (let i = 0; i < roomTable.length; i++) {
+            this.roomColors[i] = {
+                actorC0: colorNewCopy(OpaqueBlack),
+                actorK0: colorNewCopy(OpaqueBlack),
+                bg0C0: colorNewCopy(OpaqueBlack),
+                bg0K0: colorNewCopy(OpaqueBlack),
+                bg1C0: colorNewCopy(OpaqueBlack),
+                bg1K0: colorNewCopy(OpaqueBlack),
+                bg2C0: colorNewCopy(OpaqueBlack),
+                bg2K0: colorNewCopy(OpaqueBlack),
+                bg3C0: colorNewCopy(OpaqueBlack),
+                bg3K0: colorNewCopy(OpaqueBlack),
+                virtColors: null,
+            }
+        }
+    }
+
+    static fromDZS(buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
+        const chunkHeaders = parseDZSHeaders(buffer);
+
+        const paleChunk = chunkHeaders.get('Pale');
+        const paleCount = paleChunk!.count;
+        const paleOffset = paleChunk!.offs;
+
+        const coloChunk = chunkHeaders.get('Colo');
+        const coloCount = coloChunk!.count;
+        const coloOffset = coloChunk!.offs;
+
+        const envrChunk = chunkHeaders.get('EnvR');
+        const envrCount = envrChunk!.count;
+        const envrOffset = envrChunk!.offs;
+
+        const colorSets: KyankoColors[] = []
+        for (let i = 0; i < paleCount; i++) {
+            const offset = paleOffset + (i * 0x2C);
+
+            const actorShadowR = view.getUint8(offset + 0x00) / 0xFF;
+            const actorShadowG = view.getUint8(offset + 0x01) / 0xFF;
+            const actorShadowB = view.getUint8(offset + 0x02) / 0xFF;
+            const actorShadow = colorNew(actorShadowR, actorShadowG, actorShadowB, 1);
+
+            const actorAmbientR = view.getUint8(offset + 0x03) / 0xFF;
+            const actorAmbientG = view.getUint8(offset + 0x04) / 0xFF;
+            const actorAmbientB = view.getUint8(offset + 0x05) / 0xFF;
+            const actorAmbient = colorNew(actorAmbientR, actorAmbientG, actorAmbientB, 1);
+
+            const bg0C0R = view.getUint8(offset + 0x06) / 0xFF;
+            const bg0C0G = view.getUint8(offset + 0x07) / 0xFF;
+            const bg0C0B = view.getUint8(offset + 0x08) / 0xFF;
+            const bg0C0 = colorNew(bg0C0R, bg0C0G, bg0C0B, 1);
+
+            const bg0K0R = view.getUint8(offset + 0x09) / 0xFF;
+            const bg0K0G = view.getUint8(offset + 0x0A) / 0xFF;
+            const bg0K0B = view.getUint8(offset + 0x0B) / 0xFF;
+            const bg0K0 = colorNew(bg0K0R, bg0K0G, bg0K0B, 1);
+
+            const bg1C0R = view.getUint8(offset + 0x0C) / 0xFF;
+            const bg1C0G = view.getUint8(offset + 0x0D) / 0xFF;
+            const bg1C0B = view.getUint8(offset + 0x0E) / 0xFF;
+            const bg1C0 = colorNew(bg1C0R, bg1C0G, bg1C0B, 1);
+
+            const bg1K0R = view.getUint8(offset + 0x0F) / 0xFF;
+            const bg1K0G = view.getUint8(offset + 0x10) / 0xFF;
+            const bg1K0B = view.getUint8(offset + 0x11) / 0xFF;
+            const bg1K0 = colorNew(bg1K0R, bg1K0G, bg1K0B, 1);
+
+            const bg2C0R = view.getUint8(offset + 0x12) / 0xFF;
+            const bg2C0G = view.getUint8(offset + 0x13) / 0xFF;
+            const bg2C0B = view.getUint8(offset + 0x14) / 0xFF;
+            const bg2C0 = colorNew(bg2C0R, bg2C0G, bg2C0B, 1);
+
+            const bg2K0R = view.getUint8(offset + 0x15) / 0xFF;
+            const bg2K0G = view.getUint8(offset + 0x16) / 0xFF;
+            const bg2K0B = view.getUint8(offset + 0x17) / 0xFF;
+            const bg2K0 = colorNew(bg2K0R, bg2K0G, bg2K0B, 1);
+
+            const bg3C0R = view.getUint8(offset + 0x18) / 0xFF;
+            const bg3C0G = view.getUint8(offset + 0x19) / 0xFF;
+            const bg3C0B = view.getUint8(offset + 0x1A) / 0xFF;
+            const bg3C0 = colorNew(bg3C0R, bg3C0G, bg3C0B, 1);
+
+            const bg3K0R = view.getUint8(offset + 0x1B) / 0xFF;
+            const bg3K0G = view.getUint8(offset + 0x1C) / 0xFF;
+            const bg3K0B = view.getUint8(offset + 0x1D) / 0xFF;
+            const bg3K0 = colorNew(bg3K0R, bg3K0G, bg3K0B, 1);
+
+            let virtColors: VirtColors | null = null;
+            if (chunkHeaders.has('Virt')) {
+                const virtIdx = view.getUint8(offset + 0x21);
+                const virtOffs = chunkHeaders.get('Virt')!.offs + (virtIdx * 0x24);
+                const vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
+                const vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
+                const vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
+                const vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
+                const vr_back_cloud = colorNew(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
+
+                const vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
+                const vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
+                const vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
+                const vr_sky = colorNew(vr_skyR, vr_skyG, vr_skyB, 1);
+
+                const vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
+                const vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
+                const vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
+                const vr_uso_umi = colorNew(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
+
+                const vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
+                const vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
+                const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
+                const vr_kasumi_mae = colorNew(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+                virtColors = { vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
+            } else {
+                virtColors = null;
+            }
+
+            colorSets.push({
+                actorC0: actorShadow, actorK0: actorAmbient,
+                bg0C0, bg0K0, bg1C0, bg1K0, bg2C0, bg2K0, bg3C0, bg3K0,
+                virtColors,
+            });
+        }
+
+        // Two sets of KyankoColors for each of the 6 times of day
+        const todTable: KyankoTable[] = [];
+        for (let i = 0; i < coloCount; i++) {
+            const coloOffs = coloOffset + (i * 0x0C);
+
+            const setA: number[] = [];
+            const setB: number[] = [];
+            for (let t = TimeOfDay.DAWN; t <= TimeOfDay.NIGHT; t++) {
+                setA.push(view.getUint8(coloOffs + 0x00 + t));
+                setB.push(view.getUint8(coloOffs + 0x06 + t));
+            }
+
+            todTable.push({ a: setA, b: setB });
+        }
+        
+        // Two sets of Colos for 4 different types of weather, per room
+        const roomTable: KyankoTable[] = [];
+        for (let r = 0; r < envrCount; r++) {
+            const roomOffs = envrOffset + (r * 0x08);
+
+            const setA: number[] = [];
+            const setB: number[] = [];
+            for (let w = Weather.CLEAR; w <= Weather.UNKNOWN; w++) {
+                setA.push(view.getUint8(roomOffs + 0x00 + w));
+                setB.push(view.getUint8(roomOffs + 0x04 + w));
+            }
+
+            roomTable.push({ a: setA, b: setB });
+        }
+
+        return new Kyanko(colorSets, roomTable, todTable);
+    }
+
+    setTimeAndWeather(weather: Weather, timeOfDay: TimeOfDay, bSet = false) {
+        for (let roomIdx = 0; roomIdx < this.roomTable.length; roomIdx++) {
+            const weatherTable = this.roomTable[roomIdx].a;
+            const todTable = this.todTable[weatherTable[weather]].a;
+            
+            const i0 = ((timeOfDay + 0) % 6) | 0;
+            const i1 = ((timeOfDay + 1) % 6) | 0;
+            const t = timeOfDay % 1;
+
+            const colorSet0 = this.colorSets[todTable[i0]];
+            const colorSet1 = this.colorSets[todTable[i1]];
+
+            kyankoColorsLerp(this.roomColors[roomIdx], colorSet0, colorSet1, t);
+        }
     }
 }
 
@@ -749,6 +939,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
     public loadingRoomRenderer: WindWakerRoomRenderer;
+    public kyanko: Kyanko;
 
     public flowerPacket: FlowerPacket;
     
@@ -774,6 +965,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < 6; i++)
             this.timeOfDayColors.push(getKyankoColorsFromDZS(dzsBuffer, 0, i));
         this.dstColors = getKyankoColorsFromDZS(dzsBuffer, 0, 0);
+
+        this.kyanko = Kyanko.fromDZS(dzsBuffer);
     }
 
     private setTimeOfDay(timeOfDay: number): void {
@@ -794,6 +987,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             // const roomColors = getColorsFromDZS(dzsBuffer, 0, timeOfDay);
             this.roomRenderers[i].setKyankoColors(this.dstColors);
         }
+
+        this.kyanko.setTimeAndWeather(Weather.CLEAR, timeOfDay, false);
     }
 
     private setVisibleLayerMask(m: number): void {
