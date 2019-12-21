@@ -432,13 +432,15 @@ export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
 }
 
 function translateTLUT(dst: Uint8Array, rom: Rom, dramAddr: number, siz: ImageSize): void {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
-    const srcIdx = dramAddr & 0x00FFFFFF;
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
 }
 
 function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
 
     const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
     const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
@@ -446,11 +448,11 @@ function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
     assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+    //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+    //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
@@ -458,7 +460,8 @@ function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture
 const tlutColorTable = new Uint8Array(256 * 4);
 
 function translateTile_CI4(rom: Rom, dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
     translateTLUT(tlutColorTable, rom, dramPalAddr, ImageSize.G_IM_SIZ_4b);
 
     const tileW = getTileWidth(tile);
@@ -469,30 +472,32 @@ function translateTile_CI4(rom: Rom, dramAddr: number, dramPalAddr: number, tile
     assert(tile.shiftt === 0); // G_TX_NOLOD
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable);
     return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 }
 
 function translateTile_CI8(rom: Rom, dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
     translateTLUT(tlutColorTable, rom, dramPalAddr, ImageSize.G_IM_SIZ_8b);
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.shifts === 0); // G_TX_NOLOD
+    //assert(tile.shiftt === 0); // G_TX_NOLOD
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
     return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 }
 
 function translateTile_RGBA32(rom: Rom, dramAddr: number, tile: TileState): Texture {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
 
     const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
     const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
@@ -504,27 +509,33 @@ function translateTile_RGBA32(rom: Rom, dramAddr: number, tile: TileState): Text
     assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
 function translateTile_RGBA16(rom: Rom, dramAddr: number, tile: TileState): Texture {
-    const view = rom.lookupAddress(dramAddr).buffer.createDataView();
-
     const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
     const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
 
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+    try {
+        const lkup = rom.lookupAddress(dramAddr);
+        const view = lkup.buffer.createDataView(lkup.offs);
 
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+        // TODO(jstpierre): Support more tile parameters
+        assert(tile.shifts === 0); // G_TX_NOLOD
+        assert(tile.shiftt === 0); // G_TX_NOLOD
+        //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+        //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+
+        const dst = new Uint8Array(tileW * tileH * 4);
+        const srcIdx = 0; //dramAddr & 0x00FFFFFF;
+        decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
+        return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+    } catch (e) {
+        console.exception(e);
+        return new Texture(tile, dramAddr, 0, tileW, tileH, new Uint8Array(tileW * tileH * 4));
+    }
 }
 
 function translateTileTexture(rom: Rom, dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
@@ -535,7 +546,11 @@ function translateTileTexture(rom: Rom, dramAddr: number, dramPalAddr: number, t
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_RGBA16(rom, dramAddr, tile);
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): return translateTile_RGBA32(rom, dramAddr, tile);
     default:
-        throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
+        console.warn(`Unknown image format ${tile.fmt} / ${tile.siz}`);
+        const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
+        const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+        // Create dummy texture
+        return new Texture(tile, dramAddr, 0, tileW, tileH, new Uint8Array(tileW * tileH * 4));
     }
 }
 
@@ -750,6 +765,7 @@ export class RSPState {
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
+        console.log(`SetTextureImage fmt ${fmt}, siz ${siz}, w ${w}, addr 0x${addr.toString(16)}`);
         this.DP_TextureImageState.set(fmt, siz, w, addr);
     }
 
@@ -825,6 +841,7 @@ const enum F3DEX2_GBI {
     G_QUAD              = 0x07,
     G_LINE3D            = 0x08,
 
+    G_TEXTURE           = 0xD7,
     G_POPMTX            = 0xD8,
     G_GEOMETRYMODE      = 0xD9,
     G_MTX               = 0xDA,
@@ -909,6 +926,66 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             const i2 = ((w1 >>>  0) & 0xFF) / 2;
             state.gSPTri(i0, i1, i2);
         }
+        } break;
+
+        case F3DEX2_GBI.G_TEXTURE: {
+            const level = (w0 >>> 11) & 0x07;
+            let   tile  = (w0 >>> 8) & 0x07;
+            const on    = !!((w0 >>> 0) & 0x7F);
+            const s     = (w1 >>> 16) & 0xFFFF;
+            const t     = (w1 >>> 0)  & 0xFFFF;
+            state.gSPTexture(on, tile, level, s, t);
+        } break;
+
+        case F3DEX2_GBI.G_SETTIMG: {
+            const fmt = (w0 >>> 21) & 0x07;
+            const siz = (w0 >>> 19) & 0x03;
+            const w   = (w0 & 0x0FFF) + 1;
+            state.gDPSetTextureImage(fmt, siz, w, w1);
+        } break;
+        
+        case F3DEX2_GBI.G_SETTILE: {
+            const fmt =     (w0 >>> 21) & 0x07;
+            const siz =     (w0 >>> 19) & 0x03;
+            const line =    (w0 >>>  9) & 0x1FF;
+            const tmem =    (w0 >>>  0) & 0x1FF;
+            const tile    = (w1 >>> 24) & 0x07;
+            const palette = (w1 >>> 20) & 0x0F;
+            const cmt =     (w1 >>> 18) & 0x03;
+            const maskt =   (w1 >>> 14) & 0x0F;
+            const shiftt =  (w1 >>> 10) & 0x0F;
+            const cms =     (w1 >>>  8) & 0x03;
+            const masks =   (w1 >>>  4) & 0x0F;
+            const shifts =  (w1 >>>  0) & 0x0F;
+            state.gDPSetTile(fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts);
+        } break;
+        
+        case F3DEX2_GBI.G_SETTILESIZE: {
+            const uls =  (w0 >>> 12) & 0x0FFF;
+            const ult =  (w0 >>>  0) & 0x0FFF;
+            const tile = (w1 >>> 24) & 0x07;
+            const lrs =  (w1 >>> 12) & 0x0FFF;
+            const lrt =  (w1 >>>  0) & 0x0FFF;
+            state.gDPSetTileSize(tile, uls, ult, lrs, lrt);
+        } break;
+        
+        case F3DEX2_GBI.G_LOADTLUT: {
+            const tile = (w1 >>> 24) & 0x07;
+            const count = (w1 >>> 14) & 0x3FF;
+            state.gDPLoadTLUT(tile, count);
+        } break;
+
+        case F3DEX2_GBI.G_LOADBLOCK: {
+            const uls =  (w0 >>> 12) & 0x0FFF;
+            const ult =  (w0 >>>  0) & 0x0FFF;
+            const tile = (w1 >>> 24) & 0x07;
+            const lrs =  (w1 >>> 12) & 0x0FFF;
+            const dxt =  (w1 >>>  0) & 0x0FFF;
+            state.gDPLoadBlock(tile, uls, ult, lrs, dxt);
+        } break;
+        
+        case F3DEX2_GBI.G_SETCOMBINE: {
+            state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } break;
 
         case F3DEX2_GBI.G_DL: {

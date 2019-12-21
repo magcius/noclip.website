@@ -137,7 +137,9 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
                     if (banks.room === undefined)
                         throw Error(`room is undefined`);
                     return banks.room;
-                default: throw Error(`bank not found`);
+                default:
+                    console.error(`bank for 0x${addr.toString(16)} not found`);
+                    throw Error(`bank not found`);
             }
         }
         const bank = findBank();
