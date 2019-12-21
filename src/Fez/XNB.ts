@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, hexzero, hexdump } from "../util";
 import { LZXState, decompressLZX } from "../Common/Compression/LZX";
 
 // XNA Binary Format
@@ -30,7 +30,7 @@ export function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
         const state = new LZXState(16);
         let idx = 0x0E;
         let dstOffs = 0;
-        while (idx < decompressedSize) {
+        while (idx < size) {
             const flag = view.getUint8(idx + 0x00);
             let blockSize: number, frameSize: number;
             if (flag === 0xFF) {
@@ -47,6 +47,7 @@ export function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
                 break;
 
             decompressLZX(state, dst, dstOffs, frameSize, buffer.subarray(idx, blockSize));
+            idx += blockSize;
             dstOffs += frameSize;
         }
 
