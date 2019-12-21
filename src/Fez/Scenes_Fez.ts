@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { DataFetcher, getDataURLForPath } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder } from '../util';
@@ -22,24 +22,6 @@ async function fetchXML(dataFetcher: DataFetcher, path: string): Promise<Documen
     return parser.parseFromString(fileContents, `application/xml`);
 }
 
-function fetchPNG(path: string): Promise<ImageData> {
-    path = getDataURLForPath(path);
-    const img = document.createElement('img');
-    img.crossOrigin = 'anonymous';
-    img.src = path;
-    const p = new Promise<ImageData>((resolve) => {
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0);
-            resolve(ctx.getImageData(0, 0, img.width, img.height));
-        };
-    });
-    return p;
-}
-
 export class ModelCache {
     public promiseCache = new Map<string, Promise<void>>();
     public trilesetDatas: TrilesetData[] = [];
@@ -58,10 +40,6 @@ export class ModelCache {
 
     public fetchXML(path: string): Promise<Document> {
         return fetchXML(this.dataFetcher, `${pathBase}/${path}`);
-    }
-
-    public fetchPNG(path: string): Promise<ImageData> {
-        return fetchPNG(`${pathBase}/${path}`);
     }
 
     public async fetchXNB<T>(path: string): Promise<T> {

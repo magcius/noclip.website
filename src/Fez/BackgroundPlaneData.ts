@@ -1,6 +1,6 @@
 
 import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeTextureFromImageData, makeTextureFromXNA_Texture2D } from "./Texture";
+import { makeTextureFromXNA_Texture2D } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
 import { assert } from "../util";

@@ -33,6 +33,9 @@ export class ContentTypeReaderManager {
             'Microsoft.Xna.Framework.Content.TimeSpanReader');
 
         // System Types
+        this.RegisterTypeReaderDirect(System_StringReader,
+            'System.String',
+            'Microsoft.Xna.Framework.Content.StringReader');
         this.RegisterTypeReaderGenericFactory(System_ArrayReader_Factory,
             'System.Array',
             'Microsoft.Xna.Framework.Content.ArrayReader');
@@ -340,6 +343,10 @@ function System_TimeSpanReader(reader: ContentReader): number {
 
 function System_EnumReader(reader: ContentReader): number {
     return reader.ReadUInt32();
+}
+
+function System_StringReader(reader: ContentReader): string {
+    return reader.ReadString();
 }
 
 function System_ArrayReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {

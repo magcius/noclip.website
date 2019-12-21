@@ -5,21 +5,37 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec2, vec4 } from "gl-matrix";
+import { mat4, vec3, vec2, vec4, quat } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
-import { nArray, assertExists } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-import { TrileData, TrilesetData } from "./TrileData";
+import { TrilesetData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
-import { parseVector3, parseQuaternion } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { ModelCache } from "./Scenes_Fez";
 import { SkyRenderer, SkyData } from './Sky';
 import { GeometryData } from './GeometryData';
+
+function parseVector3(e: Element): vec3 {
+    assert(e.tagName === 'Vector3');
+    const x = Number(e.getAttribute('x'));
+    const y = Number(e.getAttribute('y'));
+    const z = Number(e.getAttribute('z'));
+    return vec3.fromValues(x, y, z);
+}
+
+function parseQuaternion(e: Element): quat {
+    assert(e.tagName === 'Quaternion');
+    const x = Number(e.getAttribute('x'));
+    const y = Number(e.getAttribute('y'));
+    const z = Number(e.getAttribute('z'));
+    const w = Number(e.getAttribute('w'));
+    return quat.fromValues(x, y, z, w);
+}
 
 class FezProgram {
     public static ub_SceneParams = 0;

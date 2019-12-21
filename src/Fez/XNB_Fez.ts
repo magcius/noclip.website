@@ -96,6 +96,81 @@ function Fez_FrameReader(reader: ContentReader): Fez_Frame {
     return { duration, rectangle };
 }
 
+export interface Fez_SkyLayer {
+    name: string;
+    inFront: boolean;
+    opacity: number;
+    fogTint: number;
+}
+
+function Fez_SkyLayerReader(reader: ContentReader): Fez_SkyLayer {
+    const name = reader.ReadString();
+    const inFront = reader.ReadBoolean();
+    const opacity = reader.ReadSingle();
+    const fogTint = reader.ReadSingle();
+    return { name, inFront, opacity, fogTint };
+}
+
+export interface Fez_Sky {
+    name: string;
+    background: string;
+    windSpeed: number;
+    density: number;
+    fogDensity: number;
+    layers: Fez_SkyLayer[];
+    clouds: string[];
+    shadows: string | null;
+    stars: string | null;
+    cloudTint: string | null;
+    verticalTiling: boolean;
+    horizontalScrolling: boolean;
+    layerBaseHeight: number;
+    interLayerVerticalDistance: number;
+    horizontalDistance: number;
+    verticalDistance: number;
+    layerBaseSpacing: number;
+    windParallax: number;
+    windDistance: number;
+    cloudsParallax: number;
+    shadowOpacity: number;
+    foliageShadows: boolean;
+    noPerFaceLayerXOffset: boolean;
+    layerBaseXOffset: number;
+}
+
+function Fez_SkyReader(reader: ContentReader): Fez_Sky {
+    const name = reader.ReadString();
+    const background = reader.ReadString();
+    const windSpeed = reader.ReadSingle();
+    const density = reader.ReadSingle();
+    const fogDensity = reader.ReadSingle();
+    const layers = reader.ReadObject<Fez_SkyLayer[]>()!;
+    const clouds = reader.ReadObject<string[]>()!;
+    const shadows = reader.ReadObject<string>()!;
+    const stars = reader.ReadObject<string>()!;
+    const cloudTint = reader.ReadObject<string>()!;
+    const verticalTiling = reader.ReadBoolean();
+    const horizontalScrolling = reader.ReadBoolean();
+    const layerBaseHeight = reader.ReadSingle();
+    const interLayerVerticalDistance = reader.ReadSingle();
+    const horizontalDistance = reader.ReadSingle();
+    const verticalDistance = reader.ReadSingle();
+    const layerBaseSpacing = reader.ReadSingle();
+    const windParallax = reader.ReadSingle();
+    const windDistance = reader.ReadSingle();
+    const cloudsParallax = reader.ReadSingle();
+    const shadowOpacity = reader.ReadSingle();
+    const foliageShadows = reader.ReadBoolean();
+    const noPerFaceLayerXOffset = reader.ReadBoolean();
+    const layerBaseXOffset = reader.ReadSingle();
+    return {
+        name, background, windSpeed, density, fogDensity, layers, clouds, shadows, stars,
+        cloudTint, verticalTiling, horizontalScrolling, layerBaseHeight, interLayerVerticalDistance,
+        horizontalDistance, verticalDistance, layerBaseSpacing, windParallax, windDistance,
+        cloudsParallax, shadowOpacity, foliageShadows, noPerFaceLayerXOffset, layerBaseXOffset,
+    };
+}
+
 export interface Fez_ShaderInstancedIndexedPrimitives<T> {
     primitiveType: XNA_PrimitiveType;
     vertices: T[];
@@ -156,6 +231,12 @@ export class FezContentTypeReaderManager extends ContentTypeReaderManager {
         this.RegisterTypeReaderDirect(Fez_FrameReader,
             'FezEngine.Content.FrameContent',
             'FezEngine.Readers.FrameReader');
+        this.RegisterTypeReaderDirect(Fez_SkyReader,
+            'FezEngine.Structure.Sky',
+            'FezEngine.Readers.SkyReader');
+        this.RegisterTypeReaderDirect(Fez_SkyLayerReader,
+            'FezEngine.Structure.SkyLayer',
+            'FezEngine.Readers.SkyLayerReader');
         this.RegisterTypeReaderValueType(Fez_VertexPositionNormalTextureInstanceReader,
             'FezEngine.Structure.Geometry.VertexPositionNormalTextureInstance',
             'FezEngine.Readers.VertexPositionNormalTextureInstanceReader');
