@@ -15,7 +15,8 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, 
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists } from '../../util';
-import { DisplayListRegisters, displayListRegistersRun, parseMaterialEntry, displayListRegistersInitGX } from '../../rres/brres';
+import { parseMaterialEntry } from '../../rres/brres';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../../TextureHolder';
