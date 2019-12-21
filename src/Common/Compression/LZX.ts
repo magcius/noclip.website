@@ -61,7 +61,7 @@ const enum BlockType {
 }
 
 class HuffmanTable {
-    public maxnbits: number = 15;
+    public maxnbits: number = 16;
     public nbits: number = 0;
 
     // Length table.
@@ -344,9 +344,6 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
                         // TypeScript is too dumb to figure out that this never happens...
                         throw "whoops";
                     }
-
-                    // windowOffs should never run off the end...
-                    assert(windowOffs + len < window.byteLength);
 
                     let src = (windowOffs - offs);
                     if (src < 0)

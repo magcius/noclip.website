@@ -1,20 +1,10 @@
 
 import { GfxTexture, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { vec3, vec2 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeTextureFromImageData } from "./Texture";
-import { parseVector3, parseVector2 } from "./DocumentHelpers";
+import { makeTextureFromXNA_Texture2D } from "./Texture";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-
-const gc_normals = [
-    vec3.fromValues(-1, 0, 0), 
-    vec3.fromValues(0, -1, 0), 
-    vec3.fromValues(0, 0, -1),
-    vec3.fromValues(1, 0, 0), 
-    vec3.fromValues(0, 1, 0), 
-    vec3.fromValues(0, 0, 1),
-];
+import { Fez_ArtObject } from "./XNB_Fez";
 
 export class ArtObjectData {
     private positionBuffer: GfxBuffer;
@@ -28,37 +18,26 @@ export class ArtObjectData {
     public inputState: GfxInputState;
     public bbox = new AABB();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, file: Document, texImageData: ImageData) {
-        const positions: vec3[] = [];
-        const normals: vec3[] = [];
-        const texcoords: vec2[] = [];
-        const indices: number[] = [];
+    constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, data: Fez_ArtObject) {
+        this.indexCount = data.geometry.indices.length;
 
-        const xmlVPNTI = file.getElementsByTagName('VertexPositionNormalTextureInstance');
-        for (let i = 0; i < xmlVPNTI.length; i++) {
-            positions.push(parseVector3(xmlVPNTI[i].querySelector('Position Vector3')!));
-            normals.push(gc_normals[Number(xmlVPNTI[i].querySelector('Normal')!.textContent)]);
-            texcoords.push(parseVector2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
-        }
+        const vertices = data.geometry.vertices;
+        const positions = vertices.map((v) => v.position);
+        const normals = vertices.map((v) => v.normal);
+        const texcoords = vertices.map((v) => v.texcoord);
 
         this.bbox.set(positions);
 
-        const indexXmlList = file.getElementsByTagName('Indices');
-        for (let i = 0; i < indexXmlList.length; i++) {
-            const indicesXmlList = indexXmlList[i].getElementsByTagName('Index');
-            for (let j = 0; j < indicesXmlList.length; j++)
-                indices.push(Number(indicesXmlList[j].textContent));
-        }
-        this.indexCount = indices.length;
+        const posF32A = flat(positions);
+        const normalF32A = flat(normals);
+        const texcoordF32A = flat(texcoords);
 
-        const posF32A = Float32Array.from(flat(positions));
-        const normalF32A = Float32Array.from(flat(normals));
-        const texcoordF32A = Float32Array.from(flat(texcoords));
-        const indicesI32A = Uint32Array.from(indices);
+        const indices = Uint32Array.from(data.geometry.indices);
+        this.indexCount = indices.length;
         this.positionBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posF32A.buffer);
         this.normalBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, normalF32A.buffer);
         this.texcoordBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texcoordF32A.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indicesI32A.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position
@@ -82,7 +61,7 @@ export class ArtObjectData {
         ],
         { buffer: this.indexBuffer, byteOffset: 0 });
 
-        this.texture = makeTextureFromImageData(device, texImageData);
+        this.texture = makeTextureFromXNA_Texture2D(device, data.futureCubeMap);
         this.sampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,

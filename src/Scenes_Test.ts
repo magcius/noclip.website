@@ -8,8 +8,8 @@ import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
 import * as PVRT from "./Common/DC/PVRT";
 import { CtrTextureHolder } from "./oot3d/render";
-import { decompress } from "./Fez/XNB";
-import { hexdump } from "./util";
+import { decompress, ContentReader } from "./Fez/XNB";
+import { FezContentTypeReaderManager } from "./Fez/XNB_Fez";
 
 const id = 'test';
 const name = "Test Scenes";
@@ -68,7 +68,10 @@ class XNBTest implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(this.dataPath).then((data) => {
             const decompressed = decompress(data);
-            hexdump(decompressed);
+            const typeReaderManager = new FezContentTypeReaderManager();
+            const stream = new ContentReader(typeReaderManager, decompressed);
+            const obj = stream.ReadAsset();
+            console.log(obj);
             return new JetSetRadioScene();
         });
     }

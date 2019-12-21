@@ -10,6 +10,8 @@ import { ArtObjectData } from './ArtObjectData';
 import { BackgroundPlaneData } from './BackgroundPlaneData';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SkyData, fetchSkyData } from './Sky';
+import { FezContentTypeReaderManager, Fez_ArtObject } from './XNB_Fez';
+import { parse } from './XNB';
 
 const pathBase = 'Fez';
 
@@ -45,6 +47,7 @@ export class ModelCache {
     public backgroundPlaneDatas: BackgroundPlaneData[] = [];
     public skyDatas: SkyData[] = [];
     public gfxRenderCache = new GfxRenderCache();
+    private fezTypeReaderManager = new FezContentTypeReaderManager();
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -61,7 +64,15 @@ export class ModelCache {
         return fetchPNG(`${pathBase}/${path}`);
     }
 
+    public async fetchXNB<T>(path: string): Promise<T> {
+        const data = await this.dataFetcher.fetchData(`${pathBase}/${path}`);
+        return parse<T>(this.fezTypeReaderManager, data);
+    }
+
     private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<void> {
+        const data = await this.fetchXNB(`xnb/trile sets/${path}.xnb`);
+        console.log(data);
+
         const [xml, png] = await Promise.all([
             this.fetchXML(`trile sets/${path}.xml`),
             this.fetchPNG(`trile sets/${path}.png`),
@@ -70,11 +81,8 @@ export class ModelCache {
     }
 
     private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {
-        const [xml, png] = await Promise.all([
-            this.fetchXML(`art objects/${path}.xml`),
-            this.fetchPNG(`art objects/${path}.png`),
-        ]);
-        this.artObjectDatas.push(new ArtObjectData(device, this.gfxRenderCache, path, xml, png));
+        const xnb = await this.fetchXNB<Fez_ArtObject>(`xnb/art objects/${path}.xnb`);
+        this.artObjectDatas.push(new ArtObjectData(device, this.gfxRenderCache, path, xnb));
     }
 
     private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
