@@ -3,7 +3,7 @@ import { vec3, mat4 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
 import { MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { Emitter, Sparkler, SparkleColor, ParticleType } from './particles';
+import { Emitter, Sparkler, SparkleColor, ParticleType, ConfigurableEmitter, brentildaWandConfig } from './particles';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(geometryData: GeometryData, public index: number) {
@@ -78,6 +78,15 @@ class ShinyObject extends GeometryRenderer {
 
     protected movement(deltaSeconds: number) {
         mat4.rotateY(this.modelMatrix, this.modelMatrix, deltaSeconds * this.turnRate * MathConstants.DEG_TO_RAD)
+    }
+}
+
+class Brentilda extends GeometryRenderer {
+    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+        super(geometryData);
+        const wandEmitter = new ConfigurableEmitter(brentildaWandConfig);
+        wandEmitter.movementController = new ModelPin(this.modelPointArray, 31);
+        emitters.push(wandEmitter);
     }
 }
 
@@ -629,6 +638,8 @@ export function createRenderer(emitters: Emitter[], objectID: number, geometryDa
         case 0x0e6: return new Gloop(geometryData, emitters);
         case 0x0f1: return new RailRider(geometryData); //swamp leaf
         case 0x123: return new MagicCarpet(geometryData);
+
+        case 0x348: return new Brentilda(geometryData, emitters);
     }
     return new GeometryRenderer(geometryData);
 }
@@ -690,7 +701,7 @@ export class WaterBobber extends Bobber {
 
 export class ModelPin implements MovementController {
     private modelVector: vec3;
-    constructor(points: vec3[], index: number){
+    constructor(points: vec3[], index: number) {
         this.modelVector = assertExists(points[index]);
     }
 

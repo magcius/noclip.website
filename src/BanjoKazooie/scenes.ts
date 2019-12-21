@@ -19,7 +19,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
-import { Emitter, EmitterManager } from './particles';
+import { Emitter, EmitterManager, ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter } from './particles';
 
 const pathBase = `BanjoKazooie`;
 
@@ -41,7 +41,7 @@ class BKRenderer implements Viewer.SceneGfx {
             particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
         for (let i of [0x03, 0x04, 0x05, 0x08, 0x0a, 0x0b])
             particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
-        this.emitterManager = new EmitterManager(40, particleData);
+        this.emitterManager = new EmitterManager(300, particleData);
     }
 
     public createPanels(): UI.Panel[] {
@@ -185,7 +185,7 @@ function findFileByID(archive: CRG1Archive, fileID: number): CRG1File | null {
 const levelGeoSelectors = new Map<number, number[][]>([
     // variable checks, can be enabled or disabled
     [0x01, [[1, 1], [2, 0]]], // gruntilda-shaped hole
-    [0x12, [[1, 1], [2, 1], [5, 1]]], // gobi's valley water
+    [0x12, [[1, 1], [2, 0], [5, 1]]], // gobi's valley water
     [0x14, [[5, 1]]], // spiked ceiling in sandybutt's tomb
     [0x1d, [[1, 1]]], // MMM cellar, path to egg room
 
@@ -362,19 +362,34 @@ class ObjectData {
 
     private spawnDependentObjects(device: GfxDevice, emitters: Emitter[], id: number, pos: vec3, yaw = 0): (GeometryRenderer | FlipbookRenderer)[] {
         const pairedID = ObjectData.pairedIDs.get(id);
-        if (pairedID === undefined)
-            return [];
-
         const pairedObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
         const posCopy = vec3.clone(pos);
         switch (id) {
             case 0x011:
                 for (let i = 0; i < 3; i++) {
-                    pairedObjects.push(...this.spawnObject(device, emitters, pairedID, posCopy, yaw));
+                    pairedObjects.push(...this.spawnObject(device, emitters, pairedID!, posCopy, yaw));
                     vec3.add(posCopy, posCopy, [0, 250, 0]);
                 }
                 return pairedObjects;
+            case 0x37c: // quicksand steam
+                // skip the underwater emitters, marked by yaw value for some reason
+                if (yaw === 1)
+                    return [];
+                const steamEmitter = new ConfigurableEmitter(quicksandConfig);
+                mat4.fromTranslation(steamEmitter.modelMatrix, pos);
+                emitters.push(steamEmitter);
+                return [];
+            case 0x383:
+                // TODO: finally figure out scale, also this doesn't look right yet
+                const smokeEmitter = new ScaledEmitter(.5, torchSmokeConfig);
+                mat4.fromTranslation(smokeEmitter.modelMatrix, pos);
+                const sparkleEmitter = new ScaledEmitter(.5, torchSparkleConfig);
+                mat4.fromTranslation(sparkleEmitter.modelMatrix, pos);
+                emitters.push(smokeEmitter, sparkleEmitter);
+                return [];
         }
+        if (pairedID === undefined)
+            return [];
         return this.spawnObject(device, emitters, pairedID, pos, yaw);
     }
 
@@ -389,7 +404,7 @@ class ObjectData {
     public spawnObject(device: GfxDevice, emitters: Emitter[], id: number, pos: vec3, yaw = 0, selector = 0): (GeometryRenderer | FlipbookRenderer)[] {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
-            // console.warn(`Unknown object ID ${hexzero(id, 4)}`);
+            console.warn(`Unknown object ID ${hexzero(id, 4)}`);
             return [];
         }
 
@@ -422,14 +437,15 @@ class ObjectData {
             }
             allObjects.push(renderer);
         }
+
         // an object with no geometry can still spawn others
         allObjects.push(...this.spawnDependentObjects(device, emitters, id, pos, yaw));
 
         return allObjects;
     }
 
-    public spawnDebugSphere(device: GfxDevice, emitters: Emitter[], pos: vec3): GeometryRenderer {
-        return this.spawnObject(device, emitters, 0x288, pos)[0]! as GeometryRenderer;
+    public spawnDebugSphere(device: GfxDevice, pos: vec3): GeometryRenderer {
+        return this.baseSpawnObject(device, [], 0x288, 0x402, pos)! as GeometryRenderer;
     }
 
     public destroy(device: GfxDevice): void {
@@ -527,6 +543,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const railNodes: (Actors.RailNode | undefined)[] = [];
         const movementIndicators: MovementIndicator[] = [];
+        const waterfallEndpoints: vec3[] = [];
 
         const bounds: number[] = [];
         for (let i = 0; i < 6; i++) {
@@ -569,6 +586,8 @@ class SceneDesc implements Viewer.SceneDesc {
                         if (category === 0x06) {
                             if (id === 0x13)
                                 movementIndicators.push({ pos, movementType: Actors.SinkingBobber });
+                            else if (id === 0x2f || id === 0x30)
+                                waterfallEndpoints.push(pos);
                             else if (id === 0x37)
                                 movementIndicators.push({ pos, movementType: Actors.WaterBobber });
                             else if (id === 0x38)
@@ -657,6 +676,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 obj.setRail(sceneRenderer.rails);
             }
         }
+
+        // only in Spiral Mountain
+        if (waterfallEndpoints.length === 2)
+            emitAlongLine(sceneRenderer.emitterManager, new WaterfallEmitter(), waterfallEndpoints[0], waterfallEndpoints[1], 10);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {

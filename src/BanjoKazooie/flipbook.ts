@@ -36,6 +36,7 @@ export const enum FlipbookMode {
     Opaque,
     Translucent,
     AlphaTest,
+    EmittedParticle,
 }
 
 export interface Flipbook {

@@ -36,8 +36,10 @@ export default class AnimationController {
     }
 
     public adjustTimeToNewFPS(newFPS: number): void {
-        this.timeInFrames *= newFPS / this.fps;
-        this.phaseFrames *= newFPS / this.fps;
+        if (this.fps !== 0) {
+            this.timeInFrames *= newFPS / this.fps;
+            this.phaseFrames *= newFPS / this.fps;
+        }
         this.fps = newFPS;
     }
 }

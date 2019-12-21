@@ -1232,9 +1232,18 @@ export class GeometryRenderer {
     }
 }
 
+// by default, multiply primitive color and texture
 const defaultFlipbookCombine: CombineParams = {
     c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
     c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+    a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+    a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+};
+
+// use texture to interpolate color between prim and env (which gets set to slightly dimmer than prim)
+const emittedParticleCombine: CombineParams = {
+    c0: { a: CCMUX.PRIMITIVE, b: CCMUX.ENVIRONMENT, c: CCMUX.TEXEL0, d: CCMUX.ENVIRONMENT },
+    c1: { a: CCMUX.PRIMITIVE, b: CCMUX.ENVIRONMENT, c: CCMUX.TEXEL0, d: CCMUX.ENVIRONMENT },
     a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
     a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
 };
@@ -1279,6 +1288,7 @@ export class FlipbookRenderer {
     public mode: FlipbookMode;
 
     public primColor = vec4.fromValues(1, 1, 1, 1);
+    public envColor = vec4.fromValues(1, 1, 1, 1);
     private animationParams: FlipbookAnimationParams;
 
     constructor(public flipbookData: FlipbookData, phase = 0, initialMirror = false) {
@@ -1446,7 +1456,9 @@ export class FlipbookRenderer {
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, defaultFlipbookCombine);
+        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
+        offs += fillCombineParams(comb, offs, combine);
         offs += fillVec4v(comb, offs, this.primColor);
+        offs += fillVec4v(comb, offs, this.envColor);
     }
 }
