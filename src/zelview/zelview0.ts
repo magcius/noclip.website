@@ -236,7 +236,9 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
 
         const watersN = rom.view.getUint16(offs + 0x24, false);
         const watersAddr = rom.view.getUint32(offs + 0x28, false);
-        const waters = readWaters(watersN, watersAddr);
+        //const waters = readWaters(watersN, watersAddr);
+        // TODO: implement waters
+        const waters = new Uint16Array([]);
 
         function readCamera(addr: number): mat4 {
             const skyboxCamera = loadAddress(addr + 0x04);
@@ -435,7 +437,8 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
 
         switch (cmdType) {
             case HeaderCommands.Collision:
-                headers.collision = readCollision(cmd2);
+                // TODO: implement collisions
+                //headers.collision = readCollision(cmd2);
                 break;
             case HeaderCommands.Rooms:
                 const nRooms = (cmd1 >> 16) & 0xFF;

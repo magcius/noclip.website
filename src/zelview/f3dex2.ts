@@ -478,21 +478,26 @@ function translateTile_CI4(rom: Rom, dramAddr: number, dramPalAddr: number, tile
 }
 
 function translateTile_CI8(rom: Rom, dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const lkup = rom.lookupAddress(dramAddr);
-    const view = lkup.buffer.createDataView(lkup.offs);
-    translateTLUT(tlutColorTable, rom, dramPalAddr, ImageSize.G_IM_SIZ_8b);
-
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
 
-    // TODO(jstpierre): Support more tile parameters
-    //assert(tile.shifts === 0); // G_TX_NOLOD
-    //assert(tile.shiftt === 0); // G_TX_NOLOD
+    try {
+        const lkup = rom.lookupAddress(dramAddr);
+        const view = lkup.buffer.createDataView(lkup.offs);
+        translateTLUT(tlutColorTable, rom, dramPalAddr, ImageSize.G_IM_SIZ_8b);
 
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
-    decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
-    return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
+        // TODO(jstpierre): Support more tile parameters
+        //assert(tile.shifts === 0); // G_TX_NOLOD
+        //assert(tile.shiftt === 0); // G_TX_NOLOD
+
+        const dst = new Uint8Array(tileW * tileH * 4);
+        const srcIdx = 0; // dramAddr & 0x00FFFFFF;
+        decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
+        return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
+    } catch (e) {
+        console.exception(e);
+        return new Texture(tile, dramAddr, 0, tileW, tileH, new Uint8Array(tileW * tileH * 4));
+    }
 }
 
 function translateTile_RGBA32(rom: Rom, dramAddr: number, tile: TileState): Texture {
@@ -562,7 +567,8 @@ export class TextureCache {
         if (existingIndex >= 0) {
             const texture = this.textures[existingIndex];
             assert(texture.dramAddr === dramAddr);
-            assert(texture.dramPalAddr === dramPalAddr);
+            // TODO: handle the situation of color-indexed textures decoded with multiple different tluts. (occurs in Dodongo's Canvern)
+            //assert(texture.dramPalAddr === dramPalAddr);
             return existingIndex;
         } else {
             const texture = translateTileTexture(rom, dramAddr, dramPalAddr, tile);
