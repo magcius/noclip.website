@@ -1655,7 +1655,7 @@ export function parseLightChannels(r: DisplayListRegisters): LightChannelControl
     return lightChannels;
 }
 
-export function parseMaterial(r: DisplayListRegisters): GXMaterial {
+export function parseMaterial(r: DisplayListRegisters, name: string): GXMaterial {
     const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
 
     const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
