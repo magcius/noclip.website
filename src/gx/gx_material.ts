@@ -1616,6 +1616,45 @@ export function parseAlphaTest(r: DisplayListRegisters): AlphaTest {
     return alphaTest;
 }
 
+export function parseColorChannelControlRegister(chanCtrl: number): ColorChannelControl {
+    const matColorSource: GX.ColorSrc =           (chanCtrl >>>  0) & 0x01;
+    const lightingEnabled: boolean =           !!((chanCtrl >>>  1) & 0x01);
+    const litMaskL: number =                      (chanCtrl >>>  2) & 0x0F;
+    const ambColorSource: GX.ColorSrc =           (chanCtrl >>>  6) & 0x01;
+    const diffuseFunction: GX.DiffuseFunction =   (chanCtrl >>>  7) & 0x03;
+    const attnEn: boolean =                    !!((chanCtrl >>>  9) & 0x01);
+    const attnSelect: boolean =                !!((chanCtrl >>> 10) & 0x01);
+    const litMaskH: number =                      (chanCtrl >>> 11) & 0x0F;
+
+    const litMask: number =                       (litMaskH << 4) | litMaskL;
+    const attenuationFunction = attnEn ? (attnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+}
+
+export function parseLightChannels(r: DisplayListRegisters): LightChannelControl[] {
+    const lightChannels: LightChannelControl[] = [];
+    const numColors = r.xfg(GX.XFRegister.XF_NUMCOLORS_ID);
+    for (let i = 0; i < numColors; i++) {
+        const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
+        const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
+        const colorChannel = parseColorChannelControlRegister(colorCntrl); 
+        const alphaChannel = parseColorChannelControlRegister(alphaCntrl);
+        lightChannels.push({ colorChannel, alphaChannel });
+
+        const colorUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        const alphaUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        if (colorUsesReg || alphaUsesReg)
+            console.warn(`CommandList ${name} uses register color values, but these are not yet supported`);
+    }
+    return lightChannels;
+}
+
 export function parseMaterial(r: DisplayListRegisters): GXMaterial {
     const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
 
@@ -1630,7 +1669,7 @@ export function parseMaterial(r: DisplayListRegisters): GXMaterial {
     const indTexStages: IndTexStage[] = parseIndirectStages(r, numInds);
     const ropInfo: RopInfo = parseRopInfo(r);
     const alphaTest: AlphaTest = parseAlphaTest(r);
-    const lightChannels: LightChannelControl[] = [];
+    const lightChannels: LightChannelControl[] = parseLightChannels(r);
 
     const gxMaterial: GXMaterial = {
         name,

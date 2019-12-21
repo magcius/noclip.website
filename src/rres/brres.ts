@@ -8,7 +8,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists, nArray } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist';
-import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest } from '../gx/gx_material';
+import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
 import { Endianness } from '../endian';
@@ -291,21 +291,6 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     autoOptimizeMaterial(gxMaterial);
 
     return gxMaterial;
-}
-
-function parseColorChannelControlRegister(chanCtrl: number): GX_Material.ColorChannelControl {
-    const matColorSource: GX.ColorSrc =           (chanCtrl >>>  0) & 0x01;
-    const lightingEnabled: boolean =           !!((chanCtrl >>>  1) & 0x01);
-    const litMaskL: number =                      (chanCtrl >>>  2) & 0x0F;
-    const ambColorSource: GX.ColorSrc =           (chanCtrl >>>  6) & 0x01;
-    const diffuseFunction: GX.DiffuseFunction =   (chanCtrl >>>  7) & 0x03;
-    const attnEn: boolean =                    !!((chanCtrl >>>  9) & 0x01);
-    const attnSelect: boolean =                !!((chanCtrl >>> 10) & 0x01);
-    const litMaskH: number =                      (chanCtrl >>> 11) & 0x0F;
-
-    const litMask: number =                       (litMaskH << 4) | litMaskL;
-    const attenuationFunction = attnEn ? (attnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
-    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
 }
 
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
