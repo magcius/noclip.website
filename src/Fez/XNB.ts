@@ -2,31 +2,40 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists, nArray } from "../util";
 import { LZXState, decompressLZX } from "../Common/Compression/LZX";
-import { vec3, vec2, mat4 } from "gl-matrix";
+import { vec3, vec2, mat4, vec4 } from "gl-matrix";
 
 //#region ContentTypeReaderManager
+export type ContentTypeReader = (reader: ContentReader) => any;
+export type ContentTypeReaderGenericFactory = (paramsReaders: ContentTypeReader[]) => ContentTypeReader;
 
 export class ContentTypeReaderManager {
     private directByReaderName = new Map<string, ContentTypeReader>();
     private directByTypeName = new Map<string, ContentTypeReader>();
     private genericByReaderName = new Map<string, ContentTypeReaderGenericFactory>();
+    private valueTypes = new Set<ContentTypeReader>();
 
     constructor() {
-        this.RegisterTypeReaderDirect(XNA_UInt16Reader,
+        // Value Types
+        this.RegisterTypeReaderValueType(XNA_UInt16Reader,
             'System.UInt16',
             'Microsoft.Xna.Framework.Content.UInt16Reader');
-        this.RegisterTypeReaderDirect(XNA_UInt32Reader,
+        this.RegisterTypeReaderValueType(XNA_UInt32Reader,
             'System.UInt32',
             'Microsoft.Xna.Framework.Content.UInt32Reader');
-        this.RegisterTypeReaderDirect(XNA_Int32Reader,
+        this.RegisterTypeReaderValueType(XNA_Int32Reader,
             'System.Int32',
             'Microsoft.Xna.Framework.Content.Int32Reader');
-        this.RegisterTypeReaderDirect(XNA_EnumReader,
+        this.RegisterTypeReaderValueType(XNA_EnumReader,
             'System.Enum',
             'Microsoft.Xna.Framework.Content.EnumReader');
+
+        // Primitive Types
         this.RegisterTypeReaderGenericFactory(XNA_ArrayReader_Factory,
             'System.Array',
             'Microsoft.Xna.Framework.Content.ArrayReader');
+        this.RegisterTypeReaderGenericFactory(XNA_DictionaryReader_Factory,
+            'System.Dictionary',
+            'Microsoft.Xna.Framework.Content.DictionaryReader');
 
         this.RegisterTypeReaderDirect(XNA_Texture2DReader,
             'Microsoft.Xna.Framework.Graphics.Texture2D',
@@ -34,11 +43,28 @@ export class ContentTypeReaderManager {
         this.RegisterTypeReaderDirect(XNA_MatrixReader,
             'Microsoft.Xna.Framework.Matrix',
             'Microsoft.Xna.Framework.Content.MatrixReader');
+        this.RegisterTypeReaderDirect(XNA_Vector4Reader,
+            'Microsoft.Xna.Framework.Vector4',
+            'Microsoft.Xna.Framework.Content.Vector4Reader');
+    }
+
+    public IsValueType(typeReader: ContentTypeReader): boolean {
+        return this.valueTypes.has(typeReader);
     }
 
     public RegisterTypeReaderDirect(typeReader: ContentTypeReader, typeName: string, readerClassName: string): void {
         this.directByReaderName.set(readerClassName, typeReader);
         this.directByTypeName.set(typeName, typeReader);
+    }
+
+    public RegisterTypeReaderValueType(typeReader: ContentTypeReader, typeName: string, readerClassName: string): void {
+        this.directByReaderName.set(readerClassName, typeReader);
+        this.directByTypeName.set(typeName, typeReader);
+        this.valueTypes.add(typeReader);
+    }
+
+    public RegisterTypeReaderEnum(typeName: string): void {
+        this.directByTypeName.set(typeName, XNA_EnumReader);
     }
 
     public RegisterTypeReaderGenericFactory(factory: ContentTypeReaderGenericFactory, typeName: string, readerClassName: string): void {
@@ -70,9 +96,6 @@ export class ContentTypeReaderManager {
 //#endregion
 
 //#region XNA Binary Format
-export type ContentTypeReader = (reader: ContentReader) => any;
-export type ContentTypeReaderGenericFactory = (paramsReaders: ContentTypeReader[]) => ContentTypeReader;
-
 export interface TypeSpec {
     className: string;
     ns: string | null;
@@ -188,6 +211,14 @@ export class ContentReader {
         return vec3.fromValues(x, y, z);
     }
 
+    public ReadVector4(): vec4 {
+        const x = this.ReadSingle();
+        const y = this.ReadSingle();
+        const z = this.ReadSingle();
+        const w = this.ReadSingle();
+        return vec4.fromValues(x, y, z, w);
+    }
+
     public ReadMatrix(): mat4 {
         const m00 = this.ReadSingle();
         const m01 = this.ReadSingle();
@@ -247,6 +278,13 @@ export class ContentReader {
         return typeReader(this);
     }
 
+    public ReadObjectOrValueType<T>(typeReader: ContentTypeReader): T | null {
+        if (this.typeReaderManager.IsValueType(typeReader))
+            return typeReader(this);
+        else
+            return this.ReadObject<T>();
+    }
+
     private ReadTypeReaders(): ContentTypeReader[] {
         const count = this.Read7BitEncodedInt();
         const typeReaders: ContentTypeReader[] = [];
@@ -285,13 +323,27 @@ function XNA_EnumReader(reader: ContentReader): number {
     return reader.ReadUInt32();
 }
 
-function XNA_ArrayReader_Factory(readers: ContentTypeReader[]): ContentTypeReader {
+function XNA_ArrayReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
     return (reader: ContentReader) => {
         const size = reader.ReadInt32();
-        return nArray(size, () => readers[0](reader));
+        return nArray(size, () => reader.ReadObjectOrValueType(paramsReaders[0]));
+    };
+}
+
+function XNA_DictionaryReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
+    return (reader: ContentReader) => {
+        const size = reader.ReadInt32();
+        const map = new Map<any, any>();
+        for (let i = 0; i < size; i++) {
+            const k = reader.ReadObjectOrValueType(paramsReaders[0]);
+            const v = reader.ReadObjectOrValueType(paramsReaders[1]);
+            map.set(k, v);
+        }
+        return map;
     };
 }
 //#endregion
+
 export const enum XNA_PrimitiveType {
     TriangleList, TriangleStrip, LineList, LineStrip,
 }
@@ -322,6 +374,10 @@ function XNA_Texture2DReader(reader: ContentReader): XNA_Texture2D {
 
 function XNA_MatrixReader(reader: ContentReader): mat4 {
     return reader.ReadMatrix();
+}
+
+function XNA_Vector4Reader(reader: ContentReader): vec4 {
+    return reader.ReadVector4();
 }
 //#endregion
 

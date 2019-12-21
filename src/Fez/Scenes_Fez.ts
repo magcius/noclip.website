@@ -10,7 +10,7 @@ import { ArtObjectData } from './ArtObjectData';
 import { BackgroundPlaneData } from './BackgroundPlaneData';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SkyData, fetchSkyData } from './Sky';
-import { FezContentTypeReaderManager, Fez_ArtObject } from './XNB_Fez';
+import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet } from './XNB_Fez';
 import { parse } from './XNB';
 
 const pathBase = 'Fez';
@@ -70,14 +70,8 @@ export class ModelCache {
     }
 
     private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<void> {
-        const data = await this.fetchXNB(`xnb/trile sets/${path}.xnb`);
-        console.log(data);
-
-        const [xml, png] = await Promise.all([
-            this.fetchXML(`trile sets/${path}.xml`),
-            this.fetchPNG(`trile sets/${path}.png`),
-        ]);
-        this.trilesetDatas.push(new TrilesetData(device, this.gfxRenderCache, path, xml, png));
+        const data = await this.fetchXNB<Fez_TrileSet>(`xnb/trile sets/${path}.xnb`);
+        this.trilesetDatas.push(new TrilesetData(device, this.gfxRenderCache, path, data));
     }
 
     private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {

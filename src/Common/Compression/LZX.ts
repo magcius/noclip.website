@@ -189,7 +189,6 @@ function readHuffLen(dst: HuffmanTable, state: LZXState, first: number, last: nu
 
     for (let i = first; i < last;) {
         const op = readHuffSym(pret, bs);
-
         if (op === 17) {
             // ZLE.
             const n = 4 + bs.read(4);
@@ -203,12 +202,12 @@ function readHuffLen(dst: HuffmanTable, state: LZXState, first: number, last: nu
             const n = 4 + bs.read(1);
             const delta = readHuffSym(pret, bs);
 
-            for (let j = 0; j < n; j++) {
-                let v = dst.len[i] - delta;
-                if (v < 0)
-                    v += 17;
+            let v = dst.len[i] - delta;
+            if (v < 0)
+                v += 17;
+
+            for (let j = 0; j < n; j++)
                 dst.len[i++] = v;
-            }
         } else {
             const delta = op;
 
@@ -239,7 +238,8 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
     let R1 = state.R1;
     let R2 = state.R2;
 
-    const windowMask = state.window.byteLength - 1;
+    const windowSize = state.window.byteLength;
+    const windowMask = windowSize - 1;
 
     // Block decoding loop.
     let outRemaining = dstSize;
@@ -247,7 +247,9 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
         // Read a new block if we need to.
         if (state.blockLength === 0) {
             state.blockType = bs.read(3);
-            state.blockLength = bs.read(24);
+            const i = bs.read(16);
+            const j = bs.read(8);
+            state.blockLength = (i << 8) | j;
 
             if (state.blockType === BlockType.Verbatim || state.blockType === BlockType.Aligned) {
                 // Aligned trees have an extra table at the start.
@@ -284,12 +286,11 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
         outRemaining -= blockRemaining;
         state.blockLength -= blockRemaining;
 
-        let x = 0;
+        windowOffs &= windowMask;
+        if (windowOffs + blockRemaining > windowSize)
+            throw "whoops";
 
         while (blockRemaining > 0) {
-            // Apply output window mask.
-            windowOffs &= windowMask;
-
             if (state.blockType === BlockType.Verbatim || state.blockType === BlockType.Aligned) {
                 const mainElement = readHuffSym(state.maintreeHuffTable, bs);
 

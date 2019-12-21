@@ -10,7 +10,7 @@ import { computeViewMatrix } from "../Camera";
 import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-import { TrileData } from "./TrileData";
+import { TrileData, TrilesetData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
 import { parseVector3, parseQuaternion } from "./DocumentHelpers";
@@ -19,6 +19,7 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { ModelCache } from "./Scenes_Fez";
 import { SkyRenderer, SkyData } from './Sky';
+import { GeometryData } from './GeometryData';
 
 class FezProgram {
     public static ub_SceneParams = 0;
@@ -141,9 +142,9 @@ export class FezRenderer implements Viewer.SceneGfx {
             const orientation = Number(trileInstances[i].getAttribute('orientation'));
             const rotateY = orientations[orientation] * MathConstants.DEG_TO_RAD;
 
-            const trileData = trilesetData.triles.find((trileData) => trileData.key === trileId)!;
+            const trileData = trilesetData.triles.get(trileId)!;
 
-            const trileRenderer = new FezObjectRenderer(trileData);
+            const trileRenderer = new FezObjectRenderer(trilesetData, trileData.geometry);
             mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
             mat4.rotateY(trileRenderer.modelMatrix, trileRenderer.modelMatrix, rotateY);
             mat4.mul(trileRenderer.modelMatrix, this.modelMatrix, trileRenderer.modelMatrix);
@@ -171,7 +172,7 @@ export class FezRenderer implements Viewer.SceneGfx {
 
             const scale = parseVector3(artObjectInstances[i].querySelector('Scale Vector3')!);
 
-            const renderer = new FezObjectRenderer(artObjectData);
+            const renderer = new FezObjectRenderer(artObjectData, artObjectData.geometry);
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
             mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
@@ -249,8 +250,6 @@ export class FezRenderer implements Viewer.SceneGfx {
     }
 }
 
-type FezObjectData = TrileData | ArtObjectData;
-
 const textureMappingScratch = nArray(2, () => new TextureMapping());
 
 const texMatrixScratch = mat4.create();
@@ -261,21 +260,21 @@ export class FezObjectRenderer {
     private textureMapping = new TextureMapping();
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
-    constructor(private data: FezObjectData) {
-        this.textureMapping.gfxTexture = this.data.texture;
-        this.textureMapping.gfxSampler = this.data.sampler;
+    constructor(textureData: (ArtObjectData | TrilesetData), private geometryData: GeometryData) {
+        this.textureMapping.gfxTexture = textureData.texture;
+        this.textureMapping.gfxSampler = textureData.sampler;
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         this.megaStateFlags.cullMode = GfxCullMode.BACK;
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        bboxScratch.transform(this.data.bbox, this.modelMatrix);
+        bboxScratch.transform(this.geometryData.bbox, this.modelMatrix);
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
         const renderInst = renderInstManager.pushRenderInst();
-        renderInst.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
+        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
         renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
@@ -292,7 +291,7 @@ export class FezObjectRenderer {
         offs += fillVec4v(d, offs, levelRenderData.shadowTexScaleBias);
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
-        renderInst.drawIndexes(this.data.indexCount);
+        renderInst.drawIndexes(this.geometryData.indexCount);
     }
 }
 
