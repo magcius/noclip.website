@@ -1615,6 +1615,32 @@ export function parseAlphaTest(r: DisplayListRegisters): AlphaTest {
     };
     return alphaTest;
 }
+
+export function parseMaterial(r: DisplayListRegisters): GXMaterial {
+    const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+
+    const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
+    const numTexGens = (genMode >>> 0) & 0x0F;
+    const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+    const numInds = ((genMode >>> 16) & 0x07);
+    const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+    const texGens: TexGen[] = parseTexGens(r, numTexGens);
+    const tevStages: TevStage[] = parseTevStages(r, numTevs);
+    const indTexStages: IndTexStage[] = parseIndirectStages(r, numInds);
+    const ropInfo: RopInfo = parseRopInfo(r);
+    const alphaTest: AlphaTest = parseAlphaTest(r);
+    const lightChannels: LightChannelControl[] = [];
+
+    const gxMaterial: GXMaterial = {
+        name,
+        lightChannels, cullMode,
+        tevStages, texGens,
+        indTexStages, alphaTest, ropInfo,
+    };
+
+    return gxMaterial;
+}
 // #endregion
 
 export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID {
