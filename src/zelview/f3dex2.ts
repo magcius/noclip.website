@@ -876,6 +876,8 @@ const enum F3DEX2_GBI {
     G_RDPLOADSYNC       = 0xE6,
     G_TEXRECTFLIP       = 0xE5,
     G_TEXRECT           = 0xE4,
+    G_SETOTHERMODE_H    = 0xE3,
+    G_SETOTHERMODE_L    = 0xE2,
 }
 
 export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
@@ -986,6 +988,18 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
         
         case F3DEX2_GBI.G_SETCOMBINE: {
             state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
+        } break;
+        
+        case F3DEX2_GBI.G_SETOTHERMODE_H: {
+            const len = (w0 >>> 0) & 0xFF;
+            const sft = (w0 >>> 8) & 0xFF;
+            state.gDPSetOtherModeH(sft, len, w1);
+        } break;
+        
+        case F3DEX2_GBI.G_SETOTHERMODE_L: {
+            const len = (w0 >>> 0) & 0xFF;
+            const sft = (w0 >>> 8) & 0xFF;
+            state.gDPSetOtherModeL(sft, len, w1);
         } break;
 
         case F3DEX2_GBI.G_DL: {
