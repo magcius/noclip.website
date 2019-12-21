@@ -1,7 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
-
-import { runDL_F3DEX2, RSPOutput, RSPState } from './f3dex2';
+import * as F3DEX2 from './f3dex2';
+import { runDL_F3DEX2, RSPOutput, RSPState, RSPSharedOutput } from './f3dex2';
 import * as Render from './render';
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -31,6 +31,7 @@ export class ZELVIEW0 {
     public sceneFile: VFSEntry;
     public buffer: ArrayBufferSlice;
     public view: DataView;
+    public sharedOutput: RSPSharedOutput;
 
     public lookupFile(pStart: number): VFSEntry {
         for (const entry of this.entries)
@@ -56,6 +57,7 @@ export class Mesh {
 }
 
 export class Headers {
+    public rom: Rom;
     public filename: string;
     public collision: any;
     public mesh: Mesh | null;
@@ -122,7 +124,7 @@ enum HeaderCommands {
     End = 0x14,
 }
 
-function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
+function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput: RSPSharedOutput): Headers {
     const headers = new Headers();
 
     function lookupAddress(addr: number): { buffer: ArrayBufferSlice, offs: number } {
@@ -146,6 +148,8 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
             throw Error(`absOffs out of range`);
         return { buffer: rom.buffer, offs: absOffs };
     }
+
+    headers.rom = { lookupAddress: lookupAddress };
     
     function loadAddress(addr: number): number {
         const lkup = lookupAddress(addr);
@@ -261,7 +265,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
 
     function readRoom(file: VFSEntry): Headers {
         const banks2: RomBanks = { scene: banks.scene, room: file };
-        return readHeaders(rom, file.vStart, banks2);
+        return readHeaders(rom, file.vStart, banks2, sharedOutput);
     }
 
     function readRooms(nRooms: number, roomTableAddr: number): Headers[] {
@@ -368,7 +372,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
             if (dlAddr === 0)
                 return null;
 
-            const rspState = new RSPState();
+            const rspState = new RSPState({ lookupAddress: lookupAddress }, sharedOutput);
             runDL_F3DEX2(rspState, { lookupAddress: lookupAddress }, dlAddr);
             rspState.finish();
             const rspOutput = rspState.finish();
@@ -445,5 +449,6 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks): Headers {
 
 function readScene(zelview0: ZELVIEW0, file: VFSEntry): Headers {
     const banks: RomBanks = { scene: file };
-    return readHeaders(zelview0, file.vStart, banks);
+    zelview0.sharedOutput = new F3DEX2.RSPSharedOutput();
+    return readHeaders(zelview0, file.vStart, banks, zelview0.sharedOutput);
 }

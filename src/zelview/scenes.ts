@@ -6,17 +6,18 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
 import { readZELVIEW0, Headers } from './zelview0';
-import { ZelviewMeshRenderer } from './render';
+import { RootMeshRenderer, MeshData, Mesh } from './render';
+import { RSPSharedOutput, RSPState } from './f3dex2';
 
 const pathBase = `zelview`;
 
 class ZelviewRenderer implements Viewer.SceneGfx {
     private clearRenderPassDescriptor: GfxRenderPassDescriptor;
 
-    public meshRenderers: ZelviewMeshRenderer[] = [];
+    public meshRenderers: RootMeshRenderer[] = [];
 
     private renderTarget = new BasicRenderTarget();
-    private renderHelper: GfxRenderHelper;
+    public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -73,7 +74,14 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
                 for (let i = 0; i < headers.mesh.opaque.length; i++) {
                     if (headers.mesh.opaque[i]) {
                         console.log(`Loading ${headers.filename} mesh ${i}...`);
-                        const meshRenderer = new ZelviewMeshRenderer(device, headers.mesh.opaque[i]!);
+                        const cache = renderer.renderHelper.getCache();
+                        const mesh: Mesh = {
+                            sharedOutput: zelview.sharedOutput,
+                            rspState: new RSPState(headers.rom, zelview.sharedOutput),
+                            rspOutput: headers.mesh.opaque[i],
+                        }
+                        const meshData = new MeshData(device, cache, mesh);
+                        const meshRenderer = new RootMeshRenderer(meshData);
                         renderer.meshRenderers.push(meshRenderer);
                     }
                 }
