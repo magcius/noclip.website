@@ -146,7 +146,10 @@ function buildHuffTable(tbl: HuffmanTable): void {
         assert(tbl.len[sym] <= tbl.maxnbits);
         tbl.nbits = Math.max(tbl.nbits, tbl.len[sym]);
     }
-    assert(tbl.nbits >= 1 && tbl.nbits <= tbl.maxnbits);
+    assert(tbl.nbits <= tbl.maxnbits);
+
+    if (tbl.nbits === 0)
+        return;
 
     const m = (1 << tbl.nbits);
     let code = 0;

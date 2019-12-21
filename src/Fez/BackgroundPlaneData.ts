@@ -1,10 +1,12 @@
 
 import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { makeTextureFromImageData } from "./Texture";
+import { makeTextureFromImageData, makeTextureFromXNA_Texture2D } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
 import { assert } from "../util";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { XNA_Texture2D } from "./XNB";
+import { Fez_AnimatedTexture } from "./XNB_Fez";
 
 interface Frame {
     time: number;
@@ -22,32 +24,24 @@ export class BackgroundPlaneData {
     public frames: Frame[] = [];
     public duration: number = 0;
 
-    constructor(device: GfxDevice, public name: string, texImageData: ImageData, private animatedTexture: Document | null) {
-        this.texture = makeTextureFromImageData(device, texImageData);
+    constructor(device: GfxDevice, public name: string, texture: XNA_Texture2D, animatedTexture: Fez_AnimatedTexture | null) {
+        this.texture = makeTextureFromXNA_Texture2D(device, texture);
 
         if (animatedTexture !== null) {
-            const animatedTexturePC = animatedTexture.querySelector('AnimatedTexturePC')!;
-            this.dimensions[0] = Number(animatedTexturePC.getAttribute('actualWidth')!);
-            this.dimensions[1] = Number(animatedTexturePC.getAttribute('actualHeight')!);
-
-            const framePCs = animatedTexture.querySelectorAll('Frames FramePC');
-            assert(framePCs.length > 0);
+            this.dimensions[0] = animatedTexture.actualWidth;
+            this.dimensions[1] = animatedTexture.actualHeight;
 
             let time = 0;
-            for (let i = 0; i < framePCs.length; i++) {
-                const framePC = framePCs[i];
-                const duration = timeSpanToSeconds(Number(framePC.getAttribute('duration')));
-                const rectangle = framePC.querySelector('Rectangle')!;
-                const x = Number(rectangle.getAttribute('x')!);
-                const y = Number(rectangle.getAttribute('y')!);
-                const w = Number(rectangle.getAttribute('w')!);
-                const h = Number(rectangle.getAttribute('h')!);
+            for (let i = 0; i < animatedTexture.frames.length; i++) {
+                const framePC = animatedTexture.frames[i];
+                const duration = timeSpanToSeconds(framePC.duration);
+                const [x, y, w, h] = framePC.rectangle;
 
                 const texMatrix = mat4.create();
-                texMatrix[0] = w / texImageData.width;
-                texMatrix[5] = h / texImageData.height;
-                texMatrix[12] = x / texImageData.width;
-                texMatrix[13] = y / texImageData.height;
+                texMatrix[0] =  w / texture.width;
+                texMatrix[5] =  h / texture.height;
+                texMatrix[12] = x / texture.width;
+                texMatrix[13] = y / texture.height;
 
                 this.frames.push({ time, texMatrix });
                 time += duration;
@@ -55,8 +49,8 @@ export class BackgroundPlaneData {
 
             this.duration = time;
         } else {
-            this.dimensions[0] = texImageData.width;
-            this.dimensions[1] = texImageData.height;
+            this.dimensions[0] = texture.width;
+            this.dimensions[1] = texture.height;
 
             const texMatrix = mat4.create();
             this.frames.push({ time: 0, texMatrix });

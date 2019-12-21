@@ -10,8 +10,8 @@ import { ArtObjectData } from './ArtObjectData';
 import { BackgroundPlaneData } from './BackgroundPlaneData';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SkyData, fetchSkyData } from './Sky';
-import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet } from './XNB_Fez';
-import { parse } from './XNB';
+import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet, Fez_AnimatedTexture } from './XNB_Fez';
+import { parse, XNA_Texture2D } from './XNB';
 
 const pathBase = 'Fez';
 
@@ -81,14 +81,11 @@ export class ModelCache {
 
     private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
         if (isAnimated) {
-            const [png, xml] = await Promise.all([
-                this.fetchPNG(`background planes/${path}.ani.png`),
-                this.fetchXML(`background planes/${path}.xml`),
-            ]);
-            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, png, xml));
+            const data = await this.fetchXNB<Fez_AnimatedTexture>(`xnb/background planes/${path}.xnb`);
+            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, data.texture, data));
         } else {
-            const png = await this.fetchPNG(`background planes/${path}.png`);
-            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, png, null));
+            const data = await this.fetchXNB<XNA_Texture2D>(`xnb/background planes/${path}.xnb`);
+            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, data, null));
         }
     }
 

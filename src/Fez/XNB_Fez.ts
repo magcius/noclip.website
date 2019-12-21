@@ -1,6 +1,6 @@
 
-import { ContentReader, ContentTypeReader, XNA_Texture2D, ContentTypeReaderManager, XNA_PrimitiveType } from "./XNB";
-import { vec3, vec2 } from "gl-matrix";
+import { ContentReader, ContentTypeReader, XNA_Texture2D, ContentTypeReaderManager, XNA_PrimitiveType, XNA_SurfaceFormat } from "./XNB";
+import { vec3, vec2, vec4 } from "gl-matrix";
 import { assertExists } from "../util";
 
 // Fez implementation of XNB.
@@ -64,6 +64,38 @@ function Fez_TrileSetReader(reader: ContentReader): Fez_TrileSet {
     return { name, triles, textureAtlas };
 }
 
+export interface Fez_AnimatedTexture {
+    width: number;
+    height: number;
+    actualWidth: number;
+    actualHeight: number;
+    texture: XNA_Texture2D;
+    frames: Fez_Frame[];
+}
+
+function Fez_AnimatedTextureReader(reader: ContentReader): Fez_AnimatedTexture {
+    const width = reader.ReadInt32();
+    const height = reader.ReadInt32();
+    const actualWidth = reader.ReadInt32();
+    const actualHeight = reader.ReadInt32();
+    const textureDataSize = reader.ReadInt32();
+    const textureData = reader.ReadBytes(textureDataSize);
+    const frames = reader.ReadObject<Fez_Frame[]>()!;
+    const texture: XNA_Texture2D = { format: XNA_SurfaceFormat.Color, width, height, levelData: [textureData] };
+    return { width, height, actualWidth, actualHeight, texture, frames };
+}
+
+export interface Fez_Frame {
+    duration: number;
+    rectangle: vec4;
+}
+
+function Fez_FrameReader(reader: ContentReader): Fez_Frame {
+    const duration = reader.ReadObject<number>()!;
+    const rectangle = reader.ReadObject<vec4>()!;
+    return { duration, rectangle };
+}
+
 export interface Fez_ShaderInstancedIndexedPrimitives<T> {
     primitiveType: XNA_PrimitiveType;
     vertices: T[];
@@ -118,6 +150,12 @@ export class FezContentTypeReaderManager extends ContentTypeReaderManager {
         this.RegisterTypeReaderDirect(Fez_TrileReader,
             'FezEngine.Structure.Trile',
             'FezEngine.Readers.TrileReader');
+        this.RegisterTypeReaderDirect(Fez_AnimatedTextureReader,
+            'FezEngine.Structure.AnimatedTexture',
+            'FezEngine.Readers.AnimatedTextureReader');
+        this.RegisterTypeReaderDirect(Fez_FrameReader,
+            'FezEngine.Content.FrameContent',
+            'FezEngine.Readers.FrameReader');
         this.RegisterTypeReaderValueType(Fez_VertexPositionNormalTextureInstanceReader,
             'FezEngine.Structure.Geometry.VertexPositionNormalTextureInstance',
             'FezEngine.Readers.VertexPositionNormalTextureInstanceReader');

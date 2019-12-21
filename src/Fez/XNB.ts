@@ -16,36 +16,47 @@ export class ContentTypeReaderManager {
 
     constructor() {
         // Value Types
-        this.RegisterTypeReaderValueType(XNA_UInt16Reader,
+        this.RegisterTypeReaderValueType(System_UInt16Reader,
             'System.UInt16',
             'Microsoft.Xna.Framework.Content.UInt16Reader');
-        this.RegisterTypeReaderValueType(XNA_UInt32Reader,
+        this.RegisterTypeReaderValueType(System_UInt32Reader,
             'System.UInt32',
             'Microsoft.Xna.Framework.Content.UInt32Reader');
-        this.RegisterTypeReaderValueType(XNA_Int32Reader,
+        this.RegisterTypeReaderValueType(System_Int32Reader,
             'System.Int32',
             'Microsoft.Xna.Framework.Content.Int32Reader');
-        this.RegisterTypeReaderValueType(XNA_EnumReader,
+        this.RegisterTypeReaderValueType(System_EnumReader,
             'System.Enum',
             'Microsoft.Xna.Framework.Content.EnumReader');
+        this.RegisterTypeReaderValueType(System_TimeSpanReader,
+            'System.TimeSpan',
+            'Microsoft.Xna.Framework.Content.TimeSpanReader');
 
-        // Primitive Types
-        this.RegisterTypeReaderGenericFactory(XNA_ArrayReader_Factory,
+        // System Types
+        this.RegisterTypeReaderGenericFactory(System_ArrayReader_Factory,
             'System.Array',
             'Microsoft.Xna.Framework.Content.ArrayReader');
-        this.RegisterTypeReaderGenericFactory(XNA_DictionaryReader_Factory,
+        this.RegisterTypeReaderGenericFactory(System_ArrayReader_Factory,
+            'System.List',
+            'Microsoft.Xna.Framework.Content.ListReader');
+        this.RegisterTypeReaderGenericFactory(System_DictionaryReader_Factory,
             'System.Dictionary',
             'Microsoft.Xna.Framework.Content.DictionaryReader');
+
+        // XNA Types
+        this.RegisterTypeReaderValueType(XNA_MatrixReader,
+            'Microsoft.Xna.Framework.Matrix',
+            'Microsoft.Xna.Framework.Content.MatrixReader');
+        this.RegisterTypeReaderValueType(XNA_Vector4Reader,
+            'Microsoft.Xna.Framework.Vector4',
+            'Microsoft.Xna.Framework.Content.Vector4Reader');
+        this.RegisterTypeReaderValueType(XNA_RectangleReader,
+            'Microsoft.Xna.Framework.Rectangle',
+            'Microsoft.Xna.Framework.Content.RectangleReader');
 
         this.RegisterTypeReaderDirect(XNA_Texture2DReader,
             'Microsoft.Xna.Framework.Graphics.Texture2D',
             'Microsoft.Xna.Framework.Content.Texture2DReader');
-        this.RegisterTypeReaderDirect(XNA_MatrixReader,
-            'Microsoft.Xna.Framework.Matrix',
-            'Microsoft.Xna.Framework.Content.MatrixReader');
-        this.RegisterTypeReaderDirect(XNA_Vector4Reader,
-            'Microsoft.Xna.Framework.Vector4',
-            'Microsoft.Xna.Framework.Content.Vector4Reader');
     }
 
     public IsValueType(typeReader: ContentTypeReader): boolean {
@@ -64,7 +75,7 @@ export class ContentTypeReaderManager {
     }
 
     public RegisterTypeReaderEnum(typeName: string): void {
-        this.directByTypeName.set(typeName, XNA_EnumReader);
+        this.directByTypeName.set(typeName, System_EnumReader);
     }
 
     public RegisterTypeReaderGenericFactory(factory: ContentTypeReaderGenericFactory, typeName: string, readerClassName: string): void {
@@ -307,30 +318,38 @@ export class ContentReader {
 //#region Built-In Type Readers
 
 //#region System
-function XNA_UInt16Reader(reader: ContentReader): number {
+function System_UInt16Reader(reader: ContentReader): number {
     return reader.ReadUInt16();
 }
 
-function XNA_UInt32Reader(reader: ContentReader): number {
+function System_UInt32Reader(reader: ContentReader): number {
     return reader.ReadUInt32();
 }
 
-function XNA_Int32Reader(reader: ContentReader): number {
+function System_Int32Reader(reader: ContentReader): number {
     return reader.ReadInt32();
 }
 
-function XNA_EnumReader(reader: ContentReader): number {
+function System_TimeSpanReader(reader: ContentReader): number {
+    // Time spans are 64-bit. We read the low 32-bits.
+    const lo = reader.ReadInt32();
+    const hi = reader.ReadInt32();
+    assert(hi === 0);
+    return lo;
+}
+
+function System_EnumReader(reader: ContentReader): number {
     return reader.ReadUInt32();
 }
 
-function XNA_ArrayReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
+function System_ArrayReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
     return (reader: ContentReader) => {
         const size = reader.ReadInt32();
         return nArray(size, () => reader.ReadObjectOrValueType(paramsReaders[0]));
     };
 }
 
-function XNA_DictionaryReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
+function System_DictionaryReader_Factory(paramsReaders: ContentTypeReader[]): ContentTypeReader {
     return (reader: ContentReader) => {
         const size = reader.ReadInt32();
         const map = new Map<any, any>();
@@ -378,6 +397,14 @@ function XNA_MatrixReader(reader: ContentReader): mat4 {
 
 function XNA_Vector4Reader(reader: ContentReader): vec4 {
     return reader.ReadVector4();
+}
+
+function XNA_RectangleReader(reader: ContentReader): vec4 {
+    const x = reader.ReadInt32();
+    const y = reader.ReadInt32();
+    const w = reader.ReadInt32();
+    const h = reader.ReadInt32();
+    return vec4.fromValues(x, y, w, h);
 }
 //#endregion
 
