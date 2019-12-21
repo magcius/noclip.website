@@ -2,7 +2,8 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists, nArray } from "../util";
 import { LZXState, decompressLZX } from "../Common/Compression/LZX";
-import { vec3, vec2, mat4, vec4 } from "gl-matrix";
+import { vec3, vec2, mat4, vec4, quat } from "gl-matrix";
+import { Color, colorNew } from "../Color";
 
 //#region ContentTypeReaderManager
 export type ContentTypeReader = (reader: ContentReader) => any;
@@ -16,6 +17,9 @@ export class ContentTypeReaderManager {
 
     constructor() {
         // Value Types
+        this.RegisterTypeReaderValueType(System_BooleanReader,
+            'System.Boolean',
+            'Microsoft.Xna.Framework.Content.BooleanReader');
         this.RegisterTypeReaderValueType(System_UInt16Reader,
             'System.UInt16',
             'Microsoft.Xna.Framework.Content.UInt16Reader');
@@ -212,6 +216,14 @@ export class ContentReader {
         return v;
     }
 
+    public ReadColor(): Color {
+        const r = this.ReadByte() / 0xFF;
+        const g = this.ReadByte() / 0xFF;
+        const b = this.ReadByte() / 0xFF;
+        const a = this.ReadByte() / 0xFF;
+        return colorNew(r, g, b, a);
+    }
+
     public ReadVector2(): vec2 {
         const x = this.ReadSingle();
         const y = this.ReadSingle();
@@ -231,6 +243,14 @@ export class ContentReader {
         const z = this.ReadSingle();
         const w = this.ReadSingle();
         return vec4.fromValues(x, y, z, w);
+    }
+
+    public ReadQuaternion(): quat {
+        const x = this.ReadSingle();
+        const y = this.ReadSingle();
+        const z = this.ReadSingle();
+        const w = this.ReadSingle();
+        return quat.fromValues(x, y, z, w);
     }
 
     public ReadMatrix(): mat4 {
@@ -321,6 +341,10 @@ export class ContentReader {
 //#region Built-In Type Readers
 
 //#region System
+function System_BooleanReader(reader: ContentReader): boolean {
+    return reader.ReadBoolean();
+}
+
 function System_UInt16Reader(reader: ContentReader): number {
     return reader.ReadUInt16();
 }

@@ -19,6 +19,7 @@ import { preprocessProgramObj_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { ModelCache } from "./Scenes_Fez";
 import { SkyRenderer, SkyData } from './Sky';
 import { GeometryData } from './GeometryData';
+import { Fez_Level, Fez_BackgroundPlane } from './XNB_Fez';
 
 function parseVector3(e: Element): vec3 {
     assert(e.tagName === 'Vector3');
@@ -134,28 +135,23 @@ export class FezRenderer implements Viewer.SceneGfx {
     public backgroundPlaneRenderers: BackgroundPlaneRenderer[] = [];
     public lightDirection = vec4.fromValues(1, 1, 1, 0);
 
-    constructor(device: GfxDevice, modelCache: ModelCache, levelDocument: Document) {
+    constructor(device: GfxDevice, modelCache: ModelCache, level: Fez_Level) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = preprocessProgramObj_GLSL(device, new FezProgram());
 
         mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
 
-        const trileInstances = levelDocument.querySelectorAll('TrileInstance');
+        const trilesetData = assertExists(modelCache.trilesetDatas.find((td) => td.name === level.trileSetName));
 
-        const level = levelDocument.querySelector('Level')!;
-
-        const trilesetID = level.getAttribute('trileSetName')!.toLowerCase();
-        const trilesetData = assertExists(modelCache.trilesetDatas.find((td) => td.name === trilesetID));
-
-        for (let i = 0; i < trileInstances.length; i++) {
-            const trileId = Number(trileInstances[i].getAttribute('trileId'));
+        for (const trileInstance of level.triles.values()) {
+            const trileId = trileInstance.trileID;
 
             // No clue WTF this means. Seen in globe.xml.
             if (trileId < 0)
                 continue;
 
-            const position = parseVector3(trileInstances[i].querySelector('Position Vector3')!);
-            const orientation = Number(trileInstances[i].getAttribute('orientation'));
+            const position = trileInstance.position;
+            const orientation = trileInstance.orientation;
             const rotateY = orientations[orientation] * MathConstants.DEG_TO_RAD;
 
             const trileData = trilesetData.triles.get(trileId)!;
@@ -167,49 +163,41 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.trileRenderers.push(trileRenderer);
         }
 
-        const skyID = level.getAttribute('skyName')!.toLowerCase();
-        this.skyData = assertExists(modelCache.skyDatas.find((sd) => sd.name === skyID));
+        this.skyData = assertExists(modelCache.skyDatas.find((sd) => sd.name === level.skyName));
         this.skyRenderer = new SkyRenderer(this.skyData);
 
-        const artObjectInstances = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance');
-        for (let i = 0; i < artObjectInstances.length; i++) {
-            const artObjectName = artObjectInstances[i].getAttribute('name')!.toLowerCase();
-            const artObjectData = assertExists(modelCache.artObjectDatas.find((artObject) => artObject.name === artObjectName));
+        for (const artObjectInstance of level.artObjects.values()) {
+            const artObjectData = assertExists(modelCache.artObjectDatas.find((data) => data.name === artObjectInstance.name));
 
-            const position = parseVector3(artObjectInstances[i].querySelector('Position Vector3')!);
+            const position = vec3.clone(artObjectInstance.position);
             // All art objects seem to have this offset applied to them for some reason?
             position[0] -= 0.5;
             position[1] -= 0.5;
             position[2] -= 0.5;
 
-            const rotation = parseQuaternion(artObjectInstances[i].querySelector('Rotation Quaternion')!);
             const rotationMatrix = mat4.create();
-            mat4.fromQuat(rotationMatrix, rotation);
-
-            const scale = parseVector3(artObjectInstances[i].querySelector('Scale Vector3')!);
+            mat4.fromQuat(rotationMatrix, artObjectInstance.rotation);
 
             const renderer = new FezObjectRenderer(artObjectData, artObjectData.geometry);
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
             mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
-            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, scale);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, artObjectInstance.scale);
             this.artObjectRenderers.push(renderer);
         }
 
         this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device, modelCache.gfxRenderCache);
 
-        const backgroundPlanes = levelDocument.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
-        for (let i = 0; i < backgroundPlanes.length; i++) {
-            const backgroundPlaneName = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
-            const backgroundPlaneData = assertExists(modelCache.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlaneName));
-            const renderer = new BackgroundPlaneRenderer(device, backgroundPlanes[i], backgroundPlaneData, this.backgroundPlaneStaticData);
+        for (const backgroundPlane of level.backgroundPlanes.values()) {
+            const backgroundPlaneData = assertExists(modelCache.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlane.textureName));
+            const renderer = new BackgroundPlaneRenderer(device, backgroundPlane, backgroundPlaneData, this.backgroundPlaneStaticData);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
             this.backgroundPlaneRenderers.push(renderer);
         }
 
         this.levelRenderData.shadowTextureMapping.copy(this.skyData.shadowsTextureMapping[0]);
-        this.levelRenderData.baseDiffuse = Number(level.getAttribute('baseDiffuse')!);
-        this.levelRenderData.baseAmbient = Number(level.getAttribute('baseAmbient')!);
+        this.levelRenderData.baseDiffuse = level.baseDiffuse;
+        this.levelRenderData.baseAmbient = level.baseAmbient;
     }
     
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
@@ -332,42 +320,39 @@ export class BackgroundPlaneRenderer {
     private clampTexture = false;
     private sampler: GfxSampler;
 
-    constructor(device: GfxDevice, private planeEl: Element, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
-        const position = parseVector3(planeEl.querySelector('Position Vector3')!);
+    constructor(device: GfxDevice, backgroundPlane: Fez_BackgroundPlane, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+        const position = vec3.clone(backgroundPlane.position);
         position[0] -= 0.5;
         position[1] -= 0.5;
         position[2] -= 0.5;
 
-        const rotation = parseQuaternion(planeEl.querySelector('Rotation Quaternion')!);
         const rotationMatrix = mat4.create();
-        mat4.fromQuat(rotationMatrix, rotation);
+        mat4.fromQuat(rotationMatrix, backgroundPlane.rotation);
 
         // Offset just a bit to prevent Z fighting.
         vec3.set(scratchVec3, 0, 0, 1);
         vec3.transformMat4(scratchVec3, scratchVec3, rotationMatrix);
         vec3.scaleAndAdd(position, position, scratchVec3, 0.005);
 
-        const scale = parseVector3(planeEl.querySelector('Scale Vector3')!);
-        vec2.set(this.rawScale, scale[0], scale[1]);
+        vec2.set(this.rawScale, backgroundPlane.scale[0], backgroundPlane.scale[1]);
 
         mat4.translate(this.modelMatrix, this.modelMatrix, position);
         const scaleX = this.planeData.dimensions[0] / 16;
         const scaleY = this.planeData.dimensions[1] / 16;
         mat4.mul(this.modelMatrix, this.modelMatrix, rotationMatrix);
-        mat4.scale(this.modelMatrix, this.modelMatrix, scale);
+        mat4.scale(this.modelMatrix, this.modelMatrix, backgroundPlane.scale);
         mat4.scale(this.modelMatrix, this.modelMatrix, [scaleX, scaleY, 1]);
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
-        const doubleSided = parseBoolean(planeEl.getAttribute('doubleSided')!);
-        if (doubleSided)
+        if (backgroundPlane.doubleSided)
             this.megaStateFlags.cullMode = GfxCullMode.NONE;
         else
             this.megaStateFlags.cullMode = GfxCullMode.BACK;
 
-        this.xTextureRepeat = parseBoolean(planeEl.getAttribute('xTextureRepeat')!);
-        this.yTextureRepeat = parseBoolean(planeEl.getAttribute('yTextureRepeat')!);
-        this.clampTexture = parseBoolean(planeEl.getAttribute('clampTexture')!);
+        this.xTextureRepeat = backgroundPlane.xTextureRepeat;
+        this.yTextureRepeat = backgroundPlane.yTextureRepeat;
+        this.clampTexture = backgroundPlane.clampTexture;
 
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,

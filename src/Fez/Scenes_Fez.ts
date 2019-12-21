@@ -3,24 +3,16 @@ import * as Viewer from '../viewer';
 import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { getTextDecoder } from '../util';
 import { FezRenderer } from './FezRenderer';
 import { TrilesetData } from './TrileData';
 import { ArtObjectData } from './ArtObjectData';
 import { BackgroundPlaneData } from './BackgroundPlaneData';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SkyData, fetchSkyData } from './Sky';
-import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet, Fez_AnimatedTexture } from './XNB_Fez';
+import { FezContentTypeReaderManager, Fez_ArtObject, Fez_TrileSet, Fez_AnimatedTexture, Fez_Level } from './XNB_Fez';
 import { parse, XNA_Texture2D } from './XNB';
 
 const pathBase = 'Fez';
-
-async function fetchXML(dataFetcher: DataFetcher, path: string): Promise<Document> {
-    const buffer = await dataFetcher.fetchData(path);
-    const fileContents = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
-    const parser = new DOMParser();
-    return parser.parseFromString(fileContents, `application/xml`);
-}
 
 export class ModelCache {
     public promiseCache = new Map<string, Promise<void>>();
@@ -36,10 +28,6 @@ export class ModelCache {
 
     public waitForLoad(): Promise<void> {
         return Promise.all(this.promiseCache.values()) as unknown as Promise<void>;
-    }
-
-    public fetchXML(path: string): Promise<Document> {
-        return fetchXML(this.dataFetcher, `${pathBase}/${path}`);
     }
 
     public async fetchXNB<T>(path: string): Promise<T> {
@@ -125,32 +113,21 @@ class FezSceneDesc implements Viewer.SceneDesc {
         const cache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
             return new ModelCache(context.dataFetcher);
         });
-        const levelDocument = await cache.fetchXML(`levels/${this.id}.xml`);
 
-        const level = levelDocument.querySelector('Level')!;
+        const level = await cache.fetchXNB<Fez_Level>(`xnb/levels/${this.id}.xnb`);
 
-        const trilesetID = level.getAttribute('trileSetName')!.toLowerCase();
-        cache.fetchTrileset(device, trilesetID);
+        cache.fetchTrileset(device, level.trileSetName);
+        cache.fetchSky(device, level.skyName);
 
-        const skyID = level.getAttribute('skyName')!.toLowerCase();
-        cache.fetchSky(device, skyID);
+        for (const artObject of level.artObjects.values())
+            cache.fetchArtObject(device, artObject.name);
 
-        const artObjectsXml = level.querySelectorAll('ArtObjects Entry ArtObjectInstance')!;
-        for (let i = 0; i < artObjectsXml.length; i++) {
-            const artObjectName = artObjectsXml[i].getAttribute('name')!.toLowerCase();
-            cache.fetchArtObject(device, artObjectName);
-        }
-
-        const backgroundPlanes = level.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
-        for (let i = 0; i < backgroundPlanes.length; i++) {
-            const backgroundPlane = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
-            const isAnimated = parseBoolean(backgroundPlanes[i].getAttribute('animated')!);
-            cache.fetchBackgroundPlane(device, backgroundPlane, isAnimated);
-        }
+        for (const backgroundPlane of level.backgroundPlanes.values())
+            cache.fetchBackgroundPlane(device, backgroundPlane.textureName, backgroundPlane.animated);
 
         await cache.waitForLoad();
 
-        return new FezRenderer(device, cache, levelDocument);
+        return new FezRenderer(device, cache, level);
     }
 }
 
