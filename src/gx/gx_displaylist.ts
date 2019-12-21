@@ -1020,6 +1020,123 @@ export function compileVtxLoader(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]):
 }
 //#endregion
 
+//#region Register Loading
+export class DisplayListRegisters {
+    public bp: Uint32Array = new Uint32Array(0x100);
+    public cp: Uint32Array = new Uint32Array(0x100);
+
+    // Can have up to 16 values per register.
+    private xf: Uint32Array = new Uint32Array(0x1000);
+
+    // TEV colors are weird and are two things under the hood
+    // with the same register address.
+    public kc: Uint32Array = new Uint32Array(4 * 2 * 2);
+
+    constructor() {
+        // Initialize defaults.
+        this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
+    }
+
+    public bps(regBag: number): void {
+        // First byte has register address, other 3 have value.
+        const regAddr  = regBag >>> 24;
+
+        const regWMask = this.bp[GX.BPRegister.SS_MASK];
+        // Retrieve existing value, overwrite w/ mask.
+        const regValue = (this.bp[regAddr] & ~regWMask) | (regBag & regWMask);
+        // The mask resets after use.
+        this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
+        // Set new value.
+        this.bp[regAddr] = regValue;
+
+        // Copy TEV colors internally.
+        if (regAddr >= GX.BPRegister.TEV_REGISTERL_0_ID && regAddr <= GX.BPRegister.TEV_REGISTERL_0_ID + 4 * 2) {
+            const kci = regAddr - GX.BPRegister.TEV_REGISTERL_0_ID;
+            const bank = (regValue >>> 23) & 0x01;
+            this.kc[bank * 4 * 2 + kci] = regValue;
+        }
+    }
+
+    public xfs(idx: GX.XFRegister, sub: number, v: number): void {
+        assert(idx >= 0x1000);
+        idx -= 0x1000;
+        this.xf[idx * 0x10 + sub] = v;
+    }
+
+    public xfg(idx: GX.XFRegister, sub: number = 0): number {
+        assert(idx >= 0x1000);
+        idx -= 0x1000;
+        return this.xf[idx * 0x10 + sub];
+    }
+}
+
+export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    for (let i = 0; i < buffer.byteLength;) {
+        const cmd = view.getUint8(i++);
+
+        switch (cmd) {
+        case GX.Command.NOOP:
+            continue;
+
+        case GX.Command.LOAD_BP_REG: {
+            const regBag = view.getUint32(i);
+            i += 4;
+            r.bps(regBag);
+            break;
+        }
+
+        case GX.Command.LOAD_CP_REG: {
+            const regAddr = view.getUint8(i);
+            i++;
+            const regValue = view.getUint32(i);
+            i += 4;
+            r.cp[regAddr] = regValue;
+            break;
+        }
+
+        case GX.Command.LOAD_XF_REG: {
+            const len = view.getUint16(i) + 1;
+            i += 2;
+            assert(len <= 0x10);
+
+            const regAddr = view.getUint16(i);
+            i += 2;
+
+            for (let j = 0; j < len; j++) {
+                r.xfs(regAddr, j, view.getUint32(i));
+                i += 4;
+            }
+
+            // Clear out the other values.
+            for (let j = len; j < 16; j++) {
+                r.xfs(regAddr, j, 0);
+            }
+
+            break;
+        }
+
+        default:
+            console.error(`Unknown command ${cmd} at ${i} (buffer: 0x${buffer.byteOffset.toString(16)})`);
+            throw "whoops 1";
+        }
+    }
+}
+
+function setBPReg(addr: number, value: number): number {
+    return (addr << 24) | (value & 0x00FFFFFF);
+}
+
+export function displayListRegistersInitGX(r: DisplayListRegisters): void {
+    // Init swap tables.
+    for (let i = 0; i < 8; i += 2) {
+        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 0, 0b0100));
+        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 1, 0b1110));
+    }
+}
+//#endregion
+
 //#region Utilities
 export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalIndexCount = 0;
