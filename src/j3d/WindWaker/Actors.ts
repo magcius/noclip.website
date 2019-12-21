@@ -15,7 +15,7 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, 
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists } from '../../util';
-import { parseMaterialEntry } from '../../rres/brres';
+import { parseMaterial } from '../../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
@@ -196,17 +196,7 @@ export class WhiteFlowerData {
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-
-        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
-        const numTexGens = (genMode >>> 0) & 0x0F;
-        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
-        const numInds = ((genMode >>> 16) & 0x07);
-
-        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
-        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
-
-        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
-        this.gxMaterial.cullMode = cullMode;
+        this.gxMaterial = parseMaterial(matRegisters, 'l_matDL');
 
         const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
@@ -280,19 +270,10 @@ export class PinkFlowerData {
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
 
         const matRegisters = new DisplayListRegisters();
+        
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL2);
-
-        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
-        const numTexGens = (genMode >>> 0) & 0x0F;
-        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
-        const numInds = ((genMode >>> 16) & 0x07);
-
-        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
-        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
-
-        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
-        this.gxMaterial.cullMode = cullMode;
+        this.gxMaterial = parseMaterial(matRegisters, 'l_matDL2');
 
         const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
@@ -368,17 +349,7 @@ export class BessouFlowerData {
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL3);
-
-        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
-        const numTexGens = (genMode >>> 0) & 0x0F;
-        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
-        const numInds = ((genMode >>> 16) & 0x07);
-
-        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
-        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
-
-        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
-        this.gxMaterial.cullMode = cullMode;
+        this.gxMaterial = parseMaterial(matRegisters, 'l_matDL3');
 
         const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
