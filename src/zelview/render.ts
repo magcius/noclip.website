@@ -16,7 +16,7 @@ import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
 
-export class F3DEX_Program extends DeviceProgram {
+export class F3DEX2_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
     public static a_TexCoord = 2;
@@ -56,9 +56,9 @@ const vec4 t_One = vec4(1.0);
 `;
 
     public vert = `
-layout(location = ${F3DEX_Program.a_Position}) in vec4 a_Position;
-layout(location = ${F3DEX_Program.a_Color}) in vec4 a_Color;
-layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;
+layout(location = ${F3DEX2_Program.a_Position}) in vec4 a_Position;
+layout(location = ${F3DEX2_Program.a_Color}) in vec4 a_Color;
+layout(location = ${F3DEX2_Program.a_TexCoord}) in vec2 a_TexCoord;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -103,6 +103,7 @@ void main() {
 
     constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
         super();
+        console.log(`Generating frag program OtherModeH 0x${this.DP_OtherModeH.toString(16)}; OtherModeL 0x${this.DP_OtherModeL.toString(16)}`);
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag();
@@ -147,6 +148,8 @@ void main() {
             texFiltStr = 'Bilerp';
         else
             throw "whoops";
+
+        console.log(`Generating texture filter: ${texFiltStr}`);
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -330,9 +333,9 @@ export class RenderData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
-            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
-            { location: F3DEX_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
+            { location: F3DEX2_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
+            { location: F3DEX2_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
+            { location: F3DEX2_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -381,8 +384,8 @@ export class RenderData {
 }
 
 function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x1000);
-    const cullBack = !!(m & 0x2000);
+    const cullFront = !!(m & 0x0200);
+    const cullBack = !!(m & 0x0400);
     if (cullFront && cullBack)
         return GfxCullMode.FRONT_AND_BACK;
     else if (cullFront)
@@ -424,7 +427,7 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
+        const program = new F3DEX2_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -506,8 +509,8 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
-        const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(F3DEX2_Program.ub_DrawParams, 12*2 + 8*2);
+        const mappedF32 = renderInst.mapUniformBufferF32(F3DEX2_Program.ub_DrawParams);
 
         if (isSkybox)
             computeViewMatrixSkybox(viewMatrixScratch, viewerInput.camera);
@@ -526,8 +529,8 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
-        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        offs = renderInst.allocateUniformBuffer(F3DEX2_Program.ub_CombineParams, 12);
+        const comb = renderInst.mapUniformBufferF32(F3DEX2_Program.ub_CombineParams);
         offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
@@ -669,8 +672,8 @@ export class RootMeshRenderer {
         const computeLookAt = false; // FIXME: or true?
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
 
-        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
-        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(F3DEX2_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX2_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         if (computeLookAt) {

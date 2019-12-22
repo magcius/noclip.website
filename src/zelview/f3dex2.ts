@@ -755,6 +755,7 @@ export class RSPState {
             dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            console.log(`DP_OtherModeH 0x${dc.DP_OtherModeH.toString(16)}, DP_OtherModeL 0x${dc.DP_OtherModeL.toString(16)}`);
         }
     }
 
@@ -997,14 +998,15 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
         } break;
         
         case F3DEX2_GBI.G_SETOTHERMODE_H: {
-            const len = (w0 >>> 0) & 0xFF;
-            const sft = (w0 >>> 8) & 0xFF;
+            const len = ((w0 >>> 0) & 0xFF) + 1;
+            const sft = Math.max(0, 32 - ((w0 >>> 8) & 0xFF) - len);
             state.gDPSetOtherModeH(sft, len, w1);
+            console.log(`G_SETOTHERMODE_H ${len}, ${sft}, 0x${w1.toString(16)}`);
         } break;
         
         case F3DEX2_GBI.G_SETOTHERMODE_L: {
-            const len = (w0 >>> 0) & 0xFF;
-            const sft = (w0 >>> 8) & 0xFF;
+            const len = ((w0 >>> 0) & 0xFF) + 1;
+            const sft = Math.max(0, 32 - ((w0 >>> 8) & 0xFF) - len);
             state.gDPSetOtherModeL(sft, len, w1);
         } break;
 
