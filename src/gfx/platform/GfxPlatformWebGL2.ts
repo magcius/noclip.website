@@ -575,7 +575,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxVendorInfo
     public bugQuirks = new GfxBugQuirksImpl();
-    public programBugDefines: string = '';
     public glslVersion = `#version 300 es`;
     public explicitBindingLocations = false;
     public separateSamplerTextures = false;
@@ -620,19 +619,53 @@ void main() {
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
 
-        // Set up bug defines.
-        this.programBugDefines = '';
-
-        const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (debugRendererInfo !== null) {
-            const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
-            // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
-            if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
-                this.bugQuirks.rowMajorMatricesBroken = true;
-        }
+        this._checkForBugQuirks();
 
         if (TRACK_RESOURCES)
             this._resourceCreationTracker = new ResourceCreationTracker();
+    }
+
+    private _checkForBugQuirksRowMajor(): void {
+        const gl = this.gl;
+        // Check if row_major is broken by generating a dummy program and checking the uniform data...
+        // TODO(jstpierre): Async? Some better way that doesn't block on startup?
+        const shaderVert = this._compileShader(`${this.glslVersion}
+precision mediump float;
+layout(row_major, std140) uniform ub_Test {
+    mat4x2 u_Test;
+};
+void main() {
+    gl_Position = vec4(1);
+}`, gl.VERTEX_SHADER);
+        const shaderFrag = this._compileShader(`${this.glslVersion}
+precision mediump float;
+out vec4 o_Color;
+void main() {
+    o_Color = vec4(1);
+}`, gl.FRAGMENT_SHADER);
+
+        const prog = this.ensureResourceExists(gl.createProgram());
+        gl.attachShader(prog, shaderVert);
+        gl.attachShader(prog, shaderFrag);
+        gl.linkProgram(prog);
+        assert(gl.getProgramParameter(prog, gl.LINK_STATUS));
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_Test`), 0);
+        const dataSize = gl.getActiveUniformBlockParameter(prog, 0, gl.UNIFORM_BLOCK_DATA_SIZE);
+        // If it's working, it will be 32. If it's broken, it will be 64.
+        // Looking forward to see what fun other values it will be in the wild!
+        if (dataSize === 32)
+            this.bugQuirks.rowMajorMatricesBroken = false;
+        else if (dataSize === 64)
+            this.bugQuirks.rowMajorMatricesBroken = true;
+        else
+            throw "whoops";
+        gl.deleteProgram(prog);
+        gl.deleteShader(shaderVert);
+        gl.deleteShader(shaderFrag);
+    }
+
+    private _checkForBugQuirks(): void {
+        this._checkForBugQuirksRowMajor();
     }
 
     //#region GfxSwapChain
