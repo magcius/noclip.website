@@ -6,7 +6,7 @@ import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherMo
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -527,8 +527,8 @@ class DrawCallInstance {
         offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_CombineParams);
         offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
+        offs += fillVec4v(comb, offs, this.drawCall.primColor); // primitive color
         // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
     }
 }

@@ -5,6 +5,7 @@ import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Rom } from "./zelview0";
+import { vec4 } from "gl-matrix";
 
 export class Vertex {
     public x: number = 0;
@@ -274,6 +275,7 @@ export class DrawCall {
     public DP_OtherModeL: number = 0;
     public DP_OtherModeH: number = 0;
     public DP_Combine: CombineParams;
+    public primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
 
     public textureIndices: number[] = [];
 
@@ -527,8 +529,8 @@ function translateTile_RGBA16(rom: Rom, dramAddr: number, tile: TileState): Text
         const view = lkup.buffer.createDataView(lkup.offs);
 
         // TODO(jstpierre): Support more tile parameters
-        assert(tile.shifts === 0); // G_TX_NOLOD
-        assert(tile.shiftt === 0); // G_TX_NOLOD
+        //assert(tile.shifts === 0); // G_TX_NOLOD
+        //assert(tile.shiftt === 0); // G_TX_NOLOD
         //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
         //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
@@ -603,15 +605,13 @@ export class RSPSharedOutput {
 }
 
 export const enum OtherModeH_Layout {
-    // FIXME: Some of these fields are wrong. This code was copied from F3DEX, but F3DZEX changes some of them.
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
     G_MDSFT_COMBKEY     = 8,
     G_MDSFT_TEXTCONV    = 9,
-    //G_MDSFT_TEXTFILT    = 12,
-    //G_MDSFT_TEXTLUT     = 14,
-    G_MDSFT_TEXTFILT    = 14,
+    G_MDSFT_TEXTFILT    = 12,
+    G_MDSFT_TEXTLUT     = 14,
     G_MDSFT_TEXTLOD     = 16,
     G_MDSFT_TEXTDETAIL  = 17,
     G_MDSFT_TEXTPERSP   = 19,
@@ -647,6 +647,7 @@ export class RSPState {
     private DP_TextureImageState = new TextureImageState();
     private DP_TileState = nArray(8, () => new TileState());
     private DP_TMemTracker = new Map<number, number>();
+    private primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
 
     constructor(public rom: Rom, public sharedOutput: RSPSharedOutput) {
     }
@@ -828,6 +829,11 @@ export class RSPState {
         }
     }
 
+    public setPrimColor(r: number, g: number, b: number, a: number): void {
+        this.primColor = vec4.fromValues(r, g, b, a);
+        this.stateChanged = true;
+    }
+
     public gDPSetCombine(w0: number, w1: number): void {
         if (this.DP_CombineH !== w0 || this.DP_CombineL !== w1) {
             this.DP_CombineH = w0;
@@ -862,7 +868,7 @@ const enum F3DZEX_GBI {
     G_SETCOMBINE        = 0xFC,
     G_SETENVCOLOR       = 0xFB,
     G_SETPRIMCOLOR      = 0xFA,
-    G_SETBLENDCOLOR     = 0xF9, // FIXME: is this actually SETPRIMCOLOR?
+    G_SETBLENDCOLOR     = 0xF9,
     G_SETFOGCOLOR       = 0xF8,
     G_SETFILLCOLOR      = 0xF7,
     G_FILLRECT          = 0xF6,
@@ -902,6 +908,10 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
         switch (cmd) {
         case F3DZEX_GBI.G_ENDDL:
             break outer;
+
+        case F3DZEX_GBI.G_CULLDL:
+            // Ignored. This command checks if a bouding box is in the camera frustum. If it is not, the DL is aborted.
+            break;
 
         case F3DZEX_GBI.G_GEOMETRYMODE:
             state.gSPClearGeometryMode(w0 & 0x00FFFFFF);
@@ -1009,8 +1019,17 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             state.gDPSetOtherModeL(sft, len, w1);
         } break;
 
+        case F3DZEX_GBI.G_SETPRIMCOLOR: {
+            const r = ((w1 >>> 24) & 0xFF) / 255;
+            const g = ((w1 >>> 16) & 0xFF) / 255;
+            const b = ((w1 >>> 8) & 0xFF) / 255;
+            const a = ((w1 >>> 0) & 0xFF) / 255;
+            state.setPrimColor(r, g, b, a);
+        } break;
+
         case F3DZEX_GBI.G_DL: {
             // TODO(jstpierre): Figure out the right segment address that this wants.
+            console.warn(`G_DL 0x${hexzero(w1, 8)} not implemented`);
         } break;
 
         case F3DZEX_GBI.G_RDPFULLSYNC:
