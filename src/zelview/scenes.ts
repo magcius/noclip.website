@@ -7,7 +7,7 @@ import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
 import { readZELVIEW0, Headers } from './zelview0';
 import { RootMeshRenderer, MeshData, Mesh } from './render';
-import { RSPSharedOutput, RSPState } from './f3dex2';
+import { RSPState } from './f3dzex';
 
 const pathBase = `zelview`;
 

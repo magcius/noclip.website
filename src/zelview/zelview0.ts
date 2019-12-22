@@ -1,8 +1,7 @@
 
 import { mat4 } from 'gl-matrix';
-import * as F3DEX2 from './f3dex2';
-import { runDL_F3DEX2, RSPOutput, RSPState, RSPSharedOutput } from './f3dex2';
-import * as Render from './render';
+import * as F3DZEX from './f3dzex';
+import { runDL_F3DZEX, RSPOutput, RSPState, RSPSharedOutput } from './f3dzex';
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString } from '../util';
@@ -377,7 +376,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
                 return null;
 
             const rspState = new RSPState({ lookupAddress: lookupAddress }, sharedOutput);
-            runDL_F3DEX2(rspState, { lookupAddress: lookupAddress }, dlAddr);
+            runDL_F3DZEX(rspState, { lookupAddress: lookupAddress }, dlAddr);
             rspState.finish();
             const rspOutput = rspState.finish();
 
@@ -454,6 +453,6 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
 
 function readScene(zelview0: ZELVIEW0, file: VFSEntry): Headers {
     const banks: RomBanks = { scene: file };
-    zelview0.sharedOutput = new F3DEX2.RSPSharedOutput();
+    zelview0.sharedOutput = new F3DZEX.RSPSharedOutput();
     return readHeaders(zelview0, file.vStart, banks, zelview0.sharedOutput);
 }

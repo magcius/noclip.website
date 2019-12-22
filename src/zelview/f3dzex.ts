@@ -4,9 +4,7 @@ import { nArray, assert, assertExists, hexzero } from "../util";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Rom } from "./zelview0";
-import { vec4 } from "gl-matrix";
 
 export class Vertex {
     public x: number = 0;
@@ -605,7 +603,7 @@ export class RSPSharedOutput {
 }
 
 export const enum OtherModeH_Layout {
-    // FIXME: Some of these fields are wrong. This code was copied from F3DEX, but F3DEX2 changes some of them.
+    // FIXME: Some of these fields are wrong. This code was copied from F3DEX, but F3DZEX changes some of them.
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
@@ -839,7 +837,7 @@ export class RSPState {
     }
 }
 
-const enum F3DEX2_GBI {
+const enum F3DZEX_GBI {
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,
@@ -889,7 +887,7 @@ const enum F3DEX2_GBI {
     G_SETOTHERMODE_L    = 0xE2,
 }
 
-export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
+export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
     const lkup = rom.lookupAddress(addr);
     const view = lkup.buffer.createDataView();
 
@@ -898,33 +896,33 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
-        const cmd: F3DEX2_GBI = w0 >>> 24;
+        const cmd: F3DZEX_GBI = w0 >>> 24;
         // console.log(hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
-        case F3DEX2_GBI.G_ENDDL:
+        case F3DZEX_GBI.G_ENDDL:
             break outer;
 
-        case F3DEX2_GBI.G_GEOMETRYMODE:
+        case F3DZEX_GBI.G_GEOMETRYMODE:
             state.gSPClearGeometryMode(w0 & 0x00FFFFFF);
             state.gSPSetGeometryMode(w1);
             break;
 
-        case F3DEX2_GBI.G_VTX: {
+        case F3DZEX_GBI.G_VTX: {
             const v0w = (w0 >>> 1) & 0xFF;
             const n = (w0 >>> 12) & 0xFF;
             const v0 = v0w - n;
             state.gSPVertex(rom, w1, n, v0);
         } break;
 
-        case F3DEX2_GBI.G_TRI1: {
+        case F3DZEX_GBI.G_TRI1: {
             const i0 = ((w0 >>> 16) & 0xFF) / 2;
             const i1 = ((w0 >>>  8) & 0xFF) / 2;
             const i2 = ((w0 >>>  0) & 0xFF) / 2;
             state.gSPTri(i0, i1, i2);
         } break;
 
-        case F3DEX2_GBI.G_TRI2: {
+        case F3DZEX_GBI.G_TRI2: {
         {
             const i0 = ((w0 >>> 16) & 0xFF) / 2;
             const i1 = ((w0 >>>  8) & 0xFF) / 2;
@@ -939,7 +937,7 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
         }
         } break;
 
-        case F3DEX2_GBI.G_TEXTURE: {
+        case F3DZEX_GBI.G_TEXTURE: {
             const level = (w0 >>> 11) & 0x07;
             let   tile  = (w0 >>> 8) & 0x07;
             const on    = !!((w0 >>> 0) & 0x7F);
@@ -948,14 +946,14 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             state.gSPTexture(on, tile, level, s, t);
         } break;
 
-        case F3DEX2_GBI.G_SETTIMG: {
+        case F3DZEX_GBI.G_SETTIMG: {
             const fmt = (w0 >>> 21) & 0x07;
             const siz = (w0 >>> 19) & 0x03;
             const w   = (w0 & 0x0FFF) + 1;
             state.gDPSetTextureImage(fmt, siz, w, w1);
         } break;
         
-        case F3DEX2_GBI.G_SETTILE: {
+        case F3DZEX_GBI.G_SETTILE: {
             const fmt =     (w0 >>> 21) & 0x07;
             const siz =     (w0 >>> 19) & 0x03;
             const line =    (w0 >>>  9) & 0x1FF;
@@ -971,7 +969,7 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             state.gDPSetTile(fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts);
         } break;
         
-        case F3DEX2_GBI.G_SETTILESIZE: {
+        case F3DZEX_GBI.G_SETTILESIZE: {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
             const tile = (w1 >>> 24) & 0x07;
@@ -980,13 +978,13 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             state.gDPSetTileSize(tile, uls, ult, lrs, lrt);
         } break;
         
-        case F3DEX2_GBI.G_LOADTLUT: {
+        case F3DZEX_GBI.G_LOADTLUT: {
             const tile = (w1 >>> 24) & 0x07;
             const count = (w1 >>> 14) & 0x3FF;
             state.gDPLoadTLUT(tile, count);
         } break;
 
-        case F3DEX2_GBI.G_LOADBLOCK: {
+        case F3DZEX_GBI.G_LOADBLOCK: {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
             const tile = (w1 >>> 24) & 0x07;
@@ -995,30 +993,30 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             state.gDPLoadBlock(tile, uls, ult, lrs, dxt);
         } break;
         
-        case F3DEX2_GBI.G_SETCOMBINE: {
+        case F3DZEX_GBI.G_SETCOMBINE: {
             state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } break;
         
-        case F3DEX2_GBI.G_SETOTHERMODE_H: {
+        case F3DZEX_GBI.G_SETOTHERMODE_H: {
             const len = ((w0 >>> 0) & 0xFF) + 1;
             const sft = Math.max(0, 32 - ((w0 >>> 8) & 0xFF) - len);
             state.gDPSetOtherModeH(sft, len, w1);
         } break;
         
-        case F3DEX2_GBI.G_SETOTHERMODE_L: {
+        case F3DZEX_GBI.G_SETOTHERMODE_L: {
             const len = ((w0 >>> 0) & 0xFF) + 1;
             const sft = Math.max(0, 32 - ((w0 >>> 8) & 0xFF) - len);
             state.gDPSetOtherModeL(sft, len, w1);
         } break;
 
-        case F3DEX2_GBI.G_DL: {
+        case F3DZEX_GBI.G_DL: {
             // TODO(jstpierre): Figure out the right segment address that this wants.
         } break;
 
-        case F3DEX2_GBI.G_RDPFULLSYNC:
-        case F3DEX2_GBI.G_RDPTILESYNC:
-        case F3DEX2_GBI.G_RDPPIPESYNC:
-        case F3DEX2_GBI.G_RDPLOADSYNC:
+        case F3DZEX_GBI.G_RDPFULLSYNC:
+        case F3DZEX_GBI.G_RDPTILESYNC:
+        case F3DZEX_GBI.G_RDPPIPESYNC:
+        case F3DZEX_GBI.G_RDPLOADSYNC:
             // Implementation not necessary.
             break;
 
