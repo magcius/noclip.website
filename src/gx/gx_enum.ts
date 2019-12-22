@@ -588,6 +588,25 @@ export const enum BPRegister {
     // SetTevOrder
     RAS1_TREF_0_ID     = 0x28,
 
+    // Tex offsets
+    SU_SSIZE_I0_ID = 0x30,
+    SU_SSIZE_I1_ID = 0x32,
+    SU_SSIZE_I2_ID = 0x34,
+    SU_SSIZE_I3_ID = 0x36,
+    SU_SSIZE_I4_ID = 0x38,
+    SU_SSIZE_I5_ID = 0x3a,
+    SU_SSIZE_I6_ID = 0x3c,
+    SU_SSIZE_I7_ID = 0x3e,
+
+    SU_TSIZE_I0_ID = 0x31,
+    SU_TSIZE_I1_ID = 0x33,
+    SU_TSIZE_I2_ID = 0x35,
+    SU_TSIZE_I3_ID = 0x37,
+    SU_TSIZE_I4_ID = 0x39,
+    SU_TSIZE_I5_ID = 0x3b,
+    SU_TSIZE_I6_ID = 0x3d,
+    SU_TSIZE_I7_ID = 0x3f,
+
     // PE (ROP / Pixel Engine)
     // SetZMode
     PE_ZMODE_ID        = 0x40,
@@ -595,18 +614,21 @@ export const enum BPRegister {
     PE_CMODE0_ID       = 0x41,
 
     // TX (Texture Unit)
+    TX_LOADTLUT_I0_ID = 0x64,
     TX_SETMODE0_I0_ID  = 0x80,
     TX_SETMODE0_I4_ID  = 0xA0,
     TX_SETMODE1_I0_ID  = 0x84,
     TX_SETMODE1_I4_ID  = 0xA4,
     TX_SETIMAGE0_I0_ID = 0x88,
-    TX_SETIMAGE0_I4_ID = 0xA4,
+    TX_SETIMAGE0_I4_ID = 0xA8,
     TX_SETIMAGE1_I0_ID = 0x8C,
     TX_SETIMAGE1_I4_ID = 0xAC,
     TX_SETIMAGE2_I0_ID = 0x90,
     TX_SETIMAGE2_I4_ID = 0xB0,
-    TX_SETIMAGE3_I0_ID = 0x98,
-    TX_SETIMAGE3_I4_ID = 0xB8,
+    TX_SETIMAGE3_I0_ID = 0x94,
+    TX_SETIMAGE3_I4_ID = 0xB4,
+    TX_SETTLUT_I0_ID = 0x98,
+    TX_SETTLUT_I4_ID = 0xB8,
 
     // TEV (Texture EnVironments)
     // SetTev
