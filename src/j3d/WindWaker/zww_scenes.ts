@@ -989,7 +989,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const kStartTime = TimeOfDay.DAY;
-        const kProgressTimeOfDay = false;
+        const kProgressTimeOfDay = true;
         const kDayLengthInSeconds = 60.0;
         const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
         this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
