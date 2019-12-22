@@ -6,7 +6,7 @@ import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherMo
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -103,7 +103,6 @@ void main() {
 
     constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
         super();
-        console.log(`Generating frag program OtherModeH 0x${this.DP_OtherModeH.toString(16)}; OtherModeL 0x${this.DP_OtherModeL.toString(16)}`);
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag();
@@ -148,8 +147,6 @@ void main() {
             texFiltStr = 'Bilerp';
         else
             throw "whoops";
-
-        console.log(`Generating texture filter: ${texFiltStr}`);
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -328,7 +325,6 @@ export class RenderData {
         }
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
-        console.log(`Making index buffer with ${sharedOutput.indices.length} indices`);
         const indexBufferData = new Uint32Array(sharedOutput.indices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 

@@ -6,6 +6,7 @@ import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxC
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Rom } from "./zelview0";
+import { vec4 } from "gl-matrix";
 
 export class Vertex {
     public x: number = 0;
@@ -757,7 +758,6 @@ export class RSPState {
             dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
-            console.log(`DP_OtherModeH 0x${dc.DP_OtherModeH.toString(16)}, DP_OtherModeL 0x${dc.DP_OtherModeL.toString(16)}`);
         }
     }
 
@@ -864,7 +864,7 @@ const enum F3DEX2_GBI {
     G_SETCOMBINE        = 0xFC,
     G_SETENVCOLOR       = 0xFB,
     G_SETPRIMCOLOR      = 0xFA,
-    G_SETBLENDCOLOR     = 0xF9,
+    G_SETBLENDCOLOR     = 0xF9, // FIXME: is this actually SETPRIMCOLOR?
     G_SETFOGCOLOR       = 0xF8,
     G_SETFILLCOLOR      = 0xF7,
     G_FILLRECT          = 0xF6,
@@ -1003,7 +1003,6 @@ export function runDL_F3DEX2(state: RSPState, rom: Rom, addr: number): void {
             const len = ((w0 >>> 0) & 0xFF) + 1;
             const sft = Math.max(0, 32 - ((w0 >>> 8) & 0xFF) - len);
             state.gDPSetOtherModeH(sft, len, w1);
-            console.log(`G_SETOTHERMODE_H ${len}, ${sft}, 0x${w1.toString(16)}`);
         } break;
         
         case F3DEX2_GBI.G_SETOTHERMODE_L: {
