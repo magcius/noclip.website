@@ -338,7 +338,7 @@ export class FPSCameraController implements CameraController {
         if (isShiftPressed)
             keyMoveMult = this.keyMoveShiftMult;
 
-        let keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
+        const keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
     
         const keyMovement = this.keyMovement;
@@ -353,7 +353,7 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
-        keyMovement[2] += -inputManager.getPinchDeltaDist();
+        keyMovement[2] += -inputManager.getPinchDeltaDist() * keyMoveVelocity;
 
         if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
             keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
@@ -364,7 +364,7 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
-        keyMovement[0] += -inputManager.getTouchDeltaX();
+        keyMovement[0] += -inputManager.getTouchDeltaX() * keyMoveVelocity;
 
         if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
@@ -375,7 +375,7 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
         }
 
-        keyMovement[1] += inputManager.getTouchDeltaY();
+        keyMovement[1] += inputManager.getTouchDeltaY() * keyMoveVelocity;
 
         const worldUp = scratchVec3b;
         // Instead of getting the camera up, instead use world up. Feels more natural.
