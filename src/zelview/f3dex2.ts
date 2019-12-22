@@ -604,13 +604,15 @@ export class RSPSharedOutput {
 }
 
 export const enum OtherModeH_Layout {
+    // FIXME: Some of these fields are wrong. This code was copied from F3DEX, but F3DEX2 changes some of them.
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
     G_MDSFT_COMBKEY     = 8,
     G_MDSFT_TEXTCONV    = 9,
-    G_MDSFT_TEXTFILT    = 12,
-    G_MDSFT_TEXTLUT     = 14,
+    //G_MDSFT_TEXTFILT    = 12,
+    //G_MDSFT_TEXTLUT     = 14,
+    G_MDSFT_TEXTFILT    = 14,
     G_MDSFT_TEXTLOD     = 16,
     G_MDSFT_TEXTDETAIL  = 17,
     G_MDSFT_TEXTPERSP   = 19,
