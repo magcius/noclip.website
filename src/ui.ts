@@ -2253,6 +2253,10 @@ abstract class SingleIconButton implements BottomBarWidget {
         this.elem.appendChild(this.tooltipElem);
     }
 
+    public setShow(v: boolean): void {
+        this.elem.style.display = v ? 'block' : 'none';
+    }
+
     public setArea(area: BottomBarArea): void {
         setAreaAnchor(this.tooltipElem, area);
     }
@@ -2401,6 +2405,8 @@ class ShareButton extends PanelButton {
 class FullscreenButton extends SingleIconButton {
     constructor() {
         super();
+        if (document.body.requestFullscreen === undefined)
+            this.setShow(false);
         document.addEventListener('fullscreenchange', this.syncStyle.bind(this));
         this.syncStyle();
     }
