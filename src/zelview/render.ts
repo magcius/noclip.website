@@ -239,7 +239,6 @@ void main() {
 
 ${this.generateAlphaTest()}
 
-    //gl_FragColor = v_Color;
     gl_FragColor = t_Color;
 }
 `;
@@ -427,7 +426,8 @@ class DrawCallInstance {
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
 
-        const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
+        // FIXME: For some reason, SHADE flag is off when it should be on
+        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 

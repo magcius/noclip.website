@@ -44,7 +44,6 @@ class StagingVertex extends Vertex {
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
         this.a = view.getUint8(offs + 0x0F) / 0xFF;
-        console.log(`rgba ${this.c0}, ${this.c1}, ${this.c2}, ${this.a}`);
     }
 }
 
@@ -639,7 +638,8 @@ export class RSPState {
     private SP_TextureState = new TextureState();
 
     private DP_OtherModeL: number = 0;
-    private DP_OtherModeH: number = 0;
+    // XXX: enable bilerp filtering here, as levels don't enable it themselves.
+    private DP_OtherModeH: number = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new TextureImageState();
@@ -755,6 +755,7 @@ export class RSPState {
             dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            dc.primColor = vec4.clone(this.primColor);
         }
     }
 
