@@ -483,8 +483,8 @@ function translateTile_I4(rom: Rom, dramAddr: number, tile: TileState): Texture 
     const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.shifts === 0); // G_TX_NOLOD
+    //assert(tile.shiftt === 0); // G_TX_NOLOD
     //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
     //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
