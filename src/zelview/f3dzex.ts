@@ -38,8 +38,8 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this.tx = (view.getInt16(offs + 0x08) / 0x40) + 0.5;
-        this.ty = (view.getInt16(offs + 0x0A) / 0x40) + 0.5;
+        this.tx = view.getInt16(offs + 0x08) / 32; // FIXME: Is 1/32 scaling really correct?
+        this.ty = view.getInt16(offs + 0x0A) / 32;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
@@ -464,8 +464,8 @@ function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture
     const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.shifts === 0); // G_TX_NOLOD
+    //assert(tile.shiftt === 0); // G_TX_NOLOD
     //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
     //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
