@@ -1,5 +1,5 @@
 
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt } from "../Common/N64/Image";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
 import { nArray, assert, assertExists, hexzero } from "../util";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
@@ -273,6 +273,7 @@ export class DrawCall {
     public DP_OtherModeH: number = 0;
     public DP_Combine: CombineParams;
     public primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
+    public envColor: vec4 = vec4.fromValues(1, 1, 1, 1);
 
     public textureIndices: number[] = [];
 
@@ -436,12 +437,31 @@ function translateTLUT(dst: Uint8Array, rom: Rom, dramAddr: number, siz: ImageSi
     parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
 }
 
+function translateTile_IA4(rom: Rom, dramAddr: number, tile: TileState): Texture {
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
+
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
+
+    // TODO(jstpierre): Support more tile parameters
+    assert(tile.shifts === 0); // G_TX_NOLOD
+    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+    //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+
+    const dst = new Uint8Array(tileW * tileH * 4);
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
+    decodeTex_IA4(dst, view, srcIdx, tileW, tileH);
+    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+}
+
 function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture {
     const lkup = rom.lookupAddress(dramAddr);
     const view = lkup.buffer.createDataView(lkup.offs);
 
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
@@ -452,6 +472,63 @@ function translateTile_IA8(rom: Rom, dramAddr: number, tile: TileState): Texture
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = 0; // dramAddr & 0x00FFFFFF;
     decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
+    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+}
+
+function translateTile_I4(rom: Rom, dramAddr: number, tile: TileState): Texture {
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
+
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
+
+    // TODO(jstpierre): Support more tile parameters
+    assert(tile.shifts === 0); // G_TX_NOLOD
+    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+    //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+
+    const dst = new Uint8Array(tileW * tileH * 4);
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
+    decodeTex_I4(dst, view, srcIdx, tileW, tileH);
+    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+}
+
+function translateTile_I8(rom: Rom, dramAddr: number, tile: TileState): Texture {
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
+
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
+
+    // TODO(jstpierre): Support more tile parameters
+    assert(tile.shifts === 0); // G_TX_NOLOD
+    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+    //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+
+    const dst = new Uint8Array(tileW * tileH * 4);
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
+    decodeTex_I8(dst, view, srcIdx, tileW, tileH);
+    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
+}
+
+function translateTile_IA16(rom: Rom, dramAddr: number, tile: TileState): Texture {
+    const lkup = rom.lookupAddress(dramAddr);
+    const view = lkup.buffer.createDataView(lkup.offs);
+
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
+
+    // TODO(jstpierre): Support more tile parameters
+    assert(tile.shifts === 0); // G_TX_NOLOD
+    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
+    //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
+
+    const dst = new Uint8Array(tileW * tileH * 4);
+    const srcIdx = 0; // dramAddr & 0x00FFFFFF;
+    decodeTex_IA16(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
@@ -502,8 +579,8 @@ function translateTile_RGBA32(rom: Rom, dramAddr: number, tile: TileState): Text
     const lkup = rom.lookupAddress(dramAddr);
     const view = lkup.buffer.createDataView(lkup.offs);
 
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
@@ -518,8 +595,8 @@ function translateTile_RGBA32(rom: Rom, dramAddr: number, tile: TileState): Text
 }
 
 function translateTile_RGBA16(rom: Rom, dramAddr: number, tile: TileState): Texture {
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
 
     try {
         const lkup = rom.lookupAddress(dramAddr);
@@ -545,13 +622,17 @@ function translateTileTexture(rom: Rom, dramAddr: number, dramPalAddr: number, t
     switch ((tile.fmt << 4) | tile.siz) {
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_CI4(rom, dramAddr, dramPalAddr, tile);
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_CI8(rom, dramAddr, dramPalAddr, tile);
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_IA4(rom, dramAddr, tile);
     case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_IA8(rom, dramAddr, tile);
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_IA16(rom, dramAddr, tile);
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_RGBA16(rom, dramAddr, tile);
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): return translateTile_RGBA32(rom, dramAddr, tile);
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_I4(rom, dramAddr, tile);
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_I8(rom, dramAddr, tile);
     default:
         console.warn(`Unknown image format ${tile.fmt} / ${tile.siz}`);
-        const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-        const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+        const tileW = getTileWidth(tile);
+        const tileH = getTileHeight(tile);
         // Create dummy texture
         return new Texture(tile, dramAddr, 0, tileW, tileH, new Uint8Array(tileW * tileH * 4));
     }
@@ -646,6 +727,7 @@ export class RSPState {
     private DP_TileState = nArray(8, () => new TileState());
     private DP_TMemTracker = new Map<number, number>();
     private primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
+    private envColor: vec4 = vec4.fromValues(1, 1, 1, 1);
 
     constructor(public rom: Rom, public sharedOutput: RSPSharedOutput) {
     }
@@ -722,19 +804,6 @@ export class RSPState {
             const cycletype = getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === OtherModeH_CycleType.G_CYC_2CYCLE);
 
-            // XXX(jstpierre): Hack for Banjo-Kazooie mipmaps. If we want to use mipmaps,
-            // use G_TX_LOADTILE, which we just loaded into TMEM from. I assume the game
-            // uses the G_DL call to 0x30000000 with DL generated by e.g. guLoadTextureBlockMipMap
-            // to set up the mipmap tiles in practice. Will have to figure out how to emulate that...
-            if (this.SP_TextureState.level === 2) {
-                assert(this.SP_TextureState.tile === 2);
-                this.DP_TileState[2].copy(this.DP_TileState[7]);
-                assert(this.DP_TileState[2].lrs === (31 << 2));
-                assert(this.DP_TileState[2].lrt === (47 << 2));
-                this.DP_TileState[2].lrt = this.DP_TileState[2].lrs;
-                this.DP_TileState[0].copy(this.DP_TileState[2]);
-            }
-
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
             if (this.SP_TextureState.level > 0) {
@@ -756,6 +825,7 @@ export class RSPState {
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
             dc.primColor = vec4.clone(this.primColor);
+            dc.envColor = vec4.clone(this.envColor);
         }
     }
 
@@ -830,6 +900,11 @@ export class RSPState {
 
     public setPrimColor(r: number, g: number, b: number, a: number): void {
         this.primColor = vec4.fromValues(r, g, b, a);
+        this.stateChanged = true;
+    }
+
+    public setEnvColor(r: number, g: number, b: number, a: number): void {
+        this.envColor = vec4.fromValues(r, g, b, a);
         this.stateChanged = true;
     }
 
@@ -1024,6 +1099,14 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
             state.setPrimColor(r, g, b, a);
+        } break;
+        
+        case F3DZEX_GBI.G_SETENVCOLOR: {
+            const r = ((w1 >>> 24) & 0xFF) / 255;
+            const g = ((w1 >>> 16) & 0xFF) / 255;
+            const b = ((w1 >>> 8) & 0xFF) / 255;
+            const a = ((w1 >>> 0) & 0xFF) / 255;
+            state.setEnvColor(r, g, b, a);
         } break;
 
         case F3DZEX_GBI.G_DL: {

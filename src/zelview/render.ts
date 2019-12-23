@@ -523,8 +523,7 @@ class DrawCallInstance {
         const comb = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_CombineParams);
         offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
         offs += fillVec4v(comb, offs, this.drawCall.primColor); // primitive color
-        // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
+        offs += fillVec4v(comb, offs, this.drawCall.envColor); // environment color
     }
 }
 
