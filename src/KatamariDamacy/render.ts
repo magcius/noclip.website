@@ -287,7 +287,6 @@ export class BINModelPartInstance {
             textureMatrix[13] = 1;
         } else {
             mat4.identity(textureMatrix);
-            textureMatrix[0] = 0.5;
         }
 
         let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12+12+8+4);
