@@ -35,7 +35,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 };
 
 layout(row_major, std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
+    Mat4x3 u_ModelView;
     Mat4x2 u_TexMatrix[2];
 };
 
@@ -65,8 +65,7 @@ vec3 Monochrome(vec3 t_Color) {
 }
 
 void main() {
-    int t_BoneIndex = int(a_Position.w);
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position.xyz, 1.0)));
     v_Color = t_One;
 
 #ifdef USE_VERTEX_COLOR
@@ -85,7 +84,7 @@ void main() {
 
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
-    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+    t_Normal = normalize(t_Normal);
     t_Normal.xy = vec2(dot(t_Normal, u_LookAtVectors[0]), dot(t_Normal, u_LookAtVectors[1]));
 
     // shift and rescale to tex coordinates - straight towards the camera is the center
@@ -240,6 +239,7 @@ void main() {
 
 ${this.generateAlphaTest()}
 
+    //gl_FragColor = v_Color;
     gl_FragColor = t_Color;
 }
 `;
@@ -281,7 +281,7 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
         buf[j++] = v[i].x;
         buf[j++] = v[i].y;
         buf[j++] = v[i].z;
-        buf[j++] = v[i].matrixIndex;
+        buf[j++] = 1.0;
 
         buf[j++] = v[i].tx;
         buf[j++] = v[i].ty;
@@ -423,7 +423,6 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const program = new F3DZEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
-        program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -504,7 +503,7 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_DrawParams, 12*2 + 8*2);
+        let offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_DrawParams, 12 + 8*2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_DrawParams);
 
         if (isSkybox)
@@ -512,17 +511,13 @@ class DrawCallInstance {
         else
             computeViewMatrix(viewMatrixScratch, viewerInput.camera);
 
-        mat4.mul(modelViewScratch, viewMatrixScratch, mat4.create());
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
-
-        mat4.mul(modelViewScratch, viewMatrixScratch, mat4.create());
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
-
+        offs += fillMatrix4x3(mappedF32, offs, viewMatrixScratch); // u_ModelView
+        
         this.computeTextureMatrix(texMatrixScratch, 0);
-        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
+        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[0]
 
         this.computeTextureMatrix(texMatrixScratch, 1);
-        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
+        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
 
         offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_CombineParams);

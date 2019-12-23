@@ -20,12 +20,9 @@ export class Vertex {
     public c2: number = 0
     // Alpha.
     public a: number = 0;
-    // Pretend.
-    public matrixIndex: number = 0;
 
     public copy(v: Vertex): void {
         this.x = v.x; this.y = v.y; this.z = v.z;
-        this.matrixIndex = v.matrixIndex;
         this.tx = v.tx; this.ty = v.ty;
         this.c0 = v.c0; this.c1 = v.c1; this.c2 = v.c2; this.a = v.a;
     }
@@ -47,6 +44,7 @@ class StagingVertex extends Vertex {
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
         this.a = view.getUint8(offs + 0x0F) / 0xFF;
+        console.log(`rgba ${this.c0}, ${this.c1}, ${this.c2}, ${this.a}`);
     }
 }
 
