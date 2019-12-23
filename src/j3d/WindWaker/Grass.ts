@@ -1,13 +1,14 @@
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists } from '../../util';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { SymbolMap } from './Actors';
+import { SymbolMap, SymbolData } from './Actors';
 import { Actor } from './Actors';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
+import { Endianness } from '../../endian';
 
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
@@ -19,7 +20,7 @@ import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { TextureMapping } from '../../TextureHolder';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../../viewer';
-import { colorCopy, White } from '../../Color';
+import { colorCopy, colorFromRGBA, White } from '../../Color';
 
 // @TODO: This belongs somewhere else
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
@@ -27,6 +28,31 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
     return entry.Data;
 }
 
+function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {
+    const attrFmts = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
+    const result: GX_VtxAttrFmt[] = [];
+    for (let i = 0; attrFmts[i + 0] !== 255; i += 2) {
+        const attr = attrFmts[i + 0];
+        const cnt  = attrFmts[i + 1];
+        const type = attrFmts[i + 2];
+        const frac = attrFmts[i + 3];
+        result[attr] = { compCnt: cnt, compShift: frac, compType: type };
+    }
+    return result;
+}
+
+function parseGxVtxDescList(buffer: ArrayBufferSlice) {
+    const attrTypePairs = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
+    const vtxDesc: GX_VtxDesc[] = [];
+    for (let i = 0; attrTypePairs[i + 0] !== 255; i += 2) {
+        const attr = attrTypePairs[i + 0];
+        const type = attrTypePairs[i + 1];
+        vtxDesc[attr] = { type };
+    }
+    return vtxDesc;
+}
+
+// @TODO: This is generic to all GX material display lists
 const createTexture = (r: DisplayListRegisters, data: ArrayBufferSlice, name: string): BTI_Texture => {
     const minFilterTable = [
         GX.TexFilter.NEAR,
@@ -68,6 +94,9 @@ const createTexture = (r: DisplayListRegisters, data: ArrayBufferSlice, name: st
 
     return texture;
 }
+
+const kMaxGroundChecksPerFrame = 8;
+const kDynamicAnimCount = 0; // The game uses 8 idle anims, and 64 dynamic anims for things like cutting
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -125,8 +154,6 @@ interface FlowerAnim {
 }
 
 const kMaxFlowerDatas = 200;
-const kMaxGroundChecksPerFrame = 8;
-const kDynamicAnimCount = 0; // The game uses 8 idle anims, and 64 dynamic anims for things like cutting
 
 class FlowerModel {
     public pinkTextureMapping = new TextureMapping();
@@ -432,6 +459,278 @@ export class FlowerPacket {
     }
 }
 
+
+// ---------------------------------------------
+// Tree Packet
+// ---------------------------------------------
+enum TreeFlags {
+    isFrustumCulled = 1 << 0,
+    needsGroundCheck = 1 << 1,
+    unk8 = 1 << 3,
+}
+
+enum TreeStatus {
+    UNCUT,
+}
+
+interface TreeData {
+    flags: number,
+    status: TreeStatus,
+    animIdx: number,
+    trunkAlpha: number,
+    pos: vec3,
+    
+    unkMatrix: mat4,
+
+    topModelMtx: mat4,
+    trunkModelMtx: mat4,
+    shadowModelMtx: mat4,
+
+    nextData: TreeData,
+}
+
+interface TreeAnim {
+    active: boolean,
+    initialRotation: number,
+    rotationUnk1: number,
+    rotationX1: number,
+    rotationX2: number,
+    rotationY: number,
+    offset: vec3,
+    matrix1: mat4,
+    matrix2: mat4,
+}
+
+const kMaxTreeDatas = 64;
+
+class TreeModel {
+    public pinkTextureMapping = new TextureMapping();
+    public pinkTextureData: BTIData;
+    public pinkMaterial: GXMaterialHelperGfx;
+    public woodTextureMapping = new TextureMapping();
+    public woodTextureData: BTIData;
+    public woodMaterial: GXMaterialHelperGfx;
+
+    public shapeMain: GXShapeHelperGfx;
+    public shapeTop: GXShapeHelperGfx;
+
+    public bufferCoalescer: GfxBufferCoalescerCombo;
+
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
+        const l_matDL = findSymbol(symbolMap, `d_tree.o`, `l_matDL`);
+        const l_pos = findSymbol(symbolMap, `d_tree.o`, `l_pos`);
+        const l_color = findSymbol(symbolMap, `d_tree.o`, `l_color`);
+        const l_texCoord = findSymbol(symbolMap, `d_tree.o`, `l_texCoord`);
+        const l_vtxAttrFmtList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxAttrFmtList$4670');
+        const l_vtxDescList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxDescList$4669');
+
+        const l_Oba_swood_noneDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_noneDL');
+        const l_Oba_swood_a_cuttDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
+        const l_Oba_swood_a_cutuDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
+        const l_Oba_swood_a_hapaDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
+        const l_Oba_swood_a_mikiDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
+
+        const l_Txa_kage_32TEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_kage_32TEX');
+        const l_Txa_swood_aTEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_swood_aTEX');
+
+        const matRegisters = new DisplayListRegisters();
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL);
+        this.woodMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        const woodTexture = createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX');
+        this.woodTextureData = new BTIData(device, cache, woodTexture);
+        this.woodTextureData.fillTextureMapping(this.woodTextureMapping);
+
+        // Tree Vert Format
+        const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList);
+        const vcd = parseGxVtxDescList(l_vtxDescList);
+        const vtxLoader = compileVtxLoader(vatFormat, vcd);
+
+        // Tree Verts
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
+
+        // // const vtx_l_Oba_swood_noneDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_noneDL);
+        const vtx_l_Oba_swood_a_hapaDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_hapaDL);
+        const vtx_l_Oba_swood_a_mikiDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_mikiDL);
+        // // const vtx_l_Oba_swood_a_cuttDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cuttDL);
+        // // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
+
+        // Coalesce all VBs and IBs into single buffers and upload to the GPU
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL ]);
+
+        // Build an input layout and input state from the vertex layout and data
+        this.shapeTop = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
+        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
+        this.shapeMain.destroy(device);
+        this.shapeTop.destroy(device);
+
+        this.woodTextureData.destroy(device);
+        this.pinkTextureData.destroy(device);
+    }
+}
+
+export class TreePacket {
+    datas: TreeData[] = new Array(kMaxTreeDatas);
+    dataCount: number = 0;
+
+    rooms: TreeData[] = [];
+    anims: TreeAnim[] = new Array(8 + kDynamicAnimCount);
+    
+    private treeModel: TreeModel;
+
+    constructor(private context: WindWakerRenderer) {
+        this.treeModel = new TreeModel(context.device, context.symbolMap, context.renderCache);
+
+        // Random starting rotation for each idle anim
+        const dr = 2.0 * Math.PI / 8.0;
+        for (let i = 0; i < 8; i++) {
+            this.anims[i] = {
+                active: true,
+                initialRotation: i * dr,
+                rotationUnk1: i * dr,
+                rotationX1: 0,
+                rotationX2: 0,
+                rotationY: 0,
+                offset: vec3.create(),
+                matrix1: mat4.create(),
+                matrix2: mat4.create(),
+            }
+        }
+    }
+
+    newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
+        const dataIdx = this.datas.findIndex(d => d === undefined);
+        if (dataIdx === -1) console.warn('Failed to allocate data');
+        return this.setData(dataIdx, pos, initialStatus, roomIdx);
+    }
+
+    setData(index: number, pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
+        const animIdx = Math.floor(Math.random() * 8);
+        const status = initialStatus;
+
+        const data: TreeData = this.datas[index] = {
+            flags: TreeFlags.needsGroundCheck,
+            animIdx,
+            status,
+            trunkAlpha: 0xFF,
+            pos: vec3.clone(pos),
+
+            unkMatrix: mat4.create(),
+            topModelMtx: mat4.create(),
+            trunkModelMtx: mat4.create(),
+            shadowModelMtx: mat4.create(),
+
+            nextData: this.rooms[roomIdx],
+        }
+
+        // Append to the linked list for this room
+        this.rooms[roomIdx] = data;
+
+        return data;
+    }
+
+    calc() {        
+        // Idle animation updates
+        for (let i = 0; i < 8; i++) {
+            const theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
+            this.anims[i].rotationUnk1 = uShortTo2PI(100.0 + this.anims[i].initialRotation + 100.0 * theta);
+        }
+
+        // @TODO: Hit checks
+    }
+
+    update() {
+        let groundChecksThisFrame = 0;
+
+        // Update all animation matrices
+        for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
+            const anim = this.anims[i];
+            mat4.fromYRotation(anim.matrix1, anim.rotationY);
+            mat4.rotateX(anim.matrix1, anim.matrix1, anim.rotationX1);
+            mat4.rotateY(anim.matrix1, anim.matrix1, anim.rotationUnk1 - anim.rotationY);
+
+            mat4.fromYRotation(anim.matrix2, anim.rotationY);
+            mat4.rotateX(anim.matrix2, anim.matrix2, anim.rotationX2);
+            mat4.rotateY(anim.matrix2, anim.matrix2, anim.initialRotation - anim.rotationY);
+        }
+
+        for (let i = 0; i < kMaxFlowerDatas; i++) {
+            const data = this.datas[i];
+            if (!data) continue;
+
+            // Perform ground checks for some limited number of data
+            if (data.flags & TreeFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.flags &= ~TreeFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                const anim = this.anims[data.animIdx];
+
+                // Top matrix (Leafs)
+                if ((data.flags & TreeFlags.unk8) === 0) {
+                    const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
+                    mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.matrix1);
+                } else {
+                    mat4.copy(data.topModelMtx, data.unkMatrix);
+                }
+                
+                // Trunk matrix
+                mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.matrix2);
+            }
+        }
+    }
+
+    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+        const kRoomCount = 64;
+        let template;
+
+        // @TODO: This should probably be precomputed and stored in the context
+        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
+
+        // Draw tree trunks
+        template = renderInstManager.pushTemplateRenderInst();
+        {
+            template.setSamplerBindingsFromTextureMappings([this.treeModel.woodTextureMapping]);
+            const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.treeModel.woodMaterial.materialParamsBufferSize);
+            this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.treeModel.woodMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            for (let i = 0; i < kRoomCount; i++) {
+                let data = this.rooms[i]; 
+                if (!data) continue; 
+    
+                // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
+                colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
+                
+                do {
+                    if (data.flags & FlowerFlags.isFrustumCulled) continue;
+                    
+                    const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
+                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
+                    this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+
+                    const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
+                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.topModelMtx);
+                    this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
+                } while (data = data.nextData);
+            }
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
 // ---------------------------------------------
 // Grass Actor
 // ---------------------------------------------
@@ -552,20 +851,14 @@ export class AGrass {
             break;
 
             case FoliageType.Tree:
-                // for (let j = 0; j < count; j++) {
-                //     const objectRenderer = buildSmallTreeModel(symbolMap);
-
-                //     const x = offsets[j][0];
-                //     const y = offsets[j][1];
-                //     const z = offsets[j][2];
-                //     const offset = vec3.set(scratchVec3a, x, y, z);
-
-                //     setModelMatrix(objectRenderer.modelMatrix);
-                //     mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, offset);
-                //     setToNearestFloor(objectRenderer.modelMatrix, objectRenderer.modelMatrix);
-                //     roomRenderer.objectRenderers.push(objectRenderer);
-                //     objectRenderer.layer = layer;
-                // }
+                if (!context.treePacket) context.treePacket = new TreePacket(context);
+                const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
+                
+                for (let j = 0; j < count; j++) {
+                    const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
+                    const pos = vec3.add(scratchVec3b, offset, actor.pos);
+                    const data = context.treePacket.newData(pos, 0, actor.roomIndex);
+                }
             break;
 
             case FoliageType.WhiteFlower:

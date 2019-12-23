@@ -36,8 +36,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
-import { AGrass, FlowerPacket } from './Grass';
-import { RoomRenderer } from '../../oot3d/render';
+import { AGrass, FlowerPacket, TreePacket } from './Grass';
 
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
@@ -942,6 +941,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public kyanko: Kyanko;
 
     public flowerPacket: FlowerPacket;
+    public treePacket: TreePacket;
     
     public roomMatrix = mat4.create();
     public stage: string;
@@ -1071,6 +1071,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (this.flowerPacket) this.flowerPacket.update();
         if (this.flowerPacket) this.flowerPacket.draw(renderInstManager, viewerInput, device);
 
+        if (this.treePacket) this.treePacket.calc();
+        if (this.treePacket) this.treePacket.update();
+        if (this.treePacket) this.treePacket.draw(renderInstManager, viewerInput, device);
+
         {
             this.effectSystem.calc(viewerInput);
             this.effectSystem.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
@@ -1106,7 +1110,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const kStartTime = TimeOfDay.DAY;
-        const kProgressTimeOfDay = true;
+        const kProgressTimeOfDay = false;
         const kDayLengthInSeconds = 60.0;
         const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
         this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
