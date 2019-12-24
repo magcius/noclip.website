@@ -665,6 +665,22 @@ void main() {
     }
 
     private _checkForBugQuirks(): void {
+        const gl = this.gl;
+
+        if (!this.bugQuirks.rowMajorMatricesBroken) {
+            const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugRendererInfo !== null) {
+                const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
+                // On some Apple platforms, dynamically indexing an array of row_major matrices
+                // has troubles, and there's no easy way to detect this case.
+                //
+                // https://bugs.chromium.org/p/angleproject/issues/detail?id=4242
+                if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
+                    this.bugQuirks.rowMajorMatricesBroken = true;
+            }
+        }
+
+        if (!this.bugQuirks.rowMajorMatricesBroken)
         this._checkForBugQuirksRowMajor();
     }
 
