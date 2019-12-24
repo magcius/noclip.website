@@ -494,13 +494,13 @@ interface TreeData {
 interface TreeAnim {
     active: boolean,
     initialRotationShort: number,
-    rotationUnk1: number,
-    rotationX1: number,
-    rotationX2: number,
-    rotationY: number,
+    topRotationY: number,
+    topRotationX: number,
+    trunkRotationX: number,
+    trunkFallYaw: number,
     offset: vec3,
-    matrix1: mat4,
-    matrix2: mat4,
+    topMtx: mat4,
+    trunkMtx: mat4,
 }
 
 const kMaxTreeDatas = 64;
@@ -596,13 +596,13 @@ export class TreePacket {
             this.anims[i] = {
                 active: true,
                 initialRotationShort: 0x2000 * i,
-                rotationUnk1: i * dr,
-                rotationX1: 0,
-                rotationX2: 0,
-                rotationY: 0,
+                topRotationY: i * dr,
+                topRotationX: 0,
+                trunkRotationX: 0,
+                trunkFallYaw: 0,
                 offset: vec3.create(),
-                matrix1: mat4.create(),
-                matrix2: mat4.create(),
+                topMtx: mat4.create(),
+                trunkMtx: mat4.create(),
             }
         }
     }
@@ -642,10 +642,10 @@ export class TreePacket {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
             let theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
-            this.anims[i].rotationUnk1 = uShortTo2PI(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
+            this.anims[i].topRotationY = uShortTo2PI(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
 
             theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
-            this.anims[i].rotationX1 = uShortTo2PI(100 + 100 * theta);
+            this.anims[i].topRotationX = uShortTo2PI(100 + 100 * theta);
         }
 
         // @TODO: Hit checks
@@ -657,13 +657,13 @@ export class TreePacket {
         // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             const anim = this.anims[i];
-            mat4.fromYRotation(anim.matrix1, anim.rotationY);
-            mat4.rotateX(anim.matrix1, anim.matrix1, anim.rotationX1);
-            mat4.rotateY(anim.matrix1, anim.matrix1, anim.rotationUnk1 - anim.rotationY);
+            mat4.fromYRotation(anim.topMtx, anim.trunkFallYaw);
+            mat4.rotateX(anim.topMtx, anim.topMtx, anim.topRotationX);
+            mat4.rotateY(anim.topMtx, anim.topMtx, anim.topRotationY - anim.trunkFallYaw);
 
-            mat4.fromYRotation(anim.matrix2, anim.rotationY);
-            mat4.rotateX(anim.matrix2, anim.matrix2, anim.rotationX2);
-            mat4.rotateY(anim.matrix2, anim.matrix2, uShortTo2PI(anim.initialRotationShort) - anim.rotationY);
+            mat4.fromYRotation(anim.trunkMtx, anim.trunkFallYaw);
+            mat4.rotateX(anim.trunkMtx, anim.trunkMtx, anim.trunkRotationX);
+            mat4.rotateY(anim.trunkMtx, anim.trunkMtx, uShortTo2PI(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
         for (let i = 0; i < kMaxFlowerDatas; i++) {
@@ -686,13 +686,13 @@ export class TreePacket {
                 // Top matrix (Leafs)
                 if ((data.flags & TreeFlags.unk8) === 0) {
                     const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
-                    mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.matrix1);
+                    mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.topMtx);
                 } else {
                     mat4.copy(data.topModelMtx, data.unkMatrix);
                 }
                 
                 // Trunk matrix
-                mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.matrix2);
+                mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
             }
         }
     }
