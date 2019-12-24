@@ -1045,7 +1045,8 @@ export class DisplayListRegisters {
         // Retrieve existing value, overwrite w/ mask.
         const regValue = (this.bp[regAddr] & ~regWMask) | (regBag & regWMask);
         // The mask resets after use.
-        this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
+        if (regAddr != GX.BPRegister.SS_MASK) 
+            this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
         // Set new value.
         this.bp[regAddr] = regValue;
 
