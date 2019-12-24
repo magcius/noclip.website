@@ -1134,11 +1134,6 @@ export function displayListToString(buffer: ArrayBufferSlice) {
                 i += 4;
             }
 
-            // Clear out the other values.
-            for (let j = len; j < 16; j++) {
-                // dlString += toDlString('XF', baseAddr + j, 0);
-            }
-
             break;
         }
 
