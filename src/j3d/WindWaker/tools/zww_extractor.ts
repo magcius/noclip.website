@@ -85,6 +85,31 @@ function main() {
     extractSymbol(datas, framework, `d_flower.o`, `l_matDL`);
     extractSymbol(datas, framework, `d_flower.o`, `l_matDL2`);
 
+    // d_tree.o
+    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxAttrFmtList$4670');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxDescList$4669');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_pos');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_color');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_texCoord');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_matDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_noneDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_kage_32TEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowMatDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowPos');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowTexCoord');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowColor$4656');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowVtxAttrFmtList$4655');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowVtxDescList$4654');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    
+
     const crg1 = {
         SymbolData: datas,
     };
