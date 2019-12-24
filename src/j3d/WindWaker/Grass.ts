@@ -395,8 +395,8 @@ export class FlowerPacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
     
-                // @NOTE: Flowers leave C0 as unset, and assume it is black
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].bg0K0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
@@ -420,7 +420,8 @@ export class FlowerPacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
     
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].bg0K0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
@@ -444,7 +445,8 @@ export class FlowerPacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
     
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].bg0K0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
@@ -712,8 +714,9 @@ export class TreePacket {
     
                 // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
                 colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].actorK0);
-                
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].bg0K0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
+
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled) continue;
                     
