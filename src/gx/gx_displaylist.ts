@@ -1105,7 +1105,7 @@ export function displayListToString(buffer: ArrayBufferSlice) {
             
             const regAddr  = regBag >>> 24 as GX.BPRegister;
             const regValue = regBag & ssMask;
-            if (regAddr != GX.BPRegister.SS_MASK) { ssMask = 0x00FFFFFF; }
+            if (regAddr !== GX.BPRegister.SS_MASK) { ssMask = 0x00FFFFFF; }
             else { ssMask = regValue; }
             
             dlString += toDlString(RegisterBlock.BP, regAddr, regValue);
