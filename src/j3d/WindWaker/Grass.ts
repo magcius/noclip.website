@@ -641,8 +641,11 @@ export class TreePacket {
     calc() {        
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            const theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
+            let theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
             this.anims[i].rotationUnk1 = uShortTo2PI(100.0 + this.anims[i].initialRotation + 100.0 * theta);
+
+            theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
+            this.anims[i].rotationX1 = uShortTo2PI(100 + 100 * theta);
         }
 
         // @TODO: Hit checks
