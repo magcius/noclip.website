@@ -553,7 +553,7 @@ export const enum IndTexMtxID {
     T2 = 11,
 }
 
-export const enum XFRegister {
+export enum XFRegister {
     XF_INVTXSPEC_ID    = 0x1008,
     XF_NUMCOLORS_ID    = 0x1009,
     XF_AMBIENT0_ID     = 0x100A,
@@ -585,7 +585,7 @@ export const enum XFRegister {
     XF_DUALTEX0_ID     = 0x1050,
 }
 
-export const enum BPRegister {
+export enum BPRegister {
     // GEN (Graphics ENgine)
     GEN_MODE_ID        = 0x00,
 
@@ -670,7 +670,7 @@ export const enum BPRegister {
     SS_MASK            = 0xFE,
 }
 
-export const enum CPRegister {
+export enum CPRegister {
     MATINDEX_A_ID = 0x30,
     MATINDEX_B_ID = 0x40,
     VCD_LO_ID     = 0x50,
@@ -679,104 +679,6 @@ export const enum CPRegister {
     VAT_B_ID      = 0x80,
     VAT_C_ID      = 0x90,
 }
-
-export const XFRegisterStrings = new Map([
-    [XFRegister.XF_INVTXSPEC_ID    , 'XF_INVTXSPEC_ID'],
-    [XFRegister.XF_NUMCOLORS_ID    , 'XF_NUMCOLORS_ID'],
-    [XFRegister.XF_AMBIENT0_ID     , 'XF_AMBIENT0_ID'],
-    [XFRegister.XF_AMBIENT1_ID     , 'XF_AMBIENT1_ID'],
-    [XFRegister.XF_MATERIAL0_ID    , 'XF_MATERIAL0_ID'],
-    [XFRegister.XF_MATERIAL1_ID    , 'XF_MATERIAL1_ID'],
-    [XFRegister.XF_COLOR0CNTRL_ID  , 'XF_COLOR0CNTRL_ID'],
-    [XFRegister.XF_COLOR1CNTRL_ID  , 'XF_COLOR1CNTRL_ID'],
-    [XFRegister.XF_ALPHA0CNTRL_ID  , 'XF_ALPHA0CNTRL_ID'],
-    [XFRegister.XF_ALPHA1CNTRL_ID  , 'XF_ALPHA1CNTRL_ID'],
-    [XFRegister.XF_DUALTEXTRANS_ID , 'XF_DUALTEXTRANS_ID'],
-    [XFRegister.XF_MATRIXINDEX0_ID , 'XF_MATRIXINDEX0_ID'],
-    [XFRegister.XF_MATRIXINDEX1_ID , 'XF_MATRIXINDEX1_ID'],
-    [XFRegister.XF_VPSCALEX_ID     , 'XF_VPSCALEX_ID'],
-    [XFRegister.XF_VPSCALEY_ID     , 'XF_VPSCALEY_ID'],
-    [XFRegister.XF_VPSCALEZ_ID     , 'XF_VPSCALEZ_ID'],
-    [XFRegister.XF_VPOFFSETX_ID    , 'XF_VPOFFSETX_ID'],
-    [XFRegister.XF_VPOFFSETY_ID    , 'XF_VPOFFSETY_ID'],
-    [XFRegister.XF_VPOFFSETZ_ID    , 'XF_VPOFFSETZ_ID'],
-    [XFRegister.XF_PROJECTIONA_ID  , 'XF_PROJECTIONA_ID'],
-    [XFRegister.XF_PROJECTIONB_ID  , 'XF_PROJECTIONB_ID'],
-    [XFRegister.XF_PROJECTIONC_ID  , 'XF_PROJECTIONC_ID'],
-    [XFRegister.XF_PROJECTIOND_ID  , 'XF_PROJECTIOND_ID'],
-    [XFRegister.XF_PROJECTIONE_ID  , 'XF_PROJECTIONE_ID'],
-    [XFRegister.XF_PROJECTIONF_ID  , 'XF_PROJECTIONF_ID'],
-    [XFRegister.XF_PROJECTORTHO_ID , 'XF_PROJECTORTHO_ID'],
-    [XFRegister.XF_NUMTEX_ID       , 'XF_NUMTEX_ID'],
-    [XFRegister.XF_TEX0_ID         , 'XF_TEX0_ID'],
-    [XFRegister.XF_DUALTEX0_ID     , 'XF_DUALTEX0_ID'],
-]);
-
-export const BPRegisterStrings = new Map([
-    [BPRegister.GEN_MODE_ID        , 'GEN_MODE_ID'],
-    [BPRegister.IND_MTXA0_ID       , 'IND_MTXA0_ID'],
-    [BPRegister.IND_MTXB0_ID       , 'IND_MTXB0_ID'],
-    [BPRegister.IND_MTXC0_ID       , 'IND_MTXC0_ID'],
-    [BPRegister.IND_CMD0_ID        , 'IND_CMD0_ID'],
-    [BPRegister.RAS1_SS0_ID        , 'RAS1_SS0_ID'],
-    [BPRegister.RAS1_IREF_ID       , 'RAS1_IREF_ID'],
-    [BPRegister.RAS1_TREF_0_ID     , 'RAS1_TREF_0_ID'],
-    [BPRegister.SU_SSIZE_I0_ID     , 'SU_SSIZE_I0_ID'],
-    [BPRegister.SU_SSIZE_I1_ID     , 'SU_SSIZE_I1_ID'],
-    [BPRegister.SU_SSIZE_I2_ID     , 'SU_SSIZE_I2_ID'],
-    [BPRegister.SU_SSIZE_I3_ID     , 'SU_SSIZE_I3_ID'],
-    [BPRegister.SU_SSIZE_I4_ID     , 'SU_SSIZE_I4_ID'],
-    [BPRegister.SU_SSIZE_I5_ID     , 'SU_SSIZE_I5_ID'],
-    [BPRegister.SU_SSIZE_I6_ID     , 'SU_SSIZE_I6_ID'],
-    [BPRegister.SU_SSIZE_I7_ID     , 'SU_SSIZE_I7_ID'],
-    [BPRegister.SU_TSIZE_I0_ID     , 'SU_TSIZE_I0_ID'],
-    [BPRegister.SU_TSIZE_I1_ID     , 'SU_TSIZE_I1_ID'],
-    [BPRegister.SU_TSIZE_I2_ID     , 'SU_TSIZE_I2_ID'],
-    [BPRegister.SU_TSIZE_I3_ID     , 'SU_TSIZE_I3_ID'],
-    [BPRegister.SU_TSIZE_I4_ID     , 'SU_TSIZE_I4_ID'],
-    [BPRegister.SU_TSIZE_I5_ID     , 'SU_TSIZE_I5_ID'],
-    [BPRegister.SU_TSIZE_I6_ID     , 'SU_TSIZE_I6_ID'],
-    [BPRegister.SU_TSIZE_I7_ID     , 'SU_TSIZE_I7_ID'],
-    [BPRegister.PE_ZMODE_ID        , 'PE_ZMODE_ID'],
-    [BPRegister.PE_CMODE0_ID       , 'PE_CMODE0_ID'],
-    [BPRegister.TX_LOADTLUT_I0_ID  , 'TX_LOADTLUT_I0_ID'],
-    [BPRegister.TX_SETMODE0_I0_ID  , 'TX_SETMODE0_I0_ID'],
-    [BPRegister.TX_SETMODE0_I4_ID  , 'TX_SETMODE0_I4_ID'],
-    [BPRegister.TX_SETMODE1_I0_ID  , 'TX_SETMODE1_I0_ID'],
-    [BPRegister.TX_SETMODE1_I4_ID  , 'TX_SETMODE1_I4_ID'],
-    [BPRegister.TX_SETIMAGE0_I0_ID , 'TX_SETIMAGE0_I0_ID'],
-    [BPRegister.TX_SETIMAGE0_I4_ID , 'TX_SETIMAGE0_I4_ID'],
-    [BPRegister.TX_SETIMAGE1_I0_ID , 'TX_SETIMAGE1_I0_ID'],
-    [BPRegister.TX_SETIMAGE1_I4_ID , 'TX_SETIMAGE1_I4_ID'],
-    [BPRegister.TX_SETIMAGE2_I0_ID , 'TX_SETIMAGE2_I0_ID'],
-    [BPRegister.TX_SETIMAGE2_I4_ID , 'TX_SETIMAGE2_I4_ID'],
-    [BPRegister.TX_SETIMAGE3_I0_ID , 'TX_SETIMAGE3_I0_ID'],
-    [BPRegister.TX_SETIMAGE3_I4_ID , 'TX_SETIMAGE3_I4_ID'],
-    [BPRegister.TX_SETTLUT_I0_ID   , 'TX_SETTLUT_I0_ID'],
-    [BPRegister.TX_SETTLUT_I4_ID   , 'TX_SETTLUT_I4_ID'],
-    [BPRegister.TEV_COLOR_ENV_0_ID , 'TEV_COLOR_ENV_0_ID'],
-    [BPRegister.TEV_ALPHA_ENV_0_ID , 'TEV_ALPHA_ENV_0_ID'],
-    [BPRegister.TEV_REGISTERL_0_ID , 'TEV_REGISTERL_0_ID'],
-    [BPRegister.TEV_REGISTERH_0_ID , 'TEV_REGISTERH_0_ID'],
-    [BPRegister.TEV_FOG_PARAM_0_ID , 'TEV_FOG_PARAM_0_ID'],
-    [BPRegister.TEV_FOG_PARAM_1_ID , 'TEV_FOG_PARAM_1_ID'],
-    [BPRegister.TEV_FOG_PARAM_2_ID , 'TEV_FOG_PARAM_2_ID'],
-    [BPRegister.TEV_FOG_PARAM_3_ID , 'TEV_FOG_PARAM_3_ID'],
-    [BPRegister.TEV_FOG_COLOR_ID   , 'TEV_FOG_COLOR_ID'],
-    [BPRegister.TEV_ALPHAFUNC_ID   , 'TEV_ALPHAFUNC_ID'],
-    [BPRegister.TEV_KSEL_0_ID      , 'TEV_KSEL_0_ID'],
-    [BPRegister.SS_MASK            , 'SS_MASK'],
-]);
-
-export const CPRegisterStrings = new Map([
-    [CPRegister.MATINDEX_A_ID , 'MATINDEX_A_ID'],
-    [CPRegister.MATINDEX_B_ID , 'MATINDEX_B_ID'],
-    [CPRegister.VCD_LO_ID     , 'VCD_LO_ID'],
-    [CPRegister.VCD_HI_ID     , 'VCD_HI_ID'],
-    [CPRegister.VAT_A_ID      , 'VAT_A_ID'],
-    [CPRegister.VAT_B_ID      , 'VAT_B_ID'],
-    [CPRegister.VAT_C_ID      , 'VAT_C_ID'],
-]);
 
 export const enum DiffuseFunction {
     NONE = 0x00,

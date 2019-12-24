@@ -1081,13 +1081,13 @@ export function displayListToString(buffer: ArrayBufferSlice) {
     }
 
     const enum RegisterBlock { XF, BP, CP };
-    const blockTables = [GX.XFRegisterStrings, GX.BPRegisterStrings, GX.CPRegisterStrings];
+    const blockTables = [GX.XFRegister, GX.BPRegister, GX.CPRegister];
     const blockNames = ['XF', 'BP', 'CP'];
 
     function toDlString(block: RegisterBlock, regAddr: number, regValue: number) {
-        const table = blockTables[block] as Map<number, string>;
+        const table = blockTables[block];
         const name = blockNames[block];
-        const strName = table.get(regAddr);
+        const strName = table[regAddr];
         const strAddr = toHexString(regAddr);
         return `Set ${name} ${strName ? strName : strAddr} to ${toHexString(regValue)}\n`;
     }
