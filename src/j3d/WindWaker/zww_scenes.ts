@@ -1052,7 +1052,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.time = viewerInput.time;
-        this.frameCount = viewerInput.time / 1000.0 * 33;
+        this.frameCount = viewerInput.time / 1000.0 * 30;
 
         this.extraTextures.prepareToRender(device);
 
