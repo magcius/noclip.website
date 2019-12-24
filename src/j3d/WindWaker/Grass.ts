@@ -493,7 +493,7 @@ interface TreeData {
 
 interface TreeAnim {
     active: boolean,
-    initialRotation: number,
+    initialRotationShort: number,
     rotationUnk1: number,
     rotationX1: number,
     rotationX2: number,
@@ -595,7 +595,7 @@ export class TreePacket {
         for (let i = 0; i < 8; i++) {
             this.anims[i] = {
                 active: true,
-                initialRotation: i * dr,
+                initialRotationShort: 0x2000 * i,
                 rotationUnk1: i * dr,
                 rotationX1: 0,
                 rotationX2: 0,
@@ -642,7 +642,7 @@ export class TreePacket {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
             let theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
-            this.anims[i].rotationUnk1 = uShortTo2PI(100.0 + this.anims[i].initialRotation + 100.0 * theta);
+            this.anims[i].rotationUnk1 = uShortTo2PI(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
 
             theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
             this.anims[i].rotationX1 = uShortTo2PI(100 + 100 * theta);
@@ -663,7 +663,7 @@ export class TreePacket {
 
             mat4.fromYRotation(anim.matrix2, anim.rotationY);
             mat4.rotateX(anim.matrix2, anim.matrix2, anim.rotationX2);
-            mat4.rotateY(anim.matrix2, anim.matrix2, anim.initialRotation - anim.rotationY);
+            mat4.rotateY(anim.matrix2, anim.matrix2, uShortTo2PI(anim.initialRotationShort) - anim.rotationY);
         }
 
         for (let i = 0; i < kMaxFlowerDatas; i++) {
