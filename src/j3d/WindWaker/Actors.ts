@@ -29,6 +29,7 @@ export interface Actor {
     name: string,
     parameters: number,
     roomIndex: number,
+    layer: number,
     pos: vec3,
     scale: vec3,
     rotationY: number,
