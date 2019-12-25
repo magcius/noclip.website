@@ -99,6 +99,7 @@ function main() {
     extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
     extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_kage_32TEX');
     extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_Oba_kage_32DL');
     extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowMatDL');
     extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowPos');
     extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowTexCoord');

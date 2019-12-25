@@ -13,7 +13,7 @@ import { Endianness } from '../../endian';
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
 import { parseMaterial } from '../../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX, displayListToString } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
@@ -506,15 +506,17 @@ interface TreeAnim {
 const kMaxTreeDatas = 64;
 
 class TreeModel {
-    public pinkTextureMapping = new TextureMapping();
-    public pinkTextureData: BTIData;
-    public pinkMaterial: GXMaterialHelperGfx;
+    public shadowTextureMapping = new TextureMapping();
+    public shadowTextureData: BTIData;
+    public shadowMaterial: GXMaterialHelperGfx;
+
     public woodTextureMapping = new TextureMapping();
     public woodTextureData: BTIData;
     public woodMaterial: GXMaterialHelperGfx;
 
     public shapeMain: GXShapeHelperGfx;
     public shapeTop: GXShapeHelperGfx;
+    public shapeShadow: GXShapeHelperGfx;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -526,22 +528,54 @@ class TreeModel {
         const l_vtxAttrFmtList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxAttrFmtList$4670');
         const l_vtxDescList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxDescList$4669');
 
+        const l_shadowVtxDescList = findSymbol(symbolMap, 'd_tree.o', 'l_shadowVtxDescList$4654');
+        const l_shadowVtxAttrFmtList = findSymbol(symbolMap, 'd_tree.o', 'l_shadowVtxAttrFmtList$4655');
+        const l_shadowPos = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_shadowPos');
+        const l_shadowMatDL = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_shadowMatDL');
+
+        // @HACK: The tex coord array is being read as all zero. Hardcode it.
+        const l_shadowTexCoord = new ArrayBufferSlice(new Uint8Array([0, 0, 1, 0, 1, 1, 0, 1]).buffer);
+
         const l_Oba_swood_noneDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_noneDL');
         const l_Oba_swood_a_cuttDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
         const l_Oba_swood_a_cutuDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
         const l_Oba_swood_a_hapaDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
         const l_Oba_swood_a_mikiDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
+        const g_dTree_Oba_kage_32DL = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_Oba_kage_32DL');
 
         const l_Txa_kage_32TEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_kage_32TEX');
         const l_Txa_swood_aTEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_swood_aTEX');
 
         const matRegisters = new DisplayListRegisters();
+
+        // Tree material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
         this.woodMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
         const woodTexture = createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX');
         this.woodTextureData = new BTIData(device, cache, woodTexture);
         this.woodTextureData.fillTextureMapping(this.woodTextureMapping);
+
+        // Shadow material
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_shadowMatDL);
+        const shadowMat = parseMaterial(matRegisters, 'd_tree::l_shadowMatDL');
+
+        this.shadowMaterial = new GXMaterialHelperGfx(shadowMat);
+        const shadowTexture = createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX');
+        this.shadowTextureData = new BTIData(device, cache, shadowTexture);
+        this.shadowTextureData.fillTextureMapping(this.shadowTextureMapping);
+
+        // Shadow vert format
+        const shadowVatFormat = parseGxVtxAttrFmtV(l_shadowVtxAttrFmtList);
+        const shadowVcd = parseGxVtxDescList(l_shadowVtxDescList);
+        const shadowVtxLoader = compileVtxLoader(shadowVatFormat, shadowVcd);
+
+        // Shadow verts
+        const shadowVtxArrays: GX_Array[] = [];
+        shadowVtxArrays[GX.Attr.POS]  = { buffer: l_shadowPos, offs: 0, stride: getAttributeByteSize(shadowVatFormat, GX.Attr.POS) };
+        shadowVtxArrays[GX.Attr.TEX0] = { buffer: l_shadowTexCoord, offs: 0, stride: getAttributeByteSize(shadowVatFormat, GX.Attr.TEX0) };
+        const vtx_l_shadowDL = shadowVtxLoader.runVertices(shadowVtxArrays, g_dTree_Oba_kage_32DL);
 
         // Tree Vert Format
         const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList);
@@ -561,11 +595,12 @@ class TreeModel {
         // // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_shadowDL, vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL ]);
 
         // Build an input layout and input state from the vertex layout and data
-        this.shapeTop = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
-        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
+        this.shapeTop = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
+        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[2], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
+        this.shapeShadow = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -574,7 +609,7 @@ class TreeModel {
         this.shapeTop.destroy(device);
 
         this.woodTextureData.destroy(device);
-        this.pinkTextureData.destroy(device);
+        this.shadowTextureData.destroy(device);
     }
 }
 
@@ -605,6 +640,37 @@ export class TreePacket {
                 trunkMtx: mat4.create(),
             }
         }
+    }
+
+    private checkGroundY(context: WindWakerRenderer, treeData: TreeData) {
+        // @TODO: This is using the last loaded room. It needs to use the room that this data is in.
+        const dzb = context.loadingRoomRenderer.dzb;
+    
+        const down = vec3.set(scratchVec3b, 0, -1, 0);
+        const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down);
+        const groundHeight = hit ? scratchVec3b[1] : treeData.pos[1];
+
+        const norm = vec3.fromValues(0, 1, 0);
+
+        // @TODO: Get the normal from the raycast, rotate shadow to match surface
+        treeData.shadowModelMtx[0] = 1.0;
+        treeData.shadowModelMtx[1] = norm[0];
+        treeData.shadowModelMtx[2] = 0.0;
+        treeData.shadowModelMtx[3] = treeData.pos[0];
+
+        treeData.shadowModelMtx[4] = -norm[0] * norm[1];
+        treeData.shadowModelMtx[5] = norm[1];
+        treeData.shadowModelMtx[6] = -norm[2];
+        treeData.shadowModelMtx[7] = 1.0 + groundHeight;
+
+        treeData.shadowModelMtx[8]  = -norm[0] * norm[2];
+        treeData.shadowModelMtx[9]  = norm[2];
+        treeData.shadowModelMtx[10] = norm[1];
+        treeData.shadowModelMtx[11] = treeData.pos[2];
+
+        mat4.transpose(treeData.shadowModelMtx, treeData.shadowModelMtx);
+
+        return groundHeight;
     }
 
     newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
@@ -672,7 +738,7 @@ export class TreePacket {
 
             // Perform ground checks for some limited number of data
             if (data.flags & TreeFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.pos[1] = this.checkGroundY(this.context, data);
                 data.flags &= ~TreeFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }
@@ -703,6 +769,28 @@ export class TreePacket {
 
         // @TODO: This should probably be precomputed and stored in the context
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
+
+        // Draw shadows
+        template = renderInstManager.pushTemplateRenderInst();
+        {
+            // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
+            colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 1.0);
+
+            template.setSamplerBindingsFromTextureMappings([this.treeModel.shadowTextureMapping]);
+            const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.treeModel.shadowMaterial.materialParamsBufferSize);
+            this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            for (let i = 0; i < kRoomCount; i++) {
+                let data = this.rooms[i]; 
+                if (!data) continue; 
+                do {                    
+                    const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
+                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
+                    this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
+                } while (data = data.nextData);
+            }
+        }
+        renderInstManager.popTemplateRenderInst();
 
         // Draw tree trunks
         template = renderInstManager.pushTemplateRenderInst();
