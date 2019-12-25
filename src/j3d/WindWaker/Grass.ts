@@ -31,7 +31,7 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
 function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {
     const attrFmts = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
     const result: GX_VtxAttrFmt[] = [];
-    for (let i = 0; attrFmts[i + 0] !== 255; i += 2) {
+    for (let i = 0; attrFmts[i + 0] !== 255; i += 4) {
         const attr = attrFmts[i + 0];
         const cnt  = attrFmts[i + 1];
         const type = attrFmts[i + 2];
