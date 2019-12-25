@@ -18,7 +18,7 @@ import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { TextureMapping } from '../../TextureHolder';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../../viewer';
 import { colorCopy, colorFromRGBA, White } from '../../Color';
 
@@ -773,6 +773,9 @@ export class TreePacket {
         // Draw shadows
         template = renderInstManager.pushTemplateRenderInst();
         {
+            // Set transparent
+            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 1.0);
 
@@ -809,7 +812,7 @@ export class TreePacket {
                 colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
 
                 do {
-                    if (data.flags & FlowerFlags.isFrustumCulled) continue;
+                    if (data.flags & TreeFlags.isFrustumCulled) continue;
                     
                     const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
