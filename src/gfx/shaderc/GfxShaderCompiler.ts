@@ -65,7 +65,7 @@ struct Mat4x4 { vec4 _m[4]; };
 struct Mat4x3 { vec4 _m[3]; };
 struct Mat4x2 { vec4 _m[2]; };
 vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
-vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v); }
+vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
 vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
 vec4 Mul(vec3 v, Mat4x3 m) { return vec4(
 dot(vec3(m._m[0].x, m._m[1].x, m._m[2].x), v),
