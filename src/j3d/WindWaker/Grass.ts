@@ -1010,7 +1010,7 @@ export class GrassPacket {
             mat4.rotateY(anim.modelMtx, anim.modelMtx, anim.rotationY);
         }
 
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
+        for (let i = 0; i < kMaxGrassDatas; i++) {
             const data = this.datas[i];
             if (!data) continue;
 
@@ -1026,7 +1026,7 @@ export class GrassPacket {
             if (!(data.flags & GrassFlags.isFrustumCulled)) {
                 // Update model matrix for all non-culled objects
                 if (data.animIdx < 0) {
-                    // @TODO:
+                    // @TODO: Draw cut grass
                 } else {
                     const anim = this.anims[data.animIdx];
                     mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
