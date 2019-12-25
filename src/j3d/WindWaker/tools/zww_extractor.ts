@@ -55,6 +55,7 @@ function extractSymbol(datas: SymbolData[], map: SymbolMap, symFile: string, sym
     const entry = assertExists(map.entries.find((e) => e.filename === symFile && e.symbolName === symName));
     const offs = ((entry.vaddr) & 0x00FFFFFF) - dolBase;
     const data = fetchDataFragmentSync(dolFilename, offs, entry.size);
+    console.log(entry.filename, entry.symbolName, entry.size);
     datas.push({ Filename: entry.filename, SymbolName: entry.symbolName, Data: data });
 }
 
@@ -86,7 +87,7 @@ function main() {
     extractSymbol(datas, framework, `d_flower.o`, `l_matDL2`);
 
     // d_tree.o
-    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxAttrFmtList$4670');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_color');
     extractSymbol(datas, framework, 'd_tree.o', 'l_vtxDescList$4669');
     extractSymbol(datas, framework, 'd_tree.o', 'l_pos');
     extractSymbol(datas, framework, 'd_tree.o', 'l_color');
@@ -109,7 +110,25 @@ function main() {
     extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
     extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
     extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxAttrFmtList$4670');
     
+    // d_grass.o
+    extractSymbol(datas, framework, 'd_grass.o', 'l_color');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_K_kusa_00TEX');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_matDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Oba_kusa_a_cutDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Oba_kusa_aDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_pos');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_texCoord');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Txa_ob_kusa_aTEX');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_00DL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_01DL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_color');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_matDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_pos');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_texCoord');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_vtxAttrFmtList$4529');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_vtxDescList$4528');
 
     const crg1 = {
         SymbolData: datas,

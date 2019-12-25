@@ -835,6 +835,240 @@ export class TreePacket {
 }
 
 // ---------------------------------------------
+// Grass Packet
+// ---------------------------------------------
+enum GrassFlags {
+    isFrustumCulled = 1 << 0,
+    needsGroundCheck = 1 << 1,
+}
+
+interface GrassData {
+    flags: number,
+    animIdx: number,
+    itemIdx: number,
+    pos: vec3,
+    modelMtx: mat4,
+
+    nextData: GrassData,
+}
+
+interface GrassAnim {
+    active: boolean,
+    rotationY: number,
+    rotationX: number,
+    modelMtx: mat4,
+}
+
+const kMaxGrassDatas = 1500;
+
+class GrassModel {
+    public grassTextureMapping = new TextureMapping();
+    public grassTextureData: BTIData;
+    public grassMaterial: GXMaterialHelperGfx;
+
+    public shapeMain: GXShapeHelperGfx;
+    public shapeTop: GXShapeHelperGfx;
+    public shapeShadow: GXShapeHelperGfx;
+
+    public bufferCoalescer: GfxBufferCoalescerCombo;
+
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
+        const l_matDL = findSymbol(symbolMap, `d_grass.o`, `l_matDL`);
+        const l_vtxAttrFmtList$4529 = findSymbol(symbolMap, 'd_grass.o', 'l_vtxAttrFmtList$4529');
+        const l_vtxDescList = findSymbol(symbolMap, 'd_grass.o', 'l_vtxDescList$4528');
+        const l_pos = findSymbol(symbolMap, 'd_grass.o', 'l_pos');
+        const l_color = findSymbol(symbolMap, 'd_grass.o', 'l_color');
+        const l_texCoord = findSymbol(symbolMap, 'd_grass.o', 'l_texCoord');
+
+        const l_Oba_kusa_a_cutDL = findSymbol(symbolMap, 'd_grass.o', 'l_Oba_kusa_a_cutDL');
+        const l_Oba_kusa_aDL = findSymbol(symbolMap, 'd_grass.o', 'l_Oba_kusa_aDL');
+        const l_Vmori_00DL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_00DL');
+        const l_Vmori_01DL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_01DL');
+        const l_Vmori_color = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_color');
+        const l_Vmori_pos = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_pos');
+        const l_Vmori_texCoord = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_texCoord');
+        const l_Vmori_matDL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_matDL');
+
+        const l_K_kusa_00TEX = findSymbol(symbolMap, 'd_grass.o', 'l_K_kusa_00TEX');
+        const l_Txa_ob_kusa_aTEX = findSymbol(symbolMap, 'd_grass.o', 'l_Txa_ob_kusa_aTEX');
+
+        const matRegisters = new DisplayListRegisters();
+
+        // Grass material
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL);
+        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
+        this.grassTextureData = new BTIData(device, cache, grassTexture);
+        this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
+
+        // Tree Vert Format
+        const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList$4529);
+        const vcd = parseGxVtxDescList(l_vtxDescList);
+        const vtxLoader = compileVtxLoader(vatFormat, vcd);
+
+        // Tree Verts
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
+
+        const vtx_l_Oba_kusa_aDL = vtxLoader.runVertices(vtxArrays, l_Oba_kusa_aDL);
+        
+        // Coalesce all VBs and IBs into single buffers and upload to the GPU
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL ]);
+
+        // Build an input layout and input state from the vertex layout and data
+        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
+        this.shapeMain.destroy(device);
+        this.shapeTop.destroy(device);
+
+        this.grassTextureData.destroy(device);
+    }
+}
+
+export class GrassPacket {
+    datas: GrassData[] = new Array(kMaxTreeDatas);
+    dataCount: number = 0;
+
+    rooms: GrassData[] = [];
+    anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
+    
+    private model: GrassModel;
+
+    constructor(private context: WindWakerRenderer) {
+        this.model = new GrassModel(context.device, context.symbolMap, context.renderCache);
+
+        if (this.context.stage === 'kin' || this.context.stage === "Xboss1") {
+            // @TODO: Use VMori
+        }
+
+        // Random starting rotation for each idle anim
+        const dr = 2.0 * Math.PI / 8.0;
+        for (let i = 0; i < 8; i++) {
+            this.anims[i] = {
+                active: true,
+                rotationY: uShortTo2PI(0x2000 * i),
+                rotationX: 0,
+                modelMtx: mat4.create(),
+            }
+        }
+    }
+
+    newData(pos: vec3, roomIdx: number, itemIdx: number): GrassData {
+        const dataIdx = this.datas.findIndex(d => d === undefined);
+        if (dataIdx === -1) console.warn('Failed to allocate data');
+        return this.setData(dataIdx, pos, roomIdx, itemIdx);
+    }
+
+    setData(index: number, pos: vec3, roomIdx: number, itemIdx: number): GrassData {
+        const animIdx = Math.floor(Math.random() * 8);
+
+        const data: GrassData = this.datas[index] = {
+            flags: TreeFlags.needsGroundCheck,
+            animIdx,
+            itemIdx,
+            pos: vec3.clone(pos),
+            modelMtx: mat4.create(),
+            nextData: this.rooms[roomIdx],
+        }
+
+        // Append to the linked list for this room
+        this.rooms[roomIdx] = data;
+
+        return data;
+    }
+
+    calc() {        
+        // @TODO: Use value from the wind system
+        const kWindSystemWindPower = 1.0;
+
+        // if (!kIsMonotone || context.stage !== "Hyrule")
+        const windPower = Math.max(1000.0 + 1000.0 * kWindSystemWindPower, 2000.0);
+
+        // Idle animation updates
+        for (let i = 0; i < 8; i++) {
+            let theta = Math.cos(uShortTo2PI(windPower * (this.context.frameCount + 0xfa * i)));
+            this.anims[i].rotationX = uShortTo2PI(windPower + windPower * theta);
+        }
+
+        // @TODO: Hit checks
+    }
+
+    update() {
+        let groundChecksThisFrame = 0;
+
+        // Update all animation matrices
+        for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
+            const anim = this.anims[i];
+            mat4.fromYRotation(anim.modelMtx, anim.rotationY);
+            mat4.rotateX(anim.modelMtx, anim.modelMtx, anim.rotationX);
+            mat4.rotateY(anim.modelMtx, anim.modelMtx, anim.rotationY);
+        }
+
+        for (let i = 0; i < kMaxFlowerDatas; i++) {
+            const data = this.datas[i];
+            if (!data) continue;
+
+            // Perform ground checks for some limited number of data
+            if (data.flags & TreeFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.flags &= ~TreeFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                if (data.animIdx < 0) {
+                    // @TODO:
+                } else {
+                    const anim = this.anims[data.animIdx];
+                    mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
+                }
+            }
+        }
+    }
+
+    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+        const kRoomCount = 64;
+        let template;
+
+        // @TODO: This should probably be precomputed and stored in the context
+        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
+
+        template = renderInstManager.pushTemplateRenderInst();
+        {
+            template.setSamplerBindingsFromTextureMappings([this.model.grassTextureMapping]);
+            const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.model.grassMaterial.materialParamsBufferSize);
+            this.model.grassMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.model.grassMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            for (let i = 0; i < kRoomCount; i++) {
+                let data = this.rooms[i]; 
+                if (!data) continue; 
+
+                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.kyanko.roomColors[i].bg0K0);
+                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.kyanko.roomColors[i].bg0C0);
+
+                do {
+                    if (data.flags & GrassFlags.isFrustumCulled) continue;
+                    
+                    const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
+                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
+                    this.model.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                } while (data = data.nextData);
+            }
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+// ---------------------------------------------
 // Grass Actor
 // ---------------------------------------------
 const kGrassSpawnPatterns = [
@@ -943,6 +1177,7 @@ export class AGrass {
 
         const spawnPatternId = (actor.parameters & 0x00F) >> 0;
         const type: FoliageType = (actor.parameters & 0x030) >> 4;
+        const itemIdx = (actor.parameters >> 6) & 0x3f; // Determines which item spawns when this is cut down
 
         const pattern = kGrassSpawnPatterns[spawnPatternId];
         const offsets = kGrassSpawnOffsets[pattern.group];
@@ -950,7 +1185,15 @@ export class AGrass {
 
         switch (type) {
             case FoliageType.Grass:
+                if (!context.grassPacket) context.grassPacket = new GrassPacket(context);
+                
+                for (let j = 0; j < count; j++) {
+                    // @NOTE: Grass does not observe actor rotation or scale
+                    const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos); 
 
+                    const data = context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
+                }
             break;
 
             case FoliageType.Tree:
@@ -967,8 +1210,6 @@ export class AGrass {
             case FoliageType.WhiteFlower:
             case FoliageType.PinkFlower:
                 if (!context.flowerPacket) context.flowerPacket = new FlowerPacket(context);
-
-                const itemIdx = (actor.parameters >> 6) & 0x3f; // Determines which item spawns when this is cut down
 
                 for (let j = 0; j < count; j++) {
                     const flowerType = (type == FoliageType.WhiteFlower) ? FlowerType.WHITE : FlowerType.PINK; 
