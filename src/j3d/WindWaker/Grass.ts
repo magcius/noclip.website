@@ -932,7 +932,7 @@ class GrassModel {
 }
 
 export class GrassPacket {
-    datas: GrassData[] = new Array(kMaxTreeDatas);
+    datas: GrassData[] = new Array(kMaxGrassDatas);
     dataCount: number = 0;
 
     rooms: GrassData[] = [];
@@ -985,10 +985,10 @@ export class GrassPacket {
 
     calc() {        
         // @TODO: Use value from the wind system
-        const kWindSystemWindPower = 1.0;
+        const kWindSystemWindPower = 0.0;
 
         // if (!kIsMonotone || context.stage !== "Hyrule")
-        const windPower = Math.max(1000.0 + 1000.0 * kWindSystemWindPower, 2000.0);
+        const windPower = Math.min(1000.0 + 1000.0 * kWindSystemWindPower, 2000.0);
 
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
@@ -1015,15 +1015,15 @@ export class GrassPacket {
             if (!data) continue;
 
             // Perform ground checks for some limited number of data
-            if (data.flags & TreeFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+            if (data.flags & GrassFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
                 data.pos[1] = checkGroundY(this.context, data.pos);
-                data.flags &= ~TreeFlags.needsGroundCheck;
+                data.flags &= ~GrassFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }
 
             // @TODO: Frustum culling
 
-            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+            if (!(data.flags & GrassFlags.isFrustumCulled)) {
                 // Update model matrix for all non-culled objects
                 if (data.animIdx < 0) {
                     // @TODO:
@@ -1221,6 +1221,8 @@ export class AGrass {
                     const data = context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
                 }
             break;
+            default: 
+                console.warn('Unknown grass actor type');
         }
         return;
     }
