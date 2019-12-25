@@ -1045,7 +1045,8 @@ export class DisplayListRegisters {
         // Retrieve existing value, overwrite w/ mask.
         const regValue = (this.bp[regAddr] & ~regWMask) | (regBag & regWMask);
         // The mask resets after use.
-        this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
+        if (regAddr !== GX.BPRegister.SS_MASK) 
+            this.bp[GX.BPRegister.SS_MASK] = 0x00FFFFFF;
         // Set new value.
         this.bp[regAddr] = regValue;
 
@@ -1068,6 +1069,81 @@ export class DisplayListRegisters {
         idx -= 0x1000;
         return this.xf[idx * 0x10 + sub];
     }
+}
+
+export function displayListToString(buffer: ArrayBufferSlice) {
+    const view = buffer.createDataView();
+    let dlString = '';
+    let ssMask = 0x00FFFFFF;
+
+    function toHexString(n: number) {
+        return `0x${n.toString(16)}`;
+    }
+
+    const enum RegisterBlock { XF, BP, CP };
+    const blockTables = [GX.XFRegister, GX.BPRegister, GX.CPRegister];
+    const blockNames = ['XF', 'BP', 'CP'];
+
+    function toDlString(block: RegisterBlock, regAddr: number, regValue: number) {
+        const table = blockTables[block];
+        const name = blockNames[block];
+        const strName = table[regAddr];
+        const strAddr = toHexString(regAddr);
+        return `Set ${name} ${strName ? strName : strAddr} to ${toHexString(regValue)}\n`;
+    }
+
+    for (let i = 0; i < buffer.byteLength;) {
+        const cmd = view.getUint8(i++);
+
+        switch (cmd) {
+        case GX.Command.NOOP:
+            continue;
+
+        case GX.Command.LOAD_BP_REG: {
+            const regBag = view.getUint32(i);
+            i += 4;
+            
+            const regAddr  = regBag >>> 24 as GX.BPRegister;
+            const regValue = regBag & ssMask;
+            if (regAddr !== GX.BPRegister.SS_MASK) { ssMask = 0x00FFFFFF; }
+            else { ssMask = regValue; }
+            
+            dlString += toDlString(RegisterBlock.BP, regAddr, regValue);
+            break;
+        }
+
+        case GX.Command.LOAD_CP_REG: {
+            const regAddr = view.getUint8(i);
+            i++;
+            const regValue = view.getUint32(i);
+            i += 4;
+            dlString += toDlString(RegisterBlock.CP, regAddr, regValue);
+            break;
+        }
+
+        case GX.Command.LOAD_XF_REG: {
+            const len = view.getUint16(i) + 1;
+            i += 2;
+            assert(len <= 0x10);
+
+            const regAddr = view.getUint16(i);
+            i += 2;
+
+            for (let j = 0; j < len; j++) {
+                dlString += toDlString(RegisterBlock.XF, regAddr + j, view.getUint32(i));
+                i += 4;
+            }
+
+            break;
+        }
+
+        default:
+            console.error(`Unknown command ${cmd} at ${i} (buffer: 0x${buffer.byteOffset.toString(16)})`);
+            throw "whoops 1";
+        }
+    }
+
+    return dlString;
 }
 
 export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
