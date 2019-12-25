@@ -100,6 +100,8 @@ const kDynamicAnimCount = 0; // The game uses 8 idle anims, and 64 dynamic anims
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 const scratchMat4a = mat4.create();
 const packetParams = new PacketParams();
 const materialParams = new MaterialParams();
@@ -647,25 +649,29 @@ export class TreePacket {
         const dzb = context.loadingRoomRenderer.dzb;
     
         const down = vec3.set(scratchVec3b, 0, -1, 0);
-        const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down);
+        const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down, scratchVec3a);
+
+        const normal = hit ? scratchVec3a : vec3.set(scratchVec3a, 0, 1, 0);
         const groundHeight = hit ? scratchVec3b[1] : treeData.pos[1];
 
-        const norm = vec3.fromValues(0, 1, 0);
+        const right = vec3.set(scratchVec3c, 1, 0, 0);
+        const forward = vec3.cross(scratchVec3d, normal, right);
+        vec3.cross(right, normal, forward);
 
-        // @TODO: Get the normal from the raycast, rotate shadow to match surface
-        treeData.shadowModelMtx[0] = 1.0;
-        treeData.shadowModelMtx[1] = norm[0];
-        treeData.shadowModelMtx[2] = 0.0;
+        // Get the normal from the raycast, rotate shadow to match surface
+        treeData.shadowModelMtx[0] = right[0];
+        treeData.shadowModelMtx[1] = right[1];
+        treeData.shadowModelMtx[2] = right[2];
         treeData.shadowModelMtx[3] = treeData.pos[0];
 
-        treeData.shadowModelMtx[4] = -norm[0] * norm[1];
-        treeData.shadowModelMtx[5] = norm[1];
-        treeData.shadowModelMtx[6] = -norm[2];
+        treeData.shadowModelMtx[4] = normal[0];
+        treeData.shadowModelMtx[5] = normal[1];
+        treeData.shadowModelMtx[6] = normal[2];
         treeData.shadowModelMtx[7] = 1.0 + groundHeight;
 
-        treeData.shadowModelMtx[8]  = -norm[0] * norm[2];
-        treeData.shadowModelMtx[9]  = norm[2];
-        treeData.shadowModelMtx[10] = norm[1];
+        treeData.shadowModelMtx[8]  = forward[0];
+        treeData.shadowModelMtx[9]  = forward[1];
+        treeData.shadowModelMtx[10] = forward[2];
         treeData.shadowModelMtx[11] = treeData.pos[2];
 
         mat4.transpose(treeData.shadowModelMtx, treeData.shadowModelMtx);
@@ -777,7 +783,7 @@ export class TreePacket {
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
-            colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 1.0);
+            colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
 
             template.setSamplerBindingsFromTextureMappings([this.treeModel.shadowTextureMapping]);
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.treeModel.shadowMaterial.materialParamsBufferSize);
