@@ -5,7 +5,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
-import { assert, readString, assertExists } from '../../../util';
+import { assert, readString } from '../../../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';

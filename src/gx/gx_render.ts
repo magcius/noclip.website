@@ -1,7 +1,7 @@
 
 // Common helpers for GX rendering.
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
@@ -280,6 +280,8 @@ function channelControlUsesLights(chan: GX_Material.ColorChannelControl): boolea
 }
 
 function autoOptimizeMaterialHasLightsBlock(material: GX_Material.GXMaterial): boolean {
+    return true;
+
     if (material.lightChannels[0] !== undefined) {
         if (channelControlUsesLights(material.lightChannels[0].colorChannel))
             return true;
@@ -330,8 +332,8 @@ export class GXMaterialHelperGfx {
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            const descriptor = this.program.generateShaders(device);
-            this.gfxProgram = cache.createProgramSimple(device, descriptor);
+            // const descriptor = this.program.generateShaders(device);
+            this.gfxProgram = cache.createProgram(device, this.program);
             this.programKey = this.gfxProgram.ResourceUniqueId;
         }
     }
@@ -431,10 +433,10 @@ export class GXShapeHelperGfx {
         let usesZeroBuffer = false;
         for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-    
+
             if (attribLocation === -1)
                 continue;
-    
+
             const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
             if (attrib === undefined) {
                 usesZeroBuffer = true;

@@ -185,6 +185,7 @@ export class Viewer {
         this.sceneTime = newTime;
     }
 
+
     public update(nt: number): void {
         const dt = nt - this.rafTime;
         this.updateDT(dt);

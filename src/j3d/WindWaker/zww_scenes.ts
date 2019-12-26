@@ -17,26 +17,28 @@ import { BMD, BTK, BRK, BCK, BTP } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelInstanceSimple, J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
-import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
-import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
+import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy, White, colorMult } from '../../Color';
+import { ColorKind, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData, ub_SceneParams } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor, GfxColorWriteMask, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxBlendMode, GfxBlendFactor } from '../../gfx/platform/GfxPlatform';
+import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst, setSortKeyLayer, makeSortKeyTranslucent } from '../../gfx/render/GfxRenderer';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
-import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec3v } from '../../gfx/helpers/UniformBufferHelpers';
+import { makeTriangleIndexBuffer, GfxTopology, getTriangleCountForTopologyIndexCount, convertToTriangles } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
-import { computeModelMatrixSRT, range } from '../../MathHelpers';
+import { computeModelMatrixSRT, range, MathConstants } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { getTextDecoder } from '../../util';
+import { setAttachmentStateSimple } from '../../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { preprocessProgramObj_GLSL } from '../../gfx/shaderc/GfxShaderCompiler';
 
 type ActorTable = { [name: string]: ActorInfo };
 
@@ -289,6 +291,11 @@ export function getKankyoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     };
 }
 
+function aup(modelInstance: J3DModelInstanceSimple): void {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        modelInstance.materialInstances[i].setAlphaWriteEnabled(false);
+}
+
 function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
@@ -301,6 +308,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new J3DModelData(device, cache, bdl);
     const modelInstance = new J3DModelInstanceSimple(bmdModel);
+    aup(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
@@ -485,11 +493,15 @@ class SeaPlane {
     private gfxProgram: GfxProgram;
     private modelMatrix = mat4.create();
     private color = colorNewCopy(TransparentBlack);
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.createBuffers(device);
         mat4.fromScaling(this.modelMatrix, [2000000, 1, 2000000]);
         mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
+        this.megaStateFlags.depthWrite = true;
+        this.megaStateFlags.depthCompare = reverseDepthForCompareMode(GfxCompareMode.LESS);
+        setAttachmentStateSimple(this.megaStateFlags, { colorWriteMask: GfxColorWriteMask.COLOR });
 
         this.gfxProgram = cache.createProgram(device, new PlaneColorProgram());
     }
@@ -502,10 +514,7 @@ class SeaPlane {
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setBindingLayouts(seaPlaneBindingLayouts);
-        renderInst.setMegaStateFlags({
-            depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LESS),
-        });
+        renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(6);
@@ -738,6 +747,7 @@ class SkyEnvironment {
     }
 }
 
+const sceneParams = new SceneParams();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -876,8 +886,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.extraTextures.prepareToRender(device);
 
         template.filterKey = WindWakerPass.MAIN;
-
         fillSceneParamsDataOnTemplate(template, viewerInput);
+
         if (this.seaPlane)
             this.seaPlane.prepareToRender(renderInstManager, viewerInput);
         if (this.skyEnvironment !== null)
@@ -926,7 +936,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const kStartTime = TimeOfDay.DAY;
-        const kProgressTimeOfDay = true;
+        const kProgressTimeOfDay = false;
         const kDayLengthInSeconds = 60.0;
         const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
         this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
@@ -939,7 +949,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
@@ -1260,8 +1270,8 @@ class SceneDesc {
         }
 
         // HACK(jstpierre): We spawn stage actors on the first room renderer.
-        mat4.identity(scratchMatrix);
-        this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix, actorTable);
+        // mat4.identity(scratchMatrix);
+        // this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix, actorTable);
 
         // TODO(jstpierre): Not all the actors load in the requestArchives phase...
         await modelCache.waitForLoad();
@@ -1443,6 +1453,22 @@ class SceneDesc {
             this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
             this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
         }        
+
+        {
+            const g: Actor = {
+                name: 'LinkThing',
+                roomIndex: -1,
+                info: { relName: 'LinkThing', subtype: 0, unknown1: 0 },
+                auxParams1: 0,
+                auxParams2: 0,
+                layer: 0,
+                parameters: 0,
+                pos: vec3.fromValues(-202620, 400, 316000),
+                rotationY: MathConstants.TAU * 0.4,
+                scale: vec3.fromValues(1, 1, 1),
+            };
+            callback(g);
+        }
     }
 
     private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {

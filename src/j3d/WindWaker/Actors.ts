@@ -1,24 +1,35 @@
 
+import bezier from 'bezier-easing';
+
 import * as Viewer from '../../viewer';
 import * as GX_Material from '../../gx/gx_material';
 import * as RARC from '../rarc';
 import * as JPA from '../../Common/JSYSTEM/JPA';
+import * as Yaz0 from '../../Common/Compression/Yaz0';
+
+import * as UI from '../../ui';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, leftPad } from '../../util';
-import { J3DModelInstanceSimple, BMDModelMaterialData } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
+import { hexzero, leftPad, nArray } from '../../util';
+import { J3DModelInstanceSimple, BMDModelMaterialData, MaterialInstance } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
-import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
+import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass } from "./zww_scenes";
 import * as DZB from './DZB';
 import { ColorKind } from "../../gx/gx_render";
 import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgramDescriptorSimple, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendMode, GfxBlendFactor, GfxBufferUsage } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { colorFromRGBA } from '../../Color';
-import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
-import { computeModelMatrixSRT } from '../../MathHelpers';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult } from '../../Color';
+import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst, makeSortKeyTranslucent } from '../../gfx/render/GfxRenderer';
+import { CombineColorInput, RasColorChannelID, TevColorChan } from '../../gx/gx_enum';
+import { computeModelMatrixSRT, MathConstants, lerp } from '../../MathHelpers';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { preprocessProgramObj_GLSL } from '../../gfx/shaderc/GfxShaderCompiler';
+import { setAttachmentStateSimple } from '../../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillVec3v, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
 
 export interface ActorInfo { 
     relName: string; 
@@ -127,7 +138,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
-    
+
     public setVertexColorsEnabled(v: boolean): void {
         this.modelInstance.setVertexColorsEnabled(v);
         this.childObjects.forEach((child)=> child.setVertexColorsEnabled(v));
@@ -170,8 +181,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
         }
 
         const light = this.modelInstance.getGXLightReference(0);
-        GX_Material.lightSetWorldPosition(light, viewerInput.camera, 250, 250, 250);
-        GX_Material.lightSetWorldDirection(light, viewerInput.camera, -250, -250, -250);
+        GX_Material.lightSetWorldPosition(light, viewerInput.camera, -1e7, 1.2e7, -2e7);
         // Toon lighting works by setting the color to red.
         colorFromRGBA(light.Color, 1, 0, 0, 0);
         vec3.set(light.CosAtten, 1.075, 0, 0);
@@ -195,6 +205,7 @@ export type SymbolMap = { SymbolData: SymbolData[] };
 function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, layer: number): BMDObjectRenderer {
     const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
     const modelInstance = new J3DModelInstanceSimple(model);
+    aup(modelInstance);
     modelInstance.passMask = WindWakerPass.MAIN;
     context.extraTextures.fillExtraTextures(modelInstance);
     modelInstance.name = name;
@@ -464,6 +475,38 @@ class AGrass implements ActorRel {
     }
 }
 
+class LinkThingRel implements ActorRel {
+    constructor(context: WindWakerRenderer, actor: PlacedActor) {
+        const modelCache = context.modelCache;
+        const roomRenderer = actor.roomRenderer;
+
+        const rarc = modelCache.getObjectData(`Link`);
+        const anm = modelCache.getObjectData(`LkAnm`);
+    
+        const model = modelCache.getModel(context.device, context.renderCache, rarc, `bdl/cl.bdl`);
+        const modelInstance = new J3DModelInstanceSimple(model);
+        aup(modelInstance);
+        modelInstance.passMask = WindWakerPass.MAIN;
+        context.extraTextures.fillExtraTextures(modelInstance);
+        const cl = new LinkThing(context.device, context.renderCache, modelInstance);
+        computeActorMatrix(cl.modelMatrix, actor);
+        setToNearestFloor(roomRenderer, cl.modelMatrix, cl.modelMatrix);
+        mat4.mul(cl.modelMatrix, roomRenderer.roomToWorldMatrix, cl.modelMatrix);
+        roomRenderer.objectRenderers.push(cl);
+        (async() => {
+            cl.bindANK1(BCK.parse(await Yaz0.decompress(anm.findFileData(`bcks/wait.bck`)!)));
+        })();
+        cl.layer = actor.layer;
+    
+        (window as any).cl = cl;
+    }
+
+    public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
+        context.modelCache.fetchObjectData(`Link`);
+        context.modelCache.fetchObjectData(`LkAnm`);
+    }
+}
+
 // The REL table maps .rel names to our implementations
 // @NOTE: Let's just keep this down here for now, for navigability
 interface ActorRel {
@@ -479,6 +522,8 @@ const kRelTable: { [relName: string]: ActorRelConstructor } = {
     'd_a_grass': AGrass,
     'd_a_ep': ATorch,
     'd_a_tbox': ATreasureChest,
+
+    'LinkThing': LinkThingRel,
 }
 
 export function requestArchiveForActor(renderer: WindWakerRenderer, actor: Actor): void {
@@ -545,8 +590,6 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
     // else if (actor.name === 'Akabe') return;
 }
 
-
-
 function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor) {
     const modelCache = renderer.modelCache;
     const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
@@ -558,6 +601,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
         const model = modelCache.getModel(renderer.device, cache, rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
+        aup(modelInstance);
         modelInstance.passMask = WindWakerPass.MAIN;
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = name;
@@ -2094,4 +2138,412 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     }
 
     return true;
+}
+
+function aup(modelInstance: J3DModelInstanceSimple): void {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        modelInstance.materialInstances[i].setAlphaWriteEnabled(false);
+}
+
+function setToNearestFloor(roomRenderer: WindWakerRoomRenderer, dstMatrix: mat4, localModelMatrix: mat4) {
+    mat4.getTranslation(scratchVec3a, localModelMatrix);
+    vec3.set(scratchVec3b, 0, -1, 0);
+    const found = DZB.raycast(scratchVec3b, roomRenderer.dzb, scratchVec3a, scratchVec3b);
+    if (found)
+        dstMatrix[13] = scratchVec3b[1];
+}
+
+function computeActorMatrix(m: mat4, actor: Actor): void {
+    computeModelMatrixSRT(m,
+        actor.scale[0], actor.scale[1], actor.scale[2],
+        0, actor.rotationY, 0,
+        actor.pos[0], actor.pos[1], actor.pos[2]);
+}
+
+class NormalArrowProgram {
+    public static ub_SceneParams = 0;
+
+    public both = `
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat4x3 u_BoneMatrix[1];
+    vec4 u_LightDirection;
+    vec4 u_Color[2];
+};
+`;
+
+    public vert: string = `
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec3 a_Normal;
+
+out vec3 v_Normal;
+
+void main() {
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Normal, 0.0)).xyz);
+}
+`;
+
+    public frag: string = `
+in vec3 v_Normal;
+
+void main() {
+    float t_LightIntensity = max(dot(v_Normal, normalize(u_LightDirection.xyz)), 0.0);
+    vec4 t_Color = mix(u_Color[0], u_Color[1], t_LightIntensity);
+    gl_FragColor.rgba = t_Color;
+}
+`;
+}
+
+function modm(n: number, a: number, m: number): number {
+    if (n >= a+m)
+        return a+(n-a)%m;
+    else
+        return n;
+}
+
+class NormalArrowData {
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    @UI.dfHide()
+    private indexCount: number;
+    private program: GfxProgramDescriptorSimple;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+
+    public arrowColor: Color = colorNew(0.8, 1.0, 1.5);
+    @UI.dfRange(0, 10, 0.01)
+    public baseScale = 0.3;
+    @UI.dfRange(3, 24, 1)
+    private numSegments = 16;
+    @UI.dfRange(0, 100, 0.01)
+    private tailHeight = 10;
+    @UI.dfRange(0, 100, 0.01)
+    private coneHeight = 6;
+    @UI.dfRange(0, 32, 0.01)
+    private tailWidth = 1;
+    @UI.dfRange(0, 32, 0.01)
+    private coneWidth = 3;
+
+    constructor(private device: GfxDevice, private cache: GfxRenderCache) {
+        this.program = preprocessProgramObj_GLSL(device, new NormalArrowProgram());
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, }, // Position
+            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3*0x04, }, // Normal
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 6*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
+        this.inputLayout = cache.createInputLayout(device, {
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+        });
+
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        });
+
+        this.generate();
+
+        const observer = new Proxy(this, { set: (obj, prop, value) => {
+            (obj as any)[prop] = value;
+            if (prop === 'numSegments' || prop === 'tailHeight' || prop === 'coneHeight' || prop === 'tailWidth' || prop === 'coneWidth')
+                this.generate();
+            return true;
+        }});
+        return observer;
+    }
+
+    private generate(): void {
+        const numSegments = this.numSegments;
+        const tailHeight = this.tailHeight;
+        const coneHeight = this.coneHeight;
+        const tailWidth = this.tailWidth;
+        const coneWidth = this.coneWidth;
+
+        const vertexData = new Float32Array((numSegments * 4) * 6);
+        const indexData = new Uint16Array(numSegments * 5 * 3);
+        this.indexCount = indexData.length;
+
+        const y0 = 0, y1 = tailHeight, y2 = y1 + coneHeight;
+
+        let offs: number;
+
+        for (let i = 0; i < numSegments; i++) {
+            const theta = MathConstants.TAU * (i / numSegments);
+            const sin = Math.sin(theta), cos = Math.cos(theta);
+
+            // tail bottom
+            const tailBottomIdx = (numSegments * 0 + i);
+            offs = tailBottomIdx * 6;
+            vertexData[offs++] = y0;
+            vertexData[offs++] = cos * tailWidth;
+            vertexData[offs++] = sin * tailWidth;
+            // normal
+            vertexData[offs++] = 0;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
+
+            // tail top
+            const tailTopIdx = (numSegments * 1 + i);
+            offs = tailTopIdx * 6;
+            vertexData[offs++] = y1;
+            vertexData[offs++] = cos * tailWidth;
+            vertexData[offs++] = sin * tailWidth;
+            // normal
+            vertexData[offs++] = 0;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
+
+            // cone bottom
+            const coneBottomIdx = (numSegments * 2 + i);
+            offs = coneBottomIdx * 6;
+            vertexData[offs++] = y1;
+            vertexData[offs++] = cos * coneWidth;
+            vertexData[offs++] = sin * coneWidth;
+            // normal
+            vertexData[offs++] = 0;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
+            // cone top
+            const coneTopIdx = (numSegments * 3 + i);
+            offs = coneTopIdx * 6;
+            vertexData[offs++] = y2;
+            vertexData[offs++] = 0;
+            vertexData[offs++] = 0;
+            // normal
+            vertexData[offs++] = 0.6;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
+
+            // tail triangles
+            offs = ((numSegments * 0 * 2) + (i * 2)) * 3;
+            indexData[offs++] = tailBottomIdx + 0;
+            indexData[offs++] = tailTopIdx + 0;
+            indexData[offs++] = modm(tailBottomIdx + 1, numSegments*0, numSegments);
+            indexData[offs++] = modm(tailBottomIdx + 1, numSegments*0, numSegments);
+            indexData[offs++] = tailTopIdx + 0;
+            indexData[offs++] = modm(tailTopIdx + 1, numSegments*1, numSegments);
+            // shield triangles
+            offs = ((numSegments * 1 * 2) + (i * 2)) * 3;
+            indexData[offs++] = tailTopIdx + 0;
+            indexData[offs++] = coneBottomIdx + 0;
+            indexData[offs++] = modm(tailTopIdx + 1, numSegments*1, numSegments);
+            indexData[offs++] = modm(tailTopIdx + 1, numSegments*1, numSegments);
+            indexData[offs++] = coneBottomIdx + 0;
+            indexData[offs++] = modm(coneBottomIdx + 1, numSegments*2, numSegments);
+            // cone triangles
+            offs = ((numSegments * 2 * 2) + (i * 1)) * 3;
+            indexData[offs++] = coneBottomIdx + 0;
+            indexData[offs++] = coneTopIdx + 0;
+            indexData[offs++] = modm(coneBottomIdx + 1, numSegments*2, numSegments);
+        }
+
+        const device = this.device, cache = this.cache;
+
+        if (this.vertexBuffer !== undefined)
+            device.destroyBuffer(this.vertexBuffer);
+        if (this.indexBuffer !== undefined)
+            device.destroyBuffer(this.indexBuffer);
+        if (this.inputState !== undefined)
+            device.destroyInputState(this.inputState);
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
+    }
+
+    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+        const gfxProgram = cache.createProgramSimple(device, this.program);
+        renderInst.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
+        renderInst.setGfxProgram(gfxProgram);
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.drawIndexes(this.indexCount);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
+    }
+}
+
+const aeanim = bezier(0.8, 0.0, 0.2, 1.0);
+
+type Callback = (t: number) => boolean | void;
+
+function animate(duration: number, callback: Callback): Promise<void> {
+    const begin = window.performance.now();
+    let time = begin;
+    return new Promise((resolve, reject) => {
+        const cb = (nt: number) => {
+            time = (nt - begin);
+            const t = time / duration;
+            if (t > 1.0)
+                resolve();
+            else if (callback(t) === false)
+                resolve();
+            else
+                requestAnimationFrame(cb);
+        };
+        requestAnimationFrame(cb);
+    });
+}
+
+function wait(duration: number): Promise<void> {
+    return animate(duration, () => {});
+}
+
+const posArr = nArray(1024, () => vec3.create());
+const nrmArr = nArray(1024, () => vec3.create());
+
+const enum LinkMatMode { vlight, toonify, paletteify }
+const scratchColor = colorNewCopy(White);
+const scratchMatrix = mat4.create();
+class LinkThing extends BMDObjectRenderer {
+    public bodyMatInsts: MaterialInstance[] = [];
+    private wireDepth = 0.0;
+    private posAmt = 0.0;
+    private posTime = 0.0;
+    private txcAmt = 0.0;
+    private colorAmt = 0.0;
+    private normalArrowData: NormalArrowData;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, modelInstance: J3DModelInstanceSimple) {
+        super(modelInstance);
+
+        this.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+
+        this.setupDam('eyeL');
+        this.setupDam('eyeR');
+        this.setupDam('mayuL');
+        this.setupDam('mayuR');
+
+        this.bodyMatInsts = this.modelInstance.materialInstances.filter((g) => !g.name.startsWith('eye') && !g.name.startsWith('mayu'));
+
+        this.normalArrowData = new NormalArrowData(device, cache);
+        this.normalArrowData.baseScale = 0.0;
+    }
+
+    private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
+        const m = inst.materialHelper.material;
+        m.tevStages.length = 1;
+        if (mode === LinkMatMode.vlight) {
+            // Vertex Lighting.
+            m.tevStages[0].colorInA = CombineColorInput.ZERO;
+            m.tevStages[0].colorInB = CombineColorInput.ONE;
+            m.tevStages[0].colorInC = CombineColorInput.RASC;
+            m.tevStages[0].channelId = RasColorChannelID.COLOR0A0;
+            m.tevStages[0].rasSwapTable = [TevColorChan.R, TevColorChan.R, TevColorChan.R, TevColorChan.R];
+        } else if (mode === LinkMatMode.toonify) {
+            // Toonification
+            m.tevStages[0].colorInA = CombineColorInput.ZERO;
+            m.tevStages[0].colorInB = CombineColorInput.ONE;
+            m.tevStages[0].colorInC = CombineColorInput.TEXC;
+        } else if (mode === LinkMatMode.paletteify) {
+            m.tevStages[0].colorInA = CombineColorInput.C0;
+            m.tevStages[0].colorInB = CombineColorInput.KONST;
+            m.tevStages[0].colorInC = CombineColorInput.TEXC;
+        }
+        inst.materialHelper.createProgram();
+    }
+
+    public setMode(mode: LinkMatMode): void {
+        this.bodyMatInsts.forEach((v) => this.patchMat(v, mode));
+    }
+
+    private prepareToRenderArrow(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelViewMatrix: mat4): void {
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.filterKey = WindWakerPass.MAIN;
+        renderInst.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT + 5);
+        this.normalArrowData.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
+        const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(d, offs, modelViewMatrix);
+        offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
+        colorMult(scratchColor, this.normalArrowData.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0]);
+        offs += fillColor(d, offs, scratchColor);
+        colorMult(scratchColor, this.normalArrowData.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0]);
+        offs += fillColor(d, offs, scratchColor);
+    }
+
+    private prepareToRenderArrows(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, i: number): void {
+        const nv = this.modelInstance.shapeInstances[i].skinCPU(posArr, nrmArr, this.modelInstance.shapeInstanceState);
+        const scale = this.normalArrowData.baseScale;
+        for (let i = 0; i < nv; i++) {
+            const p = posArr[i];
+            const n = nrmArr[i];
+            const yaw = Math.atan2(n[1], n[0]);
+            const pitch = Math.atan2(n[2], Math.hypot(n[0], n[1]));
+            computeModelMatrixSRT(scratchMatrix,
+                scale, scale, scale,
+                0, -pitch, yaw,
+                p[0], p[1], p[2]);
+            this.prepareToRenderArrow(device, renderInstManager, viewerInput, scratchMatrix);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const l7 = this.modelInstance.getGXLightReference(7);
+        l7.DistAtten[0] = viewerInput.time / 1000;
+        l7.DistAtten[1] = this.posAmt;
+        l7.DistAtten[2] = this.posTime;
+        l7.CosAtten[0] = 1.0 - this.wireDepth;
+        l7.CosAtten[1] = this.colorAmt;
+        l7.CosAtten[2] = this.txcAmt;
+
+        super.prepareToRender(device, renderInstManager, viewerInput);
+
+        this.prepareToRenderArrows(device, renderInstManager, viewerInput, 0);
+        this.prepareToRenderArrows(device, renderInstManager, viewerInput, 1);
+        this.prepareToRenderArrows(device, renderInstManager, viewerInput, 2);
+        this.prepareToRenderArrows(device, renderInstManager, viewerInput, 4);
+    }
+
+    private setupDam(pref: string): void {
+        const matInstA = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damA`)!;
+        const matInstB = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damB`)!;
+        // Needs to render before Link.
+        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
+        matInstA.setColorWriteEnabled(false);
+        matInstA.setAlphaWriteEnabled(true);
+        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+        matInstB.setColorWriteEnabled(false);
+        matInstB.setAlphaWriteEnabled(true);
+    }
+
+    public async animate(): Promise<void> {
+        /*
+        await animate(1000, (t) => {
+            this.wireDepth = lerp(0.7, 1.0, aeanim(t));
+        });
+
+        await wait(1000);
+        */
+
+        this.posAmt = 10.0;
+        await animate(2000, (t) => {
+            this.posTime = lerp(0.2, 2.8, t);
+        });
+        this.posAmt = 0.0;
+
+        await animate(2000, (t) => {
+            this.colorAmt = t;
+        });
+
+        await animate(2000, (t) => {
+            this.colorAmt = 1.0 - t;
+        });
+    }
 }

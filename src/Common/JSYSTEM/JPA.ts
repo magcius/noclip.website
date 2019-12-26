@@ -36,7 +36,7 @@ import { TextureMapping } from "../../TextureHolder";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
 import { BTIData, BTI } from "./JUTTexture";
 
-const SORT_PARTICLES = false;
+const SORT_PARTICLES = true;
 
 //#region JPA Engine
 export interface JPAResourceRaw {

@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
@@ -135,8 +135,24 @@ export function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): vo
     m[15] = 9999.0;
 }
 
+function transformMat4_1(dst: vec3, m: mat4): void {
+    const x = dst[0], y = dst[1], z = dst[2];
+    dst[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]);
+    dst[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]);
+    dst[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]);
+}
+
+function transformMat4_0(dst: vec3, m: mat4): void {
+    const x = dst[0], y = dst[1], z = dst[2];
+    dst[0] = (m[0] * x + m[4] * y + m[8] * z);
+    dst[1] = (m[1] * x + m[5] * y + m[9] * z);
+    dst[2] = (m[2] * x + m[6] * y + m[10] * z);
+}
+
 const scratchModelViewMatrix = mat4.create();
 const packetParams = new PacketParams();
+
+const matrixTable: mat4[] = [];
 export class ShapeInstance {
     public visible: boolean = true;
 
@@ -206,6 +222,72 @@ export class ShapeInstance {
         }
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public skinCPU(dstPos: vec3[], dstNrm: vec3[], shapeInstanceState: ShapeInstanceState): number {
+        let vtxCount = 0;
+        for (let i = 0; i < this.shapeData.shape.mtxGroups.length; i++)
+            vtxCount += this.shapeData.shapeHelpers[i].loadedVertexData.totalVertexCount;
+
+        assert(dstPos.length > vtxCount);
+        assert(dstNrm.length > vtxCount);
+
+        let outIdx = 0;
+        for (let i = 0; i < this.shapeData.shape.mtxGroups.length; i++) {
+            const vl = this.shapeData.shapeHelpers[i].loadedVertexLayout;
+            const nrm = vl.vertexAttributeLayouts.find((g) => g.vtxAttrib === 10)!;
+            if (nrm === undefined)
+                continue;
+
+            const mtxGroup = this.shapeData.shape.mtxGroups[i];
+
+            for (let j = 0; j < mtxGroup.useMtxTable.length; j++) {
+                const matrixIndex = mtxGroup.useMtxTable[j];
+
+                // Leave existing matrix.
+                if (matrixIndex === 0xFFFF)
+                    continue;
+
+                matrixTable[j] = shapeInstanceState.drawViewMatrixArray[matrixIndex];
+            }
+
+            const pos = vl.vertexAttributeLayouts.find((g) => g.vtxAttrib === 9)!;
+            assert(pos !== undefined);
+
+            const pn = vl.vertexAttributeLayouts.find((g) => g.vtxAttrib === 0);
+
+            const vd = this.shapeData.shapeHelpers[i].loadedVertexData;
+            const view = new DataView(vd.vertexBuffers[0]);
+
+            let mo = pn !== undefined ? pn.bufferOffset : 0;
+            let po = pos.bufferOffset;
+            let no = nrm.bufferOffset;
+            const stride = vl.vertexBufferStrides[0];
+            for (let j = 0; j < vd.totalVertexCount; j++) {
+                const pnmtxidx = pn !== undefined ? (view.getUint8(mo) / 3) : 0;
+                const mtx = matrixTable[pnmtxidx];
+
+                const px = view.getFloat32(po + 0, true);
+                const py = view.getFloat32(po + 4, true);
+                const pz = view.getFloat32(po + 8, true);
+
+                const nx = view.getFloat32(no + 0, true);
+                const ny = view.getFloat32(no + 4, true);
+                const nz = view.getFloat32(no + 8, true);
+
+                vec3.set(dstPos[outIdx], px, py, pz);
+                transformMat4_1(dstPos[outIdx], mtx);
+                vec3.set(dstNrm[outIdx], nx, ny, nz);
+                transformMat4_0(dstNrm[outIdx], mtx);
+                outIdx++;
+
+                mo += stride;
+                po += stride;
+                no += stride;
+            }
+        }
+
+        return vtxCount;
     }
 }
 
@@ -333,7 +415,7 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
-function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
+export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
     let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
     if (en)
         colorWriteMask |= bits;
@@ -375,8 +457,12 @@ export class MaterialInstance {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.materialData.material.translucent)
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer, useTransparent: boolean = true): void {
+        if (useTransparent && this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
@@ -1055,9 +1141,9 @@ export class J3DModelInstance {
             this.materialInstances[i].setMaterialHacks(materialHacks);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: GfxRendererLayer, useTransparent: boolean = true): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
+            this.materialInstances[i].setSortKeyLayer(layer, useTransparent);
     }
 
     /**

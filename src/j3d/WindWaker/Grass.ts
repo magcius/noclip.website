@@ -3,7 +3,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists, nArray } from '../../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxColorWriteMask } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { SymbolMap, SymbolData } from './Actors';
 import { WindWakerRenderer } from './zww_scenes';
@@ -21,6 +21,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../../viewer';
 import { colorCopy, colorFromRGBA } from '../../Color';
+import { setChanWriteEnabled } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 
 // @TODO: This belongs somewhere else
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
@@ -188,18 +189,21 @@ class FlowerModel {
 
         displayListRegistersRun(matRegisters, l_matDL);
         this.whiteMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL'));
+        setChanWriteEnabled(this.whiteMaterial, GfxColorWriteMask.ALPHA, false);
         const whiteTex = createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
         this.whiteTextureData = new BTIData(device, cache, whiteTex);
         this.whiteTextureData.fillTextureMapping(this.whiteTextureMapping);
 
         displayListRegistersRun(matRegisters, l_matDL2);
         this.pinkMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL2'));
+        setChanWriteEnabled(this.pinkMaterial, GfxColorWriteMask.ALPHA, false);
         const pinkTex = createTexture(matRegisters, l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
         this.pinkTextureData = new BTIData(device, cache, pinkTex);
         this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping);
 
         displayListRegistersRun(matRegisters, l_matDL3);
         this.bessouMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL3'));
+        setChanWriteEnabled(this.bessouMaterial, GfxColorWriteMask.ALPHA, false);
         const bessouTexture = createTexture(matRegisters, l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
         this.bessouTextureData = new BTIData(device, cache, bessouTexture);
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
@@ -552,6 +556,7 @@ class TreeModel {
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
         this.woodMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        setChanWriteEnabled(this.woodMaterial, GfxColorWriteMask.ALPHA, false);
         const woodTexture = createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX');
         this.woodTextureData = new BTIData(device, cache, woodTexture);
         this.woodTextureData.fillTextureMapping(this.woodTextureMapping);
@@ -562,6 +567,7 @@ class TreeModel {
         const shadowMat = parseMaterial(matRegisters, 'd_tree::l_shadowMatDL');
 
         this.shadowMaterial = new GXMaterialHelperGfx(shadowMat);
+        setChanWriteEnabled(this.shadowMaterial, GfxColorWriteMask.ALPHA, false);
         const shadowTexture = createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX');
         this.shadowTextureData = new BTIData(device, cache, shadowTexture);
         this.shadowTextureData.fillTextureMapping(this.shadowTextureMapping);
@@ -895,12 +901,14 @@ class GrassModel {
 
         displayListRegistersRun(matRegisters, l_matDL);
         this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_matDL'));
+        setChanWriteEnabled(this.grassMaterial, GfxColorWriteMask.ALPHA, false);
         const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
         this.grassTextureData = new BTIData(device, cache, grassTexture);
         this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
 
         displayListRegistersRun(matRegisters, l_Vmori_matDL);
         this.vmoriMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
+        setChanWriteEnabled(this.grassMaterial, GfxColorWriteMask.ALPHA, false);
         const vmoriTexture = createTexture(matRegisters, l_K_kusa_00TEX, 'l_K_kusa_00TEX');
         this.vmoriTextureData = new BTIData(device, cache, vmoriTexture);
         this.vmoriTextureData.fillTextureMapping(this.vmoriTextureMapping);

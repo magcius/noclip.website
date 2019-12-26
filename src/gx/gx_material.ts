@@ -5,7 +5,7 @@ import * as GX from './gx_enum';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice, GfxVendorInfo } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
@@ -14,6 +14,7 @@ import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/
 import { MathConstants } from '../MathHelpers';
 import { preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 import { DisplayListRegisters } from './gx_displaylist';
+import { DeviceProgram } from '../Program';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -84,6 +85,10 @@ export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, 
 
 export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
     return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetViewPosition(light: Light, v: vec3): void {
+    vec3.set(light.Position, v[0], v[1], -v[2]);
 }
 
 export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
@@ -364,7 +369,7 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export class GX_Program {
+export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
@@ -372,7 +377,9 @@ export class GX_Program {
     public name: string;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
+        super();
         this.name = material.name;
+        this.generateShaders();
     }
 
     private generateFloat(v: number): string {
@@ -1105,17 +1112,26 @@ export class GX_Program {
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    public generateShaders(device: GfxDevice): GfxProgramDescriptorSimple {
+    private generateWire(): string {
+return `
+    vec3 t_BaryWire = v_Color1.rgb / (fwidth(v_Color1.rgb) * 0.5);
+    if (!any(lessThan(t_BaryWire, vec3(1.5))))
+        discard;
+`;
+    }
+
+    public generateShaders(): void {
         const bindingsDefinition = generateBindingsDefinition(this.material);
 
         const both = `
 // ${this.material.name}
-precision mediump float;
+precision highp float;
 ${bindingsDefinition}
 
 varying vec3 v_Position;
 varying vec4 v_Color0;
-varying vec4 v_Color1;
+varying vec4 v_Color1; // bary
+varying vec4 v_Color2; // extra tint
 varying vec3 v_TexCoord0;
 varying vec3 v_TexCoord1;
 varying vec3 v_TexCoord2;
@@ -1126,11 +1142,18 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        const vendorInfo = device.queryVendorInfo();
-
-        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', `
+        this.vert = `
 ${both}
 ${this.generateVertAttributeDefs()}
+
+vec3 Bary() {
+    int m = gl_VertexID % 3;
+    float t_WireBase = -u_LightParams[7].CosAtten.x;
+    float v0 = ((m == 0) ? 1.0 : 0.0) + t_WireBase;
+    float v1 = ((m == 1) ? 1.0 : 0.0) + t_WireBase;
+    float v2 = ((m == 2) ? 1.0 : 0.0) + t_WireBase;
+    return vec3(v0, v1, v2);
+}
 
 Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
     if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
@@ -1145,6 +1168,36 @@ float ApplyCubic(vec3 t_Coeff, float t_Value) {
     return max(dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value)), 0.0);
 }
 
+float hash( in uint n )
+{
+    // integer hash copied from Hugo Elias
+	n = (n<<13U)^n; 
+    n = n*(n*n*15731U+789221U)+1376312589U;
+    return float(n&uvec3(0x0fffffffU))/float(0x0fffffff);
+}
+
+float bnoise( in float x )
+{
+    // setup    
+    float i = floor(x);
+    float f = fract(x);
+    float s = sign(fract(x/2.0)-0.5);
+    
+    // use some hash to create a random value k in [0..1] from i
+    float k = hash(uint(i));
+
+    // quartic polynomial
+    return s*f*(f-1.0)*((16.0*k-4.0)*f*(f-1.0)-1.0);
+}
+
+float pulse(in float time) {
+    return sin(clamp(time, 0.0, 1.0) * 3.1415);
+}
+
+vec3 posnoise(in vec3 pos, in float time) {
+    return vec3(bnoise(pos.x + time), bnoise(pos.y + time), bnoise(pos.z + time));
+}
+
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
@@ -1156,11 +1209,22 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
+
+    float t_Key = (-t_Position.x + t_Position.y) / 100.0 - 1.0;
+
+    float t_Time = u_LightParams[7].DistAtten.x;
+    float t_PosAnimTime = u_LightParams[7].DistAtten.z;
+    t_Position.xyz += (t_Normal * posnoise(a_Position, t_Time * 10.0)) * pulse(t_PosAnimTime + t_Key) * u_LightParams[7].DistAtten.y;
+    v_TexCoord0.xy += (vec2(bnoise(a_Position.x + t_Time), bnoise(a_Position.y + t_Time))) * u_LightParams[7].CosAtten.z;
+    v_Color2.rgb = vec3(1.0) + (posnoise(a_Position, t_Time * 3.0) * u_LightParams[7].CosAtten.y);
+    v_Color2.a = 1.0;
+
+    v_Color1 = vec4(Bary(), 1.0);
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
-`);
+`;
 
-        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', `
+        this.frag = `
 ${both}
 ${this.generateTexCoordGetters()}
 
@@ -1200,12 +1264,12 @@ ${this.generateTevStages()}
 
 ${this.generateTevStagesLastMinuteFixup()}
     t_TevOutput = TevOverflow(t_TevOutput);
+    t_TevOutput.rgb *= v_Color2.rgb;
 ${this.generateAlphaTest()}
     gl_FragColor = t_TevOutput;
+${this.generateWire()}
 }
-`);
-
-        return { preprocessedVert, preprocessedFrag };
+`;
     }
 }
 // #endregion

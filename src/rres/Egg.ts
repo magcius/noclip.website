@@ -7,6 +7,7 @@ import * as GX from '../gx/gx_enum';
 import { vec3 } from "gl-matrix";
 import { LightObj, LightSetting } from "./brres";
 import { clamp } from "../MathHelpers";
+import { lightSetViewPosition } from "../gx/gx_material";
 
 // EGG is a helper library for NintendoWare, used by Wii Sports, Mario Kart: Wii,
 // Wii Sports Resort, and probably others.
@@ -118,16 +119,16 @@ export class EggBinaryLight {
         obj.enable();
 
         if (this.lightType === EggBinaryLightType.POINT) {
-            vec3.copy(obj.light.Position, this.pos);
+            lightSetViewPosition(obj.light, this.pos);
             vec3.set(obj.light.Direction, 0, 0, 0);
         } else if (this.lightType === EggBinaryLightType.DIRECTIONAL) {
             const posX = (this.aim[0] - this.pos[0]) * -1e10;
             const posY = (this.aim[1] - this.pos[1]) * -1e10;
             const posZ = (this.aim[2] - this.pos[2]) * -1e10;
-            vec3.set(obj.light.Position, posX, posY, posZ);
+            vec3.set(obj.light.Position, posX, posY, -posZ);
             vec3.set(obj.light.Direction, 0, 0, 0);
         } else if (this.lightType === EggBinaryLightType.SPOT) {
-            vec3.copy(obj.light.Position, this.pos);
+            lightSetViewPosition(obj.light, this.pos);
             vec3.copy(obj.light.Direction, this.aim);
         }
 

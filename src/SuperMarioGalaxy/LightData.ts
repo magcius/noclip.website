@@ -2,7 +2,7 @@
 import { vec3 } from "gl-matrix";
 import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
-import { Light } from "../gx/gx_material";
+import { Light, lightSetViewPosition } from "../gx/gx_material";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
