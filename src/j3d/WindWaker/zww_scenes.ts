@@ -1496,6 +1496,12 @@ class SceneDesc {
             b00.bindTTK1(parseBTK(rarc, `btk/ghrwpb00.btk`));
             b00.bindTRK1(parseBRK(rarc, `brk/ghrwpb00.brk`));
         }
+        // Forsaken Fortress warp to Ganon's tower
+        else if (name === 'Warpmj') {
+            const rarc = await fetchArchive(`Gmjwp.arc`);
+            const m = buildModel(rarc, `bdlm/gmjwp00.bdl`);
+            m.bindTTK1(parseBTK(rarc, `btk/gmjwp00.btk`));
+        }
         // Outset Island: Jabun's barrier (six parts)
         else if (name === 'Ajav') fetchArchive(`Ajav.arc`).then((rarc) => {
             // Seems like there's one texture that's shared for all parts in ajava.bdl
@@ -2153,8 +2159,74 @@ class SceneDesc {
             buildModel(rarc, `bdl/hhbot1.bdl`);
             buildModel(rarc, `bdl/hhbot2.bdl`);
         });
+        // Spike Trap
+        else if (name === 'Trap') fetchArchive(`Trap.arc`).then((rarc) => buildModel(rarc, `bdlm/htora1.bdl`));
+        // Floor Spikes
+        else if (name === 'Htoge1') fetchArchive(`Htoge1.arc`).then((rarc) => buildModel(rarc, `bdl/htoge1.bdl`));
         // Grapple Point
         else if (name === 'Kui') fetchArchive(`Kui.arc`).then((rarc) => buildModel(rarc, `bdl/obi_ropetag.bdl`));
+        // Various pushable things
+        else if (
+            name === 'osiBLK0' || name === 'osiBLK1' || name === 'Kkiba' ||
+            name === 'Hseki2'  || name === 'Hseki7'  || name === 'Mmrr' ||
+            name === 'MkieBB'  || name === 'Ecube'   || name === 'Hjump1' ||
+            name === 'Hbox1'   || name === 'MpwrB'   || name === 'DBLK0' ||
+            name === 'DBLK1'   || name === 'DKkiba'  || name === 'Hbox2'
+        ) {
+            const type = (parameters & 0x0F000000) >> 24;
+            let rarc;
+            switch (type) {
+            case 0:
+            case 4:
+            case 8:
+            case 9:
+                // Wooden Crate
+                rarc = await fetchArchive(`Kkiba_00.arc`);
+                buildModel(rarc, `bdl/kkiba_00.bdl`);
+                break;
+            case 1:
+            case 11:
+                // Black Box
+                rarc = await fetchArchive(`Osiblk.arc`);
+                buildModel(rarc, `bdl/obm_osihikiblk1.bdl`);
+                break;
+            case 2:
+                // Black Box With Statue on Top
+                rarc = await fetchArchive(`Osiblk.arc`);
+                buildModel(rarc, `bdl/obm_osihikiblk2.bdl`);
+                break;
+            case 3:
+                // Big Black Box
+                rarc = await fetchArchive(`MpwrB.arc`);
+                buildModel(rarc, `bdl/mpwrb.bdl`);
+                break;
+            case 5:
+                // Golden Crate
+                rarc = await fetchArchive(`Hbox2.arc`);
+                buildModel(rarc, `bdl/hbox2.bdl`);
+                break;
+            case 6:
+                // Pushable Metal Box
+                rarc = await fetchArchive(`Hjump.arc`);
+                buildModel(rarc, `bdl/hbox1.bdl`);
+                break;
+            case 7:
+                // Pushable Metal Box With Spring
+                rarc = await fetchArchive(`Hjump.arc`);
+                buildModel(rarc, `bdl/hjump1.bdl`);
+                break;
+            case 10:
+                // Mirror
+                rarc = await fetchArchive(`Mmirror.arc`);
+                buildModel(rarc, `bdlm/mmrr.bdl`).bindTTK1(parseBTK(rarc, `btk/mmrr.btk`));
+                break;
+            case 12:
+                // Mossy Black Box
+                rarc = await fetchArchive(`Ecube.arc`);
+                buildModel(rarc, `bdl/ecube.bdl`);
+                break;
+            }
+        }
         // Korok Tree
         else if (name === 'FTree') fetchArchive(`Vmr.arc`).then((rarc) => buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`)));
         // Animals
