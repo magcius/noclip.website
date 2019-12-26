@@ -36,6 +36,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
+import { AABB } from '../../Geometry';
 
 // Here are the original offset positions for all flowers/grass/trees directly from the top of the daGrass_create() function in d_a_grass.rel
 // They are split into 8 different spawn patterns, which is selected by the lowest byte of the grass actor params.
@@ -2177,8 +2178,95 @@ class SceneDesc {
         else if (name === 'nezumi') fetchArchive(`Nz.arc`).then((rarc) => buildModel(rarc, `bdlm/nz.bdl`));
         else if (name === 'moZOU') fetchArchive(`Mozo.arc`).then((rarc) => buildModel(rarc, `bdlm/moz.bdl`));
         else if (name === 'MtoriSU') fetchArchive(`MtoriSU.arc`).then((rarc) => buildModel(rarc, `bdl/mtorisu.bdl`));
-        else if (name === 'Tn') fetchArchive(`Tn.arc`).then((rarc) => buildModel(rarc, `bmdm/tn_main.bmd`).bindANK1(parseBCK(rarc, `bck/await1.bck`)));
-        else if (name === 'Stal') fetchArchive(`St.arc`).then((rarc) => buildModel(rarc, `bdlm/headb.bdl`));
+        // Darknut
+        else if (name === 'Tn') fetchArchive(`Tn.arc`).then(async (rarc) => {
+            const equipmentType = (auxParams1 & 0x00E0) >>> 5;
+            const armorColor = (parameters & 0x000000F0) >>> 4;
+            
+            const mainModel = buildModel(rarc, `bmdm/tn_main.bmd`);
+            const mainAnim = parseBCK(rarc, `bck/aniou1.bck`);
+            mainModel.bindTRK1(parseBRK(rarc, `brk/tn_main.brk`), animFrame(armorColor));
+
+            const weaponRarc = await fetchArchive(`Tkwn.arc`);
+            const swordModel = buildChildModel(weaponRarc, `bdlc/tn_ken1.bdl`);
+            swordModel.setParentJoint(mainModel, `j_tn_item_r1`);
+            mat4.translate(swordModel.modelMatrix, swordModel.modelMatrix, [0, 0, 85]);
+            
+            const armorModel = buildChildModel(rarc, `bmdm/tn_yoroi1.bmd`);
+            armorModel.setParentJoint(mainModel, `j_tn_mune1`);
+            armorModel.bindTRK1(parseBRK(rarc, `brk/tn_yoroi1.brk`), animFrame(armorColor));
+            // Translate to simulate the armor model being centered on the j_yoroi_main1 bone instead of tn_yoroi_allroot.
+            mat4.translate(armorModel.modelMatrix, armorModel.modelMatrix, [-120, 0, 0]);
+            mat4.rotateZ(armorModel.modelMatrix, armorModel.modelMatrix, Math.PI * 1.5);
+
+            // Rotate both the ears by 180 degrees on all anim frames so they're hidden inside the head instead of poking out of the helmet.
+            [30, 32].forEach((ear_joint_index) => {
+                const earJointAnimEntry = mainAnim.jointAnimationEntries[ear_joint_index];
+                for (let i = 0; i < earJointAnimEntry.rotationY.frames.length; i++) {
+                    const anim_frame = earJointAnimEntry.rotationY.frames[i];
+                    anim_frame.value += Math.PI;
+                }
+            });
+            if (equipmentType >= 2) { // Has shield
+                const shieldModel = buildChildModel(rarc, `bmdm/tn_tate1.bmd`);
+                shieldModel.setParentJoint(mainModel, `j_tn_item_l1`);
+                shieldModel.bindTRK1(parseBRK(rarc, `brk/tn_tate1.brk`), animFrame(armorColor));
+
+                const shieldAnim = parseBCK(rarc, `bck/atate_on1.bck`);
+                // If the Darknut has a shield, then the left arm joints (11-17) use anim atate_on1.bck, while the rest still use aniou1.bck.
+                for (let joint_index = 11; joint_index < 18; joint_index++) {
+                    mainAnim.jointAnimationEntries[joint_index] = shieldAnim.jointAnimationEntries[joint_index];
+                }
+            }
+            mainModel.bindANK1(mainAnim);
+
+            let helmetModel;
+            if (equipmentType == 1 || equipmentType == 3 || equipmentType >= 5) { // Has full face helmet
+                helmetModel = buildChildModel(rarc, `bmdm/tn_kabuto2.bmd`);
+                helmetModel.bindTRK1(parseBRK(rarc, `brk/tn_kabuto2.brk`), animFrame(armorColor));
+            } else {
+                helmetModel = buildChildModel(rarc, `bmdm/tn_kabuto1.bmd`);
+                helmetModel.bindTRK1(parseBRK(rarc, `brk/tn_kabuto1.brk`), animFrame(armorColor));
+            }
+            helmetModel.setParentJoint(mainModel, `j_tn_atama1`);
+
+            // TODO: The armor should look specular.
+
+            if (equipmentType >= 5) { // Has a cape
+                // TODO: Cape is procedurally animated. Also, the cape's textures are inside d_a_mant.rel.
+            }
+        });
+        // Stalfos
+        else if (name === 'Stal') fetchArchive(`St.arc`).then((rarc) => {
+            const skeletonModel = buildModel(rarc, `bdlm/st.bdl`);
+            skeletonModel.bindANK1(parseBCK(rarc, 'bck/wait.bck'));
+            buildChildModel(rarc, `bdlm/st_hara.bdl`).setParentJoint(skeletonModel, `hara`);
+            buildChildModel(rarc, `bdlm/st_mune.bdl`).setParentJoint(skeletonModel, `mune`);
+            buildChildModel(rarc, `bdlm/st_katal.bdl`).setParentJoint(skeletonModel, `kataL`);
+            buildChildModel(rarc, `bdlm/st_udel.bdl`).setParentJoint(skeletonModel, `udeL`);
+            buildChildModel(rarc, `bdlm/st_handl.bdl`).setParentJoint(skeletonModel, `handL`);
+            buildChildModel(rarc, `bdlm/st_yubi1l.bdl`).setParentJoint(skeletonModel, `yubi1L`);
+            buildChildModel(rarc, `bdlm/st_yubi2l.bdl`).setParentJoint(skeletonModel, `yubi2L`);
+            buildChildModel(rarc, `bdlm/st_katar.bdl`).setParentJoint(skeletonModel, `kataR`);
+            buildChildModel(rarc, `bdlm/st_uder.bdl`).setParentJoint(skeletonModel, `udeR`);
+            buildChildModel(rarc, `bdlm/st_handr.bdl`).setParentJoint(skeletonModel, `handR`);
+            buildChildModel(rarc, `bdlm/st_buki.bdl`).setParentJoint(skeletonModel, `buki`);
+            buildChildModel(rarc, `bdlm/st_yubi1r.bdl`).setParentJoint(skeletonModel, `yubi1R`);
+            buildChildModel(rarc, `bdlm/st_yubi2r.bdl`).setParentJoint(skeletonModel, `yubi2R`);
+            buildChildModel(rarc, `bdlm/st_kubi.bdl`).setParentJoint(skeletonModel, `kubi`);
+            buildChildModel(rarc, `bdlm/st_head.bdl`).setParentJoint(skeletonModel, `head`);
+            buildChildModel(rarc, `bdlm/st_ago.bdl`).setParentJoint(skeletonModel, `ago`);
+            buildChildModel(rarc, `bdlm/st_hat.bdl`).setParentJoint(skeletonModel, `hat`);
+            buildChildModel(rarc, `bdlm/st_kotuban.bdl`).setParentJoint(skeletonModel, `kotuban`);
+            buildChildModel(rarc, `bdlm/st_momol.bdl`).setParentJoint(skeletonModel, `momoL`);
+            buildChildModel(rarc, `bdlm/st_sunel.bdl`).setParentJoint(skeletonModel, `suneL`);
+            buildChildModel(rarc, `bdlm/st_asil.bdl`).setParentJoint(skeletonModel, `asiL`);
+            buildChildModel(rarc, `bdlm/st_momor.bdl`).setParentJoint(skeletonModel, `momoR`);
+            buildChildModel(rarc, `bdlm/st_suner.bdl`).setParentJoint(skeletonModel, `suneR`);
+            buildChildModel(rarc, `bdlm/st_asir.bdl`).setParentJoint(skeletonModel, `asiR`);
+            // Set a fake bbox for the main invisible skeleton model so it doesn't get culled when the camera isn't right on top of it.
+            skeletonModel.modelInstance.modelData.bbox = new AABB(-80, -80, -80, 80, 80, 80);
+        });
         else if (name === 'p_hat') fetchArchive(`Ph.arc`).then((rarc) => {
             buildModel(rarc, `bdlm/phb.bdl`).bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
             buildModel(rarc, `bdlm/php.bdl`).bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
