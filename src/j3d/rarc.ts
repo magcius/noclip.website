@@ -105,8 +105,9 @@ export function parse(buffer: ArrayBufferSlice): RARC {
         for (let i = 0; i < fileEntryCount; i++) {
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
-            const flags = view.getUint8(fileEntryIdx + 0x04);
-            const nameOffs = view.getUint16(fileEntryIdx + 0x06);
+            const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04);
+            const flags = (flagsAndNameOffs >>> 24) & 0xFF;
+            const nameOffs = flagsAndNameOffs & 0x00FFFFFF;
             const name = readString(buffer, strTableOffs + nameOffs, -1, true);
 
             const entryDataOffs = view.getUint32(fileEntryIdx + 0x08);

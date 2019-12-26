@@ -225,7 +225,6 @@ interface GeoContext {
 }
 
 function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
-    // TODO: figure out the unreferenced vertices
     const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
     // G_TF_BILERP
     rspState.gDPSetOtherModeH(12, 2, 0x2000);
@@ -334,8 +333,10 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
                 idx += 0x02;
             }
         } else if (cmd === 0x08) {
-            // Draw distance conditional test.
-            runGeoLayout(context, geoIdx + view.getUint32(geoIdx +  0x1C));
+            // LOD selection
+            const minDist = view.getFloat32(geoIdx + 0x0c);
+            if (minDist === 0) // only use high LOD parts
+                runGeoLayout(context, geoIdx + view.getUint32(geoIdx +  0x1C));
         } else if (cmd === 0x0A) {
             const vectorIndex = view.getInt16(geoIdx + 0x08);
             const boneID = view.getInt16(geoIdx + 0x0a);

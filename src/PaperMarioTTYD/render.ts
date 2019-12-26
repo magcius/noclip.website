@@ -86,13 +86,9 @@ class BackgroundBillboardRenderer {
         renderInst.setInputLayoutAndState(null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
-
-        // Set our texture bindings.
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        // Upload new buffer data.
-        let offs = renderInst.getUniformBufferOffset(BackgroundBillboardProgram.ub_Params);
+        let offs = renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
         const d = renderInst.mapUniformBufferF32(BackgroundBillboardProgram.ub_Params);
 
         // Extract yaw

@@ -8,7 +8,6 @@ import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { makeTextureFromImageData } from '../Fez/Texture';
 import { TextureMapping } from '../TextureHolder';
 import { nArray, getTextDecoder } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -41,6 +40,14 @@ function fetchPNG(path: string): Promise<ImageData> {
         };
     });
     return p;
+}
+
+function makeTextureFromImageData(device: GfxDevice, imageData: ImageData): GfxTexture {
+    const hostAccessPass = device.createHostAccessPass();
+    const texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageData.width, imageData.height, 1));
+    hostAccessPass.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
+    device.submitPass(hostAccessPass);
+    return texture;
 }
 
 interface ObjModel {

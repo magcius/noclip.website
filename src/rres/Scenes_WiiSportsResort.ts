@@ -231,12 +231,16 @@ class IslandSceneDesc implements Viewer.SceneDesc {
 
         const renderer = new WS2_Renderer(device, resourceSystem);
         renderer.mountRRES(device, 'Island/G3D/WS2_common_seatex.brres');
-        const island = renderer.mountRRES(device, 'Island/G3D/WS2_common_island.brres');
-        renderer.spawnModel(device, island, 'WS2_common_island');
-        renderer.spawnModel(device, island, 'WS2_common_vr');
-        const sea = renderer.spawnModel(device, island, 'WS2_common_sea');
-        sea.bindRRESAnimations(renderer.animationController, island, 'WS2_common_sea_nami');
-        sea.bindRRESAnimations(renderer.animationController, island, 'WS2_common_sea_B');
+        const rres = renderer.mountRRES(device, 'Island/G3D/WS2_common_island.brres');
+        const island = renderer.spawnModel(device, rres, 'WS2_common_island');
+        // Hide some LOD bones.
+        island.mdl0Model.mdl0.nodes[10].visible = false; // Island_16b_Model
+        island.mdl0Model.mdl0.nodes[12].visible = false; // Island_17b_Model
+        island.mdl0Model.mdl0.nodes[13].visible = false; // Island_17c_Model
+        renderer.spawnModel(device, rres, 'WS2_common_vr');
+        const sea = renderer.spawnModel(device, rres, 'WS2_common_sea');
+        sea.bindRRESAnimations(renderer.animationController, rres, 'WS2_common_sea_nami');
+        sea.bindRRESAnimations(renderer.animationController, rres, 'WS2_common_sea_B');
 
         for (let i = 0; i < pmp.length; i++) {
             if (!this.spawnObject(device, renderer, pmp[i]))

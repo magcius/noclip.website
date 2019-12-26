@@ -397,7 +397,7 @@ const sceneDescs = [
     new BrawlSceneDesc('adventure/420002a.pac', 'The Great Maze Save 2-1'),
     new BrawlSceneDesc('adventure/420002b.pac', 'The Great Maze Save 2-2'),
     new BrawlSceneDesc('adventure/420002c.pac', 'The Great Maze Save 2-3'),
-    new BrawlSceneDesc('adventure/420002d.pac', 'The Greaet Maze Save 2-4'),
+    new BrawlSceneDesc('adventure/420002d.pac', 'The Great Maze Save 2-4'),
     new BrawlSceneDesc('adventure/420002e.pac', 'The Great Maze Save 2-5'),
     new BrawlSceneDesc('adventure/420003a.pac', 'The Great Maze Stadium'),
     new BrawlSceneDesc('adventure/420005a.pac', 'adventure/420005a.pac'),

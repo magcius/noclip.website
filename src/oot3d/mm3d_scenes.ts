@@ -17,6 +17,7 @@ import { TransparentBlack } from '../Color';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { SceneContext } from '../SceneBase';
+import { MathConstants } from "../MathHelpers";
 
 const pathBase = `mm3d`;
 
@@ -648,6 +649,216 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(gar, `model/snowman.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/sm_wait.csab`));
         }
+        else if (actor.actorId === ActorId.En_Bb) {
+            const gar = await fetchArchive(`zelda_bb.gar.lzs`);
+            const b = buildModel(gar, `model/bubble.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/bb_fly.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Bombf) {
+            const gar = await fetchArchive(`zelda_bombf.gar.lzs`);
+            const b = buildModel(gar, `model/bm_flower_model.cmb`);
+            b.modelMatrix[13] += 10; // Adjust bomb height to get it out of the floor, same as OOT3d
+            b.setVertexColorScale(characterLightScale);
+            const c = buildModel(gar, `model/bm_leaf_model.cmb`);
+            c.setVertexColorScale(characterLightScale);
+            const d = buildModel(gar, `model/bm_leaf2_model.cmb`);
+            d.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Bubble) {
+            const gar = await fetchArchive(`zelda_bubble.gar.lzs`);
+            const b = buildModel(gar, `model/syabom.cmb`);
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Cow) {
+            const gar = await fetchArchive(`zelda_cow.gar.lzs`);
+            const b = buildModel(gar, `model/cow2.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/ust_daran.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Crow) {
+            const gar = await fetchArchive(`zelda_crow.gar.lzs`);
+            const b = buildModel(gar, `model/gue.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/df_flygue.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Daiku) {
+            const gar = await fetchArchive(`zelda_daiku.gar.lzs`);
+            const b = buildModel(gar, `model/disciple.cmb`);     
+            b.bindCSAB(parseCSAB(gar, `anim/dk2_turuwait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Karebaba) { // Assembled Deku Baba
+            const gar = await fetchArchive('zelda_dekubaba.gar.lzs');
+            const head = buildModel(gar, `model/dekubaba.cmb`, 0.01);
+            head.bindCSAB(parseCSAB(gar, `anim/db_P_kougeki.csab`));
+            head.modelMatrix[13] += +60;
+            head.modelMatrix[14] += +3;
+            head.setVertexColorScale(characterLightScale);
+            const bush = buildModel(gar, `model/db_ha_model.cmb`, 0.01);
+            bush.setVertexColorScale(characterLightScale);
+            const stem1 = buildModel(gar, `model/db_miki1_model.cmb`, 0.01);
+            stem1.modelMatrix[13] += +40;
+            mat4.rotateX(stem1.modelMatrix, stem1.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+            stem1.setVertexColorScale(characterLightScale);
+            const stem2 = buildModel(gar, `model/db_miki2_model.cmb`, 0.01);
+            stem2.modelMatrix[13] += +20;
+            mat4.rotateX(stem2.modelMatrix, stem2.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+            stem2.setVertexColorScale(characterLightScale);
+            const stem3 = buildModel(gar, `model/db_miki3_model.cmb`, 0.01);
+            mat4.rotateX(stem3.modelMatrix, stem3.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+            stem3.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Dekubaba) {
+            const zar = await fetchArchive(`zelda_dekubaba.gar.lzs`);
+            // The Deku Baba lies in hiding...
+            buildModel(zar, `model/db_ha_model.cmb`);
+        }
+            else if (actor.actorId === ActorId.En_Dodongo) {
+            const gar = await fetchArchive(`zelda_dodongo.gar.lzs`);
+            const b = buildModel(gar, `model/dodongo.cmb`, 0.03);
+            b.bindCSAB(parseCSAB(gar, `anim/da_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Firefly) {
+            const gar = await fetchArchive(`zelda_ff.gar.lzs`);
+            const b = buildModel(gar, `model/keith.cmb`,);
+            b.bindCSAB(parseCSAB(gar, `anim/firefly_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Guruguru) {
+            const gar = await fetchArchive(`zelda_fu.gar.lzs`);
+            const b = buildModel(gar, `model/windmillman.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/fu_mawasu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Fz) {
+            const gar = await fetchArchive(`zelda_fz.gar.lzs`);
+            const b = buildModel(gar, `model/frezad.cmb`);
+            b.setVertexColorScale(characterLightScale);
+        }
+        //else if (actor.actorId === ActorId.En_Dekunuts) { 
+        //    const gar = await fetchArchive(`zelda_hintnuts.gar.lzs`);
+        //    const b = buildModel(gar, `model/dekunuts.cmb`);
+        //    b.bindCSAB(parseCSAB(gar, `anim/dnh_wait.csab`));
+        //    b.setVertexColorScale(characterLightScale);
+        //}
+        //      Need to find the dark orange/red deku scrub for this actor
+        else if (actor.actorId === ActorId.En_Hs) {
+            const gar = await fetchArchive(`zelda_hs.gar.lzs`);
+            const b = buildModel(gar, `model/nadekuro.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/hs_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Kakasi) {
+            const gar = await fetchArchive(`zelda_ka.gar.lzs`);
+            const b = buildModel(gar, `model/strawman.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/ka_newwait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Kanban) {
+            const zar = await fetchArchive(`zelda_kanban.gar.lzs`);
+            buildModel(zar, `model/kanban_bo_bottom_model.cmb`);
+            buildModel(zar, `model/kanban_bo_center_model.cmb`);
+            buildModel(zar, `model/kanban_bo_top_model.cmb`);
+            buildModel(zar, `model/kanban_L_bottom_L_model.cmb`);
+            buildModel(zar, `model/kanban_L_bottom_R_model.cmb`);
+            buildModel(zar, `model/kanban_L_top_L_model.cmb`);
+            buildModel(zar, `model/kanban_L_top_R_model.cmb`);
+            buildModel(zar, `model/kanban_R_bottom_L_model.cmb`);
+            buildModel(zar, `model/kanban_R_bottom_R_model.cmb`);
+            buildModel(zar, `model/kanban_R_top_L_model.cmb`);
+            buildModel(zar, `model/kanban_R_top_R_model.cmb`);
+        }
+        else if (actor.actorId === ActorId.Obj_Lightswitch) {
+            const gar = await fetchArchive(`zelda_lightswitch.gar.lzs`);
+            const b = buildModel(gar, `model/switch_8_model.cmb`,0.1);
+            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.csab`));
+            b.setVertexColorScale(characterLightScale);
+            //buildModel(gar, `model/switch_8_fire1_model.cmb`,0.1);
+            //buildModel(gar, `model/switch_8_fire2_model.cmb`,0.1);
+            //the sun parts around the sun switch don't show up?
+        }
+        else if (actor.actorId === ActorId.En_Ms) {
+            const gar = await fetchArchive(`zelda_ms.gar.lzs`);
+            const b = buildModel(gar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/ms_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Niw) {
+            const gar = await fetchArchive(`zelda_nw.gar.lzs`);
+            const b = buildModel(gar, `model/chicken.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/nw_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Peehat) {
+            const gar = await fetchArchive(`zelda_ph.gar.lzs`);
+            const b = buildModel(gar, `model/peehat.cmb`);
+            b.setVertexColorScale(characterLightScale);
+            const t = buildModel(gar, `model/peehat_tail.cmb`);
+            t.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Poh) {
+            const gar = await fetchArchive(`zelda_po.gar.lzs`);
+            const p = buildModel(gar, `model/poh.cmb`);
+            p.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
+            p.setVertexColorScale(characterLightScale);
+            const l = buildModel(gar, `model/kantera.cmb`);
+            l.bindCSAB(parseCSAB(gar, `anim/po_wait.csab`));
+            l.setVertexColorScale(characterLightScale);
+            const s = buildModel(gar, `model/poh_soul_modelT.cmb`);
+            s.bindCMAB(parseCMAB(gar, `anim/poh_soul_modelT.cmab`));
+            s.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Rr) {
+            const gar = await fetchArchive(`zelda_rr.gar.lzs`);
+            const b = buildModel(gar, `model/likelike.cmb`,0.02);
+            b.bindCMAB(parseCMAB(gar, `misc/likelike.cmab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Sb) {
+            const gar = await fetchArchive(`zelda_sb.gar.lzs`);
+            const b = buildModel(gar, `model/shellblade.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/sb_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_St) {
+            const gar = await fetchArchive(`zelda_st.gar.lzs`);
+            const b = buildModel(gar, `model/staltula.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/st_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.Obj_Makekinsuta) {
+            const gar = await fetchArchive(`zelda_st.gar.lzs`);
+            const b = buildModel(gar, `model/staltula_gold.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/st_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        //else if (actor.actorId === ActorId.En_Si) {
+        ///    const gar = await fetchArchive(`zelda_st.gar.lzs`);
+        //    const b = buildModel(gar, `model/gi_sutaru_coin_model.cmb`);
+        //    b.bindCSAB(parseCSAB(gar, `anim/sb_matsu.csab`));
+        //    b.setVertexColorScale(characterLightScale);
+        //}   
+        //    Gold skulltula token, probably something spawned in and not normally part of a scene
+
+        else if (actor.actorId === ActorId.Obj_Syokudai) {
+            const gar = await fetchArchive(`zelda_syokudai.gar.lzs`);
+            buildModel(gar, `model/syokudai_model.cmb`);
+        } // Golden torch stand, are the other torch models used somewhere else?
+        else if (actor.actorId === ActorId.Obj_Tsubo) {
+            const gar = await fetchArchive(`zelda_tsubo.gar.lzs`);
+            buildModel(gar, `model/tubo2_model.cmb`,0.15);
+        }
+        else if (actor.actorId === ActorId.En_Tite) {
+            const gar = await fetchArchive(`zelda_tt.gar.lzs`);
+            const b = buildModel(gar, `model/tectite.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/tt_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+
+
+
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 2)} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
     }
 

@@ -1,8 +1,9 @@
 
+// Reversed depth support
+
 import { mat4 } from "gl-matrix";
 import { GfxCompareMode } from "../platform/GfxPlatform";
 
-// Utilities for depth reversal
 export const IS_DEPTH_REVERSED = true;
 
 export function reverseDepthForPerspectiveProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {

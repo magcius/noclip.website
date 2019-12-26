@@ -5,8 +5,6 @@
 
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { DeviceProgram } from "../../Program";
-import { Color } from "../../Color";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -86,7 +84,6 @@ export interface GfxVertexAttributeDescriptor {
     format: GfxFormat;
     bufferIndex: number;
     bufferByteOffset: number;
-    usesIntInShader?: boolean;
 }
 
 export interface GfxInputLayoutBufferDescriptor {
@@ -107,6 +104,7 @@ export interface GfxTextureDescriptor {
     numLevels: number;
 }
 
+// TODO(jstpierre): Should this be moved to ../helpers?
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     return { dimension, pixelFormat, width, height, depth, numLevels };
@@ -142,6 +140,15 @@ export interface GfxBindingsDescriptor {
     bindingLayout: GfxBindingLayoutDescriptor;
     uniformBufferBindings: GfxBufferBinding[];
     samplerBindings: GfxSamplerBinding[];
+}
+
+export interface GfxProgramDescriptorSimple {
+    preprocessedVert: string;
+    preprocessedFrag: string;
+}
+
+export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
+    ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
 }
 
 export interface GfxInputLayoutDescriptor {
@@ -184,7 +191,7 @@ export interface GfxAttachmentState {
 
 export interface GfxMegaStateDescriptor {
     attachmentsState: GfxAttachmentState[];
-    blendConstant: Color;
+    blendConstant: GfxColor;
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;
@@ -209,11 +216,18 @@ export interface GfxRenderPipelineDescriptor {
     sampleCount: number;
 }
 
+export interface GfxColor {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
     colorAttachment: GfxColorAttachment | null;
     colorLoadDisposition: GfxLoadDisposition;
-    colorClearColor: Color;
+    colorClearColor: GfxColor;
     depthStencilAttachment: GfxDepthStencilAttachment | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
@@ -226,15 +240,6 @@ export interface GfxDeviceLimits {
     uniformBufferMaxPageWordSize: number;
 }
 
-export interface GfxProgramReflection {
-    name: string;
-    uniqueKey: number;
-}
-
-export interface GfxRenderPipelineReflection {
-    uniqueHash: number;
-}
-
 export interface GfxDebugGroup {
     name: string;
     drawCallCount: number;
@@ -243,8 +248,12 @@ export interface GfxDebugGroup {
     triangleCount: number;
 }
 
+export interface GfxBugQuirks {
+    rowMajorMatricesBroken: boolean;
+}
+
 export interface GfxVendorInfo {
-    programBugDefines: string;
+    bugQuirks: GfxBugQuirks;
     glslVersion: string;
     explicitBindingLocations: boolean;
     separateSamplerTextures: boolean;
@@ -293,7 +302,8 @@ export interface GfxDevice {
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
     createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
-    createProgram(program: DeviceProgram): GfxProgram;
+    createProgram(program: GfxProgramDescriptor): GfxProgram;
+    createProgramSimple(program: GfxProgramDescriptorSimple): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;

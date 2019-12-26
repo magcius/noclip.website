@@ -1,6 +1,8 @@
 
 // Things that should only be required by platform implementations.
 
+import { GfxBugQuirks } from "./GfxPlatform";
+
 // Hack to get nominal typing.
 export enum _T { Buffer, Texture, ColorAttachment, DepthStencilAttachment, Sampler, Program, Bindings, InputLayout, InputState, RenderPipeline };
 
@@ -18,3 +20,7 @@ export interface GfxRenderPipeline extends GfxResourceBase { _T: _T.RenderPipeli
 
 export type GfxResource =
     GfxBuffer | GfxTexture | GfxColorAttachment | GfxDepthStencilAttachment | GfxSampler | GfxProgram | GfxBindings | GfxInputLayout | GfxInputState | GfxRenderPipeline;
+
+export class GfxBugQuirksImpl implements GfxBugQuirks {
+    public rowMajorMatricesBroken: boolean = false;
+}

@@ -1,6 +1,7 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
+import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -26,6 +27,12 @@ function isModifier(key: string) {
 
 export type Listener = (inputManager: InputManager) => void;
 
+const enum TouchGesture {
+    None,
+    Scroll, // 1-finger scroll and pan
+    Pinch, // 2-finger pinch in and out
+}
+
 export default class InputManager {
     public invertY = false;
     public invertX = false;
@@ -42,6 +49,14 @@ export default class InputManager {
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
+
+    private touchGesture: TouchGesture = TouchGesture.None;
+    private prevTouchX: number = 0; // When scrolling, contains finger X; when pinching, contains midpoint X
+    private prevTouchY: number = 0; // When scrolling, contains finger Y; when pinching, contains midpoint Y
+    private prevPinchDist: number = 0;
+    private dTouchX: number = 0;
+    private dTouchY: number = 0;
+    private dPinchDist: number = 0;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -63,6 +78,11 @@ export default class InputManager {
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
         });
+
+        this.toplevel.addEventListener('touchstart', this._onTouchChange);
+        this.toplevel.addEventListener('touchend', this._onTouchChange);
+        this.toplevel.addEventListener('touchcancel', this._onTouchChange);
+        this.toplevel.addEventListener('touchmove', this._onTouchMove);
 
         this.afterFrame();
 
@@ -91,6 +111,20 @@ export default class InputManager {
         return this.dy;
     }
 
+    public getTouchDeltaX(): number {
+        // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
+        return this.touchGesture == TouchGesture.Pinch ? this.dTouchX : 0;
+    }
+
+    public getTouchDeltaY(): number {
+        // XXX: In non-pinch mode, touch deltas are turned into mouse deltas.
+        return this.touchGesture == TouchGesture.Pinch ? this.dTouchY : 0;
+    }
+
+    public getPinchDeltaDist(): number {
+        return this.touchGesture == TouchGesture.Pinch ? this.dPinchDist : 0;
+    }
+
     public isKeyDownEventTriggered(key: string): boolean {
         return !!this.keysDown.get(key);
     }
@@ -100,13 +134,16 @@ export default class InputManager {
     }
 
     public isDragging(): boolean {
-        return GlobalGrabManager.hasGrabListener(this);
+        return this.touchGesture != TouchGesture.None || GlobalGrabManager.hasGrabListener(this);
     }
 
     public afterFrame() {
         this.dx = 0;
         this.dy = 0;
         this.dz = 0;
+        this.dTouchX = 0;
+        this.dTouchY = 0;
+        this.dPinchDist = 0;
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
@@ -159,7 +196,79 @@ export default class InputManager {
         this.callScrollListeners();
     };
 
-    public onMotion (dx: number, dy: number) {
+    private _getScaledTouches(touches: TouchList): {x: number, y: number}[] {
+        const result = []
+        const scale = 1000 / Math.max(1, Math.min(this.toplevel.clientWidth, this.toplevel.clientHeight));
+        for (let i = 0; i < touches.length; i++) {
+            result.push({
+                x: touches[i].clientX * scale,
+                y: touches[i].clientY * scale
+            });
+        }
+        return result;
+    }
+
+    private _getPinchValues(touches: TouchList): {x: number, y: number, dist: number} {
+        const scaledTouches = this._getScaledTouches(touches);
+        return {
+            x: (scaledTouches[0].x + scaledTouches[1].x) / 2,
+            y: (scaledTouches[0].y + scaledTouches[1].y) / 2,
+            dist: Math.hypot(scaledTouches[0].x - scaledTouches[1].x, scaledTouches[0].y - scaledTouches[1].y),
+        };
+    }
+
+    private _onTouchChange = (e: TouchEvent) => { // start, end or cancel a touch
+        if (!this.isInteractive)
+            return;
+        e.preventDefault();
+        if (e.touches.length == 1) {
+            const scaledTouches = this._getScaledTouches(e.touches);
+            this.touchGesture = TouchGesture.Scroll;
+            this.prevTouchX = scaledTouches[0].x;
+            this.prevTouchY = scaledTouches[0].y;
+            this.dTouchX = 0;
+            this.dTouchY = 0;
+        } else if (e.touches.length == 2) {
+            const pinchValues = this._getPinchValues(e.touches);
+            this.touchGesture = TouchGesture.Pinch;
+            this.prevTouchX = pinchValues.x;
+            this.prevTouchY = pinchValues.y;
+            this.prevPinchDist = pinchValues.dist;
+            this.dTouchX = 0;
+            this.dTouchY = 0;
+            this.dPinchDist = 0;
+        } else {
+            this.touchGesture = TouchGesture.None;
+        }
+    };
+
+    private _onTouchMove = (e: TouchEvent) => {
+        if (!this.isInteractive)
+            return;
+        e.preventDefault();
+        if (e.touches.length == 1) {
+            const scaledTouches = this._getScaledTouches(e.touches);
+            this.touchGesture = TouchGesture.Scroll;
+            this.dTouchX = scaledTouches[0].x - this.prevTouchX;
+            this.dTouchY = scaledTouches[0].y - this.prevTouchY;
+            this.onMotion(this.dTouchX, this.dTouchY);
+            this.prevTouchX = scaledTouches[0].x;
+            this.prevTouchY = scaledTouches[0].y;
+        } else if (e.touches.length == 2) {
+            const pinchValues = this._getPinchValues(e.touches);
+            this.touchGesture = TouchGesture.Pinch;
+            this.dTouchX = pinchValues.x - this.prevTouchX;
+            this.dTouchY = pinchValues.y - this.prevTouchY;
+            this.dPinchDist = pinchValues.dist - this.prevPinchDist;
+            this.prevTouchX = pinchValues.x;
+            this.prevTouchY = pinchValues.y;
+            this.prevPinchDist = pinchValues.dist;
+        } else {
+            this.touchGesture = TouchGesture.None;
+        }
+    }
+
+    public onMotion(dx: number, dy: number) {
         this.dx += dx;
         this.dy += dy;
     }

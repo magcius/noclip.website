@@ -3,16 +3,17 @@
 
 import * as GX from './gx_enum';
 
-import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
+import { preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
+import { DisplayListRegisters } from './gx_displaylist';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -243,10 +244,10 @@ interface VertexAttributeGenDef {
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
     { attrib: GX.Attr.POS,        name: "Position",      format: GfxFormat.F32_RGB },
-    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.U8_R },
+    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.F32_R },
     // These are packed separately since we would run out of attribute space otherwise.
-    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.U8_RGBA },
-    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.F32_RGBA },
+    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.F32_RGBA },
     { attrib: GX.Attr.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
     { attrib: GX.Attr.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
     { attrib: GX.Attr.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
@@ -363,15 +364,15 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export class GX_Program extends DeviceProgram {
+export class GX_Program {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
+    public name: string;
+
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
-        super();
         this.name = material.name;
-        this.generateShaders();
     }
 
     private generateFloat(v: number): string {
@@ -512,14 +513,14 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
-        if (index === GX.TexCoordID.TEXCOORD0) return `a_TexMtx0123Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD1) return `a_TexMtx0123Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD2) return `a_TexMtx0123Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD3) return `a_TexMtx0123Idx.w`;
-        if (index === GX.TexCoordID.TEXCOORD4) return `a_TexMtx4567Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD5) return `a_TexMtx4567Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD6) return `a_TexMtx4567Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD7) return `a_TexMtx4567Idx.w`;
+        if (index === GX.TexCoordID.TEXCOORD0) return `uint(a_TexMtx0123Idx.x)`;
+        if (index === GX.TexCoordID.TEXCOORD1) return `uint(a_TexMtx0123Idx.y)`;
+        if (index === GX.TexCoordID.TEXCOORD2) return `uint(a_TexMtx0123Idx.z)`;
+        if (index === GX.TexCoordID.TEXCOORD3) return `uint(a_TexMtx0123Idx.w)`;
+        if (index === GX.TexCoordID.TEXCOORD4) return `uint(a_TexMtx4567Idx.x)`;
+        if (index === GX.TexCoordID.TEXCOORD5) return `uint(a_TexMtx4567Idx.y)`;
+        if (index === GX.TexCoordID.TEXCOORD6) return `uint(a_TexMtx4567Idx.z)`;
+        if (index === GX.TexCoordID.TEXCOORD7) return `uint(a_TexMtx4567Idx.w)`;
         throw "whoops";
     }
 
@@ -1069,8 +1070,7 @@ export class GX_Program extends DeviceProgram {
 
     private generateAttributeStorageType(fmt: GfxFormat): string {
         switch (fmt) {
-        case GfxFormat.U8_R:     return 'uint';
-        case GfxFormat.U8_RGBA:  return 'uvec4';
+        case GfxFormat.F32_R:    return 'float';
         case GfxFormat.F32_RG:   return 'vec2';
         case GfxFormat.F32_RGB:  return 'vec3';
         case GfxFormat.F32_RGBA: return 'vec4';
@@ -1089,7 +1089,7 @@ export class GX_Program extends DeviceProgram {
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Position, 1.0)`;
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1100,15 +1100,15 @@ export class GX_Program extends DeviceProgram {
         const src = `vec4(a_Normal, 0.0)`;
         // TODO(jstpierre): Move to a normal matrix calculated on the CPU
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    private generateShaders() {
+    public generateShaders(device: GfxDevice): GfxProgramDescriptorSimple {
         const bindingsDefinition = generateBindingsDefinition(this.material);
 
-        this.both = `
+        const both = `
 // ${this.material.name}
 precision mediump float;
 ${bindingsDefinition}
@@ -1126,7 +1126,10 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        this.vert = `
+        const vendorInfo = device.queryVendorInfo();
+
+        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', `
+${both}
 ${this.generateVertAttributeDefs()}
 
 Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
@@ -1155,11 +1158,10 @@ ${this.generateLightChannels()}
 ${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
-`;
+`);
 
-        const alphaTest = this.material.alphaTest;
-
-        this.frag = `
+        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', `
+${both}
 ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
@@ -1201,7 +1203,9 @@ ${this.generateTevStagesLastMinuteFixup()}
 ${this.generateAlphaTest()}
     gl_FragColor = t_TevOutput;
 }
-`;
+`);
+
+        return { preprocessedVert, preprocessedFrag };
     }
 }
 // #endregion
@@ -1311,6 +1315,370 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
     }
 
     setAttachmentStateSimple(megaState, attachmentStateSimple);
+}
+// #endregion
+
+// #region Material parsing
+export function parseTexGens(r: DisplayListRegisters, numTexGens: number): TexGen[] {
+    const texGens: TexGen[] = [];
+
+    for (let i = 0; i < numTexGens; i++) {
+        const v = r.xfg(GX.XFRegister.XF_TEX0_ID + i);
+
+        const enum TexProjection {
+            ST = 0x00,
+            STQ = 0x01,
+        }
+        const enum TexForm {
+            AB11 = 0x00,
+            ABC1 = 0x01,
+        }
+        const enum TexGenType {
+            REGULAR = 0x00,
+            EMBOSS_MAP = 0x01,
+            COLOR_STRGBC0 = 0x02,
+            COLOR_STRGBC1 = 0x02,
+        }
+        const enum TexSourceRow {
+            GEOM = 0x00,
+            NRM = 0x01,
+            CLR = 0x02,
+            BNT = 0x03,
+            BNB = 0x04,
+            TEX0 = 0x05,
+            TEX1 = 0x06,
+            TEX2 = 0x07,
+            TEX3 = 0x08,
+            TEX4 = 0x09,
+            TEX5 = 0x0A,
+            TEX6 = 0x0B,
+            TEX7 = 0x0C,
+        }
+
+        const proj: TexProjection = (v >>>  1) & 0x01;
+        const form: TexForm =       (v >>>  2) & 0x01;
+        const tgType: TexGenType =  (v >>>  4) & 0x02;
+        const src: TexSourceRow =   (v >>>  7) & 0x0F;
+        const embossSrc =           (v >>> 12) & 0x07;
+        const embossLgt =           (v >>> 15) & 0x07;
+
+        let texGenType: GX.TexGenType;
+        let texGenSrc: GX.TexGenSrc;
+
+        if (tgType === TexGenType.REGULAR) {
+            const srcLookup = [
+                GX.TexGenSrc.POS,
+                GX.TexGenSrc.NRM,
+                GX.TexGenSrc.COLOR0,
+                GX.TexGenSrc.BINRM,
+                GX.TexGenSrc.TANGENT,
+                GX.TexGenSrc.TEX0,
+                GX.TexGenSrc.TEX1,
+                GX.TexGenSrc.TEX2,
+                GX.TexGenSrc.TEX3,
+                GX.TexGenSrc.TEX4,
+                GX.TexGenSrc.TEX5,
+                GX.TexGenSrc.TEX6,
+                GX.TexGenSrc.TEX7,
+            ];
+
+            texGenType = proj === TexProjection.ST ? GX.TexGenType.MTX2x4 : GX.TexGenType.MTX3x4;
+            texGenSrc = srcLookup[src];
+        } else if (tgType === TexGenType.EMBOSS_MAP) {
+            texGenType = GX.TexGenType.BUMP0 + embossLgt;
+            texGenSrc = GX.TexGenSrc.TEXCOORD0 + embossSrc;
+        } else if (tgType === TexGenType.COLOR_STRGBC0) {
+            texGenType = GX.TexGenType.SRTG;
+            texGenSrc = GX.TexGenSrc.COLOR0;
+        } else if (tgType === TexGenType.COLOR_STRGBC1) {
+            texGenType = GX.TexGenType.SRTG;
+            texGenSrc = GX.TexGenSrc.COLOR1;
+        } else {
+            throw "whoops";
+        }
+
+        const matrix: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY;
+
+        const dv = r.xfg(GX.XFRegister.XF_DUALTEX0_ID + i);
+        const postMatrix: GX.PostTexGenMatrix = ((dv >>> 0) & 0xFF) + GX.PostTexGenMatrix.PTTEXMTX0;
+        const normalize: boolean = !!((dv >>> 8) & 0x01);
+
+        texGens.push({ type: texGenType, source: texGenSrc, matrix, normalize, postMatrix });
+    }
+
+    return texGens;
+}
+
+function findTevOp(bias: GX.TevBias, scale: GX.TevScale, sub: boolean): GX.TevOp {
+    if (bias === GX.TevBias.$HWB_COMPARE) {
+        switch (scale) {
+        case GX.TevScale.$HWB_R8: return sub ? GX.TevOp.COMP_R8_EQ : GX.TevOp.COMP_R8_GT;
+        case GX.TevScale.$HWB_GR16: return sub ? GX.TevOp.COMP_GR16_EQ : GX.TevOp.COMP_GR16_GT;
+        case GX.TevScale.$HWB_BGR24: return sub ? GX.TevOp.COMP_BGR24_EQ : GX.TevOp.COMP_BGR24_GT;
+        case GX.TevScale.$HWB_RGB8: return sub ? GX.TevOp.COMP_RGB8_EQ : GX.TevOp.COMP_RGB8_GT;
+        default:
+            throw "whoops 2";
+        }
+    } else {
+        return sub ? GX.TevOp.SUB : GX.TevOp.ADD;
+    }
+}
+
+export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevStage[] {
+    const tevStages: TevStage[] = [];
+
+    interface TevOrder {
+        texMapId: GX.TexMapID;
+        texCoordId: GX.TexCoordID;
+        channelId: GX.RasColorChannelID;
+    }
+
+    const tevOrders: TevOrder[] = [];
+
+    // First up, parse RAS1_TREF into tev orders.
+    for (let i = 0; i < 8; i++) {
+        const v = r.bp[GX.BPRegister.RAS1_TREF_0_ID + i];
+        const ti0: GX.TexMapID =          (v >>>  0) & 0x07;
+        const tc0: GX.TexCoordID =        (v >>>  3) & 0x07;
+        const te0: boolean =           !!((v >>>  6) & 0x01);
+        const cc0: GX.RasColorChannelID = (v >>>  7) & 0x07;
+        // 7-10 = pad
+        const ti1: GX.TexMapID =          (v >>> 12) & 0x07;
+        const tc1: GX.TexCoordID =        (v >>> 15) & 0x07;
+        const te1: boolean =           !!((v >>> 18) & 0x01);
+        const cc1: GX.RasColorChannelID = (v >>> 19) & 0x07;
+
+        if (i*2+0 >= numTevs)
+            break;
+
+        const order0 = {
+            texMapId: te0 ? ti0 : GX.TexMapID.TEXMAP_NULL,
+            texCoordId: tc0,
+            channelId: cc0,
+        };
+        tevOrders.push(order0);
+
+        if (i*2+1 >= numTevs)
+            break;
+
+        const order1 = {
+            texMapId: te1 ? ti1 : GX.TexMapID.TEXMAP_NULL,
+            texCoordId: tc1,
+            channelId: cc1,
+        };
+        tevOrders.push(order1);
+    }
+
+    assert(tevOrders.length === numTevs);
+
+    // Now parse out individual stages.
+    for (let i = 0; i < tevOrders.length; i++) {
+        const color = r.bp[GX.BPRegister.TEV_COLOR_ENV_0_ID + (i * 2)];
+
+        const colorInD: GX.CombineColorInput = (color >>>  0) & 0x0F;
+        const colorInC: GX.CombineColorInput = (color >>>  4) & 0x0F;
+        const colorInB: GX.CombineColorInput = (color >>>  8) & 0x0F;
+        const colorInA: GX.CombineColorInput = (color >>> 12) & 0x0F;
+        const colorBias: GX.TevBias =          (color >>> 16) & 0x03;
+        const colorSub: boolean =           !!((color >>> 18) & 0x01);
+        const colorClamp: boolean =         !!((color >>> 19) & 0x01);
+        const colorScale: GX.TevScale =        (color >>> 20) & 0x03;
+        const colorRegId: GX.Register =        (color >>> 22) & 0x03;
+
+        const colorOp: GX.TevOp = findTevOp(colorBias, colorScale, colorSub);
+
+        // Find the op.
+        const alpha = r.bp[GX.BPRegister.TEV_ALPHA_ENV_0_ID + (i * 2)];
+
+        const rswap: number =                  (alpha >>>  0) & 0x03;
+        const tswap: number =                  (alpha >>>  2) & 0x03;
+        const alphaInD: GX.CombineAlphaInput = (alpha >>>  4) & 0x07;
+        const alphaInC: GX.CombineAlphaInput = (alpha >>>  7) & 0x07;
+        const alphaInB: GX.CombineAlphaInput = (alpha >>> 10) & 0x07;
+        const alphaInA: GX.CombineAlphaInput = (alpha >>> 13) & 0x07;
+        const alphaBias: GX.TevBias =          (alpha >>> 16) & 0x03;
+        const alphaSub: boolean =           !!((alpha >>> 18) & 0x01);
+        const alphaClamp: boolean =         !!((alpha >>> 19) & 0x01);
+        const alphaScale: GX.TevScale =        (alpha >>> 20) & 0x03;
+        const alphaRegId: GX.Register =        (alpha >>> 22) & 0x03;
+
+        const alphaOp: GX.TevOp = findTevOp(alphaBias, alphaScale, alphaSub);
+
+        const ksel = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (i >>> 1)];
+        const konstColorSel: GX.KonstColorSel = ((i & 1) ? (ksel >>> 14) : (ksel >>> 4)) & 0x1F;
+        const konstAlphaSel: GX.KonstAlphaSel = ((i & 1) ? (ksel >>> 19) : (ksel >>> 9)) & 0x1F;
+
+        const indCmd = r.bp[GX.BPRegister.IND_CMD0_ID + i];
+        const indTexStage: GX.IndTexStageID =   (indCmd >>>  0) & 0x03;
+        const indTexFormat: GX.IndTexFormat =   (indCmd >>>  2) & 0x03;
+        const indTexBiasSel: GX.IndTexBiasSel = (indCmd >>>  4) & 0x07;
+        // alpha sel
+        const indTexMatrix: GX.IndTexMtxID =    (indCmd >>>  9) & 0x0F;
+        const indTexWrapS: GX.IndTexWrap =      (indCmd >>> 13) & 0x07;
+        const indTexWrapT: GX.IndTexWrap =      (indCmd >>> 16) & 0x07;
+        const indTexUseOrigLOD: boolean =    !!((indCmd >>> 19) & 0x01);
+        const indTexAddPrev: boolean =       !!((indCmd >>> 20) & 0x01);
+
+        const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
+        const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
+
+        const rasSwapTable: number[] = [
+            (rasSwapTableRG >>> 0) & 0x03,
+            (rasSwapTableRG >>> 2) & 0x03,
+            (rasSwapTableBA >>> 0) & 0x03,
+            (rasSwapTableBA >>> 2) & 0x03,
+        ];
+
+        const texSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2)];
+        const texSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2) + 1];
+
+        const texSwapTable: number[] = [
+            (texSwapTableRG >>> 0) & 0x03,
+            (texSwapTableRG >>> 2) & 0x03,
+            (texSwapTableBA >>> 0) & 0x03,
+            (texSwapTableBA >>> 2) & 0x03,
+        ];
+
+        const tevStage: TevStage = {
+            colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorClamp, colorScale, colorRegId,
+            alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaClamp, alphaScale, alphaRegId,
+
+            texCoordId: tevOrders[i].texCoordId,
+            texMap: tevOrders[i].texMapId,
+            channelId: tevOrders[i].channelId,
+
+            konstColorSel, konstAlphaSel,
+            rasSwapTable, texSwapTable,
+
+            indTexStage, indTexFormat, indTexBiasSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
+        };
+
+        tevStages.push(tevStage);
+    }
+
+    return tevStages;
+}
+
+export function parseIndirectStages(r: DisplayListRegisters, numInds: number): IndTexStage[] {
+    const indTexStages: IndTexStage[] = [];
+    const iref = r.bp[GX.BPRegister.RAS1_IREF_ID];
+    for (let i = 0; i < numInds; i++) {
+        const ss = r.bp[GX.BPRegister.RAS1_SS0_ID + (i >>> 2)];
+        const scaleS: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x00) & 0x0F);
+        const scaleT: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x04) & 0x0F);
+        const texture: GX.TexMapID = (iref >>> (0x06*i)) & 0x07;
+        const texCoordId: GX.TexCoordID = (iref >>> (0x06*i)) & 0x07;
+        indTexStages.push({ scaleS, scaleT, texCoordId, texture });
+    }
+    return indTexStages;
+}
+
+export function parseRopInfo(r: DisplayListRegisters): RopInfo {
+    // Blend mode.
+    const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
+    const bmboe = (cm0 >>> 0) & 0x01;
+    const bmloe = (cm0 >>> 1) & 0x01;
+    const bmbop = (cm0 >>> 11) & 0x01;
+
+    const blendType: GX.BlendMode =
+        bmboe ? (bmbop ? GX.BlendMode.SUBTRACT : GX.BlendMode.BLEND) :
+        bmloe ? GX.BlendMode.LOGIC : GX.BlendMode.NONE;;
+    const dstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
+    const srcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
+    const logicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
+    const blendMode: BlendMode = {
+        type: blendType,
+        dstFactor, srcFactor, logicOp,
+    };
+
+    // Depth state.
+    const zm = r.bp[GX.BPRegister.PE_ZMODE_ID];
+    const depthTest = !!((zm >>> 0) & 0x01);
+    const depthFunc = (zm >>> 1) & 0x07;
+    const depthWrite = !!((zm >>> 4) & 0x01);
+
+    const ropInfo: RopInfo = {
+        blendMode, depthFunc, depthTest, depthWrite,
+    };
+
+    return ropInfo;
+}
+
+export function parseAlphaTest(r: DisplayListRegisters): AlphaTest {
+    const ap = r.bp[GX.BPRegister.TEV_ALPHAFUNC_ID];
+    const alphaTest: AlphaTest = {
+        referenceA: ((ap >>>  0) & 0xFF) / 0xFF,
+        referenceB: ((ap >>>  8) & 0xFF) / 0xFF,
+        compareA:    (ap >>> 16) & 0x07,
+        compareB:    (ap >>> 19) & 0x07,
+        op:          (ap >>> 22) & 0x07,
+    };
+    return alphaTest;
+}
+
+export function parseColorChannelControlRegister(chanCtrl: number): ColorChannelControl {
+    const matColorSource: GX.ColorSrc =           (chanCtrl >>>  0) & 0x01;
+    const lightingEnabled: boolean =           !!((chanCtrl >>>  1) & 0x01);
+    const litMaskL: number =                      (chanCtrl >>>  2) & 0x0F;
+    const ambColorSource: GX.ColorSrc =           (chanCtrl >>>  6) & 0x01;
+    const diffuseFunction: GX.DiffuseFunction =   (chanCtrl >>>  7) & 0x03;
+    const attnEn: boolean =                    !!((chanCtrl >>>  9) & 0x01);
+    const attnSelect: boolean =                !!((chanCtrl >>> 10) & 0x01);
+    const litMaskH: number =                      (chanCtrl >>> 11) & 0x0F;
+
+    const litMask: number =                       (litMaskH << 4) | litMaskL;
+    const attenuationFunction = attnEn ? (attnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+}
+
+export function parseLightChannels(r: DisplayListRegisters): LightChannelControl[] {
+    const lightChannels: LightChannelControl[] = [];
+    const numColors = r.xfg(GX.XFRegister.XF_NUMCOLORS_ID);
+    for (let i = 0; i < numColors; i++) {
+        const colorCntrl = r.xfg(GX.XFRegister.XF_COLOR0CNTRL_ID + i);
+        const alphaCntrl = r.xfg(GX.XFRegister.XF_ALPHA0CNTRL_ID + i);
+        const colorChannel = parseColorChannelControlRegister(colorCntrl); 
+        const alphaChannel = parseColorChannelControlRegister(alphaCntrl);
+        lightChannels.push({ colorChannel, alphaChannel });
+
+        const colorUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        const alphaUsesReg = colorChannel.lightingEnabled &&  
+            colorChannel.matColorSource === GX.ColorSrc.REG ||
+            colorChannel.ambColorSource === GX.ColorSrc.REG;
+        
+        if (colorUsesReg || alphaUsesReg)
+            console.warn(`CommandList ${name} uses register color values, but these are not yet supported`);
+    }
+    return lightChannels;
+}
+
+export function parseMaterial(r: DisplayListRegisters, name: string): GXMaterial {
+    const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+
+    const genMode = r.bp[GX.BPRegister.GEN_MODE_ID];
+    const numTexGens = (genMode >>> 0) & 0x0F;
+    const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+    const numInds = ((genMode >>> 16) & 0x07);
+    const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+    const texGens: TexGen[] = parseTexGens(r, numTexGens);
+    const tevStages: TevStage[] = parseTevStages(r, numTevs);
+    const indTexStages: IndTexStage[] = parseIndirectStages(r, numInds);
+    const ropInfo: RopInfo = parseRopInfo(r);
+    const alphaTest: AlphaTest = parseAlphaTest(r);
+    const lightChannels: LightChannelControl[] = parseLightChannels(r);
+
+    const gxMaterial: GXMaterial = {
+        name,
+        lightChannels, cullMode,
+        tevStages, texGens,
+        indTexStages, alphaTest, ropInfo,
+    };
+
+    return gxMaterial;
 }
 // #endregion
 

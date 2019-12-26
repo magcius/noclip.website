@@ -122,8 +122,10 @@ const pt0 = vec3.create();
 const pt1 = vec3.create();
 const pt2 = vec3.create();
 const bary = vec3.create();
-export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec3): boolean {
+export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec3, outNormal?: vec3): boolean {
     vec3.copy(pdir, direction);
+
+    let ci0 = 0, ci1 = 0, ci2 = 0;
 
     let closestDist = Infinity;
     for (let i = 0; i < dzb.faceCount; i++) {
@@ -153,11 +155,27 @@ export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec
             continue;
 
         vec3.set(closestHit, rx, ry, rz);
+        ci0 = i0;
+        ci1 = i1;
+        ci2 = i2;
+
         closestDist = sqdist;
     }
 
     if (closestDist < Infinity) {
         vec3.add(closestHit, closestHit, origin);
+
+        if (outNormal) {
+            vec3.set(pt0, dzb.vertexData[ci0*3+0], dzb.vertexData[ci0*3+1], dzb.vertexData[ci0*3+2]);
+            vec3.set(pt1, dzb.vertexData[ci1*3+0], dzb.vertexData[ci1*3+1], dzb.vertexData[ci1*3+2]);
+            vec3.set(pt2, dzb.vertexData[ci2*3+0], dzb.vertexData[ci2*3+1], dzb.vertexData[ci2*3+2]);
+
+            const v0 = vec3.sub(pdir, pt1, pt0);
+            const v1 = vec3.sub(bary, pt2, pt0);
+            vec3.cross(outNormal, v0, v1);
+            vec3.normalize(outNormal, outNormal);
+        }
+
         return true;
     } else {
         return false;

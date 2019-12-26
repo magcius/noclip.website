@@ -186,10 +186,26 @@ export interface TextureEnvironment {
     combinerBufferColor: Color;
 }
 
+export const enum TextureCoordinatorMappingMethod {
+    None,
+    UvCoordinateMap,
+    CameraCubeEnvMap,
+    CameraSphereEnvMap,
+    ProjectionMap,
+}
+
+export interface TextureCoordinator {
+    sourceCoordinate: number;
+    mappingMethod: TextureCoordinatorMappingMethod;
+    referenceCamera: number;
+    matrixMode: number;
+    textureMatrix: mat4;
+}
+
 export interface Material {
     index: number;
     textureBindings: TextureBinding[];
-    textureMatrices: mat4[];
+    textureCoordinators: TextureCoordinator[];
     constantColors: Color[];
     textureEnvironment: TextureEnvironment;
     alphaTestFunction: GfxCompareMode;
@@ -273,19 +289,23 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             bindingOffs += 0x18;
         }
 
-        let matricesOffs = offs + 0x58;
-        const textureMatrices: mat4[] = [];
+        let coordinatorsOffs = offs + 0x58;
+        const textureCoordinators: TextureCoordinator[] = [];
         for (let j = 0; j < 3; j++) {
-            const flags = view.getUint32(matricesOffs + 0x00, true);
-            const scaleS = view.getFloat32(matricesOffs + 0x04, true);
-            const scaleT = view.getFloat32(matricesOffs + 0x08, true);
-            const translationS = view.getFloat32(matricesOffs + 0x0C, true);
-            const translationT = view.getFloat32(matricesOffs + 0x10, true);
-            const rotation = view.getFloat32(matricesOffs + 0x14, true);
-            const texMtx = mat4.create();
-            calcTexMtx(texMtx, scaleS, scaleT, rotation, translationS, translationT);
-            textureMatrices.push(texMtx);
-            matricesOffs += 0x18;
+            // TODO(jstpierre): Unsure about how these are packed...
+            const matrixMode = view.getUint8(coordinatorsOffs + 0x00);
+            const referenceCamera = view.getUint8(coordinatorsOffs + 0x01);
+            const mappingMethod: TextureCoordinatorMappingMethod = view.getUint8(coordinatorsOffs + 0x02);
+            const sourceCoordinate = view.getUint8(coordinatorsOffs + 0x03);
+            const scaleS = view.getFloat32(coordinatorsOffs + 0x04, true);
+            const scaleT = view.getFloat32(coordinatorsOffs + 0x08, true);
+            const translationS = view.getFloat32(coordinatorsOffs + 0x0C, true);
+            const translationT = view.getFloat32(coordinatorsOffs + 0x10, true);
+            const rotation = view.getFloat32(coordinatorsOffs + 0x14, true);
+            const textureMatrix = mat4.create();
+            calcTexMtx(textureMatrix, scaleS, scaleT, rotation, translationS, translationT);
+            textureCoordinators.push({ sourceCoordinate, mappingMethod, referenceCamera, matrixMode, textureMatrix });
+            coordinatorsOffs += 0x18;
         }
 
         const unkColor0 = view.getUint32(offs + 0xB0, true);
@@ -304,7 +324,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const bufferColorA = view.getFloat32(offs + 0xD8, true);
 
         const bumpTextureIndex = view.getUint16(offs + 0xDC, true);
-        const lightEnvBumpUsage = view.getUint16(offs + 0xDE, true);
+        const bumpMode = view.getUint16(offs + 0xDE, true);
 
         // Fragment lighting table.
         const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
@@ -428,7 +448,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
-        cmb.materials.push({ index: i, textureBindings, textureMatrices, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
+        cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
 
         offs += 0x15C;
 
