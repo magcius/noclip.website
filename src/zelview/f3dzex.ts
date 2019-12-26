@@ -502,8 +502,8 @@ function translateTile_I8(rom: Rom, dramAddr: number, tile: TileState): Texture 
     const tileH = getTileHeight(tile);
 
     // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
+    //assert(tile.shifts === 0); // G_TX_NOLOD
+    //assert(tile.shiftt === 0); // G_TX_NOLOD
     //assert(tile.masks === 0 || (1 << tile.masks) === tileW);
     //assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
@@ -842,7 +842,6 @@ export class RSPState {
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
-        console.log(`SetTextureImage fmt ${fmt}, siz ${siz}, w ${w}, addr 0x${addr.toString(16)}`);
         this.DP_TextureImageState.set(fmt, siz, w, addr);
     }
 
@@ -968,7 +967,14 @@ const enum F3DZEX_GBI {
 }
 
 export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
-    const lkup = rom.lookupAddress(addr);
+    let lkup;
+    try {
+        lkup = rom.lookupAddress(addr);
+    } catch (e) {
+        console.warn(e);
+        return;
+    }
+
     const view = lkup.buffer.createDataView();
 
     outer:
@@ -982,6 +988,11 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
         switch (cmd) {
         case F3DZEX_GBI.G_ENDDL:
             break outer;
+            
+        case F3DZEX_GBI.G_DL: {
+            // TODO: A field in w0 determines whether to call or branch (i.e. whether to push a return address to the stack)
+            runDL_F3DZEX(state, rom, w1);
+        } break;
 
         case F3DZEX_GBI.G_CULLDL:
             // Ignored. This command checks if a bouding box is in the camera frustum. If it is not, the DL is aborted.
@@ -1107,11 +1118,6 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
             state.setEnvColor(r, g, b, a);
-        } break;
-
-        case F3DZEX_GBI.G_DL: {
-            // TODO(jstpierre): Figure out the right segment address that this wants.
-            console.warn(`G_DL 0x${hexzero(w1, 8)} not implemented`);
         } break;
 
         case F3DZEX_GBI.G_RDPFULLSYNC:

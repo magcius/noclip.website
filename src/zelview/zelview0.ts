@@ -4,7 +4,7 @@ import * as F3DZEX from './f3dzex';
 import { runDL_F3DZEX, RSPOutput, RSPState, RSPSharedOutput } from './f3dzex';
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString } from '../util';
+import { readString, hexzero } from '../util';
 
 // Loads the ZELVIEW0 format.
 
@@ -137,7 +137,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
                         throw Error(`room is undefined`);
                     return banks.room;
                 default:
-                    console.error(`bank for 0x${addr.toString(16)} not found`);
+                    console.error(`bank for 0x${hexzero(addr, 8)} not found`);
                     throw Error(`bank not found`);
             }
         }
@@ -275,7 +275,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
         const rooms = [];
         for (let i = 0; i < nRooms; i++) {
             const pStart = loadAddress(roomTableAddr);
-            console.log(`room ${i} pStart 0x${pStart.toString(16)}`);
+            console.log(`room ${i} pStart 0x${hexzero(pStart, 8)}`);
             const file = rom.lookupFile(pStart);
             const room = readRoom(file);
             room.filename = file.filename;
