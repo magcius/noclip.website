@@ -2355,10 +2355,45 @@ class SceneDesc {
             const m = buildModel(rarc, `bdlm/bo_sita1.bdl`);
             // TODO(jstpierre): animation?
         });
-        else if (name === 'c_green' || name === 'c_red' || name === 'c_blue') fetchArchive(`Cc.arc`).then((rarc) => {
-            // TODO(jstpierre): Colors?
+        // ChuChus
+        else if (name === 'c_green' || name === 'c_red' || name === 'c_blue' || name == 'c_black' || name == 'c_kiiro') fetchArchive(`Cc.arc`).then((rarc) => {
             const cc = buildModel(rarc, `bmdm/cc.bmd`);
             cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
+
+            const chuchuType = (parameters & 0x0000FF00) >>> 8;
+            let frameNum;
+            switch (chuchuType) {
+            case 0:
+            case 10:
+                // Green
+                frameNum = 0;
+                break;
+            case 1:
+            case 11:
+            case 15:
+                // Red
+                frameNum = 1;
+                break;
+            case 2:
+            case 12:
+                // Blue
+                frameNum = 2;
+                break;
+            case 3:
+            case 13:
+                // Dark
+                frameNum = 3;
+                break;
+            case 4:
+            case 14:
+                // Yellow
+                frameNum = 4;
+                break;
+            default:
+                frameNum = 0;
+                break;
+            }
+            cc.bindTRK1(parseBRK(rarc, `brk/cc.brk`), animFrame(frameNum));
         });
         // Beedle's Shop Ship (in Tip Top Shape)
         else if (name === 'ikada_h') fetchArchive(`IkadaH.arc`).then((rarc) => buildModel(rarc, `bdl/vtsp.bdl`));
