@@ -1,0 +1,113 @@
+
+precision mediump float; precision lowp sampler2D;
+
+struct Light {
+    vec4 position;
+    vec4 rotation;
+    vec4 color;
+    float type;
+    float radius;
+    float angle;
+    float pad;
+};
+
+#define LIGHT_TYPE_AMBIENT     1.0 // rpLIGHTAMBIENT
+#define LIGHT_TYPE_DIRECTIONAL 2.0 // rpLIGHTDIRECTIONAL
+#define LIGHT_TYPE_POINT       3.0 // rpLIGHTPOINT
+#define LIGHT_TYPE_SPOT        4.0 // rpLIGHTSPOTSOFT
+
+#define LIGHT_COUNT 8
+
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat4x3 u_ViewMatrix;
+    vec4 u_FogColor;
+    vec4 u_FogParams;
+    Light u_Lights[LIGHT_COUNT];
+};
+
+#define u_FogStart (u_FogParams.x)
+#define u_FogStop (u_FogParams.y)
+
+layout(row_major, std140) uniform ub_ModelParams {
+    Mat4x3 u_ModelMatrix;
+    vec4 u_ModelColor;
+};
+
+uniform sampler2D u_Texture;
+
+varying vec4 v_Position;
+varying vec4 v_Color;
+varying vec2 v_TexCoord;
+varying vec3 v_LightColor;
+
+#ifdef VERT
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec3 a_Normal;
+layout(location = 2) in vec4 a_Color;
+layout(location = 3) in vec2 a_TexCoord;
+
+void main() {
+    v_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), Mul(_Mat4x4(u_ModelMatrix), vec4(a_Position, 1.0))));
+    v_Color = a_Color;
+    v_TexCoord = a_TexCoord;
+
+    //vec4 t_Normal = Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0));
+    //vec4 t_Normal = vec4(a_Normal, 1.0);
+
+#ifdef ENT
+#ifndef SKY
+    /*
+    v_LightColor = vec3(0.0);
+
+    for (int i = 0; i < LIGHT_COUNT; i++) {
+        Light light = u_Lights[i];
+        vec3 colorFactor = (light.color.rgb * light.color.a);
+
+        if (light.type == LIGHT_TYPE_AMBIENT) {
+            v_LightColor += colorFactor;
+        } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
+            vec3 lightDir = normalize(-light.rotation.xyz);
+            float diffuse = max(dot(a_Normal, lightDir), 0.0);
+            v_LightColor += diffuse * colorFactor;
+        }
+    }
+    */
+#endif
+#endif
+
+    gl_Position = v_Position;
+}
+#endif
+
+#ifdef FRAG
+void main() {
+    vec4 t_Color = v_Color;
+
+#ifdef USE_TEXTURE
+    t_Color *= texture(u_Texture, v_TexCoord);
+#endif
+
+    t_Color *= u_ModelColor;
+
+#ifdef SKY
+    gl_FragDepth = float(SKY_DEPTH);
+#else
+#ifdef ENT
+    //t_Color *= vec4(v_LightColor, 1.0);
+#endif
+    if (u_FogColor.w > 0.0) {
+        float t_FogFactor = 1.0 - (u_FogStop - abs(v_Position.z))/(u_FogStop - u_FogStart);
+        t_FogFactor = clamp(t_FogFactor, 0.0, 1.0);
+
+        vec4 t_FogColor = u_FogColor;
+        t_FogColor.w = t_Color.w;
+
+        t_Color = mix(t_Color, t_FogColor, t_FogFactor);
+    }
+#endif
+
+    gl_FragColor = t_Color;
+    
+}
+#endif
