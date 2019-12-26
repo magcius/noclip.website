@@ -1301,7 +1301,7 @@ class SceneDesc {
         }
     }
 
-    private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4): Promise<void> {
+    private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, auxParams1: number, auxParams2: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4): Promise<void> {
         // TODO(jstpierre): Better actor implementations
 
         const modelCache = renderer.modelCache;
@@ -2620,15 +2620,15 @@ class SceneDesc {
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            // const auxParam = view.getInt16(actrTableIdx + 0x18);
+            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            const flag = view.getUint16(actrTableIdx + 0x1C);
+            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
             const enemyNum = view.getUint16(actrTableIdx + 0x1E);
 
             const localModelMatrix = mat4.create();
             computeModelMatrixSRT(localModelMatrix, 1, 1, 1, 0, rotY, 0, posX, posY, posZ);
 
-            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layerIndex, localModelMatrix, worldModelMatrix);
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, auxParams1, auxParams2, layerIndex, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x20;
         }
@@ -2647,9 +2647,9 @@ class SceneDesc {
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            // const auxParam = view.getInt16(actrTableIdx + 0x18);
+            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            // const unk1 = view.getInt16(actrTableIdx + 0x1C);
+            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
             // const unk2 = view.getInt16(actrTableIdx + 0x1E);
             const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
             const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
@@ -2659,7 +2659,7 @@ class SceneDesc {
             const localModelMatrix = mat4.create();
             computeModelMatrixSRT(localModelMatrix, scaleX, scaleY, scaleZ, 0, rotY, 0, posX, posY, posZ);
 
-            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layer, localModelMatrix, worldModelMatrix);
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, auxParams1, auxParams2, layer, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x24;
         }
