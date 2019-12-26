@@ -1411,11 +1411,11 @@ class SceneDesc {
         function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
-        // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping
+        // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
         // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
 
         if (name === 'item') {
-            // Item table provided with the help of the incredible LugoLunatic <3.
+            // Item table provided with the help of the incredible LagoLunatic <3.
             const itemId = (parameters & 0x000000FF);
 
             // Heart
@@ -1444,10 +1444,18 @@ class SceneDesc {
                 m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
                 m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
             });
+            // Rupee (Purple})
+            else if (itemId === 0x05) fetchArchive(`Always.arc`).then((rarc) => {
+                const m = buildModel(rarc, `bdlm/vlupl.bdl`);
+                m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(4));
+                m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            });
             // Small magic jar
             else if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
             else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
         }
+        // Heart Container
+        else if (name === 'Bitem') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/vhutl.bdl`).bindTTK1(parseBTK(rarc, `btk/vhutl.btk`)));
         // Generic Torch
         else if (name === 'bonbori') {
             const rarc = await fetchArchive(`Ep.arc`);
