@@ -2851,6 +2851,7 @@ class SceneDesc {
             this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TRES', i)), modelMatrix);
             this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('SCOB', i)), modelMatrix);
             this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGSC', i)), modelMatrix);
+            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('DOOR', i)), modelMatrix);
         }
     }
 }
