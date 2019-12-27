@@ -17,7 +17,7 @@ import { assert, nArray } from '../util';
 import { GraphObjBase } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from '../Camera';
-import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec3 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -807,8 +807,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < lightCount; i++) {
             if (this.lightKit && this.lightKit.lightCount > i) {
                 const light = this.lightKit.lightListArray[i];
-                offs += fillVec3(mapped, offs, this.lightPositionCache[i]);
-                offs += fillVec3(mapped, offs, this.lightRotationCache[i]);
+                offs += fillVec3v(mapped, offs, this.lightPositionCache[i]);
+                offs += fillVec3v(mapped, offs, this.lightRotationCache[i]);
                 offs += fillColor(mapped, offs, light.color);
                 mapped[offs++] = light.type;
                 mapped[offs++] = light.radius;
