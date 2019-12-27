@@ -2,6 +2,7 @@
 // @ts-ignore
 import program_glsl from './program.glsl';
 import * as rw from 'librw';
+import * as UI from "../ui";
 import * as Viewer from '../viewer';
 import * as Assets from './assets';
 import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
@@ -26,14 +27,18 @@ import { mat4FromYPR, RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFrom
 import { EventID } from './events';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
+import { Asset } from './hip';
 
 const DRAW_DISTANCE = 1000.0;
 
 interface BFBBProgramDef {
-    ENT?: string;
+    JSP?: string;
     SKY?: string;
     SKY_DEPTH?: string;
     USE_TEXTURE?: string;
+    USE_LIGHTING?: string;
+    USE_FOG?: string;
+    ALPHA_REF?: string;
 }
 
 class BFBBProgram extends DeviceProgram {
@@ -49,14 +54,18 @@ class BFBBProgram extends DeviceProgram {
 
     constructor(def: BFBBProgramDef = {}) {
         super();
-        if (def.ENT)
-            this.defines.set('ENT', def.ENT);
         if (def.SKY)
             this.defines.set('SKY', def.SKY);
         if (def.SKY_DEPTH)
             this.defines.set('SKY_DEPTH', def.SKY_DEPTH);
         if (def.USE_TEXTURE)
             this.defines.set('USE_TEXTURE', def.USE_TEXTURE);
+        if (def.USE_LIGHTING)
+            this.defines.set('USE_LIGHTING', def.USE_LIGHTING);
+        if (def.USE_FOG)
+            this.defines.set('USE_FOG', def.USE_FOG);
+        if (def.ALPHA_REF)
+            this.defines.set('ALPHA_REF', def.ALPHA_REF);
     }
 }
 
@@ -101,25 +110,6 @@ class RWMeshFragData implements MeshFragData {
 
     public get vertices() {
         return this.indexMap.length;
-    }
-
-    public distanceToCamera(modelMatrix: mat4, cameraPosition: vec3): number {
-        let minDist = Infinity;
-        const m = modelMatrix;
-        for (let i = 0; i < this.positions.length; i += 3) {
-            const vx = this.positions[i+0];
-            const vy = this.positions[i+1];
-            const vz = this.positions[i+2];
-            const x = m[0] * vx + m[4] * vy + m[8] * vz + m[12];
-            const y = m[1] * vx + m[5] * vy + m[9] * vz + m[13];
-            const z = m[2] * vx + m[6] * vy + m[10] * vz + m[14];
-            const dx = cameraPosition[0] - x;
-            const dy = cameraPosition[1] - y;
-            const dz = cameraPosition[2] - z;
-            const dist = dx*dx + dy*dy + dz*dz;
-            minDist = Math.min(dist, minDist);
-        }
-        return Math.sqrt(minDist);
     }
 
     public fillPosition(dst: vec3, index: number): void {
@@ -311,6 +301,11 @@ export class TextureCache {
     }
 }
 
+export interface JSP {
+    model?: ModelData;
+    textures?: TextureData[];
+}
+
 export interface Ent {
     asset: Assets.EntAsset;
     model?: ModelData;
@@ -360,16 +355,6 @@ function convertPipeCullMode(cull: Assets.PipeCullMode): GfxCullMode {
     }
 }
 
-function convertPipeZWriteMode(zwrite: Assets.PipeZWriteMode): boolean {
-    switch (zwrite) {
-        case Assets.PipeZWriteMode.Disable:
-        default:
-            return false;
-        case Assets.PipeZWriteMode.Enable:
-            return true;
-    }
-}
-
 function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFactor {
     switch (blend) {
         case Assets.PipeBlendFunction.Zero:
@@ -399,13 +384,7 @@ function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFact
     }
 }
 
-interface SceneRenderer extends GraphObjBase {
-    modelMatrix: mat4;
-    transparent: boolean;
-    distanceToCamera(cameraPosition: vec3): number;
-}
-
-class MeshRenderer implements SceneRenderer {
+class MeshRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
@@ -422,9 +401,11 @@ class MeshRenderer implements SceneRenderer {
     private bboxModel = new AABB();
 
     public modelMatrix = mat4.create();
+    public transparent = false;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, public frag: RWMeshFragData, public transparent: boolean,
-            private textureData?: TextureData, private pipeInfo?: Assets.PipeInfo) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, public frag: RWMeshFragData,
+        private textureData?: TextureData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
+
         this.indices = frag.indices.length;
         assert(this.indices > 0);
 
@@ -445,9 +426,9 @@ class MeshRenderer implements SceneRenderer {
             vbuf[voffs++] = posnorm[2];
             this.bbox.unionPoint(posnorm);
             frag.fillNormal(posnorm, i);
-            vbuf[voffs++] = posnorm[0];
-            vbuf[voffs++] = posnorm[1];
-            vbuf[voffs++] = posnorm[2];
+            vbuf[voffs++] = posnorm[2]; // Normal has to be rotated for whatever reason...
+            vbuf[voffs++] = posnorm[0]; // These coordinates might be wrong. They look
+            vbuf[voffs++] = posnorm[1]; // the most accurate out of all combinations though
             frag.fillColor(color, i);
             voffs += fillColor(vbuf, voffs, color);
             frag.fillTexCoord(texcoord, i);
@@ -479,44 +460,51 @@ class MeshRenderer implements SceneRenderer {
         this.megaStateFlags = {
             cullMode: GfxCullMode.NONE,
             depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL)
         };
         let blendMode = GfxBlendMode.ADD;
         let blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
         let blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
 
-        if (pipeInfo) {
-            this.megaStateFlags.cullMode = convertPipeCullMode(Assets.extractPipeCullMode(pipeInfo.PipeFlags));
-            this.megaStateFlags.depthWrite = convertPipeZWriteMode(Assets.extractPipeZWriteMode(pipeInfo.PipeFlags));
-            const dstFactor = convertPipeBlendFunction(Assets.extractPipeDstBlend(pipeInfo.PipeFlags));
-            const srcFactor = convertPipeBlendFunction(Assets.extractPipeSrcBlend(pipeInfo.PipeFlags));
+        let useFog = !defines.SKY;
+        let useLighting = !defines.SKY;
+        let alphaRef = 0;
+
+        if (this.pipeInfo && (this.pipeInfo.SubObjectBits & subObject!)) {
+            this.megaStateFlags.cullMode = convertPipeCullMode(this.pipeInfo.PipeFlags.cullMode);
+            this.megaStateFlags.depthWrite = !this.pipeInfo.PipeFlags.noZWrite;
+            const dstFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.dstBlend);
+            const srcFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.srcBlend);
             if (dstFactor != -1) blendDstFactor = dstFactor;
             if (srcFactor != -1) blendSrcFactor = srcFactor;
+
+            if (this.pipeInfo.PipeFlags.noFog)
+                useFog = false;
+            
+            if (this.pipeInfo.PipeFlags.noLighting)
+                useLighting = false;
+            
+            if (this.pipeInfo.PipeFlags.alphaCompare)
+                alphaRef = this.pipeInfo.PipeFlags.alphaCompare / 255;
         }
+
+        if (useFog && !defines.USE_FOG)
+            defines.USE_FOG = '1';
+        if (useLighting && !defines.USE_LIGHTING)
+            defines.USE_LIGHTING = '1';
+        if (alphaRef && !defines.ALPHA_REF)
+            defines.ALPHA_REF = alphaRef.toString();
 
         setAttachmentStateSimple(this.megaStateFlags, { blendMode, blendDstFactor, blendSrcFactor });
-        
-        if (textureData) {
-            textureData.setup(device, cache);
-            defines.USE_TEXTURE = '1';
-        }
 
-        let renderLayer = GfxRendererLayer.OPAQUE;
-
-        if (this.transparent)
-            renderLayer = GfxRendererLayer.TRANSLUCENT;
-        else if (defines.SKY)
-            renderLayer = GfxRendererLayer.BACKGROUND;
+        this.transparent = frag.transparent || (textureData ? textureData.texture.transparent : false) || !this.megaStateFlags.depthWrite;
+        const renderLayer = this.transparent ? GfxRendererLayer.TRANSLUCENT : (defines.SKY ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE);
 
         this.program = new BFBBProgram(defines);
         this.gfxProgram = device.createProgram(this.program);
 
         this.sortKey = makeSortKey(renderLayer);
         this.filterKey = defines.SKY ? BFBBPass.SKYDOME : BFBBPass.MAIN;
-    }
-
-    public distanceToCamera(cameraPosition: vec3) {
-        return this.frag.distanceToCamera(this.modelMatrix, cameraPosition);
     }
 
     private scratchVec3 = vec3.create();
@@ -538,7 +526,7 @@ class MeshRenderer implements SceneRenderer {
         if (this.textureData !== undefined)
             renderInst.setSamplerBindingsFromTextureMappings(this.textureData.textureMapping);
         
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bboxModel);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
         renderInst.filterKey = this.filterKey;
     }
@@ -556,60 +544,39 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 },
 ];
 
-export class ModelRenderer implements SceneRenderer {
+export class ModelRenderer {
     public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
     private bboxModel = new AABB();
 
     public renderers: MeshRenderer[] = [];
     public modelMatrix = mat4.create();
 
-    public transparent: boolean;
-
     constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, model: ModelData, textures?: TextureData[], public color: Color = White) {
-        this.transparent = color.a < 1.0;
-
-        let pipeTransparent = false;
-        if (model.pipeInfo) {
-            if (Assets.extractPipeDstBlend(model.pipeInfo.PipeFlags) === Assets.PipeBlendFunction.One)
-                pipeTransparent = true;
-        }
+        let subObject = 1 << (model.meshes.length - 1);
 
         for (let i = 0; i < model.meshes.length; i++) {
             const mesh = model.meshes[i];
-            const subObject = 1 << i;
 
             if (mesh.atomicStruct.flags & RWAtomicFlags.Render) {
                 for (const frag of mesh.frags) {
-                    let meshTransparent = frag.transparent || pipeTransparent;
-
                     let textureData: TextureData | undefined;
                     if (frag.texName && textures) {
                         textureData = textures.find((tex) => tex.name === frag.texName);
 
-                        if (textureData && textureData.texture.transparent)
-                            meshTransparent = true;
+                        if (textureData) {
+                            textureData.setup(device, cache);
+                            defines.USE_TEXTURE = '1';
+                        }
                     }
-
-                    if (meshTransparent)
-                        this.transparent = true;
                     
-                    let pipeInfo = model.pipeInfo;
-                    if (pipeInfo && !(pipeInfo.SubObjectBits & subObject))
-                        pipeInfo = undefined;
-                    
-                    const renderer = new MeshRenderer(device, cache, defines, frag, meshTransparent, textureData, pipeInfo);
+                    const renderer = new MeshRenderer(device, cache, defines, frag, textureData, model.pipeInfo, subObject);
                     this.bbox.union(this.bbox, renderer.bbox);
                     this.renderers.push(renderer);
                 }
             }
-        }
-    }
 
-    public distanceToCamera(cameraPosition: vec3) {
-        let distance = Infinity;
-        for (const renderer of this.renderers)
-            distance = Math.min(renderer.distanceToCamera(cameraPosition), distance);
-        return distance;
+            subObject >>>= 1;
+        }
     }
 
     private scratchVec3 = vec3.create();
@@ -630,21 +597,39 @@ export class ModelRenderer implements SceneRenderer {
         offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
         offs += fillColor(mapped, offs, this.color);
 
-        for (const renderer of this.renderers) {
-            mat4.copy(renderer.modelMatrix, this.modelMatrix);
-            renderer.prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.renderers.length; i++) {
+            mat4.copy(this.renderers[i].modelMatrix, this.modelMatrix);
+            this.renderers[i].prepareToRender(device, renderInstManager, viewerInput);
         }
         
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        for (const renderer of this.renderers)
-            renderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
     }
 }
 
-export class EntRenderer implements SceneRenderer {
+export class JSPRenderer {
+    public modelRenderer?: ModelRenderer;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly jsp: JSP) {
+        this.modelRenderer = new ModelRenderer(device, cache, { USE_LIGHTING: '0' }, jsp.model!, jsp.textures);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (this.modelRenderer)
+            this.modelRenderer.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public destroy(device: GfxDevice) {
+        if (this.modelRenderer)
+            this.modelRenderer.destroy(device);
+    }
+}
+
+export class EntRenderer {
     public modelRenderer?: ModelRenderer;
     public visible: boolean;
     public color: Color;
@@ -653,7 +638,6 @@ export class EntRenderer implements SceneRenderer {
     public skydomeLockY = false;
 
     public modelMatrix = mat4.create();
-    public transparent = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public readonly ent: Ent) {
         this.visible = (ent.asset.flags & Assets.EntFlags.Visible) != 0;
@@ -665,7 +649,7 @@ export class EntRenderer implements SceneRenderer {
         };
 
         if (ent.model) {
-            const defines: BFBBProgramDef = { ENT: '1' };
+            const defines: BFBBProgramDef = {};
 
             for (const link of ent.asset.links) {
                 if (link.srcEvent === EventID.SceneBegin && link.dstEvent === EventID.SetSkyDome) {
@@ -678,17 +662,12 @@ export class EntRenderer implements SceneRenderer {
             }
 
             this.modelRenderer = new ModelRenderer(device, cache, defines, ent.model, ent.textures, this.color);
-            this.transparent = this.modelRenderer.transparent;
 
             const q = quat.create();
             quatFromYPR(q, ent.asset.ang);
 
             mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
         }
-    }
-
-    public distanceToCamera(cameraPosition: vec3) {
-        return this.modelRenderer ? this.modelRenderer.distanceToCamera(cameraPosition) : Infinity;
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput) {
@@ -720,14 +699,15 @@ export class EntRenderer implements SceneRenderer {
 }
 
 export class BFBBRenderer implements Viewer.SceneGfx {
-    private opaqueRenderers: SceneRenderer[] = [];
-    private transparentRenderers: SceneRenderer[] = [];
+    public renderers: GraphObjBase[] = [];
 
     private fog?: Fog;
     private lightKit?: Assets.LightKit;
 
     private lightPositionCache: vec3[] = [];
     private lightRotationCache: vec3[] = [];
+
+    private lightingEnabled = true;
 
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
@@ -736,13 +716,6 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public addRenderer(renderer: SceneRenderer) {
-        if (renderer.transparent)
-            this.transparentRenderers.push(renderer);
-        else
-            this.opaqueRenderers.push(renderer);
     }
 
     public setFog(fog: Fog) {
@@ -780,10 +753,6 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         return controller;
     }
 
-    private scratchVec3_0 = vec3.create();
-    private scratchVec3_1 = vec3.create();
-    private scratchVec3_2 = vec3.create();
-
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(1);
         this.renderHelper.pushTemplateRenderInst();
@@ -806,7 +775,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         offs += fillVec4(mapped, offs, fogStart, fogStop);
 
         for (let i = 0; i < lightCount; i++) {
-            if (this.lightKit && this.lightKit.lightCount > i) {
+            if (this.lightingEnabled && this.lightKit && this.lightKit.lightCount > i) {
                 const light = this.lightKit.lightListArray[i];
                 offs += fillVec3v(mapped, offs, this.lightPositionCache[i]);
                 offs += fillVec3v(mapped, offs, this.lightRotationCache[i]);
@@ -821,24 +790,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             }
         }
 
-        const camPosition = this.scratchVec3_0;
-        mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-
-        for (const renderer of this.opaqueRenderers)
-            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        
-        const posA = this.scratchVec3_1;
-        const posB = this.scratchVec3_2;
-        
-        // transparency sorting... not perfect yet
-        this.transparentRenderers.sort((a, b) => {
-            mat4.getTranslation(posA, a.modelMatrix);
-            mat4.getTranslation(posB, b.modelMatrix);
-            return vec3.squaredDistance(posB, camPosition) - vec3.squaredDistance(posA, camPosition);
-        });
-
-        for (const renderer of this.transparentRenderers)
-            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -871,12 +824,25 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         return mainPassRenderer;
     }
 
+    public createPanels(): UI.Panel[] {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const lightingCheckbox = new UI.Checkbox("Lighting", true);
+        lightingCheckbox.onchanged = () => {
+            this.lightingEnabled = lightingCheckbox.checked;
+        };
+
+        panel.contents.appendChild(lightingCheckbox.elem);
+        panel.setVisible(true);
+        return [panel];
+    }
+
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        for (const renderer of this.opaqueRenderers)
-            renderer.destroy(device);
-        for (const renderer of this.transparentRenderers)
-            renderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
     }
 }

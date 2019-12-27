@@ -595,31 +595,11 @@ export function readLightKit(stream: DataStream): LightKit {
     return { tagID, groupID, lightCount, lightList, lightListArray };
 }
 
-export interface PipeInfo {
-    ModelHashID: number;
-    SubObjectBits: number;
-    PipeFlags: number;
-}
-
-export const enum PipeZWriteMode {
-    Enable,
-    Disable,
-    Unknown2,
-    Unknown3
-}
-
 export const enum PipeCullMode {
     Unknown0,
     None,
     Back,
     Unknown3 // front+back?
-}
-
-export const enum PipeLightMode {
-    Unknown0,
-    Unknown1,
-    Unknown2,
-    Unknown3
 }
 
 // RwBlendFunction
@@ -638,36 +618,46 @@ export const enum PipeBlendFunction {
     SrcAlphaSat
 }
 
-export function extractPipeZWriteMode(pipeFlags: number): PipeZWriteMode {
-    return (pipeFlags & 0xC) >> 2;
+export class PipeInfoFlags {
+    constructor(public flags: number) {}
+
+    public get noZWrite(): boolean {
+        return ((this.flags & 0xC) >>> 2) === 1;
+    }
+
+    public get cullMode(): PipeCullMode {
+        return (this.flags & 0x30) >>> 4;
+    }
+
+    public get noLighting(): boolean {
+        return ((this.flags & 0xC0) >>> 6) == 1;
+    }
+
+    public get srcBlend(): PipeBlendFunction {
+        return (this.flags & 0xF00) >>> 8;
+    }
+
+    public get dstBlend(): PipeBlendFunction {
+        return (this.flags & 0xF000) >>> 12;
+    }
+
+    public get noFog(): boolean {
+        return ((this.flags & 0x10000) >>> 16) === 1;
+    }
+
+    public get unknownF00000(): number {
+        return (this.flags & 0xF00000) >>> 20;
+    }
+
+    public get alphaCompare(): number {
+        return (this.flags & 0xFF000000) >>> 24;
+    }
 }
 
-export function extractPipeCullMode(pipeFlags: number): PipeCullMode {
-    return (pipeFlags & 0x30) >> 4;
-}
-
-export function extractPipeLightMode(pipeFlags: number): PipeLightMode {
-    return (pipeFlags & 0xC0) >> 6;
-}
-
-export function extractPipeSrcBlend(pipeFlags: number): PipeBlendFunction {
-    return (pipeFlags & 0xF00) >> 8;
-}
-
-export function extractPipeDstBlend(pipeFlags: number): PipeBlendFunction {
-    return (pipeFlags & 0xF000) >> 12;
-}
-
-export function extractPipeFogUnknown(pipeFlags: number): number {
-    return (pipeFlags & 0x10000) >> 16;
-}
-
-export function extractPipeUnknownF00000(pipeFlags: number): number {
-    return (pipeFlags & 0xF00000) >> 20;
-}
-
-export function extractPipeAlphaCmp(pipeFlags: number): number {
-    return (pipeFlags & 0xFF000000) >> 24;
+export interface PipeInfo {
+    ModelHashID: number;
+    SubObjectBits: number;
+    PipeFlags: PipeInfoFlags;
 }
 
 export function readPipeInfoTable(stream: DataStream): PipeInfo[] {
@@ -676,7 +666,7 @@ export function readPipeInfoTable(stream: DataStream): PipeInfo[] {
     for (let i = 0; i < entryCount; i++) {
         const ModelHashID = stream.readUInt32();
         const SubObjectBits = stream.readUInt32();
-        const PipeFlags = stream.readUInt32();
+        const PipeFlags = new PipeInfoFlags(stream.readUInt32());
         entries.push({ ModelHashID, SubObjectBits, PipeFlags });
     }
     return entries;

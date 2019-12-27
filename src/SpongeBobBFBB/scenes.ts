@@ -6,7 +6,7 @@ import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { initializeBasis } from '../vendor/basis_universal';
 
-import { ModelCache, BFBBRenderer, ModelRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog } from './render';
+import { ModelCache, BFBBRenderer, ModelRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer } from './render';
 import { Ent, Button, Platform, Player, SimpleObj } from './render';
 import { parseHIP, Asset } from './hip';
 import * as Assets from './assets';
@@ -74,11 +74,6 @@ enum AssetType {
     UIFT = 0x55494654, // UI Font
     VIL  = 0x56494C20, // Villain
     VILP = 0x56494C50  // Villain Props
-}
-
-interface JSP {
-    model?: ModelData;
-    textures?: TextureData[];
 }
 
 class AssetCache {
@@ -321,37 +316,27 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
 
         while (dataHolder.jsps.length) {
             const jsp = dataHolder.jsps.pop()!;
-
-            if (jsp.model)
-                renderer.addRenderer(new ModelRenderer(gfxDevice, cache, {}, jsp.model, jsp.textures));
+            renderer.renderers.push(new JSPRenderer(gfxDevice, cache, jsp));
         }
 
         while (dataHolder.buttons.length) {
             const butn = dataHolder.buttons.pop()!;
-            const butnRenderer = new EntRenderer(gfxDevice, cache, butn.ent);
-            if (butnRenderer)
-                renderer.addRenderer(butnRenderer);
+            renderer.renderers.push(new EntRenderer(gfxDevice, cache, butn.ent));
         }
 
         while (dataHolder.players.length) {
             const plyr = dataHolder.players.pop()!;
-            const plyrRenderer = new EntRenderer(gfxDevice, cache, plyr.ent);
-            if (plyrRenderer)
-                renderer.addRenderer(plyrRenderer);
+            renderer.renderers.push(new EntRenderer(gfxDevice, cache, plyr.ent));
         }
 
         while (dataHolder.platforms.length) {
             const plat = dataHolder.platforms.pop()!;
-            const platRenderer = new EntRenderer(gfxDevice, cache, plat.ent);
-            if (platRenderer)
-                renderer.addRenderer(platRenderer);
+            renderer.renderers.push(new EntRenderer(gfxDevice, cache, plat.ent));
         }
 
         while (dataHolder.simpleObjs.length) {
             const simp = dataHolder.simpleObjs.pop()!
-            const simpRenderer = new EntRenderer(gfxDevice, cache, simp.ent);
-            if (simpRenderer)
-                renderer.addRenderer(simpRenderer);
+            renderer.renderers.push(new EntRenderer(gfxDevice, cache, simp.ent));
         }
 
         if (dataHolder.fog) {
