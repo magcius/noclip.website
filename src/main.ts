@@ -47,6 +47,7 @@ import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
+import * as Scenes_FZEROGX from './AmusementVision/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -125,6 +126,7 @@ const sceneGroups = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
+    Scenes_FZEROGX.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
