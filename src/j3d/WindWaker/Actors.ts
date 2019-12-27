@@ -26,13 +26,13 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 
 export interface Actor {
-    name: string,
-    parameters: number,
-    roomIndex: number,
-    layer: number,
-    pos: vec3,
-    scale: vec3,
-    rotationY: number,
+    name: string;
+    parameters: number;
+    roomIndex: number;
+    layer: number;
+    pos: vec3;
+    scale: vec3;
+    rotationY: number;
 };
 
 // Special-case actors
