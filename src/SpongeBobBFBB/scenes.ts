@@ -290,7 +290,9 @@ async function loadHIP(dataFetcher: DataFetcher, path: string) {
 class BFBBSceneDesc implements Viewer.SceneDesc {
     private static initialised = false;
 
-    constructor(public id: string, public name: string) {}
+    constructor(public id: string, public name: string) {
+        this.id = this.id.toLowerCase();
+    }
 
     private static async initialize(dataFetcher: DataFetcher) {
         if (this.initialised)
@@ -301,7 +303,7 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
         rw.Texture.setLoadTextures(false);
         await initializeBasis();
 
-        await loadHIP(dataFetcher, 'BOOT.HIP');
+        await loadHIP(dataFetcher, 'boot.HIP');
 
         this.initialised = true;
     }
