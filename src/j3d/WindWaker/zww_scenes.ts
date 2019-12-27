@@ -2569,7 +2569,6 @@ const sceneDescs = [
 
     "Outset Island",
     new SceneDesc("sea", "Outset Island", [44]),
-    new SceneDesc("sea", "Outset Island", [33]),
     new SceneDesc("LinkRM", "Link's House"),
     new SceneDesc("LinkUG", "Under Link's House"),
     new SceneDesc("A_mori", "Forest of Fairies"),
