@@ -52,7 +52,8 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
 
-    vec3 t_Normal = normalize(Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal, 0.0)).xyz);
+   // vec4 t_Normal = Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0));
+    //vec4 t_Normal = vec4(a_Normal, 1.0);
 
 #ifdef USE_LIGHTING
     if (USE_LIGHTING == 1) {
@@ -62,14 +63,14 @@ void main() {
             Light light = u_Lights[i];
             if (light.type == 0.0) break;
 
-            vec3 lightColor = light.color.rgb; // alpha is ignored
+            vec3 colorFactor = (light.color.rgb * light.color.a);
 
             if (light.type == LIGHT_TYPE_AMBIENT) {
-                v_LightColor += lightColor;
+                v_LightColor += colorFactor;
             } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
-                vec3 lightDir = normalize(light.direction.xyz);
-                float diffuse = clamp(dot(t_Normal, lightDir), 0.0, 1.0);
-                v_LightColor += diffuse * lightColor;
+                vec3 lightDir = normalize(-light.rotation.xyz);
+                float diffuse = max(dot(a_Normal, lightDir), 0.0);
+                v_LightColor += diffuse * colorFactor;
             }
         }
     }

@@ -6,7 +6,7 @@ import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { initializeBasis } from '../vendor/basis_universal';
 
-import { ModelCache, BFBBRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer } from './render';
+import { ModelCache, BFBBRenderer, ModelRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer } from './render';
 import { Ent, Button, Platform, Player, SimpleObj } from './render';
 import { parseHIP, Asset } from './hip';
 import * as Assets from './assets';
