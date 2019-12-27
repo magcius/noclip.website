@@ -875,15 +875,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // Grass/Flowers/Trees
         if (this.flowerPacket) this.flowerPacket.calc();
-        if (this.flowerPacket) this.flowerPacket.update();
-        if (this.flowerPacket) this.flowerPacket.draw(renderInstManager, viewerInput, device);
-
         if (this.treePacket) this.treePacket.calc();
-        if (this.treePacket) this.treePacket.update();
-        if (this.treePacket) this.treePacket.draw(renderInstManager, viewerInput, device);
-
         if (this.grassPacket) this.grassPacket.calc();
+
+        if (this.flowerPacket) this.flowerPacket.update();
+        if (this.treePacket) this.treePacket.update();
         if (this.grassPacket) this.grassPacket.update();
+
+        if (this.flowerPacket) this.flowerPacket.draw(renderInstManager, viewerInput, device);
+        if (this.treePacket) this.treePacket.draw(renderInstManager, viewerInput, device);
         if (this.grassPacket) this.grassPacket.draw(renderInstManager, viewerInput, device);
 
         {
