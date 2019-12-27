@@ -743,7 +743,7 @@ export class TreePacket {
             if (!data) continue;
 
             // Perform ground checks for some limited number of data
-            if (data.flags & TreeFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+            if ((data.flags & TreeFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
                 data.pos[1] = this.checkGroundY(this.context, data);
                 data.flags &= ~TreeFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
@@ -1015,7 +1015,7 @@ export class GrassPacket {
             if (!data) continue;
 
             // Perform ground checks for some limited number of data
-            if (data.flags & GrassFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+            if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
                 data.pos[1] = checkGroundY(this.context, data.pos);
                 data.flags &= ~GrassFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
