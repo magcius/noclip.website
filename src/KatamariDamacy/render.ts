@@ -53,7 +53,7 @@ layout(location = 2) in vec2 a_TexCoord;
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(a_Normal, 0.0)).xyz);
-    v_TexCoord = (u_TextureMatrix[0] * vec4(a_TexCoord, 0.0, 1.0));
+    v_TexCoord = Mul(_Mat4x4(u_TextureMatrix[0]), vec4(a_TexCoord, 0.0, 1.0)).xy;
 }
 `;
 

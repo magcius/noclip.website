@@ -60,8 +60,8 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
 
 export function nArray<T>(n: number, c: () => T): T[] {
     const d = new Array(n);
-    while (n--)
-        d[n] = c();
+    for (let i = 0; i < n; i++)
+        d[i] = c();
     return d;
 }
 

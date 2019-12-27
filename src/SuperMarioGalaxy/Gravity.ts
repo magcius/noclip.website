@@ -78,7 +78,7 @@ export class PlanetGravityManager extends NameObj {
 }
 
 function registerGravity(sceneObjHolder: SceneObjHolder, gravity: PlanetGravity): void {
-    sceneObjHolder.create(SceneObj.PLANET_GRAVITY_MANAGER);
+    sceneObjHolder.create(SceneObj.PlanetGravityManager);
     sceneObjHolder.planetGravityManager!.registerGravity(gravity);
 }
 

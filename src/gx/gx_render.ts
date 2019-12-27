@@ -14,12 +14,11 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
-import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
-import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
@@ -82,10 +81,10 @@ export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams:
 
 export function fillLightData(d: Float32Array, offs: number, light: GX_Material.Light): number {
     offs += fillColor(d, offs, light.Color);
-    offs += fillVec3(d, offs, light.Position);
-    offs += fillVec3(d, offs, light.Direction);
-    offs += fillVec3(d, offs, light.DistAtten);
-    offs += fillVec3(d, offs, light.CosAtten);
+    offs += fillVec3v(d, offs, light.Position);
+    offs += fillVec3v(d, offs, light.Direction);
+    offs += fillVec3v(d, offs, light.DistAtten);
+    offs += fillVec3v(d, offs, light.CosAtten);
     return 4*5;
 }
 
@@ -331,7 +330,8 @@ export class GXMaterialHelperGfx {
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
+            const descriptor = this.program.generateShaders(device);
+            this.gfxProgram = cache.createProgramSimple(device, descriptor);
             this.programKey = this.gfxProgram.ResourceUniqueId;
         }
     }
@@ -386,16 +386,15 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
 
         const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
         const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
-        const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
 
         if (attrib !== undefined) {
             const bufferByteOffset = attrib.bufferOffset;
             const bufferIndex = attrib.bufferIndex;
-            vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, usesIntInShader });
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset });
         } else if (wantZeroBuffer) {
             const bufferByteOffset = 0;
             const bufferIndex = loadedVertexLayout.vertexBufferStrides.length;
-            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset, usesIntInShader });
+            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset });
             usesZeroBuffer = true;
         }
     }

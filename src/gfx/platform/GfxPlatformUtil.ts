@@ -1,16 +1,28 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor, GfxColor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
-import { EqualFunc } from '../../HashMap';
-import { colorEqual } from '../../Color';
 
-export type CopyFunc<T> = (a: T) => T;
+type EqualFunc<K> = (a: K, b: K) => boolean;
+type CopyFunc<T> = (a: T) => T;
 
-export function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
+function gfxColorEqual(c0: GfxColor, c1: GfxColor): boolean {
+    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
     const b = Array(a.length);
     for (let i = 0; i < a.length; i++)
         b[i] = copyFunc(a[i]);
     return b;
+}
+
+function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
+    if (a.length !== b.length)
+        return false;
+    for (let i = 0; i < a.length; i++)
+        if (!e(a[i], b[i]))
+            return false;
+    return true;
 }
 
 export function gfxSamplerBindingCopy(a: GfxSamplerBinding): GfxSamplerBinding {
@@ -49,14 +61,6 @@ export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor):
     return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology, sampleCount };
 }
 
-function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++)
-        if (!e(a[i], b[i]))
-            return false;
-    return true;
-}
-
 function gfxBufferBindingEquals(a: GfxBufferBinding, b: GfxBufferBinding): boolean {
     return a.buffer === b.buffer && a.wordCount === b.wordCount && a.wordOffset === b.wordOffset;
 }
@@ -89,7 +93,7 @@ function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState)
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
         return false;
-    if (!colorEqual(a.blendConstant, b.blendConstant))
+    if (!gfxColorEqual(a.blendConstant, b.blendConstant))
         return false;
 
     return (
@@ -127,8 +131,7 @@ export function gfxVertexAttributeDescriptorEquals(a: GfxVertexAttributeDescript
         a.bufferIndex === b.bufferIndex &&
         a.bufferByteOffset === b.bufferByteOffset &&
         a.location === b.location &&
-        a.format === b.format &&
-        a.usesIntInShader === b.usesIntInShader
+        a.format === b.format
     );
 }
 

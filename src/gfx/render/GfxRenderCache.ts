@@ -1,11 +1,10 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler } from "../platform/GfxPlatform";
+import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
-import { DeviceProgram } from "../../Program";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformUtil';
 
-function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
-    return DeviceProgram.equals(a, b);
+function gfxProgramDescriptorEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
+    return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
 }
 
 function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
@@ -30,10 +29,10 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64, 4);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash, 16, 4);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
-    constructor(private outlivesScene: boolean = false) {
+    constructor() {
     }
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
@@ -41,8 +40,6 @@ export class GfxRenderCache {
         if (bindings === null) {
             const descriptorCopy = gfxBindingsDescriptorCopy(descriptor);
             bindings = device.createBindings(descriptorCopy);
-            if (this.outlivesScene)
-                device.setResourceLeakCheck(bindings, false);
             this.gfxBindingsCache.add(descriptorCopy, bindings);
         }
         return bindings;
@@ -53,8 +50,6 @@ export class GfxRenderCache {
         if (renderPipeline === null) {
             const descriptorCopy = gfxRenderPipelineDescriptorCopy(descriptor);
             renderPipeline = device.createRenderPipeline(descriptorCopy);
-            if (this.outlivesScene)
-                device.setResourceLeakCheck(renderPipeline, false);
             this.gfxRenderPipelinesCache.add(descriptorCopy, renderPipeline);
         }
         return renderPipeline;
@@ -64,20 +59,27 @@ export class GfxRenderCache {
         let inputLayout = this.gfxInputLayoutsCache.get(descriptor);
         if (inputLayout === null) {
             inputLayout = device.createInputLayout(descriptor);
-            if (this.outlivesScene)
-                device.setResourceLeakCheck(inputLayout, false);
             this.gfxInputLayoutsCache.add(descriptor, inputLayout);
         }
         return inputLayout;
     }
 
-    public createProgram(device: GfxDevice, deviceProgram: DeviceProgram): GfxProgram {
-        let program = this.gfxProgramCache.get(deviceProgram);
+    public createProgramSimple(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptorSimple): GfxProgram {
+        let program = this.gfxProgramCache.get(gfxProgramDescriptor);
         if (program === null) {
-            program = device.createProgram(deviceProgram);
-            if (this.outlivesScene)
-                device.setResourceLeakCheck(program, false);
-            this.gfxProgramCache.add(deviceProgram, program);
+            program = device.createProgramSimple(gfxProgramDescriptor);
+            this.gfxProgramCache.add(gfxProgramDescriptor, program);
+        }
+        return program;
+    }
+
+    public createProgram(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
+        // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
+        gfxProgramDescriptor.ensurePreprocessed(device.queryVendorInfo());
+        let program = this.gfxProgramCache.get(gfxProgramDescriptor);
+        if (program === null) {
+            program = device.createProgram(gfxProgramDescriptor);
+            this.gfxProgramCache.add(gfxProgramDescriptor, program);
         }
         return program;
     }
@@ -86,8 +88,6 @@ export class GfxRenderCache {
         let sampler = this.gfxSamplerCache.get(descriptor);
         if (sampler === null) {
             sampler = device.createSampler(descriptor);
-            if (this.outlivesScene)
-                device.setResourceLeakCheck(sampler, false);
             this.gfxSamplerCache.add(descriptor, sampler);
         }
         return sampler;

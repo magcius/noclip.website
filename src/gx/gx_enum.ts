@@ -553,15 +553,39 @@ export const enum IndTexMtxID {
     T2 = 11,
 }
 
-export const enum XFRegister {
+export enum XFRegister {
     XF_INVTXSPEC_ID    = 0x1008,
     XF_NUMCOLORS_ID    = 0x1009,
+    XF_AMBIENT0_ID     = 0x100A,
+    XF_AMBIENT1_ID     = 0x100B,
+    XF_MATERIAL0_ID    = 0x100C,
+    XF_MATERIAL1_ID    = 0x100D,
+    XF_COLOR0CNTRL_ID  = 0x100E,
+    XF_COLOR1CNTRL_ID  = 0x100F,
+    XF_ALPHA0CNTRL_ID  = 0x1010,
+    XF_ALPHA1CNTRL_ID  = 0x1011,
+    XF_DUALTEXTRANS_ID = 0x1012,
+    XF_MATRIXINDEX0_ID = 0x1018,
+    XF_MATRIXINDEX1_ID = 0x1019,
+    XF_VPSCALEX_ID     = 0x101A,
+    XF_VPSCALEY_ID     = 0x101B,
+    XF_VPSCALEZ_ID     = 0x101C,
+    XF_VPOFFSETX_ID    = 0x101D,
+    XF_VPOFFSETY_ID    = 0x101E,
+    XF_VPOFFSETZ_ID    = 0x101F,
+    XF_PROJECTIONA_ID  = 0x1020,
+    XF_PROJECTIONB_ID  = 0x1021,
+    XF_PROJECTIONC_ID  = 0x1022,
+    XF_PROJECTIOND_ID  = 0x1023,
+    XF_PROJECTIONE_ID  = 0x1024,
+    XF_PROJECTIONF_ID  = 0x1025,
+    XF_PROJECTORTHO_ID = 0x1026,
     XF_NUMTEX_ID       = 0x103F,
     XF_TEX0_ID         = 0x1040,
     XF_DUALTEX0_ID     = 0x1050,
 }
 
-export const enum BPRegister {
+export enum BPRegister {
     // GEN (Graphics ENgine)
     GEN_MODE_ID        = 0x00,
 
@@ -580,6 +604,25 @@ export const enum BPRegister {
     // SetTevOrder
     RAS1_TREF_0_ID     = 0x28,
 
+    // Tex offsets
+    SU_SSIZE_I0_ID = 0x30,
+    SU_SSIZE_I1_ID = 0x32,
+    SU_SSIZE_I2_ID = 0x34,
+    SU_SSIZE_I3_ID = 0x36,
+    SU_SSIZE_I4_ID = 0x38,
+    SU_SSIZE_I5_ID = 0x3a,
+    SU_SSIZE_I6_ID = 0x3c,
+    SU_SSIZE_I7_ID = 0x3e,
+
+    SU_TSIZE_I0_ID = 0x31,
+    SU_TSIZE_I1_ID = 0x33,
+    SU_TSIZE_I2_ID = 0x35,
+    SU_TSIZE_I3_ID = 0x37,
+    SU_TSIZE_I4_ID = 0x39,
+    SU_TSIZE_I5_ID = 0x3b,
+    SU_TSIZE_I6_ID = 0x3d,
+    SU_TSIZE_I7_ID = 0x3f,
+
     // PE (ROP / Pixel Engine)
     // SetZMode
     PE_ZMODE_ID        = 0x40,
@@ -587,18 +630,21 @@ export const enum BPRegister {
     PE_CMODE0_ID       = 0x41,
 
     // TX (Texture Unit)
+    TX_LOADTLUT_I0_ID = 0x64,
     TX_SETMODE0_I0_ID  = 0x80,
     TX_SETMODE0_I4_ID  = 0xA0,
     TX_SETMODE1_I0_ID  = 0x84,
     TX_SETMODE1_I4_ID  = 0xA4,
     TX_SETIMAGE0_I0_ID = 0x88,
-    TX_SETIMAGE0_I4_ID = 0xA4,
+    TX_SETIMAGE0_I4_ID = 0xA8,
     TX_SETIMAGE1_I0_ID = 0x8C,
     TX_SETIMAGE1_I4_ID = 0xAC,
     TX_SETIMAGE2_I0_ID = 0x90,
     TX_SETIMAGE2_I4_ID = 0xB0,
-    TX_SETIMAGE3_I0_ID = 0x98,
-    TX_SETIMAGE3_I4_ID = 0xB8,
+    TX_SETIMAGE3_I0_ID = 0x94,
+    TX_SETIMAGE3_I4_ID = 0xB4,
+    TX_SETTLUT_I0_ID = 0x98,
+    TX_SETTLUT_I4_ID = 0xB8,
 
     // TEV (Texture EnVironments)
     // SetTev
@@ -624,7 +670,7 @@ export const enum BPRegister {
     SS_MASK            = 0xFE,
 }
 
-export const enum CPRegister {
+export enum CPRegister {
     MATINDEX_A_ID = 0x30,
     MATINDEX_B_ID = 0x40,
     VCD_LO_ID     = 0x50,

@@ -6,7 +6,7 @@ import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilter
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -86,7 +86,6 @@ void main() {
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
-    // TODO: figure out whether to use lookat vectors instead, and find where the light direction gets set
 
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
@@ -711,11 +710,15 @@ function sampleAnimationTrackLinear(track: AnimationTrack, frame: number): numbe
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class BoneAnimator {
-    constructor(private animFile: AnimationFile) {
+    constructor(private animFile: AnimationFile, public duration: number) {
     }
 
-    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number): void {
-        timeInFrames = getAnimFrame(this.animFile, timeInFrames);
+    public frames(): number {
+        return this.animFile.endFrame - this.animFile.startFrame;
+    }
+
+    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
+        timeInFrames = getAnimFrame(this.animFile, timeInFrames, mode);
 
         mat4.identity(scratchMatrix);
 
@@ -774,10 +777,17 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
-function getAnimFrame(anim: AnimationFile, frame: number): number {
+function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): number {
     const lastFrame = anim.endFrame - anim.startFrame;
-    while (frame > lastFrame)
-        frame -= lastFrame;
+    switch (mode) {
+    case AnimationMode.Loop:
+        while (frame > lastFrame)
+            frame -= lastFrame;
+        break;
+    case AnimationMode.Once:
+        if (frame > lastFrame)
+            frame = lastFrame;
+    }
     return frame + anim.startFrame;
 }
 
@@ -910,6 +920,12 @@ class TextureAnimator {
     }
 }
 
+export const enum AnimationMode {
+    None,
+    Once,
+    Loop,
+}
+
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
@@ -926,7 +942,11 @@ export class GeometryRenderer {
     public boneToParentMatrixArray: mat4[];
     public modelPointArray: vec3[];
 
-    public boneAnimator: BoneAnimator | null = null;
+    public currAnimation = 0;
+    public animationMode = AnimationMode.Loop;
+    private animFrames = 0;
+
+    public boneAnimators: BoneAnimator[] = [];
     public animationController = new AnimationController(30);
     public movementController: MovementController | null = null;
     public textureAnimator: TextureAnimator | null = null;
@@ -1034,13 +1054,34 @@ export class GeometryRenderer {
     }
 
     private calcAnim(): void {
-        const animationSetup = this.animationSetup;
-        if (this.boneAnimator !== null && animationSetup !== null) {
-            const bones = animationSetup.bones;
+        this.animFrames = this.animationController.getTimeInFrames();
+        const animator = this.boneAnimators[this.currAnimation];
+        if (animator === undefined || this.animationSetup === null)
+            return;
+        const bones = this.animationSetup.bones;
+        const scale = this.animationSetup.translationScale;
 
-            for (let i = 0; i < bones.length; i++)
-                this.boneAnimator.calcBoneToParentMtx(this.boneToParentMatrixArray[i], animationSetup.translationScale, bones[i], this.animationController.getTimeInFrames());
-        }
+        for (let i = 0; i < bones.length; i++)
+            animator.calcBoneToParentMtx(this.boneToParentMatrixArray[i], scale, bones[i], this.animFrames, this.animationMode);
+    }
+
+    public changeAnimation(newIndex: number, mode: AnimationMode) {
+        this.currAnimation = newIndex;
+        this.animationMode = mode;
+        const animator = this.boneAnimators[newIndex];
+        if (animator === undefined)
+            throw `bad animation index ${newIndex}`;
+        this.animationController.adjustTimeToNewFPS(animator.frames()/animator.duration);
+        this.animationController.setPhaseToCurrent();
+        this.animFrames = 0;
+    }
+
+    public animationPhaseTrigger(phase: number): boolean {
+        const total = this.boneAnimators[this.currAnimation].frames();
+        const currFrame = this.animationController.getTimeInFrames()/total;
+        const oldFrame = this.animFrames/total;
+        // assume forward for now
+        return (oldFrame <= phase && phase < currFrame) || (currFrame < oldFrame && (phase < currFrame || oldFrame <= phase));
     }
 
     private calcBonesRelativeToMatrix(array: mat4[], base: mat4): void {
@@ -1191,9 +1232,18 @@ export class GeometryRenderer {
     }
 }
 
+// by default, multiply primitive color and texture
 const defaultFlipbookCombine: CombineParams = {
     c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
     c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+    a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+    a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+};
+
+// use texture to interpolate color between prim and env (which gets set to slightly dimmer than prim)
+const emittedParticleCombine: CombineParams = {
+    c0: { a: CCMUX.PRIMITIVE, b: CCMUX.ENVIRONMENT, c: CCMUX.TEXEL0, d: CCMUX.ENVIRONMENT },
+    c1: { a: CCMUX.PRIMITIVE, b: CCMUX.ENVIRONMENT, c: CCMUX.TEXEL0, d: CCMUX.ENVIRONMENT },
     a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
     a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
 };
@@ -1217,7 +1267,7 @@ interface FlipbookAnimationParams {
     reversed: boolean;
 }
 
-const texMappingScratch = [new TextureMapping()];
+const texMappingScratch = nArray(1, () => new TextureMapping());
 export class FlipbookRenderer {
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
@@ -1234,9 +1284,11 @@ export class FlipbookRenderer {
     public animationController: AnimationController;
     public sortKeyBase: number;
     public rotationAngle = 0;
+    public screenOffset = vec2.create();
     public mode: FlipbookMode;
 
     public primColor = vec4.fromValues(1, 1, 1, 1);
+    public envColor = vec4.fromValues(1, 1, 1, 1);
     private animationParams: FlipbookAnimationParams;
 
     constructor(public flipbookData: FlipbookData, phase = 0, initialMirror = false) {
@@ -1261,7 +1313,7 @@ export class FlipbookRenderer {
         };
     }
 
-    public changeData(data: FlipbookData, modeOverride?: FlipbookMode) {
+    public changeData(data: FlipbookData, modeOverride?: FlipbookMode, mirror = false) {
         this.flipbookData = data;
         for (let i = 0; i < data.renderData.textures.length; i++) {
             this.textureEntry[i] = data.renderData.sharedOutput.textureCache.textures[i];
@@ -1275,6 +1327,8 @@ export class FlipbookRenderer {
         this.createProgram();
         this.animationController.fps = data.flipbook.frameRate;
         this.animationController.phaseFrames = 0;
+        this.animationParams.initialMirror = mirror;
+        this.animationParams.mirrored = mirror;
     }
 
     private createProgram(): void {
@@ -1392,14 +1446,19 @@ export class FlipbookRenderer {
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
         J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+        // apply screen transformations after billboarding
         mat4.rotateZ(modelViewScratch, modelViewScratch, this.rotationAngle);
+        modelViewScratch[12] += this.screenOffset[0];
+        modelViewScratch[13] += this.screenOffset[1];
 
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, defaultFlipbookCombine);
+        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
+        offs += fillCombineParams(comb, offs, combine);
         offs += fillVec4v(comb, offs, this.primColor);
+        offs += fillVec4v(comb, offs, this.envColor);
     }
 }

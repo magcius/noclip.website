@@ -389,7 +389,7 @@ class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private modelCache = new Map<string, BMDData>();
-    private gfxRenderCache = new GfxRenderCache(true);
+    private gfxRenderCache = new GfxRenderCache();
 
     constructor(private dataFetcher: DataFetcher) {
     }

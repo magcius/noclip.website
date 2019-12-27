@@ -141,6 +141,8 @@ const enum GfxRenderInstFlags {
     TEMPLATE_RENDER_INST = 1 << 0,
     DRAW_RENDER_INST = 1 << 1,
     DRAW_INDEXED = 1 << 2,
+
+    INHERITED_FLAGS = (DRAW_INDEXED),
 }
 
 interface GfxRendererTransientState {
@@ -195,13 +197,18 @@ export class GfxRenderInst {
         this._renderPipeline = o._renderPipeline;
         this._inputState = o._inputState;
         this._uniformBuffer = o._uniformBuffer;
+        this._drawCount = o._drawCount;
+        this._drawStart = o._drawStart;
+        this._drawInstanceCount = o._drawInstanceCount;
+        this._flags = (this._flags & ~GfxRenderInstFlags.INHERITED_FLAGS) | (o._flags & GfxRenderInstFlags.INHERITED_FLAGS);
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
-        if (o._bindingDescriptors[0].bindingLayout !== null)
-            this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
-        for (let i = 0; i < o._bindingDescriptors[0].uniformBufferBindings.length; i++)
-            this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
-        this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
+        const tbd = this._bindingDescriptors[0], obd = o._bindingDescriptors[0];
+        if (obd.bindingLayout !== null)
+            this._setBindingLayout(obd.bindingLayout);
+        for (let i = 0; i < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); i++)
+            tbd.uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
+        this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
             this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
     }
@@ -303,9 +310,9 @@ export class GfxRenderInst {
     }
 
     public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
-        for (let i = 0; i < m.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i]!;
-            if (m[i] !== null) {
+        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
+            const dst = this._bindingDescriptors[0].samplerBindings[i];
+            if (m[i] !== undefined && m[i] !== null) {
                 dst.gfxTexture = m[i]!.gfxTexture;
                 dst.gfxSampler = m[i]!.gfxSampler;
             } else {

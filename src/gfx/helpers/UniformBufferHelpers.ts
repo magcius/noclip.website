@@ -1,10 +1,10 @@
 
-// Parse uniform buffer definitions, and provide helpers for filling them...
+// Helpers to fill vertex buffers.
 
-import { Color } from "../../Color";
 import { mat4, mat2d, vec3, vec4 } from "gl-matrix";
+import { GfxColor } from "../platform/GfxPlatform";
 
-export function fillVec3(d: Float32Array, offs: number, v: vec3, v3: number = 0): number {
+export function fillVec3v(d: Float32Array, offs: number, v: vec3, v3: number = 0): number {
     d[offs + 0] = v[0];
     d[offs + 1] = v[1];
     d[offs + 2] = v[2];
@@ -28,7 +28,7 @@ export function fillVec4v(d: Float32Array, offs: number, v: vec4): number {
     return 4;
 }
 
-export function fillColor(d: Float32Array, offs: number, c: Color): number {
+export function fillColor(d: Float32Array, offs: number, c: GfxColor): number {
     d[offs + 0] = c.r;
     d[offs + 1] = c.g;
     d[offs + 2] = c.b;

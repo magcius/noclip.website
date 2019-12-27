@@ -1,45 +1,22 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
-import { DeviceProgram } from '../../Program';
 import { assert, assertExists, leftPad } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { colorEqual, colorCopy } from '../../Color';
 import { range } from '../../MathHelpers';
+import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 
 const SHADER_DEBUG = IS_DEVELOPMENT;
 
-// TODO(jstpierre): Turn this back on at some point in the future. The DataShare really breaks this concept...
 const TRACK_RESOURCES = IS_DEVELOPMENT;
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
 const UBO_PAGE_MAX_BYTE_SIZE = 0x10000;
-
-class FullscreenCopyProgram extends DeviceProgram {
-    public vert: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1, 1);
-}
-`;
-    public frag: string = `
-uniform sampler2D u_Texture;
-in vec2 v_TexCoord;
-
-void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
-    gl_FragColor = vec4(color.rgb, 1.0);
-}
-`;
-}
 
 interface GfxBufferP_GL extends GfxBuffer {
     gl_buffer_pages: WebGLBuffer[];
@@ -76,10 +53,12 @@ interface GfxSamplerP_GL extends GfxSampler {
 }
 
 interface GfxProgramP_GL extends GfxProgram {
-    glProgram: WebGLProgram | null;
+    gl_program: WebGLProgram | null;
+    gl_shader_vert: WebGLShader | null;
+    gl_shader_frag: WebGLShader | null;
     compileDirty: boolean;
     bindDirty: boolean;
-    deviceProgram: DeviceProgram;
+    descriptor: GfxProgramDescriptorSimple;
 }
 
 interface GfxBindingsP_GL extends GfxBindings {
@@ -555,101 +534,6 @@ function prependLineNo(str: string, lineStart: number = 1) {
     return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
 }
 
-function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
-    const shader: WebGLShader = assertExists(gl.createShader(type));
-
-    gl.shaderSource(shader, str);
-    gl.compileShader(shader);
-
-    if (SHADER_DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(prependLineNo(str));
-        const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
-        if (debug_shaders)
-            console.error(debug_shaders.getTranslatedShaderSource(shader));
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-    }
-
-    return shader;
-}
-
-interface ProgramKey {
-    vert: string;
-    frag: string;
-}
-
-abstract class MemoizeCache<TKey, TRes> {
-    private cache = new Map<string, TRes>();
-
-    protected abstract make(key: TKey): TRes | null;
-    protected abstract makeKey(key: TKey): string;
-
-    public get(key: TKey): TRes | null {
-        const keyStr = this.makeKey(key);
-        if (this.cache.has(keyStr)) {
-            return assertExists(this.cache.get(keyStr));
-        } else {
-            const obj = this.make(key);
-            if (obj !== null)
-                this.cache.set(keyStr, obj);
-            return obj;
-        }
-    }
-
-    public clear(): void {
-        this.cache.clear();
-    }
-}
-
-interface ProgramWithKey extends WebGLProgram {
-    uniqueKey: number;
-}
-
-class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
-    private _uniqueKey: number = 0;
-
-    constructor(private gl: WebGL2RenderingContext) {
-        super();
-    }
-
-    protected make(key: ProgramKey): ProgramWithKey | null {
-        const gl = this.gl;
-        const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
-        if (!vertShader || !fragShader)
-            return null;
-        const prog = gl.createProgram() as ProgramWithKey;
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
-        if (SHADER_DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error(key.vert);
-            console.error(key.frag);
-            console.error(gl.getProgramInfoLog(prog));
-            gl.deleteProgram(prog);
-            return null;
-        }
-        prog.uniqueKey = ++this._uniqueKey;
-        return prog;
-    }
-
-    protected destroy(obj: ProgramWithKey) {
-        const gl = this.gl;
-        gl.deleteProgram(obj);
-    }
-
-    protected makeKey(key: ProgramKey): string {
-        return `${key.vert}$${key.frag}`;
-    }
-
-    public compileProgram(vert: string, frag: string) {
-        return this.get({ vert, frag });
-    }
-}
-
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
@@ -669,11 +553,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GfxDevice
     private _currentActiveTexture: GLenum | null = null;
     private _currentBoundVAO: WebGLVertexArrayObject | null = null;
-    private _currentProgram: WebGLProgram | null = null;
+    private _currentProgram: GfxProgramP_GL | null = null;
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
-    private _dummyCompilerVAO: WebGLVertexArrayObject;
-    private _programCache: ProgramCache;
 
     // Pass Execution
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
@@ -692,26 +574,40 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _blackTexture!: WebGLTexture;
 
     // GfxVendorInfo
-    public programBugDefines: string = '';
+    public bugQuirks = new GfxBugQuirksImpl();
     public glslVersion = `#version 300 es`;
     public explicitBindingLocations = false;
     public separateSamplerTextures = false;
 
-    constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
+    constructor(public gl: WebGL2RenderingContext) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
-        if (programCache !== null) {
-            this._programCache = programCache;
-        } else {
-            this._programCache = new ProgramCache(gl);
-        }
+        const fullscreenVS: string = `
+out vec2 v_TexCoord;
 
-        this._fullscreenCopyProgram = this._createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
-        this._tryCompileProgram(this._fullscreenCopyProgram);
+void main() {
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1, 1);
+}
+`;
+        const fullscreenFS: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+
+        const fullscreenProgramDescriptor = preprocessProgram_GLSL(this.queryVendorInfo(), fullscreenVS, fullscreenFS);
+        this._fullscreenCopyProgram = this._createProgram(fullscreenProgramDescriptor);
 
         this._resolveReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._resolveDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -721,23 +617,71 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
-        this._dummyCompilerVAO = gl.createVertexArray()!;
-
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
 
-        // Set up bug defines.
-        this.programBugDefines = '';
-
-        const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (debugRendererInfo !== null) {
-            const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
-            // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
-            if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
-                this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
-        }
+        this._checkForBugQuirks();
 
         if (TRACK_RESOURCES)
             this._resourceCreationTracker = new ResourceCreationTracker();
+    }
+
+    private _checkForBugQuirksRowMajor(): void {
+        const gl = this.gl;
+        // Check if row_major is broken by generating a dummy program and checking the uniform data...
+        // TODO(jstpierre): Async? Some better way that doesn't block on startup?
+        const shaderVert = this._compileShader(`${this.glslVersion}
+precision mediump float;
+layout(row_major, std140) uniform ub_Test {
+    mat4x2 u_Test;
+};
+void main() {
+    gl_Position = vec4(1);
+}`, gl.VERTEX_SHADER);
+        const shaderFrag = this._compileShader(`${this.glslVersion}
+precision mediump float;
+out vec4 o_Color;
+void main() {
+    o_Color = vec4(1);
+}`, gl.FRAGMENT_SHADER);
+
+        const prog = this.ensureResourceExists(gl.createProgram());
+        gl.attachShader(prog, shaderVert);
+        gl.attachShader(prog, shaderFrag);
+        gl.linkProgram(prog);
+        assert(gl.getProgramParameter(prog, gl.LINK_STATUS));
+        gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, `ub_Test`), 0);
+        const dataSize = gl.getActiveUniformBlockParameter(prog, 0, gl.UNIFORM_BLOCK_DATA_SIZE);
+        // If it's working, it will be 32. If it's broken, it will be 64.
+        // Looking forward to see what fun other values it will be in the wild!
+        if (dataSize === 32)
+            this.bugQuirks.rowMajorMatricesBroken = false;
+        else if (dataSize === 64)
+            this.bugQuirks.rowMajorMatricesBroken = true;
+        else
+            throw "whoops";
+        gl.deleteProgram(prog);
+        gl.deleteShader(shaderVert);
+        gl.deleteShader(shaderFrag);
+    }
+
+    private _checkForBugQuirks(): void {
+        const gl = this.gl;
+
+        if (!this.bugQuirks.rowMajorMatricesBroken) {
+            const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugRendererInfo !== null) {
+                const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
+                // On some Apple platforms, dynamically indexing an array of row_major matrices
+                // has troubles, and there's no easy way to detect this case.
+                //
+                // https://bugs.chromium.org/p/angleproject/issues/detail?id=4242
+                if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
+                    this.bugQuirks.rowMajorMatricesBroken = true;
+            }
+        }
+
+        if (!this.bugQuirks.rowMajorMatricesBroken)
+        this._checkForBugQuirksRowMajor();
     }
 
     //#region GfxSwapChain
@@ -930,17 +874,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _useProgram(program: GfxProgramP_GL): void {
-        if (this._currentProgram !== program.glProgram) {
-            this.gl.useProgram(program.glProgram);
-            this._tryBindProgram(program);
-            this._currentProgram = program.glProgram;
+        if (this._currentProgram !== program) {
+            this.gl.useProgram(program.gl_program);
+            this._currentProgram = program;
         }
     }
 
     private ensureResourceExists<T>(resource: T | null): T {
         if (resource === null) {
             const error = this.gl.getError();
-            // TODO(jstpierre): Add minimal leak tracking.
             throw new Error(`Created resource is null; GL error encountered: ${error}`);
         } else {
             return resource;
@@ -1068,19 +1010,27 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return depthStencilAttachment;
     }
 
-    private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
-        deviceProgram.ensurePreprocessed(this);
-        const glProgram: WebGLProgram | null = null;
-        const bindDirty = true, compileDirty = true;
-        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram, bindDirty, compileDirty, glProgram };
+    private _createProgram(descriptor: GfxProgramDescriptorSimple): GfxProgramP_GL {
+        const gl_program: WebGLProgram | null = null;
+        const gl_shader_vert: WebGLShader | null = null;
+        const gl_shader_frag: WebGLShader | null = null;
+        const compileDirty = true;
+        const bindDirty = true;
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, bindDirty, gl_program, gl_shader_vert, gl_shader_frag };
+        this._tryCompileProgram(program);
         return program;
     }
 
-    public createProgram(compiledProgram: DeviceProgram): GfxProgram {
-        const program = this._createProgram(compiledProgram);
+    public createProgramSimple(descriptor: GfxProgramDescriptor): GfxProgramP_GL {
+        const program = this._createProgram(descriptor);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(program);
         return program;
+    }
+
+    public createProgram(descriptor: GfxProgramDescriptor): GfxProgram {
+        descriptor.ensurePreprocessed(this.queryVendorInfo());
+        return this.createProgramSimple(descriptor);
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
@@ -1122,12 +1072,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
 
             const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
-            // TODO(jstpierre): How do we support glVertexAttribIPointer without too much insanity?
-            if (attr.usesIntInShader) {
-                gl.vertexAttribIPointer(attr.location, size, type, inputLayoutBuffer.byteStride, bufferOffset);
-            } else {
-                gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
-            }
+            gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
                 gl.vertexAttribDivisor(attr.location, 1);
@@ -1165,47 +1110,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(pipeline);
-
-        // Start compiling the program. ANGLE compiles a separate underlying program for each InputLayout
-        // it is used in. For that reason, when we call compileShader, we set up a dummy VAO with the right
-        // formats and attributes so that it does not need to dynamically recompile shaders at useProgram time.
-        const gl = this.gl;
-        if (inputLayout !== null) {
-            gl.bindVertexArray(this._dummyCompilerVAO);
-
-            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-                const attr = inputLayout.vertexAttributeDescriptors[i];
-                const { size, type, normalized } = translateVertexFormat(attr.format);
-                const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex];
-                if (inputLayoutBuffer === null)
-                    continue;
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-                if (attr.usesIntInShader) {
-                    gl.vertexAttribIPointer(attr.location, size, type, 0, 0);
-                } else {
-                    gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
-                }
-
-                if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
-                    gl.vertexAttribDivisor(attr.location, 1);
-                }
-    
-                gl.enableVertexAttribArray(attr.location);
-            }
-        }
-
-        this._tryCompileProgram(program);
-
-        if (inputLayout !== null) {
-            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
-                const attr = inputLayout.vertexAttributeDescriptors[i];
-                gl.disableVertexAttribArray(attr.location);
-            }
-            gl.bindVertexArray(this._currentBoundVAO);
-        }
-
         return pipeline;
     }
 
@@ -1246,6 +1150,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public destroyProgram(o: GfxProgram): void {
+        const program = o as GfxProgramP_GL;
+        this.gl.deleteProgram(program.gl_program);
+        this.gl.deleteShader(program.gl_shader_vert);
+        this.gl.deleteShader(program.gl_shader_frag);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1345,31 +1253,28 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public queryPipelineReady(o: GfxRenderPipeline): boolean {
         const pipeline = o as GfxRenderPipelineP_GL;
-        if (pipeline.ready) {
+        if (pipeline.ready)
             return true;
+
+        if (pipeline.program.gl_program === null)
+            return false;
+
+        const gl = this.gl;
+        const prog = pipeline.program.gl_program;
+
+        if (this._KHR_parallel_shader_compile !== null) {
+            // With asynchronous pipeline compilation, we need to ask whether the pipeline is ready...
+            pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
         } else {
-            if (pipeline.program.glProgram === null)
-                return false;
-
-            if (this._KHR_parallel_shader_compile !== null) {
-                const gl = this.gl;
-                const prog = pipeline.program.glProgram;
-                pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
-
-                if (pipeline.ready) {
-                    if (IS_DEVELOPMENT && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-                        const deviceProgram = pipeline.program.deviceProgram;
-                        console.error(deviceProgram.vert);
-                        console.error(deviceProgram.frag);
-                        console.error(gl.getProgramInfoLog(prog));
-                    }
-                }
-            } else {
-                pipeline.ready = true;
-            }
-
-            return pipeline.ready;
+            // With synchronous pipeline compilation, pipelines are ready as soon as they're created...
+            pipeline.ready = true;
         }
+
+        // Check for errors.
+        if (pipeline.ready && SHADER_DEBUG)
+            this._checkProgramCompilationForErrors(pipeline.program);
+
+        return pipeline.ready;
     }
 
     public queryPlatformAvailable(): boolean {
@@ -1549,50 +1454,62 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._debugGroupStack[i].triangleCount += count;
     }
 
-    private _tryCompileProgram(program: GfxProgramP_GL): void {
-        if (!program.compileDirty)
-            return;
-
-        const deviceProgram = program.deviceProgram;
-        deviceProgram.ensurePreprocessed(this);
-
-        const newProg = this._programCache.compileProgram(deviceProgram.preprocessedVert, deviceProgram.preprocessedFrag);
-        if (newProg !== null && newProg !== program.glProgram) {
-            program.glProgram = newProg;
-            program.bindDirty = true;
-        }
-
-        program.compileDirty = false;
+    private _compileShader(contents: string, type: GLenum): WebGLShader {
+        const gl = this.gl;
+        const shader: WebGLShader = this.ensureResourceExists(gl.createShader(type));
+        gl.shaderSource(shader, contents);
+        gl.compileShader(shader);
+        return shader;
     }
 
-    private _tryBindProgram(program: GfxProgramP_GL): void {
-        if (!program.bindDirty)
-            return;
+    private _reportShaderError(shader: WebGLShader, str: string): boolean {
+        const gl = this.gl;
+        const status = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+        if (!status) {
+            console.error(prependLineNo(str));
+            const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
+            if (debug_shaders)
+                console.error(debug_shaders.getTranslatedShaderSource(shader));
+            console.error(gl.getShaderInfoLog(shader));
+        }
+        return status;
+    }
+
+    private _checkProgramCompilationForErrors(program: GfxProgramP_GL): void {
+        const gl = this.gl;
+
+        const prog = program.gl_program!;
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            const descriptor = program.descriptor as GfxProgramDescriptor;
+
+            if (!this._reportShaderError(program.gl_shader_vert!, descriptor.preprocessedVert))
+                return;
+
+            if (!this._reportShaderError(program.gl_shader_frag!, descriptor.preprocessedFrag))
+                return;
+
+            // Neither shader had an error, report the program info log.
+            console.error(gl.getProgramInfoLog(program.gl_program!));
+            debugger;
+        }
+    }
+
+    private _tryCompileProgram(program: GfxProgramP_GL): void {
+        assert(program.compileDirty);
+
+        const descriptor = program.descriptor;
 
         const gl = this.gl;
-        const prog = program.glProgram!;
-        const deviceProgram = program.deviceProgram;
+        program.gl_shader_vert = this._compileShader(descriptor.preprocessedVert, gl.VERTEX_SHADER);
+        program.gl_shader_frag = this._compileShader(descriptor.preprocessedFrag, gl.FRAGMENT_SHADER);
+        const prog = this.ensureResourceExists(gl.createProgram());
+        gl.attachShader(prog, program.gl_shader_vert);
+        gl.attachShader(prog, program.gl_shader_frag);
+        gl.linkProgram(prog);
+        program.gl_program = prog;
 
-        // TODO(jstpierre): Remove this reflection.
-
-        const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
-        for (let i = 0; i < uniformBlocks.length; i++) {
-            const [m, blockName, contents] = uniformBlocks[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
-        }
-
-        const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
-        let samplerIndex = 0;
-        for (let i = 0; i < samplers.length; i++) {
-            const [m, name, arraySizeStr] = samplers[i];
-            const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
-            // Assign identities in order.
-            const samplerUniformLocation = gl.getUniformLocation(prog, name);
-            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
-            samplerIndex += arraySize;
-        }
-
-        program.bindDirty = false;
+        program.compileDirty = false;
+        program.bindDirty = true;
     }
 
     private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
@@ -1713,12 +1630,39 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         // Hotpatch support.
         // TODO(jstpierre): Make this a bit less hacky in the future.
-        if (this._currentPipeline.program.deviceProgram.preprocessedVert === '') {
-            this._currentPipeline.program.compileDirty = true;
-            this._tryCompileProgram(this._currentPipeline.program);
+        const program = this._currentPipeline.program;
+        if (program.descriptor.preprocessedVert === '') {
+            const descriptor = program.descriptor as GfxProgramDescriptor;
+            descriptor.ensurePreprocessed(this.queryVendorInfo());
+            program.compileDirty = true;
+            this._tryCompileProgram(program);
         }
 
-        this._useProgram(this._currentPipeline.program);
+        this._useProgram(program);
+
+        if (program.bindDirty) {
+            const gl = this.gl, prog = program.gl_program!;
+            const deviceProgram = program.descriptor;
+
+            const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
+            for (let i = 0; i < uniformBlocks.length; i++) {
+                const [m, blockName, contents] = uniformBlocks[i];
+                gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
+            }
+
+            const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
+            let samplerIndex = 0;
+            for (let i = 0; i < samplers.length; i++) {
+                const [m, name, arraySizeStr] = samplers[i];
+                const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
+                // Assign identities in order.
+                const samplerUniformLocation = gl.getUniformLocation(prog, name);
+                gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
+                samplerIndex += arraySize;
+            }
+
+            program.bindDirty = false;
+        }
     }
 
     private setInputState(inputState_: GfxInputState | null): void {

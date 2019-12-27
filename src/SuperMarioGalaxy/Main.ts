@@ -674,7 +674,7 @@ export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
-    public cache = new GfxRenderCache(true);
+    public cache = new GfxRenderCache();
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
@@ -740,6 +740,7 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
+        this.cache.destroy(device);
         for (const resourceHolder of this.archiveResourceHolder.values())
             resourceHolder.destroy(device);
     }
@@ -773,13 +774,13 @@ class CaptureSceneDirector {
 }
 
 export const enum SceneObj {
-    SENSOR_HIT_CHECKER     = 0x00,
-    PLANET_GRAVITY_MANAGER = 0x32,
-    AIR_BUBBLE_HOLDER      = 0x39,
-    SWING_ROPE_GROUP       = 0x47,
-    TRAPEZE_ROPE_DRAW_INIT = 0x4A,
-    WATER_AREA_HOLDER      = 0x62,
-    WATER_PLANT_DRAW_INIT  = 0x63,
+    SensorHitChecked     = 0x00,
+    PlanetGravityManager = 0x32,
+    AirBubbleHolder      = 0x39,
+    SwingRopeGroup       = 0x47,
+    TrapezeRopeDrawInit  = 0x4A,
+    WaterAreaHolder      = 0x62,
+    WaterPlantDrawInit   = 0x63,
 }
 
 export class SceneObjHolder {
@@ -816,37 +817,37 @@ export class SceneObjHolder {
     }
 
     public getObj(sceneObj: SceneObj): NameObj | null {
-        if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
+        if (sceneObj === SceneObj.SensorHitChecked)
             return this.sensorHitChecker;
-        else if (sceneObj === SceneObj.PLANET_GRAVITY_MANAGER)
+        else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
-        else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
+        else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
-        else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
+        else if (sceneObj === SceneObj.SwingRopeGroup)
             return this.swingRopeGroup;
-        else if (sceneObj === SceneObj.TRAPEZE_ROPE_DRAW_INIT)
+        else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             return this.trapezeRopeDrawInit;
-        else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
+        else if (sceneObj === SceneObj.WaterAreaHolder)
             return this.waterAreaHolder;
-        else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
+        else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
         return null;
     }
 
     private newEachObj(sceneObj: SceneObj): void {
-        if (sceneObj === SceneObj.SENSOR_HIT_CHECKER)
+        if (sceneObj === SceneObj.SensorHitChecked)
             this.sensorHitChecker = new SensorHitChecker(this);
-        else if (sceneObj === SceneObj.PLANET_GRAVITY_MANAGER)
+        else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
-        else if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
+        else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
-        else if (sceneObj === SceneObj.SWING_ROPE_GROUP)
+        else if (sceneObj === SceneObj.SwingRopeGroup)
             this.swingRopeGroup = new SwingRopeGroup(this);
-        else if (sceneObj === SceneObj.TRAPEZE_ROPE_DRAW_INIT)
+        else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
-        else if (sceneObj === SceneObj.WATER_AREA_HOLDER)
+        else if (sceneObj === SceneObj.WaterAreaHolder)
             this.waterAreaHolder = new WaterAreaHolder(this);
-        else if (sceneObj === SceneObj.WATER_PLANT_DRAW_INIT)
+        else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
     }
 

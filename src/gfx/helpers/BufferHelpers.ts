@@ -1,5 +1,5 @@
 
-// Gfx version of BufferCoalescer, etc.
+// Helpers to manage GPU buffer data...
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { assert, align } from "../../util";
@@ -42,6 +42,9 @@ export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: 
     device.submitPass(hostAccessPass);
     return coalescedBuffers;
 }
+
+// TODO(jstpierre): Remove the buffer coalescer... it doesn't really help as much as I thought it did.
+// At least remove everything but the combo version...
 
 export class GfxBufferCoalescer {
     public coalescedBuffers: GfxCoalescedBuffers[];
