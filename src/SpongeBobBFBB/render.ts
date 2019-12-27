@@ -673,6 +673,7 @@ export class EntRenderer implements SceneRenderer {
                     defines.SKY = '1';
                     defines.SKY_DEPTH = `${link.param[0] / 8.0}`;
                     this.skydomeLockY = (link.param[1] === 1);
+                    break;
                 }
             }
 
@@ -874,6 +875,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
         for (const renderer of this.opaqueRenderers)
+            renderer.destroy(device);
+        for (const renderer of this.transparentRenderers)
             renderer.destroy(device);
     }
 }
