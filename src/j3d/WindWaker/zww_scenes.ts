@@ -2247,6 +2247,21 @@ class SceneDesc {
         else if (name === 'wiz_r') fetchArchive(`Wz.arc`).then((rarc) => buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`)));
         else if (name === 'gmos') fetchArchive(`Gm.arc`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
         else if (name === 'mo2') fetchArchive(`Mo2.arc`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
+        else if (name === 'pow') fetchArchive(`Pw.arc`).then(async (rarc) => {
+            let color = (parameters & 0x0000FE00) >> 9;
+            if (color > 5)
+                color = 0;
+
+            const mainModel = buildModel(rarc, `bdlm/pw.bdl`);
+            mainModel.bindANK1(parseBCK(rarc, `bck/wait1.bck`));
+            mainModel.bindTPT1(parseBTP(rarc, `btp/irogae1.btp`), animFrame(color));
+
+            const lanternRarc = await fetchArchive(`Kantera.arc`);
+            const lanternModel = buildChildModel(lanternRarc, `bmdm/mk_kantera.bmd`);
+            lanternModel.bindTRK1(parseBRK(lanternRarc, `brk/mk_kantera.brk`));
+            lanternModel.setParentJoint(mainModel, `j_pw_item_r1`);
+            mat4.rotateX(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI / 4);
+        });
         else if (name === 'Bb') fetchArchive(`Bb.arc`).then((rarc) => buildModel(rarc, `bdlm/bb.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
         else if (name === 'Bk') fetchArchive(`Bk.arc`).then((rarc) => buildModel(rarc, `bdlm/bk.bdl`).bindANK1(parseBCK(rarc, `bck/bk_wait.bck`)));
         else if (name === 'Oq') fetchArchive(`Oq.arc`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
