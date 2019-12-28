@@ -754,6 +754,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public grassPacket: GrassPacket;
     
     public roomMatrix = mat4.create();
+    public roomInverseMatrix = mat4.create();
     public stage: string;
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
@@ -1201,6 +1202,7 @@ class SceneDesc {
                 }
 
                 renderer.roomMatrix = modelMatrix;
+                renderer.roomInverseMatrix = mat4.invert(mat4.create(), renderer.roomMatrix);
 
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;

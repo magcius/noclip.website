@@ -284,6 +284,13 @@ class FlowerModel {
     }
 }
 
+function distanceCull(camPos: vec3, objPos: vec3) {
+    const distSq = vec3.squaredDistance(camPos, objPos);
+    const maxDist = 20000;
+    const maxDistSq = maxDist*maxDist;
+    return distSq >= maxDistSq;
+}
+
 export class FlowerPacket {
     datas: FlowerData[] = new Array(kMaxFlowerDatas);
     dataCount: number = 0;
@@ -386,6 +393,10 @@ export class FlowerPacket {
         // @TODO: This should probably be precomputed and stored in the context
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
 
+        // Transform camera to room space for distance culling
+        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
+
         // Draw white flowers
         template = renderInstManager.pushTemplateRenderInst();
         {
@@ -402,7 +413,8 @@ export class FlowerPacket {
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
-                    
+                    if (distanceCull(roomCamPos, data.pos)) continue;
+
                     const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
                     this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
@@ -427,7 +439,8 @@ export class FlowerPacket {
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
-                    
+                    if (distanceCull(roomCamPos, data.pos)) continue;
+
                     const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
                     this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
@@ -452,7 +465,8 @@ export class FlowerPacket {
                 
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
-                    
+                    if (distanceCull(roomCamPos, data.pos)) continue;
+
                     const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
                     this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
@@ -776,6 +790,10 @@ export class TreePacket {
         // @TODO: This should probably be precomputed and stored in the context
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
 
+        // Transform camera to room space for distance culling
+        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
+
         // Draw shadows
         template = renderInstManager.pushTemplateRenderInst();
         {
@@ -793,6 +811,7 @@ export class TreePacket {
                 let data = this.rooms[i]; 
                 if (!data) continue; 
                 do {                    
+                    if (distanceCull(roomCamPos, data.pos)) continue;
                     const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
                     this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
@@ -819,7 +838,8 @@ export class TreePacket {
 
                 do {
                     if (data.flags & TreeFlags.isFrustumCulled) continue;
-                    
+                    if (distanceCull(roomCamPos, data.pos)) continue;
+
                     const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
                     this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
@@ -1042,6 +1062,10 @@ export class GrassPacket {
         // @TODO: This should probably be precomputed and stored in the context
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
 
+        // Transform camera to room space for distance culling
+        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
+        
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings([this.model.grassTextureMapping]);
@@ -1057,6 +1081,7 @@ export class GrassPacket {
 
                 do {
                     if (data.flags & GrassFlags.isFrustumCulled) continue;
+                    if (distanceCull(roomCamPos, data.pos)) continue;
                     
                     const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
