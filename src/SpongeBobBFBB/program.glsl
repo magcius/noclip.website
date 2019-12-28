@@ -3,7 +3,7 @@ precision mediump float; precision lowp sampler2D;
 
 struct Light {
     vec4 position;
-    vec4 rotation;
+    vec4 direction;
     vec4 color;
     float type;
     float radius;
@@ -52,28 +52,27 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
 
-    //vec4 t_Normal = Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0));
-    //vec4 t_Normal = vec4(a_Normal, 1.0);
+    vec3 t_Normal = normalize(Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal, 0.0)).xyz);
 
-#ifdef ENT
-#ifndef SKY
-    /*
-    v_LightColor = vec3(0.0);
+#ifdef USE_LIGHTING
+    if (USE_LIGHTING == 1) {
+        v_LightColor = vec3(0.0);
 
-    for (int i = 0; i < LIGHT_COUNT; i++) {
-        Light light = u_Lights[i];
-        vec3 colorFactor = (light.color.rgb * light.color.a);
+        for (int i = 0; i < LIGHT_COUNT; i++) {
+            Light light = u_Lights[i];
+            if (light.type == 0.0) break;
 
-        if (light.type == LIGHT_TYPE_AMBIENT) {
-            v_LightColor += colorFactor;
-        } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
-            vec3 lightDir = normalize(-light.rotation.xyz);
-            float diffuse = max(dot(a_Normal, lightDir), 0.0);
-            v_LightColor += diffuse * colorFactor;
+            vec3 lightColor = light.color.rgb; // alpha is ignored
+
+            if (light.type == LIGHT_TYPE_AMBIENT) {
+                v_LightColor += lightColor;
+            } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
+                vec3 lightDir = normalize(light.direction.xyz);
+                float diffuse = clamp(dot(t_Normal, lightDir), 0.0, 1.0);
+                v_LightColor += diffuse * lightColor;
+            }
         }
     }
-    */
-#endif
 #endif
 
     gl_Position = v_Position;
@@ -82,30 +81,44 @@ void main() {
 
 #ifdef FRAG
 void main() {
+    float t_Distance = abs(v_Position.z);
+    if (u_FogColor.a > 0.0 && t_Distance > u_FogStop) discard;
+
     vec4 t_Color = v_Color;
 
 #ifdef USE_TEXTURE
-    t_Color *= texture(u_Texture, v_TexCoord);
+    if (USE_TEXTURE == 1)
+        t_Color *= texture(u_Texture, v_TexCoord);
 #endif
 
     t_Color *= u_ModelColor;
 
-#ifdef SKY
-    gl_FragDepth = float(SKY_DEPTH);
-#else
-#ifdef ENT
-    //t_Color *= vec4(v_LightColor, 1.0);
+#ifdef ALPHA_REF
+    if (t_Color.a <= ALPHA_REF) discard;
 #endif
-    if (u_FogColor.w > 0.0) {
-        float t_FogFactor = 1.0 - (u_FogStop - abs(v_Position.z))/(u_FogStop - u_FogStart);
-        t_FogFactor = clamp(t_FogFactor, 0.0, 1.0);
 
-        vec4 t_FogColor = u_FogColor;
-        t_FogColor.w = t_Color.w;
+#ifdef USE_LIGHTING
+    if (USE_LIGHTING == 1 && u_Lights[0].type != 0.0)
+        t_Color *= vec4(v_LightColor, 1.0);
+#endif
 
-        t_Color = mix(t_Color, t_FogColor, t_FogFactor);
+#ifdef USE_FOG
+    if (USE_FOG == 1) {
+        if (u_FogColor.w > 0.0) {
+            float t_FogFactor = 1.0 - (u_FogStop - t_Distance)/(u_FogStop - u_FogStart);
+            t_FogFactor = clamp(t_FogFactor, 0.0, 1.0);
+
+            vec4 t_FogColor = u_FogColor;
+            t_FogColor.a = t_Color.a;
+
+            t_Color = mix(t_Color, t_FogColor, t_FogFactor);
+        }
     }
 #endif
+
+#ifdef SKY
+    gl_FragDepth = float(SKY_DEPTH);
+#endif 
 
     gl_FragColor = t_Color;
     
