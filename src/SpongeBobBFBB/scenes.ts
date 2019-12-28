@@ -6,7 +6,7 @@ import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { initializeBasis } from '../vendor/basis_universal';
 
-import { ModelCache, BFBBRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer } from './render';
+import { ModelCache, BFBBRenderer, TextureCache, TextureData, EntRenderer, ModelData, Fog, JSP, JSPRenderer, PlayerRenderer, NPC, textureNameRW3 } from './render';
 import { Ent, Button, Platform, Player, SimpleObj } from './render';
 import { parseHIP, Asset } from './hip';
 import * as Assets from './assets';
@@ -82,20 +82,30 @@ class AssetCache extends DataCacheIDName<Asset> {
     }
 }
 
+class ButtonCache extends DataCacheIDName<Button> {}
+class NPCCache extends DataCacheIDName<NPC> {}
+class PlatformCache extends DataCacheIDName<Platform> {}
+class PlayerCache extends DataCacheIDName<Player> {}
+class SimpleObjCache extends DataCacheIDName<SimpleObj> {}
+class LightKitCache extends DataCacheIDName<Assets.LightKit> {}
+class ModelInfoCache extends DataCacheIDName<Assets.ModelAssetInfo> {}
+
 class DataHolder {
     public assetCache = new AssetCache();
     public modelCache = new ModelCache();
     public textureCache = new TextureCache();
 
+    public buttonCache = new ButtonCache();
+    public npcCache = new NPCCache();
+    public platformCache = new PlatformCache();
+    public playerCache = new PlayerCache();
+    public simpleObjCache = new SimpleObjCache();
+    public lightKitCache = new LightKitCache();
+    public modelInfoCache = new ModelInfoCache();
+
     public jsps: JSP[] = [];
     public env?: Assets.EnvAsset;
     public fog?: Assets.FogAsset;
-    public lightKits = new Map<number, Assets.LightKit>();
-
-    public buttons: Button[] = [];
-    public platforms: Platform[] = [];
-    public players: Player[] = [];
-    public simpleObjs: SimpleObj[] = [];
 }
 
 const dataHolder = new DataHolder();
@@ -107,7 +117,7 @@ function getTexturesForClump(clump: rw.Clump): TextureData[] {
         for (let i = 0; i < atomic.geometry.meshHeader.numMeshes; i++) {
             const texture = atomic.geometry.meshHeader.mesh(i).material.texture;
             if (texture) {
-                const textureData = dataHolder.textureCache.getByName(texture.name + '.RW3');
+                const textureData = dataHolder.textureCache.getByName(textureNameRW3(texture.name));
                 if (textureData)
                     textures.push(textureData);
             }
@@ -117,7 +127,7 @@ function getTexturesForClump(clump: rw.Clump): TextureData[] {
     return textures;
 }
 
-async function loadHIP(dataFetcher: DataFetcher, path: string, global: boolean = false) {
+async function loadHIP(dataFetcher: DataFetcher, path: string, beta: boolean, global: boolean = false) {
     const data = await dataFetcher.fetchData(`${dataPath}/${path}`);
     const hip = parseHIP(data);
 
@@ -163,26 +173,35 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, global: boolean =
     }
 
     function loadEnt(asset: Assets.EntAsset): Ent {
-        let model = dataHolder.modelCache.getByID(asset.modelInfoID);
+        const models: ModelData[] = [];
 
-        if (!model) {
-            const modelInfoAsset = dataHolder.assetCache.getByID(asset.modelInfoID);
-            if (modelInfoAsset) {
-                assert(modelInfoAsset.type === AssetType.MINF);
-                // todo
+        function recurseModelInfo(id: number) {
+            let model = dataHolder.modelCache.getByID(id);
+
+            if (model) {
+                models.push(model);
+            } else {
+                const modelInfo = dataHolder.modelInfoCache.getByID(id);
+
+                if (modelInfo) {
+                    for (let i = 0; i < modelInfo.NumModelInst; i++) {
+                        recurseModelInfo(modelInfo.modelInst[i].ModelID);
+                    }
+                }
             }
         }
-        
-        return { asset, model };
+
+        recurseModelInfo(asset.modelInfoID);
+        return { asset, models };
     }
 
     loadAssets({
         [AssetType.BUTN]: (a) => {
             const stream = new DataStream(a.data, true);
-            const asset = Assets.readButtonAsset(stream);
+            const asset = Assets.readButtonAsset(stream, beta);
             const ent = loadEnt(asset.ent);
 
-            dataHolder.buttons.push({ ent, asset });
+            dataHolder.buttonCache.add({ ent, asset }, a.name, a.id, global);
         },
         [AssetType.ENV]: (a) => {
             const stream = new DataStream(a.data, true);
@@ -195,7 +214,11 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, global: boolean =
         },
         [AssetType.LKIT]: (a) => {
             const stream = new DataStream(a.data, true);
-            dataHolder.lightKits.set(a.id, Assets.readLightKit(stream));
+            dataHolder.lightKitCache.add(Assets.readLightKit(stream), a.name, a.id, global);
+        },
+        [AssetType.MINF]: (a) => {
+            const stream = new DataStream(a.data, true);
+            dataHolder.modelInfoCache.add(Assets.readModelInfo(stream), a.name, a.id, global);
         },
         [AssetType.MODL]: (a) => {
             loadClump(a);
@@ -225,27 +248,34 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, global: boolean =
         },
         [AssetType.PLAT]: (a) => {
             const stream = new DataStream(a.data, true);
-            const asset = Assets.readPlatformAsset(stream);
+            const asset = Assets.readPlatformAsset(stream, beta);
             const ent = loadEnt(asset.ent);
 
-            dataHolder.platforms.push({ ent, asset });
+            dataHolder.platformCache.add({ ent, asset }, a.name, a.id, global);
         },
         [AssetType.PLYR]: (a) => {
             const stream = new DataStream(a.data, true);
-            const asset = Assets.readPlayerAsset(stream);
+            const asset = Assets.readPlayerAsset(stream, beta);
             const ent = loadEnt(asset.ent);
             
-            dataHolder.players.push({ ent, asset });
+            dataHolder.playerCache.add({ ent, asset }, a.name, a.id, global);
         },
         [AssetType.RWTX]: (a) => {
             loadTexture(a);
         },
         [AssetType.SIMP]: (a) => {
             const stream = new DataStream(a.data, true);
-            const asset = Assets.readSimpleObjAsset(stream);
+            const asset = Assets.readSimpleObjAsset(stream, beta);
             const ent = loadEnt(asset.ent);
 
-            dataHolder.simpleObjs.push({ ent, asset });
+            dataHolder.simpleObjCache.add({ ent, asset }, a.name, a.id, global);
+        },
+        [AssetType.VIL]: (a) => {
+            const stream = new DataStream(a.data, true);
+            const asset = Assets.readNPCAsset(stream, beta);
+            const ent = loadEnt(asset.ent);
+
+            dataHolder.npcCache.add({ ent, asset }, a.name, a.id, global);
         }
     });
 }
@@ -253,7 +283,7 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, global: boolean =
 class BFBBSceneDesc implements Viewer.SceneDesc {
     private static initialised = false;
 
-    constructor(public id: string, public name: string) {
+    constructor(public id: string, public name: string, public beta: boolean = false) {
         this.id = this.id.toLowerCase();
     }
 
@@ -266,7 +296,7 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
         rw.Texture.setLoadTextures(false);
         await initializeBasis();
 
-        await loadHIP(dataFetcher, 'boot.HIP', true);
+        await loadHIP(dataFetcher, 'boot.HIP', false, true);
 
         this.initialised = true;
     }
@@ -276,8 +306,8 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
 
         const hipPath = `${this.id.substr(0, 2)}/${this.id}`;
 
-        await loadHIP(context.dataFetcher, `${hipPath}.HOP`);
-        await loadHIP(context.dataFetcher, `${hipPath}.HIP`);
+        await loadHIP(context.dataFetcher, `${hipPath}.HOP`, this.beta);
+        await loadHIP(context.dataFetcher, `${hipPath}.HIP`, this.beta);
 
         const renderer = new BFBBRenderer(gfxDevice);
         const cache = renderer.renderHelper.getCache();
@@ -287,37 +317,43 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
             renderer.renderers.push(new JSPRenderer(gfxDevice, cache, jsp));
         }
 
-        while (dataHolder.buttons.length) {
-            const butn = dataHolder.buttons.pop()!;
-            renderer.renderers.push(new EntRenderer(gfxDevice, cache, butn.ent));
-        }
+        for (const butn of dataHolder.buttonCache.data())
+            renderer.renderers.push(new EntRenderer(undefined, gfxDevice, cache, butn.ent));
+        
+        for (const npc of dataHolder.npcCache.data())
+            renderer.renderers.push(new EntRenderer(undefined, gfxDevice, cache, npc.ent));
 
-        while (dataHolder.players.length) {
-            const plyr = dataHolder.players.pop()!;
-            renderer.renderers.push(new EntRenderer(gfxDevice, cache, plyr.ent));
-        }
+        for (const plat of dataHolder.platformCache.data())
+            renderer.renderers.push(new EntRenderer(undefined, gfxDevice, cache, plat.ent));
 
-        while (dataHolder.platforms.length) {
-            const plat = dataHolder.platforms.pop()!;
-            renderer.renderers.push(new EntRenderer(gfxDevice, cache, plat.ent));
-        }
+        for (const simp of dataHolder.simpleObjCache.data())
+            renderer.renderers.push(new EntRenderer(undefined, gfxDevice, cache, simp.ent));
 
-        while (dataHolder.simpleObjs.length) {
-            const simp = dataHolder.simpleObjs.pop()!
-            renderer.renderers.push(new EntRenderer(gfxDevice, cache, simp.ent));
+        for (const plyrID of dataHolder.playerCache.ids()) {
+            if (!dataHolder.playerCache.isIDLocked(plyrID)) {
+                const plyr = dataHolder.playerCache.getByID(plyrID)!;
+                renderer.renderers.push(new PlayerRenderer(gfxDevice, cache, plyr));
+                renderer.playerLightKit = dataHolder.lightKitCache.getByID(plyr.asset.lightKitID);
+            }
         }
 
         if (dataHolder.env) {
-            renderer.lightKit = dataHolder.lightKits.get(dataHolder.env.objectLightKit);
+            renderer.objectLightKit = dataHolder.lightKitCache.getByID(dataHolder.env.objectLightKit);
             dataHolder.env = undefined;
         }
-
-        dataHolder.lightKits.clear();
 
         if (dataHolder.fog) {
             renderer.fog = dataHolder.fog;
             dataHolder.fog = undefined;
         }
+
+        dataHolder.buttonCache.clear();
+        dataHolder.npcCache.clear();
+        dataHolder.platformCache.clear();
+        dataHolder.playerCache.clear();
+        dataHolder.simpleObjCache.clear();
+        dataHolder.lightKitCache.clear();
+        dataHolder.modelInfoCache.clear();
 
         dataHolder.assetCache.clear();
         dataHolder.modelCache.clear();
@@ -390,7 +426,7 @@ const sceneDescs = [
     new BFBBSceneDesc('DB02', 'Sandy\'s Dream'),
     new BFBBSceneDesc('DB03', 'Squidward\'s Dream'),
     new BFBBSceneDesc('DB04', 'Mr. Krabs\' Dream'),
-    new BFBBSceneDesc('DB05', 'Patrick\'s Dream (unused)'),
+    new BFBBSceneDesc('DB05', 'Patrick\'s Dream (unused)', true),
     new BFBBSceneDesc('DB06', 'Patrick\'s Dream'),
     'Chum Bucket Lab',
     new BFBBSceneDesc('B301', 'MuscleBob Fight (unused)'),

@@ -31,7 +31,7 @@ import { Asset } from './hip';
 const MAX_DRAW_DISTANCE = 1000.0;
 
 interface BFBBProgramDef {
-    JSP?: string;
+    PLAYER?: string;
     SKY?: string;
     SKY_DEPTH?: string;
     USE_TEXTURE?: string;
@@ -53,6 +53,8 @@ class BFBBProgram extends DeviceProgram {
 
     constructor(def: BFBBProgramDef = {}) {
         super();
+        if (def.PLAYER)
+            this.defines.set('PLAYER', def.PLAYER);
         if (def.SKY)
             this.defines.set('SKY', def.SKY);
         if (def.SKY_DEPTH)
@@ -78,7 +80,7 @@ export class TextureData {
 
     constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
 
-    public setup(device: GfxDevice, cache: GfxRenderCache) {
+    public setup(device: GfxDevice) {
         if (this.isSetup) return;
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
@@ -86,7 +88,7 @@ export class TextureData {
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
         device.submitPass(hostAccessPass);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = device.createSampler({
             magFilter: this.filter,
             minFilter: this.filter,
             mipFilter: GfxMipFilterMode.NO_MIP,
@@ -111,6 +113,8 @@ export class TextureData {
             device.destroyTexture(this.gfxTexture);
         if (this.gfxSampler !== null)
             device.destroySampler(this.gfxSampler);
+        
+        this.isSetup = false;
     }
 }
 
@@ -139,10 +143,15 @@ export class TextureCache extends DataCacheIDName<TextureData> {
         const wrapS = convertWrapMode(rwtx.addressU);
         const wrapT = convertWrapMode(rwtx.addressV);
         const texture = rwTexture(rwtx, name, false);
-        const textureData = new TextureData(texture, rwtx.name, filter, wrapS, wrapT);
+        const textureData = new TextureData(texture, name, filter, wrapS, wrapT);
 
         this.add(textureData, name, id, lock);
     }
+}
+
+// Convert a RW texture name to BFBB's expected format for texture names
+export function textureNameRW3(name: string) {
+    return name + '.RW3';
 }
 
 class RWMeshFragData implements MeshFragData {
@@ -160,7 +169,7 @@ class RWMeshFragData implements MeshFragData {
 
         if (texture && textures) {
             for (const textureData of textures) {
-                if (textureData.name === texture.name) {
+                if (textureData.name === textureNameRW3(texture.name)) {
                     this.textureData = textureData;
                     break;
                 }
@@ -295,12 +304,17 @@ export interface JSP {
 
 export interface Ent {
     asset: Assets.EntAsset;
-    model?: ModelData;
+    models: ModelData[];
 }
 
 export interface Button {
     ent: Ent;
     asset: Assets.ButtonAsset;
+}
+
+export interface NPC {
+    ent: Ent;
+    asset: Assets.NPCAsset;
 }
 
 export interface Platform {
@@ -376,7 +390,7 @@ const LIGHTKIT_SIZE = LIGHTKIT_LIGHT_COUNT * LIGHTKIT_LIGHT_SIZE;
 
 function fillConstant(d: Float32Array, offs: number, val: number, count: number): number {
     d.fill(val, offs, offs + count);
-    return 4*count;
+    return count;
 }
 
 function fillLightKit(d: Float32Array, offs: number, l: Assets.LightKit): number {
@@ -398,8 +412,9 @@ interface RenderHacks {
     lighting: boolean;
     fog: boolean;
     skydome: boolean;
-    showInvisibleEntities: boolean;
-    showInvisibleAtomics: boolean;
+    player: boolean;
+    invisibleEntities: boolean;
+    invisibleAtomics: boolean;
 }
 
 interface RenderState {
@@ -417,7 +432,7 @@ export class BaseRenderer {
     public transparent = false;
     public isCulled = false;
 
-    protected renderers: BaseRenderer[] = [];
+    public renderers: BaseRenderer[] = [];
 
     private scratchVec3 = vec3.create();
 
@@ -607,6 +622,10 @@ export class FragRenderer extends BaseRenderer {
 export class MeshRenderer extends BaseRenderer {
     public visible: boolean = true;
 
+    private isAtomicVisible() {
+        return (this.mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
+    }
+
     constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef,
         public mesh: MeshData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
 
@@ -614,19 +633,17 @@ export class MeshRenderer extends BaseRenderer {
 
         for (const frag of mesh.frags) {
             if (frag.textureData) {
-                frag.textureData.setup(device, cache);
+                frag.textureData.setup(device);
                 defines.USE_TEXTURE = '1';
             }
             
             this.addRenderer(new FragRenderer(this, device, cache, defines, frag, pipeInfo, subObject));
         }
-
-        this.visible = (mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
     }
 
     public prepareToRender(renderState: RenderState) {
         super.prepareToRender(renderState);
-        if (this.isCulled || (!this.visible && !renderState.hacks.showInvisibleAtomics)) return;
+        if (this.isCulled || !this.visible || (!this.isAtomicVisible() && !renderState.hacks.invisibleAtomics)) return;
 
         for (let i = 0; i < this.renderers.length; i++) 
             this.renderers[i].prepareToRender(renderState);
@@ -702,15 +719,14 @@ export class JSPRenderer extends BaseRenderer {
 }
 
 export class EntRenderer extends BaseRenderer {
-    public modelRenderer?: ModelRenderer;
     public visible: boolean;
     public color: Color;
 
     public isSkydome = false;
     public skydomeLockY = false;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly ent: Ent) {
-        super();
+    constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, public readonly ent: Ent, defines: BFBBProgramDef = {}) {
+        super(parent);
 
         this.visible = (ent.asset.flags & Assets.EntFlags.Visible) != 0;
         this.color = {
@@ -720,27 +736,24 @@ export class EntRenderer extends BaseRenderer {
             a: ent.asset.seeThru
         };
 
-        if (ent.model) {
-            const defines: BFBBProgramDef = {};
-
-            for (const link of ent.asset.links) {
-                if (link.srcEvent === EventID.SceneBegin && link.dstEvent === EventID.SetSkyDome) {
-                    this.isSkydome = true;
-                    defines.SKY = '1';
-                    defines.SKY_DEPTH = `${link.param[0] / 8.0}`;
-                    this.skydomeLockY = (link.param[1] === 1);
-                    break;
-                }
+        for (let i = 0; i < ent.asset.linkCount; i++) {
+            const link = ent.asset.links[i];
+            if (link.srcEvent === EventID.SceneBegin && link.dstEvent === EventID.SetSkyDome) {
+                this.isSkydome = true;
+                defines.SKY = '1';
+                defines.SKY_DEPTH = `${link.param[0] / 8.0}`;
+                this.skydomeLockY = (link.param[1] === 1);
+                break;
             }
-
-            this.modelRenderer = new ModelRenderer(this, device, cache, defines, ent.model, this.color);
-            this.addRenderer(this.modelRenderer);
-
-            const q = quat.create();
-            quatFromYPR(q, ent.asset.ang);
-
-            mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
         }
+
+        for (let i = 0; i < ent.models.length; i++)
+            this.addRenderer(new ModelRenderer(this, device, cache, defines, ent.models[i], this.color));
+
+        const q = quat.create();
+        quatFromYPR(q, ent.asset.ang);
+
+        mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
     }
 
     public update(viewerInput: Viewer.ViewerRenderInput) {
@@ -757,28 +770,96 @@ export class EntRenderer extends BaseRenderer {
         this.update(renderState.viewerInput);
         super.prepareToRender(renderState);
 
-        if (this.isCulled || (!this.visible && !renderState.hacks.showInvisibleEntities)) return;
+        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
 
-        if (this.modelRenderer)
-            this.modelRenderer.prepareToRender(renderState);
+        for (let i = 0; i < this.renderers.length; i++) {
+            const modelRenderer = this.renderers[i] as ModelRenderer;
+            modelRenderer.color = this.color;
+            modelRenderer.prepareToRender(renderState);
+        }
     }
 
     public destroy(device: GfxDevice) {
-        if (this.modelRenderer)
-            this.modelRenderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
     }
 }
 
-interface BFBBRendererInfo {
-    isEnt: boolean;
-    renderer: BaseRenderer;
+const enum SBModelIndices {
+    Body = 4,
+    ArmL = 3,
+    ArmR = 2,
+    Ass = 0,
+    Underwear = 1,
+    Wand = 5,
+    Tongue = 6,
+    BubbleHelmet = 7,
+    BubbleShoeL = 8,
+    BubbleShoeR = 9,
+    ShadowBody = 10,
+    ShadowArmL = 11,
+    ShadowArmR = 12,
+    ShadowWand = 13,
+    Count = 14
+}
+
+export class PlayerRenderer extends BaseRenderer {
+    public entRenderer: EntRenderer;
+
+    private meshRenderers: MeshRenderer[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly player: Player, defines: BFBBProgramDef = {}) {
+        super();
+
+        defines.PLAYER = '1';
+
+        this.entRenderer = new EntRenderer(this, device, cache, player.ent, defines);
+        this.addRenderer(this.entRenderer);
+        
+        this.entRenderer.renderers.forEach((r) => {
+            const modelRenderer = r as ModelRenderer;
+            modelRenderer.renderers.forEach((r) => {
+                this.meshRenderers.push(r as MeshRenderer);
+            })
+        });
+
+        this.entRenderer.color.a = 1.0;
+
+        if (this.meshRenderers.length === SBModelIndices.Count) {
+            this.meshRenderers[SBModelIndices.Body].visible = true;
+            this.meshRenderers[SBModelIndices.ArmL].visible = true;
+            this.meshRenderers[SBModelIndices.ArmR].visible = true;
+            this.meshRenderers[SBModelIndices.Ass].visible = false;
+            this.meshRenderers[SBModelIndices.Underwear].visible = false;
+            this.meshRenderers[SBModelIndices.Wand].visible = false;
+            this.meshRenderers[SBModelIndices.Tongue].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleHelmet].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleShoeL].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleShoeR].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowBody].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowArmL].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowArmR].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowWand].visible = false;
+        }
+
+        mat4.copy(this.modelMatrix, this.entRenderer.modelMatrix);
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        if (!renderState.hacks.player) return;
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        this.entRenderer.prepareToRender(renderState);
+    }
 }
 
 export class BFBBRenderer implements Viewer.SceneGfx {
     public renderers: BaseRenderer[] = [];
 
     public fog?: Assets.FogAsset;
-    public lightKit?: Assets.LightKit;
+    public objectLightKit?: Assets.LightKit;
+    public playerLightKit?: Assets.LightKit;
 
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
@@ -789,8 +870,9 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         lighting: true,
         fog: true,
         skydome: true,
-        showInvisibleEntities: false,
-        showInvisibleAtomics: false,
+        player: true,
+        invisibleEntities: false,
+        invisibleAtomics: false,
     };
 
     constructor(device: GfxDevice) {
@@ -825,15 +907,20 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             drawDistance: drawDistance,
         }
 
-        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + LIGHTKIT_SIZE);
+        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + LIGHTKIT_SIZE*2);
         const mapped = template.mapUniformBufferF32(BFBBProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         offs += fillColor(mapped, offs, fogColor);
         offs += fillVec4(mapped, offs, fogStart, fogStop);
 
-        if (this.renderHacks.lighting && this.lightKit)
-            offs += fillLightKit(mapped, offs, this.lightKit);
+        if (this.renderHacks.lighting && this.objectLightKit)
+            offs += fillLightKit(mapped, offs, this.objectLightKit);
+        else
+            offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
+        
+        if (this.renderHacks.player && this.renderHacks.lighting && this.playerLightKit)
+            offs += fillLightKit(mapped, offs, this.playerLightKit);
         else
             offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
 
@@ -891,13 +978,17 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         skydomeCheckbox.onchanged = () => { this.renderHacks.skydome = skydomeCheckbox.checked; };
         panel.contents.appendChild(skydomeCheckbox.elem);
 
-        const showInvisibleEntitiesCheckbox = new UI.Checkbox('Show Invisible Entities', this.renderHacks.showInvisibleEntities);
-        showInvisibleEntitiesCheckbox.onchanged = () => { this.renderHacks.showInvisibleEntities = showInvisibleEntitiesCheckbox.checked; };
-        panel.contents.appendChild(showInvisibleEntitiesCheckbox.elem);
+        const playerCheckbox = new UI.Checkbox('Player', this.renderHacks.player);
+        playerCheckbox.onchanged = () => { this.renderHacks.player = playerCheckbox.checked; };
+        panel.contents.appendChild(playerCheckbox.elem);
 
-        const showInvisibleAtomicsCheckbox = new UI.Checkbox('Show Invisible Atomics', this.renderHacks.showInvisibleAtomics);
-        showInvisibleAtomicsCheckbox.onchanged = () => { this.renderHacks.showInvisibleAtomics = showInvisibleAtomicsCheckbox.checked; };
-        panel.contents.appendChild(showInvisibleAtomicsCheckbox.elem);
+        const invisibleEntitiesCheckbox = new UI.Checkbox('Invisible Entities', this.renderHacks.invisibleEntities);
+        invisibleEntitiesCheckbox.onchanged = () => { this.renderHacks.invisibleEntities = invisibleEntitiesCheckbox.checked; };
+        panel.contents.appendChild(invisibleEntitiesCheckbox.elem);
+
+        const invisibleAtomicsCheckbox = new UI.Checkbox('Invisible Atomics', this.renderHacks.invisibleAtomics);
+        invisibleAtomicsCheckbox.onchanged = () => { this.renderHacks.invisibleAtomics = invisibleAtomicsCheckbox.checked; };
+        panel.contents.appendChild(invisibleAtomicsCheckbox.elem);
 
         panel.setVisible(true);
         return [panel];

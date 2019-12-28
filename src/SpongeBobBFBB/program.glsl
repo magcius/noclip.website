@@ -23,11 +23,18 @@ layout(row_major, std140) uniform ub_SceneParams {
     Mat4x3 u_ViewMatrix;
     vec4 u_FogColor;
     vec4 u_FogParams;
-    Light u_Lights[LIGHT_COUNT];
+    Light u_ObjectLights[LIGHT_COUNT];
+    Light u_PlayerLights[LIGHT_COUNT];
 };
 
 #define u_FogStart (u_FogParams.x)
 #define u_FogStop (u_FogParams.y)
+
+#ifdef PLAYER
+#define u_Lights u_PlayerLights
+#else
+#define u_Lights u_ObjectLights
+#endif
 
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_ModelMatrix;
@@ -85,6 +92,10 @@ void main() {
     if (u_FogColor.a > 0.0 && t_Distance > u_FogStop) discard;
 
     vec4 t_Color = v_Color;
+
+#ifdef PLAYER
+    t_Color.rgb = vec3(1.0, 1.0, 1.0);
+#endif
 
 #ifdef USE_TEXTURE
     if (USE_TEXTURE == 1)

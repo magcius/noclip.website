@@ -152,17 +152,15 @@ export interface EntAsset extends BaseAsset {
     animListID: number;
 }
 
-const EntAssetSize = 0x54;
-
-export function readEntAsset(stream: DataStream, extraSize: number): EntAsset {
+export function readEntAsset(stream: DataStream, beta: boolean): EntAsset {
     const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
     const flags = stream.readUInt8();
     const subtype = stream.readUInt8();
     const pflags = stream.readUInt8();
     const moreFlags = stream.readUInt8();
     let pad = 0;
-    if (preLinkSize(linkCount, stream.length) - extraSize === EntAssetSize) {
-        // Beta ent assets don't have this pad field, so their pre-link size is always 0x50.
+    if (!beta) {
+        // Beta ent assets don't have this pad field
         pad = stream.readUInt8();
         stream.align(4);
     }
@@ -237,8 +235,6 @@ export interface MotionAsset {
     flags: number;
     data: MotionData | undefined;
 }
-
-const MotionAssetSize = 0x30;
 
 export enum MotionType {
     ExtendRetract,
@@ -342,8 +338,8 @@ export interface ButtonAsset {
     motion: MotionAsset;
 }
 
-export function readButtonAsset(stream: DataStream): ButtonAsset {
-    const ent = readEntAsset(stream, 0x18 + MotionAssetSize);
+export function readButtonAsset(stream: DataStream, beta: boolean): ButtonAsset {
+    const ent = readEntAsset(stream, beta);
     const modelPressedInfoID = stream.readUInt32();
     const actMethod = stream.readUInt32();
     const initButtonState = stream.readInt32();
@@ -353,6 +349,28 @@ export function readButtonAsset(stream: DataStream): ButtonAsset {
     const motion = readMotionAsset(stream);
     readLinks(stream, ent);
     return { ent, modelPressedInfoID, actMethod, initButtonState, isReset, resetDelay, buttonActFlags, motion };
+}
+
+export interface NPCAsset {
+    ent: EntAsset;
+    npcFlags: number;
+    npcModel: number;
+    npcProps: number;
+    movepoint: number;
+    taskWidgetPrime: number;
+    taskWidgetSecond: number;
+}
+
+export function readNPCAsset(stream: DataStream, beta: boolean): NPCAsset {
+    const ent = readEntAsset(stream, beta);
+    const npcFlags = stream.readInt32();
+    const npcModel = stream.readInt32();
+    const npcProps = stream.readInt32();
+    const movepoint = stream.readUInt32();
+    const taskWidgetPrime = stream.readUInt32();
+    const taskWidgetSecond = stream.readUInt32();
+    readLinks(stream, ent);
+    return { ent, npcFlags, npcModel, npcProps, movepoint, taskWidgetPrime, taskWidgetSecond };
 }
 
 interface PlatformERData { nodata: number;}
@@ -436,8 +454,8 @@ export interface PlatformAsset {
     motion: MotionAsset;
 }
 
-export function readPlatformAsset(stream: DataStream): PlatformAsset {
-    const ent = readEntAsset(stream, 0x3C + MotionAssetSize);
+export function readPlatformAsset(stream: DataStream, beta: boolean): PlatformAsset {
+    const ent = readEntAsset(stream, beta);
     const type = stream.readUInt8();
     const pad = stream.readUInt8();
     const flags = stream.readUInt16();
@@ -566,8 +584,8 @@ export interface PlayerAsset {
     lightKitID: number;
 }
 
-export function readPlayerAsset(stream: DataStream): PlayerAsset {
-    const ent = readEntAsset(stream, 0x4);
+export function readPlayerAsset(stream: DataStream, beta: boolean): PlayerAsset {
+    const ent = readEntAsset(stream, beta);
     readLinks(stream, ent);
     const lightKitID = stream.readUInt32();
 
@@ -582,8 +600,8 @@ export interface SimpleObjAsset {
     flags: number;
 }
 
-export function readSimpleObjAsset(stream: DataStream): SimpleObjAsset {
-    const ent = readEntAsset(stream, 0xC);
+export function readSimpleObjAsset(stream: DataStream, beta: boolean): SimpleObjAsset {
+    const ent = readEntAsset(stream, beta);
     const animSpeed = stream.readFloat();
     const initAnimState = stream.readUInt32();
     const collType = stream.readUInt8();
@@ -628,8 +646,45 @@ export function readLightKit(stream: DataStream): LightKit {
     return { tagID, groupID, lightCount, lightList, lightListArray };
 }
 
-interface JSPInfo {
+export interface ModelAssetInst {
+    ModelID: number;
+    Flags: number;
+    Parent: number;
+    Bone: number;
+    MatRight: vec3;
+    MatUp: vec3;
+    MatAt: vec3;
+    MatPos: vec3;
+}
 
+export interface ModelAssetInfo {
+    Magic: number;
+    NumModelInst: number;
+    AnimTableID: number;
+    CombatID: number;
+    BrainID: number;
+    modelInst: ModelAssetInst[];
+}
+
+export function readModelInfo(stream: DataStream): ModelAssetInfo {
+    const Magic = stream.readUInt32();
+    const NumModelInst = stream.readUInt32();
+    const AnimTableID = stream.readUInt32();
+    const CombatID = stream.readUInt32();
+    const BrainID = stream.readUInt32();
+    const modelInst: ModelAssetInst[] = [];
+    for (let i = 0; i < NumModelInst; i++) {
+        const ModelID = stream.readUInt32();
+        const Flags = stream.readUInt16();
+        const Parent = stream.readUInt8();
+        const Bone = stream.readUInt8();
+        const MatRight = stream.readVec3();
+        const MatUp = stream.readVec3();
+        const MatAt = stream.readVec3();
+        const MatPos = stream.readVec3();
+        modelInst.push({ ModelID, Flags, Parent, Bone, MatRight, MatUp, MatAt, MatPos });
+    }
+    return { Magic, NumModelInst, AnimTableID, CombatID, BrainID, modelInst };
 }
 
 export const enum PipeCullMode {

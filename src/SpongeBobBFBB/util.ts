@@ -170,7 +170,7 @@ export class DataCacheIDName<T> {
 
     public get count() { return this.dataCount; }
 
-    public add(data: T, name: string, id: number, lock: boolean) {
+    public add(data: T, name: string, id: number, lock: boolean = false) {
         this.nameToDataMap.set(name, data);
         this.idToDataMap.set(id, data);
         this.nameToLockMap.set(name, lock);
@@ -186,37 +186,46 @@ export class DataCacheIDName<T> {
         return this.idToDataMap.get(id);
     }
 
-    public removeByName(name: string, force: boolean) {
-        if (force || !this.nameToLockMap.get(name))
-            this.nameToDataMap.delete(name);
+    public ids() {
+        return this.idToDataMap.keys();
     }
 
-    public removeByID(id: number, force: boolean) {
-        if (force || !this.idToLockMap.get(name))
+    public names() {
+        return this.nameToDataMap.keys();
+    }
+
+    public data() {
+        return this.idToDataMap.values();
+    }
+
+    public isIDLocked(id: number) {
+        return this.idToLockMap.get(id) || false;
+    }
+
+    public isNameLocked(name: string) {
+        return this.nameToLockMap.get(name) || false;
+    }
+
+    public removeByName(name: string, force: boolean = false) {
+        if (force || !this.isNameLocked(name)) {
+            this.nameToDataMap.delete(name);
+            this.nameToLockMap.delete(name);
+        }
+    }
+
+    public removeByID(id: number, force: boolean = false) {
+        if (force || !this.isIDLocked(id)) {
             this.idToDataMap.delete(id);
+            this.idToLockMap.delete(id);
+        }
     }
 
     // Clears just unlocked data or all data
     public clear(all: boolean = false) {
-        if (all) {
-            this.idToDataMap.clear();
-            this.nameToDataMap.clear();
-            this.idToLockMap.clear();
-            this.nameToLockMap.clear();
-        } else {
-            for (const [id, lock] of this.idToLockMap) {
-                if (!lock) {
-                    this.idToDataMap.delete(id);
-                    this.idToLockMap.delete(id);
-                }
-            }
-            for (const [name, lock] of this.nameToLockMap) {
-                if (!lock) {
-                    this.nameToDataMap.delete(name);
-                    this.nameToLockMap.delete(name);
-                }
-            }
-        }
+        for (const [id] of this.idToDataMap)
+            this.removeByID(id, all);
+        for (const [name] of this.nameToDataMap)
+            this.removeByName(name, all);
     }
 }
 
