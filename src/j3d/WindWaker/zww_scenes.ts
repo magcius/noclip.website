@@ -750,7 +750,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
-    
+
     public roomMatrix = mat4.create();
     public roomInverseMatrix = mat4.create();
     public stage: string;
@@ -1210,7 +1210,7 @@ class SceneDesc {
                     mat4.identity(modelMatrix);
                 }
 
-                renderer.roomMatrix = modelMatrix;
+                mat4.copy(renderer.roomMatrix, modelMatrix);
                 mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
                 // Now spawn any objects that might show up in it.

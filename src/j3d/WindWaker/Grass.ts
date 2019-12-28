@@ -147,7 +147,6 @@ interface FlowerData {
     particleLifetime: number;
     pos: vec3;
     modelMatrix: mat4;
-    nextData: FlowerData;
 }
 
 interface FlowerAnim {
@@ -331,13 +330,9 @@ export class FlowerPacket {
             particleLifetime: 0,
             pos: vec3.clone(pos),
             modelMatrix: mat4.create(),
-            nextData: this.rooms[roomIdx],
         };
 
         this.datas.push(data);
-
-        // Append to the linked list for this room
-        this.rooms[roomIdx] = data;
 
         return data;
     }
@@ -382,7 +377,6 @@ export class FlowerPacket {
     }
 
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
-        const kRoomCount = 64;
         let template;
 
         // @TODO: This should probably be precomputed and stored in the context
@@ -399,21 +393,20 @@ export class FlowerPacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.whiteMaterial.materialParamsBufferSize);
             this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
+            colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
 
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
-                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
 
-                do {
-                    if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
-                    if (distanceCull(roomCamPos, data.pos)) continue;
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE)
+                    continue;
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
 
-                    const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-                    this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
-                } while (data = data.nextData);
+                const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -425,21 +418,20 @@ export class FlowerPacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.pinkMaterial.materialParamsBufferSize);
             this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
+            colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
 
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
-                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
 
-                do {
-                    if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
-                    if (distanceCull(roomCamPos, data.pos)) continue;
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK)
+                    continue;
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
 
-                    const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-                    this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
-                } while (data = data.nextData);
+                const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -451,21 +443,21 @@ export class FlowerPacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.flowerModel.bessouMaterial.materialParamsBufferSize);
             this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
 
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
-                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
+            colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
 
-                do {
-                    if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
-                    if (distanceCull(roomCamPos, data.pos)) continue;
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
 
-                    const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
-                    this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
-                } while (data = data.nextData);
+                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU)
+                    continue;
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
+
+                const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -499,8 +491,6 @@ interface TreeData {
     topModelMtx: mat4;
     trunkModelMtx: mat4;
     shadowModelMtx: mat4;
-
-    nextData: TreeData;
 }
 
 interface TreeAnim {
@@ -626,7 +616,6 @@ class TreeModel {
 export class TreePacket {
     private datas: TreeData[] = [];
 
-    private rooms: TreeData[] = [];
     private anims: TreeAnim[] = new Array(8 + kDynamicAnimCount);
 
     private treeModel: TreeModel;
@@ -702,14 +691,9 @@ export class TreePacket {
             topModelMtx: mat4.create(),
             trunkModelMtx: mat4.create(),
             shadowModelMtx: mat4.create(),
-
-            nextData: this.rooms[roomIdx],
         };
 
         this.datas.push(data);
-
-        // Append to the linked list for this room
-        this.rooms[roomIdx] = data;
 
         return data;
     }
@@ -773,10 +757,10 @@ export class TreePacket {
     }
 
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
-        const kRoomCount = 64;
         let template;
 
         // @TODO: This should probably be precomputed and stored in the context
+        // TODO(jstpierre): This doesn't seem right, since we overwrite roomMatrix at load time?
         const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
 
         // Transform camera to room space for distance culling
@@ -796,15 +780,13 @@ export class TreePacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.treeModel.shadowMaterial.materialParamsBufferSize);
             this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
-                do {
-                    if (distanceCull(roomCamPos, data.pos)) continue;
-                    const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
-                    this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
-                } while (data = data.nextData);
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
+                const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
+                this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -816,27 +798,27 @@ export class TreePacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.treeModel.woodMaterial.materialParamsBufferSize);
             this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.treeModel.woodMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
 
-                // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
-                colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
-                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
+            // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
+            colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
+            colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
 
-                do {
-                    if (data.flags & TreeFlags.isFrustumCulled) continue;
-                    if (distanceCull(roomCamPos, data.pos)) continue;
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
 
-                    const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
-                    this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                if (data.flags & TreeFlags.isFrustumCulled)
+                    continue;
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
 
-                    const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.topModelMtx);
-                    this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
-                } while (data = data.nextData);
+                const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
+                this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+
+                const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.topModelMtx);
+                this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -858,8 +840,6 @@ interface GrassData {
     itemIdx: number;
     pos: vec3;
     modelMtx: mat4;
-
-    nextData: GrassData;
 }
 
 interface GrassAnim {
@@ -978,13 +958,9 @@ export class GrassPacket {
             itemIdx,
             pos: vec3.clone(pos),
             modelMtx: mat4.create(),
-            nextData: this.rooms[roomIdx],
         };
 
         this.datas.push(data);
-
-        // Append to the linked list for this room
-        this.rooms[roomIdx] = data;
 
         return data;
     }
@@ -1042,7 +1018,6 @@ export class GrassPacket {
     }
 
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
-        const kRoomCount = 64;
         let template;
 
         // @TODO: This should probably be precomputed and stored in the context
@@ -1058,21 +1033,21 @@ export class GrassPacket {
             const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.model.grassMaterial.materialParamsBufferSize);
             this.model.grassMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.model.grassMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i];
-                if (!data) continue;
 
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
-                colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
+            colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
 
-                do {
-                    if (data.flags & GrassFlags.isFrustumCulled) continue;
-                    if (distanceCull(roomCamPos, data.pos)) continue;
+            for (let i = 0; i < this.datas.length; i++) {
+                const data = this.datas[i];
 
-                    const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
-                    mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
-                    this.model.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
-                } while (data = data.nextData);
+                if (data.flags & GrassFlags.isFrustumCulled)
+                    continue;
+                if (distanceCull(roomCamPos, data.pos))
+                    continue;
+
+                const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
+                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
+                this.model.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
