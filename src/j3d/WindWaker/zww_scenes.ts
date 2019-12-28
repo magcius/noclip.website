@@ -2075,9 +2075,85 @@ class SceneDesc {
             buildChildModel(rarc, `bdl/ro_hat3.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ro_wait01.bck`));
         });
-        // Small decoration (Always)
-        else if (name === 'kotubo') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_kotubo1.bdl`));
-        else if (name === 'ootubo1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
+        // Various liftable objects
+        else if (
+            name === 'kotubo' || name === 'ootubo1' || name === 'Kmtub' ||
+            name === 'Ktaru'  || name === 'Ostool'  || name === 'Odokuro' ||
+            name === 'Okioke'  || name === 'Kmi02'   || name === 'Ptubo' ||
+            name === 'KkibaB'   || name === 'Kmi00'   || name === 'Hbox2S'
+        ) {
+            const type = (parameters & 0x0F000000) >> 24;
+            let rarc;
+            let model;
+            switch (type) {
+            case 0:
+                // Small Pot
+                rarc = await fetchArchive(`Always.arc`);
+                model = buildModel(rarc, `bdl/obm_kotubo1.bdl`);
+                break;
+            case 1:
+                // Large Pot
+                rarc = await fetchArchive(`Always.arc`);
+                model = buildModel(rarc, `bdl/obm_ootubo1.bdl`);
+                break;
+            case 2:
+                // Water Pot
+                rarc = await fetchArchive(`Kmtub_00.arc`);
+                model = buildModel(rarc, `bdl/kmtub_00.bdl`);
+                break;
+            case 3:
+                // Barrel
+                rarc = await fetchArchive(`Ktaru_01.arc`);
+                model = buildModel(rarc, `bdl/ktaru_01.bdl`);
+                break;
+            case 4:
+                // Stool
+                rarc = await fetchArchive(`Okmono.arc`);
+                model = buildModel(rarc, `bdl/ostool.bdl`);
+                break;
+            case 5:
+                // Skull
+                rarc = await fetchArchive(`Odokuro.arc`);
+                model = buildModel(rarc, `bdl/odokuro.bdl`);
+                break;
+            case 6:
+                // Bucket
+                rarc = await fetchArchive(`Okioke.arc`);
+                model = buildModel(rarc, `bdl/okioke.bdl`);
+                break;
+            case 7:
+                // Nut
+                rarc = await fetchArchive(`Kmi00x.arc`);
+                model = buildModel(rarc, `bdl/kmi_00x.bdl`);
+                break;
+            case 8:
+                // Golden Crate
+                rarc = await fetchArchive(`Hbox2.arc`);
+                model = buildModel(rarc, `bdl/hbox2.bdl`);
+                break;
+            case 13:
+                // Seed
+                rarc = await fetchArchive(`Sitem.arc`);
+                model = buildModel(rarc, `bdl/kmi_02.bdl`);
+                break;
+            case 14:
+                // Fancy Pot
+                rarc = await fetchArchive(`Ptubo.arc`);
+                model = buildModel(rarc, `bdl/ptubo.bdl`);
+                break;
+            case 15:
+                // Wooden Crate
+                rarc = await fetchArchive(`Kkiba_00.arc`);
+                model = buildModel(rarc, `bdl/kkiba_00.bdl`);
+                break;
+            default:
+                // Blue Tower of the Gods Pillar Statue
+                rarc = await fetchArchive(`Hseki.arc`);
+                model = buildModel(rarc, `bdlm/hmon1.bdl`);
+                break;
+            }
+            setToNearestFloor(model.modelMatrix, model.modelMatrix);
+        }
         else if (name === 'koisi1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
         // Bigger trees
         else if (name === 'lwood') fetchArchive(`Lwood.arc`).then((rarc) => {
@@ -2087,19 +2163,10 @@ class SceneDesc {
         else if (name === 'Oyashi') fetchArchive(`Oyashi.arc`).then((rarc) => buildModel(rarc, `bdl/oyashi.bdl`));
         else if (name === 'Vyasi') fetchArchive(`Vyasi.arc`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
         // Barrels
-        else if (name === 'Ktaru') fetchArchive(`Ktaru_01.arc`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
         else if (name === 'Ktarux') fetchArchive(`Ktaru_01.arc`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
         else if (name === 'Ktaruo') fetchArchive(`Ktaru_01.arc`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));
-        // Wooden Crates
-        else if (name === 'Kkiba') fetchArchive(`Kkiba_00.arc`).then((rarc) => buildModel(rarc, `bdl/kkiba_00.bdl`));
-        else if (name === 'KkibaB') fetchArchive(`Kkiba_00.arc`).then((rarc) => buildModel(rarc, `bdl/kkiba_00.bdl`));
         // Breakable shelves
         else if (name === 'Otana') fetchArchive(`Otana.arc`).then((rarc) => buildModel(rarc, `bdl/otana.bdl`));
-        // Fancy pots
-        else if (name === 'Ptubo') fetchArchive(`Ptubo.arc`).then((rarc) => buildModel(rarc, `bdl/ptubo.bdl`));
-        else if (name === 'Kmtub') fetchArchive(`Kmtub_00.arc`).then((rarc) => buildModel(rarc, `bdl/kmtub_00.bdl`));
-        // Skull
-        else if (name === 'Odokuro') fetchArchive(`Odokuro.arc`).then((rarc) => buildModel(rarc, `bdl/odokuro.bdl`));
         // Mailbox
         else if (name === 'Tpost') fetchArchive(`Toripost.arc`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
         // Sign
@@ -2166,7 +2233,7 @@ class SceneDesc {
         else if (name === 'Htoge1') fetchArchive(`Htoge1.arc`).then((rarc) => buildModel(rarc, `bdl/htoge1.bdl`));
         // Grapple Point
         else if (name === 'Kui') fetchArchive(`Kui.arc`).then((rarc) => buildModel(rarc, `bdl/obi_ropetag.bdl`));
-        // Various pushable things
+        // Various pushable objects
         else if (
             name === 'osiBLK0' || name === 'osiBLK1' || name === 'Kkiba' ||
             name === 'Hseki2'  || name === 'Hseki7'  || name === 'Mmrr' ||
@@ -2479,8 +2546,6 @@ class SceneDesc {
         else if (name === 'MOsara') fetchArchive(`Mshokki.arc`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
         else if (name === 'MPot') fetchArchive(`Mshokki.arc`).then((rarc) => buildModel(rarc, `bdl/pot.bdl`));
         else if (name === 'Branch') fetchArchive(`Kwood_00.arc`).then((rarc) => buildModel(rarc, `bmdc/ws.bmd`));
-        else if (name === 'Okioke') fetchArchive(`Okioke.arc`).then((rarc) => buildModel(rarc, `bdl/okioke.bdl`));
-        else if (name === 'Ostool') fetchArchive(`Okmono.arc`).then((rarc) => buildModel(rarc, `bdl/ostool.bdl`));
         else if (name === 'Otble') fetchArchive(`Okmono.arc`).then((rarc) => buildModel(rarc, `bdl/otable.bdl`));
         else if (name === 'OtbleL') fetchArchive(`Okmono.arc`).then((rarc) => buildModel(rarc, `bdl/otablel.bdl`));
         else if (name === 'AjavW') {
@@ -2541,10 +2606,7 @@ class SceneDesc {
         });
         else if (name === 'Rcloud') fetchArchive(`BVkumo.arc`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)))
         else if (name === 'TrFlag') fetchArchive(`Trflag.arc`).then((rarc) => buildModel(rarc, `bdl/ethata.bdl`));
-        else if (name === 'Ecube') fetchArchive(`Ecube.arc`).then((rarc) => buildModel(rarc, `bdl/ecube.bdl`));
         else if (name === 'Piwa') fetchArchive(`Piwa.arc`).then((rarc) => buildModel(rarc, `bdl/piwa.bdl`));
-        else if (name === 'osiBLK0') fetchArchive(`Osiblk.arc`).then((rarc) => buildModel(rarc, `bdl/obm_osihikiblk1.bdl`));
-        else if (name === 'osiBLK1') fetchArchive(`Osiblk.arc`).then((rarc) => buildModel(rarc, `bdl/obm_osihikiblk2.bdl`));
         else if (name === 'Gryw00') fetchArchive(`Gryw00.arc`).then((rarc) => buildModel(rarc, `bdlm/gryw00.bdl`));
         else if (name === 'Eayogn') fetchArchive(`Eayogn.arc`).then((rarc) => buildModel(rarc, `bdl/eayogn.bdl`));
         else if (name === 'Mswing') fetchArchive(`Msw.arc`).then((rarc) => buildModel(rarc, `bdl/mswng.bdl`));
