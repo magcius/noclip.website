@@ -54,7 +54,7 @@ function parseGxVtxDescList(buffer: ArrayBufferSlice) {
 }
 
 // @TODO: This is generic to all GX material display lists
-const createTexture = (r: DisplayListRegisters, data: ArrayBufferSlice, name: string): BTI_Texture => {
+function createTexture(r: DisplayListRegisters, data: ArrayBufferSlice, name: string): BTI_Texture {
     const minFilterTable = [
         GX.TexFilter.NEAR,
         GX.TexFilter.NEAR_MIP_NEAR,
@@ -115,9 +115,9 @@ function uShortTo2PI(x: number) {
 }
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
-function checkGroundY(context: WindWakerRenderer, pos: vec3) {
+function checkGroundY(context: WindWakerRenderer, roomIdx: number, pos: vec3) {
     // @TODO: This is using the last loaded room. It needs to use the room that this flower is in.
-    const dzb = context.loadingRoomRenderer.dzb;
+    const dzb = context.getRoomDZB(roomIdx);
 
     const down = vec3.set(scratchVec3b, 0, -1, 0);
     const hit = DZB.raycast(scratchVec3b, dzb, pos, down);
@@ -139,21 +139,22 @@ enum FlowerFlags {
 }
 
 interface FlowerData {
-    flags: number,
-    type: FlowerType,
-    animIdx: number,
-    itemIdx: number,
-    particleLifetime: number,
-    pos: vec3,
-    modelMatrix: mat4,
-    nextData: FlowerData,
+    roomIdx: number;
+    flags: number;
+    type: FlowerType;
+    animIdx: number;
+    itemIdx: number;
+    particleLifetime: number;
+    pos: vec3;
+    modelMatrix: mat4;
+    nextData: FlowerData;
 }
 
 interface FlowerAnim {
-    active: boolean,
-    rotationX: number,
-    rotationY: number,
-    matrix: mat4,
+    active: boolean;
+    rotationX: number;
+    rotationY: number;
+    matrix: mat4;
 }
 
 class FlowerModel {
@@ -322,6 +323,7 @@ export class FlowerPacket {
         }
 
         const data: FlowerData = {
+            roomIdx,
             flags: FlowerFlags.needsGroundCheck,
             type,
             animIdx,
@@ -365,7 +367,7 @@ export class FlowerPacket {
 
             // Perform ground checks for some limited number of flowers
             if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.pos[1] = checkGroundY(this.context, data.roomIdx, data.pos);
                 data.flags &= ~FlowerFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }
@@ -485,31 +487,32 @@ const enum TreeStatus {
 }
 
 interface TreeData {
-    flags: number,
-    status: TreeStatus,
-    animIdx: number,
-    trunkAlpha: number,
-    pos: vec3,
+    roomIdx: number;
+    flags: number;
+    status: TreeStatus;
+    animIdx: number;
+    trunkAlpha: number;
+    pos: vec3;
 
-    unkMatrix: mat4,
+    unkMatrix: mat4;
 
-    topModelMtx: mat4,
-    trunkModelMtx: mat4,
-    shadowModelMtx: mat4,
+    topModelMtx: mat4;
+    trunkModelMtx: mat4;
+    shadowModelMtx: mat4;
 
-    nextData: TreeData,
+    nextData: TreeData;
 }
 
 interface TreeAnim {
-    active: boolean,
-    initialRotationShort: number,
-    topRotationY: number,
-    topRotationX: number,
-    trunkRotationX: number,
-    trunkFallYaw: number,
-    offset: vec3,
-    topMtx: mat4,
-    trunkMtx: mat4,
+    active: boolean;
+    initialRotationShort: number;
+    topRotationY: number;
+    topRotationX: number;
+    trunkRotationX: number;
+    trunkFallYaw: number;
+    offset: vec3;
+    topMtx: mat4;
+    trunkMtx: mat4;
 }
 
 class TreeModel {
@@ -648,9 +651,9 @@ export class TreePacket {
         }
     }
 
-    private checkGroundY(context: WindWakerRenderer, treeData: TreeData) {
+    private checkGroundY(context: WindWakerRenderer, treeData: TreeData): number {
         // @TODO: This is using the last loaded room. It needs to use the room that this data is in.
-        const dzb = context.loadingRoomRenderer.dzb;
+        const dzb = context.getRoomDZB(treeData.roomIdx);
 
         const down = vec3.set(scratchVec3b, 0, -1, 0);
         const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down, scratchVec3a);
@@ -688,6 +691,7 @@ export class TreePacket {
         const status = initialStatus;
 
         const data: TreeData = {
+            roomIdx,
             flags: TreeFlags.needsGroundCheck,
             animIdx,
             status,
@@ -848,20 +852,21 @@ enum GrassFlags {
 }
 
 interface GrassData {
-    flags: number,
-    animIdx: number,
-    itemIdx: number,
-    pos: vec3,
-    modelMtx: mat4,
+    roomIdx: number;
+    flags: number;
+    animIdx: number;
+    itemIdx: number;
+    pos: vec3;
+    modelMtx: mat4;
 
-    nextData: GrassData,
+    nextData: GrassData;
 }
 
 interface GrassAnim {
-    active: boolean,
-    rotationY: number,
-    rotationX: number,
-    modelMtx: mat4,
+    active: boolean;
+    rotationY: number;
+    rotationX: number;
+    modelMtx: mat4;
 }
 
 const kMaxGrassDatas = 1500;
@@ -967,6 +972,7 @@ export class GrassPacket {
         const animIdx = Math.floor(Math.random() * 8);
 
         const data: GrassData = {
+            roomIdx,
             flags: TreeFlags.needsGroundCheck,
             animIdx,
             itemIdx,
@@ -1016,7 +1022,7 @@ export class GrassPacket {
 
             // Perform ground checks for some limited number of data
             if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                data.pos[1] = checkGroundY(this.context, data.pos);
+                data.pos[1] = checkGroundY(this.context, data.roomIdx, data.pos);
                 data.flags &= ~GrassFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }
@@ -1173,7 +1179,7 @@ const kGrassSpawnOffsets = [
 
 export class AGrass {
     public static create(context: WindWakerRenderer, actor: Actor): void {
-        enum FoliageType {
+        const enum FoliageType {
             Grass,
             Tree,
             WhiteFlower,
@@ -1190,40 +1196,33 @@ export class AGrass {
 
         switch (type) {
             case FoliageType.Grass:
-                if (!context.grassPacket) context.grassPacket = new GrassPacket(context);
-
                 for (let j = 0; j < count; j++) {
                     // @NOTE: Grass does not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-
-                    const data = context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
+                    context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
                 }
             break;
 
             case FoliageType.Tree:
-                if (!context.treePacket) context.treePacket = new TreePacket(context);
                 const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
 
                 for (let j = 0; j < count; j++) {
                     const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
                     const pos = vec3.add(scratchVec3b, offset, actor.pos);
-                    const data = context.treePacket.newData(pos, 0, actor.roomIndex);
+                    context.treePacket.newData(pos, 0, actor.roomIndex);
                 }
             break;
 
             case FoliageType.WhiteFlower:
             case FoliageType.PinkFlower:
-                if (!context.flowerPacket) context.flowerPacket = new FlowerPacket(context);
-
                 for (let j = 0; j < count; j++) {
-                    const flowerType = (type == FoliageType.WhiteFlower) ? FlowerType.WHITE : FlowerType.PINK;
+                    const flowerType = (type === FoliageType.WhiteFlower) ? FlowerType.WHITE : FlowerType.PINK;
 
                     // @NOTE: Flowers do not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-
-                    const data = context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
+                    context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
                 }
             break;
             default:
