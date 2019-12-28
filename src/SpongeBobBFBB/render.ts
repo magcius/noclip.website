@@ -26,8 +26,6 @@ import { TextureMapping } from '../TextureHolder';
 import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR } from './util';
 import { EventID } from './events';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
-import { Asset } from './hip';
 
 const DRAW_DISTANCE = 1000.0;
 
@@ -426,9 +424,9 @@ class MeshRenderer {
             vbuf[voffs++] = posnorm[2];
             this.bbox.unionPoint(posnorm);
             frag.fillNormal(posnorm, i);
-            vbuf[voffs++] = posnorm[2]; // Normal has to be rotated for whatever reason...
-            vbuf[voffs++] = posnorm[0]; // These coordinates might be wrong. They look
-            vbuf[voffs++] = posnorm[1]; // the most accurate out of all combinations though
+            vbuf[voffs++] = posnorm[0];
+            vbuf[voffs++] = posnorm[1];
+            vbuf[voffs++] = posnorm[2];
             frag.fillColor(color, i);
             voffs += fillColor(vbuf, voffs, color);
             frag.fillTexCoord(texcoord, i);
@@ -706,8 +704,6 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
     private lightPositionCache: vec3[] = [];
     private lightDirectionCache: vec3[] = [];
-
-    private lightingEnabled = true;
 
     private lightingEnabled = true;
 
