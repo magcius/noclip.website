@@ -5,7 +5,7 @@ import * as GX_Material from '../../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
 import { J3DModelInstanceSimple } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
-import { ANK1, TTK1, TRK1 } from "../../Common/JSYSTEM/J3D/J3DLoader";
+import { ANK1, TTK1, TRK1, TPT1 } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
 import { KyankoColors, ZWWExtraTextures } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
@@ -90,6 +90,10 @@ export class BMDObjectRenderer implements ObjectRenderer {
 
     public bindTRK1(trk1: TRK1, animationController?: AnimationController): void {
         this.modelInstance.bindTRK1(trk1, animationController);
+    }
+
+    public bindTPT1(tpt1: TPT1, animationController?: AnimationController): void {
+        this.modelInstance.bindTPT1(tpt1, animationController);
     }
 
     public setParentJoint(o: BMDObjectRenderer, jointName: string): void {

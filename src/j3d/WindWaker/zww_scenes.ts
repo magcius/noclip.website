@@ -13,7 +13,7 @@ import * as UI from '../../ui';
 
 import * as DZB from './DZB';
 import * as JPA from '../../Common/JSYSTEM/JPA';
-import { BMD, BTK, BRK, BCK, LoopMode, BMT } from '../../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BTK, BRK, BCK, LoopMode, BMT, BTP } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
@@ -1409,6 +1409,7 @@ class SceneDesc {
         function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
         function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
         function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
+        function parseBTP(rarc: RARC.RARC, path: string) { return BTP.parse(rarc.findFileData(path)!); }
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
