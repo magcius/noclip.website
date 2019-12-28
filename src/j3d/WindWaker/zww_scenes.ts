@@ -17,7 +17,7 @@ import { BMD, BTK, BRK, BCK, LoopMode, BMT } from '../../Common/JSYSTEM/J3D/J3DL
 import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
-import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy, OpaqueBlack } from '../../Color';
+import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
@@ -34,7 +34,6 @@ import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpe
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 import { AGrass, FlowerPacket, TreePacket, GrassPacket } from './Grass';
 

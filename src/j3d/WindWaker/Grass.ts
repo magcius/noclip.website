@@ -1,6 +1,7 @@
+
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists } from '../../util';
-import { mat4, vec3, quat } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
@@ -13,14 +14,14 @@ import { Endianness } from '../../endian';
 import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
 import { parseMaterial } from '../../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX, displayListToString } from '../../gx/gx_displaylist';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { TextureMapping } from '../../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../../viewer';
-import { colorCopy, colorFromRGBA, White } from '../../Color';
+import { colorCopy, colorFromRGBA } from '../../Color';
 
 // @TODO: This belongs somewhere else
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
@@ -155,8 +156,6 @@ interface FlowerAnim {
     matrix: mat4,
 }
 
-const kMaxFlowerDatas = 200;
-
 class FlowerModel {
     public pinkTextureMapping = new TextureMapping();
     public pinkTextureData: BTIData;
@@ -183,11 +182,11 @@ class FlowerModel {
         const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
         const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
         const l_Txo_ob_flower_white_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
-        const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);        
+        const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
 
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
-        
+
         displayListRegistersRun(matRegisters, l_matDL);
         this.whiteMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL'));
         const whiteTex = createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
@@ -219,7 +218,7 @@ class FlowerModel {
         const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
         const l_texCoord2 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord2`);
-        
+
         // Bessou
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
         const l_color3 = new ArrayBufferSlice(l_color3Data.buffer);
@@ -292,12 +291,11 @@ function distanceCull(camPos: vec3, objPos: vec3) {
 }
 
 export class FlowerPacket {
-    datas: FlowerData[] = new Array(kMaxFlowerDatas);
-    dataCount: number = 0;
+    datas: FlowerData[] = [];
 
     rooms: FlowerData[] = [];
     anims: FlowerAnim[] = new Array(8 + kDynamicAnimCount);
-    
+
     private flowerModel: FlowerModel;
 
     constructor(private context: WindWakerRenderer) {
@@ -315,21 +313,15 @@ export class FlowerPacket {
         }
     }
 
-    newData(pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
-        const dataIdx = this.datas.findIndex(d => d === undefined);
-        if (dataIdx === -1) console.warn('Failed to allocate flower data');
-        return this.setData(dataIdx, pos, type, roomIdx, itemIdx);
-    }
-
-    setData(index: number, pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
+    public newData(pos: vec3, type: FlowerType, roomIdx: number, itemIdx: number): FlowerData {
         const animIdx = Math.floor(Math.random() * 8);
-        
+
         // Island 0x21 uses the Bessou flower (the game does this check here as well)
         if (this.context.stage === 'sea' && roomIdx === 0x21 && type === FlowerType.PINK) {
             type = FlowerType.BESSOU;
         }
 
-        const data = this.datas[index] = {
+        const data: FlowerData = {
             flags: FlowerFlags.needsGroundCheck,
             type,
             animIdx,
@@ -338,7 +330,9 @@ export class FlowerPacket {
             pos: vec3.clone(pos),
             modelMatrix: mat4.create(),
             nextData: this.rooms[roomIdx],
-        }
+        };
+
+        this.datas.push(data);
 
         // Append to the linked list for this room
         this.rooms[roomIdx] = data;
@@ -346,7 +340,7 @@ export class FlowerPacket {
         return data;
     }
 
-    calc() {        
+    public calc(): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
             const theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
@@ -356,7 +350,7 @@ export class FlowerPacket {
         // @TODO: Hit checks
     }
 
-    update() {
+    public update(): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -366,12 +360,11 @@ export class FlowerPacket {
             mat4.rotateY(this.anims[i].matrix, this.anims[i].matrix, -this.anims[i].rotationY);
         }
 
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
+        for (let i = 0; i < this.datas.length; i++) {
             const data = this.datas[i];
-            if (!data) continue;
 
             // Perform ground checks for some limited number of flowers
-            if (data.flags & FlowerFlags.needsGroundCheck && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+            if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
                 data.pos[1] = checkGroundY(this.context, data.pos);
                 data.flags &= ~FlowerFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
@@ -386,7 +379,7 @@ export class FlowerPacket {
         }
     }
 
-    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+    public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
         const kRoomCount = 64;
         let template;
 
@@ -405,12 +398,12 @@ export class FlowerPacket {
             this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
-    
+                let data = this.rooms[i];
+                if (!data) continue;
+
                 colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
                 colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
-                
+
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE) continue;
                     if (distanceCull(roomCamPos, data.pos)) continue;
@@ -431,12 +424,12 @@ export class FlowerPacket {
             this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
-    
+                let data = this.rooms[i];
+                if (!data) continue;
+
                 colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
                 colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
-                
+
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK) continue;
                     if (distanceCull(roomCamPos, data.pos)) continue;
@@ -457,12 +450,12 @@ export class FlowerPacket {
             this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
-    
+                let data = this.rooms[i];
+                if (!data) continue;
+
                 colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
                 colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
-                
+
                 do {
                     if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU) continue;
                     if (distanceCull(roomCamPos, data.pos)) continue;
@@ -481,13 +474,13 @@ export class FlowerPacket {
 // ---------------------------------------------
 // Tree Packet
 // ---------------------------------------------
-enum TreeFlags {
+const enum TreeFlags {
     isFrustumCulled = 1 << 0,
     needsGroundCheck = 1 << 1,
     unk8 = 1 << 3,
 }
 
-enum TreeStatus {
+const enum TreeStatus {
     UNCUT,
 }
 
@@ -497,7 +490,7 @@ interface TreeData {
     animIdx: number,
     trunkAlpha: number,
     pos: vec3,
-    
+
     unkMatrix: mat4,
 
     topModelMtx: mat4,
@@ -518,8 +511,6 @@ interface TreeAnim {
     topMtx: mat4,
     trunkMtx: mat4,
 }
-
-const kMaxTreeDatas = 64;
 
 class TreeModel {
     public shadowTextureMapping = new TextureMapping();
@@ -630,12 +621,11 @@ class TreeModel {
 }
 
 export class TreePacket {
-    datas: TreeData[] = new Array(kMaxTreeDatas);
-    dataCount: number = 0;
+    private datas: TreeData[] = [];
 
-    rooms: TreeData[] = [];
-    anims: TreeAnim[] = new Array(8 + kDynamicAnimCount);
-    
+    private rooms: TreeData[] = [];
+    private anims: TreeAnim[] = new Array(8 + kDynamicAnimCount);
+
     private treeModel: TreeModel;
 
     constructor(private context: WindWakerRenderer) {
@@ -661,7 +651,7 @@ export class TreePacket {
     private checkGroundY(context: WindWakerRenderer, treeData: TreeData) {
         // @TODO: This is using the last loaded room. It needs to use the room that this data is in.
         const dzb = context.loadingRoomRenderer.dzb;
-    
+
         const down = vec3.set(scratchVec3b, 0, -1, 0);
         const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down, scratchVec3a);
 
@@ -693,17 +683,11 @@ export class TreePacket {
         return groundHeight;
     }
 
-    newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
-        const dataIdx = this.datas.findIndex(d => d === undefined);
-        if (dataIdx === -1) console.warn('Failed to allocate data');
-        return this.setData(dataIdx, pos, initialStatus, roomIdx);
-    }
-
-    setData(index: number, pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
+    public newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
         const animIdx = Math.floor(Math.random() * 8);
         const status = initialStatus;
 
-        const data: TreeData = this.datas[index] = {
+        const data: TreeData = {
             flags: TreeFlags.needsGroundCheck,
             animIdx,
             status,
@@ -716,7 +700,9 @@ export class TreePacket {
             shadowModelMtx: mat4.create(),
 
             nextData: this.rooms[roomIdx],
-        }
+        };
+
+        this.datas.push(data);
 
         // Append to the linked list for this room
         this.rooms[roomIdx] = data;
@@ -724,7 +710,7 @@ export class TreePacket {
         return data;
     }
 
-    calc() {        
+    public calc(): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
             let theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
@@ -737,7 +723,7 @@ export class TreePacket {
         // @TODO: Hit checks
     }
 
-    update() {
+    public update(): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -752,9 +738,8 @@ export class TreePacket {
             mat4.rotateY(anim.trunkMtx, anim.trunkMtx, uShortTo2PI(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
-        for (let i = 0; i < kMaxFlowerDatas; i++) {
+        for (let i = 0; i < this.datas.length; i++) {
             const data = this.datas[i];
-            if (!data) continue;
 
             // Perform ground checks for some limited number of data
             if ((data.flags & TreeFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
@@ -776,14 +761,14 @@ export class TreePacket {
                 } else {
                     mat4.copy(data.topModelMtx, data.unkMatrix);
                 }
-                
+
                 // Trunk matrix
                 mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
             }
         }
     }
 
-    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+    public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
         const kRoomCount = 64;
         let template;
 
@@ -808,9 +793,9 @@ export class TreePacket {
             this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
-                do {                    
+                let data = this.rooms[i];
+                if (!data) continue;
+                do {
                     if (distanceCull(roomCamPos, data.pos)) continue;
                     const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
@@ -828,9 +813,9 @@ export class TreePacket {
             this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.treeModel.woodMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
-    
+                let data = this.rooms[i];
+                if (!data) continue;
+
                 // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
                 colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
                 colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
@@ -934,7 +919,7 @@ class GrassModel {
         vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
 
         const vtx_l_Oba_kusa_aDL = vtxLoader.runVertices(vtxArrays, l_Oba_kusa_aDL);
-        
+
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL ]);
 
@@ -952,12 +937,11 @@ class GrassModel {
 }
 
 export class GrassPacket {
-    datas: GrassData[] = new Array(kMaxGrassDatas);
-    dataCount: number = 0;
+    private datas: GrassData[] = [];
 
-    rooms: GrassData[] = [];
-    anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
-    
+    private rooms: GrassData[] = [];
+    private anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
+
     private model: GrassModel;
 
     constructor(private context: WindWakerRenderer) {
@@ -979,23 +963,19 @@ export class GrassPacket {
         }
     }
 
-    newData(pos: vec3, roomIdx: number, itemIdx: number): GrassData {
-        const dataIdx = this.datas.findIndex(d => d === undefined);
-        if (dataIdx === -1) console.warn('Failed to allocate data');
-        return this.setData(dataIdx, pos, roomIdx, itemIdx);
-    }
-
-    setData(index: number, pos: vec3, roomIdx: number, itemIdx: number): GrassData {
+    public newData(pos: vec3, roomIdx: number, itemIdx: number): GrassData {
         const animIdx = Math.floor(Math.random() * 8);
 
-        const data: GrassData = this.datas[index] = {
+        const data: GrassData = {
             flags: TreeFlags.needsGroundCheck,
             animIdx,
             itemIdx,
             pos: vec3.clone(pos),
             modelMtx: mat4.create(),
             nextData: this.rooms[roomIdx],
-        }
+        };
+
+        this.datas.push(data);
 
         // Append to the linked list for this room
         this.rooms[roomIdx] = data;
@@ -1003,7 +983,7 @@ export class GrassPacket {
         return data;
     }
 
-    calc() {        
+    public calc(): void {
         // @TODO: Use value from the wind system
         const kWindSystemWindPower = 0.0;
 
@@ -1019,7 +999,7 @@ export class GrassPacket {
         // @TODO: Hit checks
     }
 
-    update() {
+    public update(): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -1055,7 +1035,7 @@ export class GrassPacket {
         }
     }
 
-    draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
+    public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
         const kRoomCount = 64;
         let template;
 
@@ -1065,7 +1045,7 @@ export class GrassPacket {
         // Transform camera to room space for distance culling
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
         const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
-        
+
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings([this.model.grassTextureMapping]);
@@ -1073,8 +1053,8 @@ export class GrassPacket {
             this.model.grassMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.model.grassMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < kRoomCount; i++) {
-                let data = this.rooms[i]; 
-                if (!data) continue; 
+                let data = this.rooms[i];
+                if (!data) continue;
 
                 colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
                 colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
@@ -1082,7 +1062,7 @@ export class GrassPacket {
                 do {
                     if (data.flags & GrassFlags.isFrustumCulled) continue;
                     if (distanceCull(roomCamPos, data.pos)) continue;
-                    
+
                     const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
                     mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
                     this.model.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
@@ -1192,7 +1172,7 @@ const kGrassSpawnOffsets = [
 ];
 
 export class AGrass {
-    static create(context: WindWakerRenderer, actor: Actor) {
+    public static create(context: WindWakerRenderer, actor: Actor): void {
         enum FoliageType {
             Grass,
             Tree,
@@ -1211,11 +1191,11 @@ export class AGrass {
         switch (type) {
             case FoliageType.Grass:
                 if (!context.grassPacket) context.grassPacket = new GrassPacket(context);
-                
+
                 for (let j = 0; j < count; j++) {
                     // @NOTE: Grass does not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
-                    const pos = vec3.add(scratchVec3a, offset, actor.pos); 
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
 
                     const data = context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
                 }
@@ -1224,7 +1204,7 @@ export class AGrass {
             case FoliageType.Tree:
                 if (!context.treePacket) context.treePacket = new TreePacket(context);
                 const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
-                
+
                 for (let j = 0; j < count; j++) {
                     const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
                     const pos = vec3.add(scratchVec3b, offset, actor.pos);
@@ -1237,18 +1217,17 @@ export class AGrass {
                 if (!context.flowerPacket) context.flowerPacket = new FlowerPacket(context);
 
                 for (let j = 0; j < count; j++) {
-                    const flowerType = (type == FoliageType.WhiteFlower) ? FlowerType.WHITE : FlowerType.PINK; 
+                    const flowerType = (type == FoliageType.WhiteFlower) ? FlowerType.WHITE : FlowerType.PINK;
 
                     // @NOTE: Flowers do not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
-                    const pos = vec3.add(scratchVec3a, offset, actor.pos); 
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
 
                     const data = context.flowerPacket.newData(pos, flowerType, actor.roomIndex, itemIdx);
                 }
             break;
-            default: 
+            default:
                 console.warn('Unknown grass actor type');
         }
-        return;
     }
 }

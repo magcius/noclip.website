@@ -1,6 +1,5 @@
 
 import * as Viewer from '../../viewer';
-import * as GX from '../../gx/gx_enum';
 import * as GX_Material from '../../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
@@ -8,22 +7,13 @@ import { J3DModelInstanceSimple } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1 } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
 import { KyankoColors, ZWWExtraTextures } from "./zww_scenes";
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
+import { ColorKind } from "../../gx/gx_render";
 import { AABB } from '../../Geometry';
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../../Camera';
+import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assertExists } from '../../util';
-import { parseMaterial } from '../../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
-import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
-import { TextureMapping } from '../../TextureHolder';
-import { colorFromRGBA, White, colorNewCopy, colorCopy } from '../../Color';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { colorFromRGBA } from '../../Color';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
-import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 
 export interface Actor {
     name: string;
