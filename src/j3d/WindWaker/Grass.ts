@@ -318,7 +318,7 @@ export class FlowerPacket {
         const animIdx = Math.floor(Math.random() * 8);
         
         // Island 0x21 uses the Bessou flower (the game does this check here as well)
-        if (this.context.stage === 'sea' && roomIdx === 0x21) {
+        if (this.context.stage === 'sea' && roomIdx === 0x21 && type === FlowerType.PINK) {
             type = FlowerType.BESSOU;
         }
 
