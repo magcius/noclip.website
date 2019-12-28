@@ -1,6 +1,6 @@
 
 import { DataStream } from './util';
-import { vec3, mat4, quat } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 import { Color } from '../Color';
 
 export interface LinkAsset {

@@ -5,13 +5,13 @@ import * as rw from 'librw';
 import * as UI from "../ui";
 import * as Viewer from '../viewer';
 import * as Assets from './assets';
-import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { MeshFragData, TextureArray, Texture, rwTexture } from '../GrandTheftAuto3/render';
+import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import { MeshFragData, Texture, rwTexture } from '../GrandTheftAuto3/render';
 import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNew, Color, colorCopy, TransparentBlack } from '../Color';
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { DeviceProgram } from '../Program';
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
@@ -21,13 +21,11 @@ import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from '..
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { mat4FromYPR, RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR } from './util';
+import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR } from './util';
 import { EventID } from './events';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
-import { Asset } from './hip';
 
 const DRAW_DISTANCE = 1000.0;
 
@@ -426,9 +424,9 @@ class MeshRenderer {
             vbuf[voffs++] = posnorm[2];
             this.bbox.unionPoint(posnorm);
             frag.fillNormal(posnorm, i);
-            vbuf[voffs++] = posnorm[2]; // Normal has to be rotated for whatever reason...
-            vbuf[voffs++] = posnorm[0]; // These coordinates might be wrong. They look
-            vbuf[voffs++] = posnorm[1]; // the most accurate out of all combinations though
+            vbuf[voffs++] = posnorm[0];
+            vbuf[voffs++] = posnorm[1];
+            vbuf[voffs++] = posnorm[2];
             frag.fillColor(color, i);
             voffs += fillColor(vbuf, voffs, color);
             frag.fillTexCoord(texcoord, i);
@@ -705,7 +703,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
     private lightKit?: Assets.LightKit;
 
     private lightPositionCache: vec3[] = [];
-    private lightRotationCache: vec3[] = [];
+    private lightDirectionCache: vec3[] = [];
 
     private lightingEnabled = true;
 
@@ -730,16 +728,13 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.lightKit = lightKit;
 
         this.lightPositionCache.length = 0;
-        this.lightRotationCache.length = 0;
-
-        const position = vec3.create();
-        const rotation = vec3.create();
+        this.lightDirectionCache.length = 0;
 
         for (const light of lightKit.lightListArray) {
-            mat4.getTranslation(position, light.matrix);
-            computeEulerAngleRotationFromSRTMatrix(rotation, light.matrix);
-            this.lightPositionCache.push(vec3.clone(position));
-            this.lightRotationCache.push(vec3.clone(rotation));
+            const position = vec3.fromValues(light.matrix[12], light.matrix[13], light.matrix[14]);
+            const direction = vec3.fromValues(light.matrix[8], light.matrix[9], light.matrix[10]);
+            this.lightPositionCache.push(position);
+            this.lightDirectionCache.push(direction);
         }
     }
 
@@ -778,7 +773,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             if (this.lightingEnabled && this.lightKit && this.lightKit.lightCount > i) {
                 const light = this.lightKit.lightListArray[i];
                 offs += fillVec3v(mapped, offs, this.lightPositionCache[i]);
-                offs += fillVec3v(mapped, offs, this.lightRotationCache[i]);
+                offs += fillVec3v(mapped, offs, this.lightDirectionCache[i]);
                 offs += fillColor(mapped, offs, light.color);
                 mapped[offs++] = light.type;
                 mapped[offs++] = light.radius;

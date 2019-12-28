@@ -3,7 +3,7 @@ precision mediump float; precision lowp sampler2D;
 
 struct Light {
     vec4 position;
-    vec4 rotation;
+    vec4 direction;
     vec4 color;
     float type;
     float radius;
@@ -52,8 +52,7 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
 
-   // vec4 t_Normal = Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0));
-    //vec4 t_Normal = vec4(a_Normal, 1.0);
+    vec3 t_Normal = normalize(Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0)).xyz);
 
 #ifdef USE_LIGHTING
     if (USE_LIGHTING == 1) {
@@ -63,14 +62,14 @@ void main() {
             Light light = u_Lights[i];
             if (light.type == 0.0) break;
 
-            vec3 colorFactor = (light.color.rgb * light.color.a);
+            vec3 lightColor = light.color.rgb; // alpha is ignored
 
             if (light.type == LIGHT_TYPE_AMBIENT) {
-                v_LightColor += colorFactor;
+                v_LightColor += lightColor;
             } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
-                vec3 lightDir = normalize(-light.rotation.xyz);
-                float diffuse = max(dot(a_Normal, lightDir), 0.0);
-                v_LightColor += diffuse * colorFactor;
+                vec3 lightDir = normalize(light.direction.xyz);
+                float diffuse = clamp(dot(t_Normal, lightDir), 0.0, 1.0);
+                v_LightColor += diffuse * lightColor;
             }
         }
     }
