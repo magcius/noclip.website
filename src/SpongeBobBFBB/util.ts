@@ -159,6 +159,76 @@ export class DataStream {
     }
 }
 
+export class DataCacheIDName<T> {
+    private nameToDataMap = new Map<string, T>();
+    private idToDataMap = new Map<number, T>();
+
+    private nameToLockMap = new Map<string, boolean>();
+    private idToLockMap = new Map<number, boolean>();
+
+    private dataCount = 0;
+
+    public get count() { return this.dataCount; }
+
+    public add(data: T, name: string, id: number, lock: boolean = false) {
+        this.nameToDataMap.set(name, data);
+        this.idToDataMap.set(id, data);
+        this.nameToLockMap.set(name, lock);
+        this.idToLockMap.set(id, lock);
+        this.dataCount++;
+    }
+
+    public getByName(name: string) {
+        return this.nameToDataMap.get(name);
+    }
+
+    public getByID(id: number) {
+        return this.idToDataMap.get(id);
+    }
+
+    public ids() {
+        return this.idToDataMap.keys();
+    }
+
+    public names() {
+        return this.nameToDataMap.keys();
+    }
+
+    public data() {
+        return this.idToDataMap.values();
+    }
+
+    public isIDLocked(id: number) {
+        return this.idToLockMap.get(id) || false;
+    }
+
+    public isNameLocked(name: string) {
+        return this.nameToLockMap.get(name) || false;
+    }
+
+    public removeByName(name: string, force: boolean = false) {
+        if (force || !this.isNameLocked(name)) {
+            this.nameToDataMap.delete(name);
+            this.nameToLockMap.delete(name);
+        }
+    }
+
+    public removeByID(id: number, force: boolean = false) {
+        if (force || !this.isIDLocked(id)) {
+            this.idToDataMap.delete(id);
+            this.idToLockMap.delete(id);
+        }
+    }
+
+    // Clears just unlocked data or all data
+    public clear(all: boolean = false) {
+        for (const [id] of this.idToDataMap)
+            this.removeByID(id, all);
+        for (const [name] of this.nameToDataMap)
+            this.removeByName(name, all);
+    }
+}
+
 export interface RWChunkHeader {
     type: number;
     length: number;
