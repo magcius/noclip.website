@@ -687,11 +687,17 @@ export function readModelInfo(stream: DataStream): ModelAssetInfo {
     return { Magic, NumModelInst, AnimTableID, CombatID, BrainID, modelInst };
 }
 
+export const enum PipeZWriteMode {
+    Enabled,
+    Disabled,
+    Dual
+}
+
 export const enum PipeCullMode {
     Unknown0,
     None,
     Back,
-    Unknown3 // front+back?
+    Dual
 }
 
 // RwBlendFunction
@@ -713,8 +719,8 @@ export const enum PipeBlendFunction {
 export class PipeInfoFlags {
     constructor(public flags: number) {}
 
-    public get noZWrite(): boolean {
-        return ((this.flags & 0xC) >>> 2) === 1;
+    public get zWriteMode(): PipeZWriteMode {
+        return ((this.flags & 0xC) >>> 2);
     }
 
     public get cullMode(): PipeCullMode {

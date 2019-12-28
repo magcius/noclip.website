@@ -11,7 +11,7 @@ import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNew, Color, colorCopy, TransparentBlack } from '../Color';
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { DeviceProgram } from '../Program';
-import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
@@ -343,47 +343,6 @@ const enum BFBBPass {
     SKYDOME,
 }
 
-function convertPipeCullMode(cull: Assets.PipeCullMode): GfxCullMode {
-    switch (cull) {
-        case Assets.PipeCullMode.Back:
-            return GfxCullMode.BACK;
-        case Assets.PipeCullMode.Unknown3:
-            return GfxCullMode.FRONT;
-        case Assets.PipeCullMode.None:
-        default:
-            return GfxCullMode.NONE;
-    }
-}
-
-function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFactor {
-    switch (blend) {
-        case Assets.PipeBlendFunction.Zero:
-            return GfxBlendFactor.ZERO;
-        case Assets.PipeBlendFunction.One:
-            return GfxBlendFactor.ONE;
-        case Assets.PipeBlendFunction.SrcColor:
-            return GfxBlendFactor.SRC_COLOR;
-        case Assets.PipeBlendFunction.InvSrcColor:
-            return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
-        case Assets.PipeBlendFunction.SrcAlpha:
-            return GfxBlendFactor.SRC_ALPHA;
-        case Assets.PipeBlendFunction.InvSrcAlpha:
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        case Assets.PipeBlendFunction.DestAlpha:
-            return GfxBlendFactor.DST_ALPHA;
-        case Assets.PipeBlendFunction.InvDestAlpha:
-            return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
-        case Assets.PipeBlendFunction.DestColor:
-            return GfxBlendFactor.DST_COLOR;
-        case Assets.PipeBlendFunction.InvDestColor:
-            return GfxBlendFactor.ONE_MINUS_DST_COLOR;
-        case Assets.PipeBlendFunction.SrcAlphaSat:
-        case Assets.PipeBlendFunction.NA:
-        default:
-            return -1;
-    }
-}
-
 const LIGHTKIT_LIGHT_COUNT = 8;
 const LIGHTKIT_LIGHT_SIZE = 4*4;
 const LIGHTKIT_SIZE = LIGHTKIT_LIGHT_COUNT * LIGHTKIT_LIGHT_SIZE;
@@ -472,6 +431,35 @@ export class BaseRenderer {
     }
 }
 
+function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFactor {
+    switch (blend) {
+        case Assets.PipeBlendFunction.Zero:
+            return GfxBlendFactor.ZERO;
+        case Assets.PipeBlendFunction.One:
+            return GfxBlendFactor.ONE;
+        case Assets.PipeBlendFunction.SrcColor:
+            return GfxBlendFactor.SRC_COLOR;
+        case Assets.PipeBlendFunction.InvSrcColor:
+            return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
+        case Assets.PipeBlendFunction.SrcAlpha:
+            return GfxBlendFactor.SRC_ALPHA;
+        case Assets.PipeBlendFunction.InvSrcAlpha:
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        case Assets.PipeBlendFunction.DestAlpha:
+            return GfxBlendFactor.DST_ALPHA;
+        case Assets.PipeBlendFunction.InvDestAlpha:
+            return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
+        case Assets.PipeBlendFunction.DestColor:
+            return GfxBlendFactor.DST_COLOR;
+        case Assets.PipeBlendFunction.InvDestColor:
+            return GfxBlendFactor.ONE_MINUS_DST_COLOR;
+        case Assets.PipeBlendFunction.SrcAlphaSat:
+        case Assets.PipeBlendFunction.NA:
+        default:
+            return -1;
+    }
+}
+
 export class FragRenderer extends BaseRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -484,6 +472,9 @@ export class FragRenderer extends BaseRenderer {
     private filterKey: number;
 
     private indices: number;
+
+    private dualCull: boolean;
+    private dualZWrite: boolean;
 
     constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, 
         public frag: RWMeshFragData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
@@ -554,9 +545,23 @@ export class FragRenderer extends BaseRenderer {
         let useLighting = !defines.SKY;
         let alphaRef = 0;
 
+        this.dualCull = false;
+
         if (this.pipeInfo && (this.pipeInfo.SubObjectBits & subObject!)) {
-            this.megaStateFlags.cullMode = convertPipeCullMode(this.pipeInfo.PipeFlags.cullMode);
-            this.megaStateFlags.depthWrite = !this.pipeInfo.PipeFlags.noZWrite;
+            switch (this.pipeInfo.PipeFlags.cullMode) {
+                case Assets.PipeCullMode.None:
+                    this.megaStateFlags.cullMode = GfxCullMode.NONE;
+                    break;
+                case Assets.PipeCullMode.Back:
+                    this.megaStateFlags.cullMode = GfxCullMode.BACK;
+                    break;
+                case Assets.PipeCullMode.Dual:
+                    this.dualCull = true;
+                    this.megaStateFlags.cullMode = GfxCullMode.FRONT;
+                    break;
+            }
+            
+            this.megaStateFlags.depthWrite = this.pipeInfo.PipeFlags.zWriteMode != Assets.PipeZWriteMode.Disabled;
             const dstFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.dstBlend);
             const srcFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.srcBlend);
             if (dstFactor != -1) blendDstFactor = dstFactor;
@@ -591,22 +596,35 @@ export class FragRenderer extends BaseRenderer {
         this.filterKey = defines.SKY ? BFBBPass.SKYDOME : BFBBPass.MAIN;
     }
 
-    public prepareToRender(renderState: RenderState) {
-        super.prepareToRender(renderState);
-        if (this.isCulled) return;
-        
-        const renderInst = renderState.instManager.pushRenderInst();
+    public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
+        const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
+
+        if (this.dualCull)
+            this.megaStateFlags.cullMode = secondPass ? GfxCullMode.BACK : GfxCullMode.FRONT;
+        else if (this.dualZWrite)
+            this.megaStateFlags.depthWrite = secondPass;
+        
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         if (this.frag.textureData !== undefined)
             renderInst.setSamplerBindingsFromTextureMappings(this.frag.textureData.textureMapping);
         
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera, this.bboxModel);
-        renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+        renderInst.sortKey = setSortKeyDepth(this.sortKey, viewSpaceDepth);
         renderInst.filterKey = this.filterKey;
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera, this.bboxModel);
+        this.prepareRenderInst(renderState.instManager, depth, false);
+
+        if (this.dualCull || this.dualZWrite)
+            this.prepareRenderInst(renderState.instManager, depth, true);
     }
 
     public destroy(device: GfxDevice) {
