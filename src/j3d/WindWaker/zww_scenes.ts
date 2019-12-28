@@ -1150,7 +1150,7 @@ class SceneDesc {
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
         }
         
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc?cache_bust=1`);
         
         return modelCache.waitForLoad().then(() => {
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
@@ -1202,7 +1202,7 @@ class SceneDesc {
                 }
 
                 renderer.roomMatrix = modelMatrix;
-                renderer.roomInverseMatrix = mat4.invert(mat4.create(), renderer.roomMatrix);
+                mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;

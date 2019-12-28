@@ -14,8 +14,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer as ArrayBuffer);
 }
 
-const pathBaseIn  = `../../../data/zww_raw`;
-const pathBaseOut = `../../../data/j3d/ww`;
+const pathBaseIn  = `../../../../data/zww_raw`;
+const pathBaseOut = `../../../../data/j3d/ww`;
 
 interface SymbolMapEntry {
     size: number;
