@@ -57,9 +57,50 @@ export function readBaseAsset(stream: DataStream): BaseAsset {
     return { id, baseType, linkCount, baseFlags, links };
 }
 
+export interface EnvAsset extends BaseAsset {
+    bspAssetID: number; // JSP info ID
+    startCameraAssetID: number;
+    climateFlags: number;
+    climateStrengthMin: number;
+    climateStrengthMax: number;
+    bspLightKit: number; // not used
+    objectLightKit: number;
+    padF1: number;
+    bspCollisionAssetID: number;
+    bspFXAssetID: number;
+    bspCameraAssetID: number;
+    bspMapperID: number;
+    bspMapperCollisionID: number;
+    bspMapperFXID: number;
+    loldHeight: number;
+}
+
+export function readEnvAsset(stream: DataStream): EnvAsset {
+    const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
+    const bspAssetID = stream.readUInt32();
+    const startCameraAssetID = stream.readUInt32();
+    const climateFlags = stream.readUInt32();
+    const climateStrengthMin = stream.readFloat();
+    const climateStrengthMax = stream.readFloat();
+    const bspLightKit = stream.readUInt32();
+    const objectLightKit = stream.readUInt32();
+    const padF1 = stream.readFloat();
+    const bspCollisionAssetID = stream.readUInt32()
+    const bspFXAssetID = stream.readUInt32();
+    const bspCameraAssetID = stream.readUInt32();
+    const bspMapperID = stream.readUInt32()
+    const bspMapperCollisionID = stream.readUInt32();
+    const bspMapperFXID = stream.readUInt32();
+    const loldHeight = stream.readFloat();
+    const env: EnvAsset = { id, baseType, linkCount, baseFlags, links, bspAssetID, startCameraAssetID, climateFlags, climateStrengthMin, climateStrengthMax,
+        bspLightKit, objectLightKit, padF1, bspCollisionAssetID, bspFXAssetID, bspCameraAssetID, bspMapperID, bspMapperCollisionID, bspMapperFXID, loldHeight };
+    readLinks(stream, env);
+    return env;
+}
+
 export interface FogAsset extends BaseAsset {
-    bkgndColor: number[];
-    fogColor: number[];
+    bkgndColor: Color;
+    fogColor: Color;
     fogDensity: number;
     fogStart: number;
     fogStop: number;
@@ -70,16 +111,8 @@ export interface FogAsset extends BaseAsset {
 
 export function readFogAsset(stream: DataStream): FogAsset {
     const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
-    const bkgndColor: number[] = [];
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    const fogColor: number[] = [];
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
+    const bkgndColor = stream.readColor8();
+    const fogColor = stream.readColor8();
     const fogDensity = stream.readFloat();
     const fogStart = stream.readFloat();
     const fogStop = stream.readFloat();
@@ -593,6 +626,10 @@ export function readLightKit(stream: DataStream): LightKit {
         lightListArray.push({ type, color, matrix, radius, angle, platLight });
     }
     return { tagID, groupID, lightCount, lightList, lightListArray };
+}
+
+interface JSPInfo {
+
 }
 
 export const enum PipeCullMode {

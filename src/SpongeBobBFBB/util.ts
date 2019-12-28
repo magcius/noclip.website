@@ -159,6 +159,67 @@ export class DataStream {
     }
 }
 
+export class DataCacheIDName<T> {
+    private nameToDataMap = new Map<string, T>();
+    private idToDataMap = new Map<number, T>();
+
+    private nameToLockMap = new Map<string, boolean>();
+    private idToLockMap = new Map<number, boolean>();
+
+    private dataCount = 0;
+
+    public get count() { return this.dataCount; }
+
+    public add(data: T, name: string, id: number, lock: boolean) {
+        this.nameToDataMap.set(name, data);
+        this.idToDataMap.set(id, data);
+        this.nameToLockMap.set(name, lock);
+        this.idToLockMap.set(id, lock);
+        this.dataCount++;
+    }
+
+    public getByName(name: string) {
+        return this.nameToDataMap.get(name);
+    }
+
+    public getByID(id: number) {
+        return this.idToDataMap.get(id);
+    }
+
+    public removeByName(name: string, force: boolean) {
+        if (force || !this.nameToLockMap.get(name))
+            this.nameToDataMap.delete(name);
+    }
+
+    public removeByID(id: number, force: boolean) {
+        if (force || !this.idToLockMap.get(name))
+            this.idToDataMap.delete(id);
+    }
+
+    // Clears just unlocked data or all data
+    public clear(all: boolean = false) {
+        if (all) {
+            this.idToDataMap.clear();
+            this.nameToDataMap.clear();
+            this.idToLockMap.clear();
+            this.nameToLockMap.clear();
+        } else {
+            for (const [id, lock] of this.idToLockMap) {
+                if (!lock) {
+                    this.idToDataMap.delete(id);
+                    this.idToLockMap.delete(id);
+                }
+            }
+            for (const [name, lock] of this.nameToLockMap) {
+                if (!lock) {
+                    this.nameToDataMap.delete(name);
+                    this.nameToLockMap.delete(name);
+                }
+            }
+        }
+    }
+}
+
 export interface RWChunkHeader {
     type: number;
     length: number;

@@ -23,9 +23,10 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR } from './util';
+import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
 import { EventID } from './events';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { Asset } from './hip';
 
 const MAX_DRAW_DISTANCE = 1000.0;
 let DrawDistance = MAX_DRAW_DISTANCE;
@@ -68,24 +69,115 @@ class BFBBProgram extends DeviceProgram {
     }
 }
 
+export class TextureData {
+    private gfxTexture: GfxTexture | null = null;
+    private gfxSampler: GfxSampler | null = null;
+
+    public textureMapping = nArray(1, () => new TextureMapping());
+
+    private isSetup = false;
+
+    constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
+
+    public setup(device: GfxDevice, cache: GfxRenderCache) {
+        if (this.isSetup) return;
+
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
+        device.submitPass(hostAccessPass);
+
+        this.gfxSampler = cache.createSampler(device, {
+            magFilter: this.filter,
+            minFilter: this.filter,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 1000,
+            wrapS: this.wrapS,
+            wrapT: this.wrapT,
+        });
+
+        const mapping = this.textureMapping[0];
+        mapping.width = this.texture.width;
+        mapping.height = this.texture.height;
+        mapping.flipY = false;
+        mapping.gfxTexture = this.gfxTexture;
+        mapping.gfxSampler = this.gfxSampler;
+
+        this.isSetup = true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.gfxTexture !== null)
+            device.destroyTexture(this.gfxTexture);
+        if (this.gfxSampler !== null)
+            device.destroySampler(this.gfxSampler);
+    }
+}
+
+function convertFilterMode(filter: number): GfxTexFilterMode {
+    return GfxTexFilterMode.BILINEAR;
+}
+
+function convertWrapMode(addressing: number): GfxWrapMode {
+    switch (addressing) {
+        case rw.Texture.Addressing.MIRROR:
+            return GfxWrapMode.MIRROR;
+        case rw.Texture.Addressing.WRAP:
+            return GfxWrapMode.REPEAT;
+        case rw.Texture.Addressing.CLAMP:
+        case rw.Texture.Addressing.BORDER:
+        default:
+            return GfxWrapMode.CLAMP;
+    }
+}
+
+export class TextureCache extends DataCacheIDName<TextureData> {
+    public addTexDictionary(texdic: rw.TexDictionary, name: string, id: number, lock: boolean = false) {
+        // Only add the first texture (Each texture in BFBB is a separate texdic)
+        const rwtx = rw.Texture.fromDict(texdic.textures.begin);
+        const filter = convertFilterMode(rwtx.filter);
+        const wrapS = convertWrapMode(rwtx.addressU);
+        const wrapT = convertWrapMode(rwtx.addressV);
+        const texture = rwTexture(rwtx, name, false);
+        const textureData = new TextureData(texture, rwtx.name, filter, wrapS, wrapT);
+
+        this.add(textureData, name, id, lock);
+    }
+}
+
 class RWMeshFragData implements MeshFragData {
     public indices: Uint16Array;
-    public texName?: string;
+    public textureData?: TextureData;
     public transparent: boolean;
 
     private baseColor = colorNewCopy(White);
     private indexMap: number[];
 
-    constructor(mesh: rw.Mesh, tristrip: boolean, txdName: string, private positions: Float32Array,
-        private normals: Float32Array | null, private texCoords: Float32Array | null, private colors: Uint8Array | null) {
-
-        this.transparent = false;
+    constructor(mesh: rw.Mesh, tristrip: boolean, private positions: Float32Array, private normals: Float32Array | null,
+        private texCoords: Float32Array | null, private colors: Uint8Array | null, textures?: TextureData[]) {
 
         const { texture, color } = mesh.material;
 
-        if (color && color[3] < 0xFF) {
+        if (texture && textures) {
+            for (const textureData of textures) {
+                if (textureData.name === texture.name) {
+                    this.textureData = textureData;
+                    break;
+                }
+            }
+        }
+
+        if (color)
+            this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
+
+        this.transparent = false;
+
+        if (this.textureData && this.textureData.texture.transparent)
             this.transparent = true;
-        } else if (this.colors) {
+        else if (color && color[3] < 0xFF)
+            this.transparent = true;
+        else if (this.colors) {
             for (let i = 0; i < this.colors.length; i += 4) {
                 if (this.colors[i+3] < 0xFF) {
                     this.transparent = true;
@@ -93,12 +185,6 @@ class RWMeshFragData implements MeshFragData {
                 }
             }
         }
-
-        if (texture)
-            // this.texName = txdName + '/' + texture.name.toLowerCase();
-            this.texName = txdName;
-        if (color)
-            this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
 
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
@@ -161,154 +247,56 @@ export interface ModelData {
     pipeInfo?: Assets.PipeInfo;
 }
 
-export class ModelCache {
-    public models = new Map<string, ModelData>();
+export class ModelCache extends DataCacheIDName<ModelData> {
+    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, name: string, id: number, textures?: TextureData[], lock: boolean = false) {
+        let model = this.getByID(id);
+        if (!model) {
+            model = { meshes: [] };
+            this.add(model, name, id, lock);
+        }
 
-    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, name: string) {
         const geom = atomic.geometry;
         const positions = geom.morphTarget(0).vertices!.slice();
         const normals = (geom.morphTarget(0).normals) ? geom.morphTarget(0).normals!.slice() : null;
         const texCoords = (geom.numTexCoordSets) ? geom.texCoords(0)!.slice() : null;
         const colors = (geom.colors) ? geom.colors.slice() : null;
-        const h = geom.meshHeader;
+        const meshHeader = geom.meshHeader;
 
-        if (!this.models.get(name))
-            this.models.set(name, { meshes: [] });
-
-        const model = this.models.get(name)!;
         const frags: RWMeshFragData[] = [];
 
-        for (let i = 0; i < h.numMeshes; i++) {
-            const mesh = h.mesh(i);
-            const texture = mesh.material.texture;
-            const txdName = texture ? `${texture.name}.RW3` : '';
-            const frag = new RWMeshFragData(h.mesh(i), h.tristrip, txdName, positions, normals, texCoords, colors);
-            frags.push(frag);
-        }
+        for (let i = 0; i < meshHeader.numMeshes; i++)
+            frags.push(new RWMeshFragData(meshHeader.mesh(i), meshHeader.tristrip, positions, normals, texCoords, colors, textures));
 
         model.meshes.push({ frags, atomicStruct });
     }
 
-    public addClump(chunk: RWChunk, name: string) {
-        const stream = createRWStreamFromChunk(chunk);
-        const clump = rw.Clump.streamRead(stream);
+    public addClump(chunk: RWChunk, clump: rw.Clump, name: string, id: number, textures?: TextureData[], lock: boolean = false) {
+        for (let i = 0, lnk = clump.atomics.begin; i < chunk.children.length && !lnk.is(clump.atomics.end); lnk = lnk.next) {
+            const atomic = rw.Atomic.fromClump(lnk);
 
-        const atomics: rw.Atomic[] = [];
-        const atomicStructs: RWAtomicStruct[] = [];
+            let atomicChunk: RWChunk;
+            do { atomicChunk = chunk.children[i++]; } while (atomicChunk.header.type !== rw.PluginID.ID_ATOMIC);
+            const structChunk = atomicChunk.children[0];
+            assert(structChunk.header.type === rw.PluginID.ID_STRUCT);
 
-        for (let lnk = clump.atomics.begin; !lnk.is(clump.atomics.end); lnk = lnk.next) {
-            atomics.push(rw.Atomic.fromClump(lnk));
-        }
+            const atomicStruct = parseRWAtomic(structChunk);
 
-        for (const child of chunk.children) {
-            if (child.header.type === rw.PluginID.ID_ATOMIC) {
-                const structChunk = child.children[0];
-                assert(structChunk.header.type === rw.PluginID.ID_STRUCT);
-                const atomicStruct = parseRWAtomic(structChunk);
-                atomicStructs.push(atomicStruct);
-            }
-        }
-
-        assert(atomics.length === atomicStructs.length);
-
-        for (let i = 0; i < atomics.length; i++)
-            this.addAtomic(atomics[i], atomicStructs[i], name);
-        
-        stream.delete();
-        clump.delete();
-
-        for (const atomic of atomics)
+            this.addAtomic(atomic, atomicStruct, name, id, textures, lock);
             atomic.delete();
-    }
-}
-
-export class TextureData {
-    private gfxTexture: GfxTexture | null = null;
-    private gfxSampler: GfxSampler | null = null;
-
-    public textureMapping = nArray(1, () => new TextureMapping());
-
-    constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
-
-    public setup(device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
-        device.submitPass(hostAccessPass);
-
-        this.gfxSampler = cache.createSampler(device, {
-            magFilter: this.filter,
-            minFilter: this.filter,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0,
-            maxLOD: 1000,
-            wrapS: this.wrapS,
-            wrapT: this.wrapT,
-        });
-
-        const mapping = this.textureMapping[0];
-        mapping.width = this.texture.width;
-        mapping.height = this.texture.height;
-        mapping.flipY = false;
-        mapping.gfxTexture = this.gfxTexture;
-        mapping.gfxSampler = this.gfxSampler;
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.gfxTexture !== null)
-            device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
-    }
-}
-
-function convertFilterMode(filter: number): GfxTexFilterMode {
-    return GfxTexFilterMode.BILINEAR;
-}
-
-function convertWrapMode(addressing: number): GfxWrapMode {
-    switch (addressing) {
-        case rw.Texture.Addressing.MIRROR:
-            return GfxWrapMode.MIRROR;
-        case rw.Texture.Addressing.WRAP:
-            return GfxWrapMode.REPEAT;
-        case rw.Texture.Addressing.CLAMP:
-        case rw.Texture.Addressing.BORDER:
-        default:
-            return GfxWrapMode.CLAMP;
-    }
-}
-
-export class TextureCache {
-    public textureData = new Map<string, TextureData[]>();
-
-    public addTexDictionary(texdic: rw.TexDictionary, name: string) {
-        if (!this.textureData.get(name))
-            this.textureData.set(name, []);
-
-        const textures = this.textureData.get(name)!;
-
-        for (let lnk = texdic.textures.begin; !lnk.is(texdic.textures.end); lnk = lnk.next) {
-            const rwtx = rw.Texture.fromDict(lnk);
-            const filter = convertFilterMode(rwtx.filter);
-            const wrapS = convertWrapMode(rwtx.addressU);
-            const wrapT = convertWrapMode(rwtx.addressV);
-
-            const texture = rwTexture(rw.Texture.fromDict(lnk), name, false);
-            textures.push(new TextureData(texture, name, filter, wrapS, wrapT));
         }
+        
+        clump.delete();
     }
 }
 
 export interface JSP {
-    model?: ModelData;
-    textures?: TextureData[];
+    id: number;
+    model: ModelData;
 }
 
 export interface Ent {
     asset: Assets.EntAsset;
     model?: ModelData;
-    textures?: TextureData[];
 }
 
 export interface Button {
@@ -426,9 +414,7 @@ class MeshRenderer {
     public modelMatrix = mat4.create();
     public transparent = false;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, public frag: RWMeshFragData,
-        private textureData?: TextureData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
-
+    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, public frag: RWMeshFragData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
         this.indices = frag.indices.length;
         assert(this.indices > 0);
 
@@ -520,7 +506,7 @@ class MeshRenderer {
 
         setAttachmentStateSimple(this.megaStateFlags, { blendMode, blendDstFactor, blendSrcFactor });
 
-        this.transparent = frag.transparent || (textureData ? textureData.texture.transparent : false) || !this.megaStateFlags.depthWrite;
+        this.transparent = frag.transparent || !this.megaStateFlags.depthWrite;
         const renderLayer = this.transparent ? GfxRendererLayer.TRANSLUCENT : (defines.SKY ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE);
 
         this.program = new BFBBProgram(defines);
@@ -546,8 +532,8 @@ class MeshRenderer {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        if (this.textureData !== undefined)
-            renderInst.setSamplerBindingsFromTextureMappings(this.textureData.textureMapping);
+        if (this.frag.textureData !== undefined)
+            renderInst.setSamplerBindingsFromTextureMappings(this.frag.textureData.textureMapping);
         
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bboxModel);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
@@ -574,7 +560,7 @@ export class ModelRenderer {
     public renderers: MeshRenderer[] = [];
     public modelMatrix = mat4.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, model: ModelData, textures?: TextureData[], public color: Color = White) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, model: ModelData, public color: Color = White) {
         let subObject = 1 << (model.meshes.length - 1);
 
         for (let i = 0; i < model.meshes.length; i++) {
@@ -582,17 +568,12 @@ export class ModelRenderer {
 
             if (mesh.atomicStruct.flags & RWAtomicFlags.Render) {
                 for (const frag of mesh.frags) {
-                    let textureData: TextureData | undefined;
-                    if (frag.texName && textures) {
-                        textureData = textures.find((tex) => tex.name === frag.texName);
-
-                        if (textureData) {
-                            textureData.setup(device, cache);
-                            defines.USE_TEXTURE = '1';
-                        }
+                    if (frag.textureData) {
+                        frag.textureData.setup(device, cache);
+                        defines.USE_TEXTURE = '1';
                     }
                     
-                    const renderer = new MeshRenderer(device, cache, defines, frag, textureData, model.pipeInfo, subObject);
+                    const renderer = new MeshRenderer(device, cache, defines, frag, model.pipeInfo, subObject);
                     this.bbox.union(this.bbox, renderer.bbox);
                     this.renderers.push(renderer);
                 }
@@ -638,7 +619,7 @@ export class JSPRenderer {
     public modelRenderer?: ModelRenderer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public readonly jsp: JSP) {
-        this.modelRenderer = new ModelRenderer(device, cache, { USE_LIGHTING: '0' }, jsp.model!, jsp.textures);
+        this.modelRenderer = new ModelRenderer(device, cache, { USE_LIGHTING: '0' }, jsp.model);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -684,7 +665,7 @@ export class EntRenderer {
                 }
             }
 
-            this.modelRenderer = new ModelRenderer(device, cache, defines, ent.model, ent.textures, this.color);
+            this.modelRenderer = new ModelRenderer(device, cache, defines, ent.model, this.color);
 
             const q = quat.create();
             quatFromYPR(q, ent.asset.ang);
@@ -729,7 +710,7 @@ interface RenderHacks {
 export class BFBBRenderer implements Viewer.SceneGfx {
     public renderers: GraphObjBase[] = [];
 
-    public fog?: Fog;
+    public fog?: Assets.FogAsset;
     public lightKit?: Assets.LightKit;
 
     public renderHelper: GfxRenderHelper;
@@ -761,8 +742,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         const fogEnabled = this.renderHacks.fog && this.fog;
         this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
         const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
-        const fogStart = fogEnabled ? this.fog!.asset.fogStart : 0;
-        const fogStop = fogEnabled ? this.fog!.asset.fogStop : 0;
+        const fogStart = fogEnabled ? this.fog!.fogStart : 0;
+        const fogStop = fogEnabled ? this.fog!.fogStop : 0;
 
         DrawDistance = fogStop ? Math.min(fogStop, MAX_DRAW_DISTANCE) : MAX_DRAW_DISTANCE;
 
