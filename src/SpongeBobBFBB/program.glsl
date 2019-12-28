@@ -52,7 +52,7 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
 
-    vec3 t_Normal = normalize(Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0)).xyz);
+    vec3 t_Normal = normalize(Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal, 0.0)).xyz);
 
 #ifdef USE_LIGHTING
     if (USE_LIGHTING == 1) {
