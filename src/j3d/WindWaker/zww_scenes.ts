@@ -989,19 +989,22 @@ class ModelCache {
         return Promise.all(v);
     }
 
-    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+    private fetchFile(path: string, cacheBust: number = 0): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        const p = this.dataFetcher.fetchData(path);
+        let fetchPath = path;
+        if (cacheBust > 0)
+            fetchPath = `${path}?cache_bust=${cacheBust}`;
+        const p = this.dataFetcher.fetchData(fetchPath);
         this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string): Promise<ArrayBufferSlice> {
+    public fetchFileData(path: string, cacheBust: number = 0): Promise<ArrayBufferSlice> {
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path).then((data) => {
+            return this.fetchFile(path, cacheBust).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -1149,9 +1152,9 @@ class SceneDesc {
             const roomIdx = Math.abs(this.rooms[i]);
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
         }
-        
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc?cache_bust=1`);
-        
+
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 1);
+
         return modelCache.waitForLoad().then(() => {
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
 
