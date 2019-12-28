@@ -602,12 +602,18 @@ export class FragRenderer extends BaseRenderer {
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
 
+        const oldCullMode = this.megaStateFlags.cullMode;
+        const oldDepthWrite = this.megaStateFlags.depthWrite;
+
         if (this.dualCull)
             this.megaStateFlags.cullMode = secondPass ? GfxCullMode.BACK : GfxCullMode.FRONT;
         else if (this.dualZWrite)
             this.megaStateFlags.depthWrite = secondPass;
         
         renderInst.setMegaStateFlags(this.megaStateFlags);
+
+        this.megaStateFlags.cullMode = oldCullMode;
+        this.megaStateFlags.depthWrite = oldDepthWrite;
 
         if (this.frag.textureData !== undefined)
             renderInst.setSamplerBindingsFromTextureMappings(this.frag.textureData.textureMapping);
