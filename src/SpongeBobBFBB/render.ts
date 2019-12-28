@@ -417,13 +417,18 @@ export class BaseRenderer {
     public transparent = false;
     public isCulled = false;
 
-    public renderers: BaseRenderer[] = [];
+    protected renderers: BaseRenderer[] = [];
 
     private scratchVec3 = vec3.create();
 
     constructor(public parent?: BaseRenderer) {
         if (parent)
             mat4.copy(this.modelMatrix, parent.modelMatrix);
+    }
+
+    public addRenderer(renderer: BaseRenderer) {
+        this.bbox.union(this.bbox, renderer.bbox);
+        this.renderers.push(renderer);
     }
 
     public prepareToRender(renderState: RenderState) {
@@ -613,9 +618,7 @@ export class MeshRenderer extends BaseRenderer {
                 defines.USE_TEXTURE = '1';
             }
             
-            const renderer = new FragRenderer(this, device, cache, defines, frag, pipeInfo, subObject);
-            this.bbox.union(this.bbox, renderer.bbox);
-            this.renderers.push(renderer);
+            this.addRenderer(new FragRenderer(this, device, cache, defines, frag, pipeInfo, subObject));
         }
 
         this.visible = (mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
@@ -625,7 +628,7 @@ export class MeshRenderer extends BaseRenderer {
         super.prepareToRender(renderState);
         if (this.isCulled || (!this.visible && !renderState.hacks.showInvisibleAtomics)) return;
 
-        for (let i = 0; i < this.renderers.length; i++)
+        for (let i = 0; i < this.renderers.length; i++) 
             this.renderers[i].prepareToRender(renderState);
     }
 
@@ -647,12 +650,7 @@ export class ModelRenderer extends BaseRenderer {
         let subObject = 1 << (model.meshes.length - 1);
 
         for (let i = 0; i < model.meshes.length; i++) {
-            const mesh = model.meshes[i];
-
-            const renderer = new MeshRenderer(this, device, cache, defines, mesh, model.pipeInfo, subObject);
-            this.bbox.union(this.bbox, renderer.bbox);
-            this.renderers.push(renderer);
-
+            this.addRenderer(new MeshRenderer(this, device, cache, defines, model.meshes[i], model.pipeInfo, subObject));
             subObject >>>= 1;
         }
     }
@@ -669,10 +667,8 @@ export class ModelRenderer extends BaseRenderer {
         offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
         offs += fillColor(mapped, offs, this.color);
 
-        for (let i = 0; i < this.renderers.length; i++) {
-            mat4.copy(this.renderers[i].modelMatrix, this.modelMatrix);
+        for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(renderState);
-        }
         
         renderState.instManager.popTemplateRenderInst();
     }
@@ -689,7 +685,7 @@ export class JSPRenderer extends BaseRenderer {
         super();
 
         this.modelRenderer = new ModelRenderer(this, device, cache, { USE_LIGHTING: '0' }, jsp.model);
-        this.bbox.union(this.bbox, this.modelRenderer.bbox);
+        this.addRenderer(this.modelRenderer);
     }
 
     public prepareToRender(renderState: RenderState) {
@@ -738,7 +734,7 @@ export class EntRenderer extends BaseRenderer {
             }
 
             this.modelRenderer = new ModelRenderer(this, device, cache, defines, ent.model, this.color);
-            this.bbox.union(this.bbox, this.modelRenderer.bbox);
+            this.addRenderer(this.modelRenderer);
 
             const q = quat.create();
             quatFromYPR(q, ent.asset.ang);
@@ -763,10 +759,8 @@ export class EntRenderer extends BaseRenderer {
 
         if (this.isCulled || (!this.visible && !renderState.hacks.showInvisibleEntities)) return;
 
-        if (this.modelRenderer) {
-            mat4.copy(this.modelRenderer.modelMatrix, this.modelMatrix);
+        if (this.modelRenderer)
             this.modelRenderer.prepareToRender(renderState);
-        }
     }
 
     public destroy(device: GfxDevice) {
