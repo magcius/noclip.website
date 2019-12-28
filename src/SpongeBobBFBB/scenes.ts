@@ -340,12 +340,12 @@ class BFBBSceneDesc implements Viewer.SceneDesc {
         }
 
         if (dataHolder.fog) {
-            renderer.setFog(dataHolder.fog);
+            renderer.fog = dataHolder.fog;
             dataHolder.fog = undefined;
         }
 
         if (dataHolder.lightKit) {
-            renderer.setLightKit(dataHolder.lightKit);
+            renderer.lightKit = dataHolder.lightKit;
             dataHolder.lightKit = undefined;
         }
 

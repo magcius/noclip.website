@@ -2,13 +2,13 @@
 precision mediump float; precision lowp sampler2D;
 
 struct Light {
-    vec4 position;
-    vec4 direction;
-    vec4 color;
     float type;
     float radius;
     float angle;
     float pad;
+    vec4 position;
+    vec4 direction;
+    vec4 color;
 };
 
 #define LIGHT_TYPE_AMBIENT     1.0 // rpLIGHTAMBIENT

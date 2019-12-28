@@ -27,7 +27,8 @@ import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtom
 import { EventID } from './events';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
-const DRAW_DISTANCE = 1000.0;
+const MAX_DRAW_DISTANCE = 1000.0;
+let DrawDistance = MAX_DRAW_DISTANCE;
 
 interface BFBBProgramDef {
     JSP?: string;
@@ -382,6 +383,30 @@ function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFact
     }
 }
 
+const LIGHTKIT_LIGHT_COUNT = 8;
+const LIGHTKIT_LIGHT_SIZE = 4*4;
+const LIGHTKIT_SIZE = LIGHTKIT_LIGHT_COUNT * LIGHTKIT_LIGHT_SIZE;
+
+function fillConstant(d: Float32Array, offs: number, val: number, count: number): number {
+    d.fill(val, offs, offs + count);
+    return 4*count;
+}
+
+function fillLightKit(d: Float32Array, offs: number, l: Assets.LightKit): number {
+    for (let i = 0; i < LIGHTKIT_LIGHT_COUNT; i++) {
+        if (l.lightCount > i) {
+            const light = l.lightListArray[i];
+            offs += fillVec4(d, offs, light.type, light.radius, light.angle);
+            offs += fillVec4(d, offs, light.matrix[12], light.matrix[13], light.matrix[14]);
+            offs += fillVec4(d, offs, light.matrix[8], light.matrix[9], light.matrix[10]);
+            offs += fillColor(d, offs, light.color);
+        } else {
+            offs += fillConstant(d, offs, 0, LIGHTKIT_LIGHT_SIZE);
+        }
+    }
+    return LIGHTKIT_SIZE;
+}
+
 class MeshRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -513,7 +538,7 @@ class MeshRenderer {
 
         const camPosition = this.scratchVec3;
         mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DRAW_DISTANCE) return;
+        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DrawDistance) return;
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
@@ -585,7 +610,7 @@ export class ModelRenderer {
 
         const camPosition = this.scratchVec3;
         mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DRAW_DISTANCE) return;
+        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DrawDistance) return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -696,50 +721,29 @@ export class EntRenderer {
     }
 }
 
+interface RenderHacks {
+    lighting: boolean;
+    fog: boolean;
+}
+
 export class BFBBRenderer implements Viewer.SceneGfx {
     public renderers: GraphObjBase[] = [];
 
-    private fog?: Fog;
-    private lightKit?: Assets.LightKit;
-
-    private lightPositionCache: vec3[] = [];
-    private lightDirectionCache: vec3[] = [];
-
-    private lightingEnabled = true;
+    public fog?: Fog;
+    public lightKit?: Assets.LightKit;
 
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
     private clearColor: Color;
 
+    public renderHacks: RenderHacks = {
+        lighting: true,
+        fog: true,
+    };
+
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public setFog(fog: Fog) {
-        this.fog = fog;
-    }
-
-    public getFog() {
-        return this.fog;
-    }
-
-    public setLightKit(lightKit: Assets.LightKit) {
-        this.lightKit = lightKit;
-
-        this.lightPositionCache.length = 0;
-        this.lightDirectionCache.length = 0;
-
-        for (const light of lightKit.lightListArray) {
-            const position = vec3.fromValues(light.matrix[12], light.matrix[13], light.matrix[14]);
-            const direction = vec3.fromValues(light.matrix[8], light.matrix[9], light.matrix[10]);
-            this.lightPositionCache.push(position);
-            this.lightDirectionCache.push(direction);
-        }
-    }
-
-    public getLightKit() {
-        return this.lightKit;
     }
 
     public createCameraController() {
@@ -754,36 +758,25 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        this.clearColor = this.fog ? this.fog.bkgndColor : TransparentBlack;
-        const fogColor = this.fog ? this.fog.fogColor : TransparentBlack;
-        const fogStart = this.fog ? this.fog.asset.fogStart : 0;
-        const fogStop = this.fog ? this.fog.asset.fogStop : 0;
+        const fogEnabled = this.renderHacks.fog && this.fog;
+        this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
+        const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
+        const fogStart = fogEnabled ? this.fog!.asset.fogStart : 0;
+        const fogStop = fogEnabled ? this.fog!.asset.fogStop : 0;
 
-        const lightCount = 8;
-        const lightSize = (3*4 + 4);
+        DrawDistance = fogStop ? Math.min(fogStop, MAX_DRAW_DISTANCE) : MAX_DRAW_DISTANCE;
 
-        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + lightCount*lightSize);
+        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + LIGHTKIT_SIZE);
         const mapped = template.mapUniformBufferF32(BFBBProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         offs += fillColor(mapped, offs, fogColor);
         offs += fillVec4(mapped, offs, fogStart, fogStop);
 
-        for (let i = 0; i < lightCount; i++) {
-            if (this.lightingEnabled && this.lightKit && this.lightKit.lightCount > i) {
-                const light = this.lightKit.lightListArray[i];
-                offs += fillVec3v(mapped, offs, this.lightPositionCache[i]);
-                offs += fillVec3v(mapped, offs, this.lightDirectionCache[i]);
-                offs += fillColor(mapped, offs, light.color);
-                mapped[offs++] = light.type;
-                mapped[offs++] = light.radius;
-                mapped[offs++] = light.angle;
-                mapped[offs++] = 0;
-            } else {
-                for (let j = 0; j < lightSize; j++)
-                    mapped[offs++] = 0;
-            }
-        }
+        if (this.renderHacks.lighting && this.lightKit)
+            offs += fillLightKit(mapped, offs, this.lightKit);
+        else
+            offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
 
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -824,12 +817,18 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         panel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
 
-        const lightingCheckbox = new UI.Checkbox("Lighting", true);
+        const lightingCheckbox = new UI.Checkbox("Lighting", this.renderHacks.lighting);
         lightingCheckbox.onchanged = () => {
-            this.lightingEnabled = lightingCheckbox.checked;
+            this.renderHacks.lighting = lightingCheckbox.checked;
         };
 
+        const fogCheckbox = new UI.Checkbox("Fog", this.renderHacks.fog);
+        fogCheckbox.onchanged = () => {
+            this.renderHacks.fog = fogCheckbox.checked;
+        }
+
         panel.contents.appendChild(lightingCheckbox.elem);
+        panel.contents.appendChild(fogCheckbox.elem);
         panel.setVisible(true);
         return [panel];
     }
