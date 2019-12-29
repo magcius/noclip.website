@@ -9,7 +9,7 @@ import { hexzero, leftPad } from '../../util';
 import { J3DModelInstanceSimple, BMDModelMaterialData } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, BTK, BRK, BCK, TTK1, TRK1, LoopMode, BMT } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
-import { KyankoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass } from "./zww_scenes";
+import { KyankoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
 import { ColorKind } from "../../gx/gx_render";
 import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
@@ -33,6 +33,10 @@ export interface Actor {
     pos: vec3;
     scale: vec3;
     rotationY: number;
+
+    // Derived values for convenience
+    modelMatrix: mat4;
+    roomRenderer: WindWakerRoomRenderer;
 };
 
 // The REL table maps .rel names to our implementations
@@ -185,6 +189,41 @@ export class BMDObjectRenderer implements ObjectRenderer {
 
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
+
+function fetchArchive(modelCache: ModelCache, objArcName: string): Promise<RARC.RARC> {
+    return modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
+}
+
+function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, layer: number): BMDObjectRenderer {
+    const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
+    const modelInstance = new J3DModelInstanceSimple(model);
+    modelInstance.passMask = WindWakerPass.MAIN;
+    context.extraTextures.fillExtraTextures(modelInstance);
+    modelInstance.name = name;
+    modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+    const objectRenderer = new BMDObjectRenderer(modelInstance);
+    objectRenderer.layer = layer;
+    return objectRenderer;
+}
+
+function setModelMatrix(actor: Actor, m: mat4): void {
+    mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, actor.modelMatrix);
+}
+
+function buildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, actor: Actor): BMDObjectRenderer {
+    const objectRenderer = buildChildModel(context, rarc, modelPath, actor.layer);
+
+    // Transform Actor model from room space to world space
+    setModelMatrix(actor, objectRenderer.modelMatrix);
+    actor.roomRenderer.objectRenderers.push(objectRenderer);
+    return objectRenderer;
+}
+
+function createEmitter(context: WindWakerRenderer, resourceId: number): JPA.JPABaseEmitter {
+    const emitter = context.effectSystem!.createBaseEmitter(context.device, context.renderCache, resourceId);
+    // TODO(jstpierre): Scale, Rotation
+    return emitter;
+}
 
 function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
 function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
@@ -1283,80 +1322,12 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
 }
 
 export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
-    // TODO(jstpierre): Better actor implementations
-    const modelCache = renderer.modelCache;
-    const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-
-    function fetchArchive(objArcName: string): Promise<RARC.RARC> {
-        return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
-    }
-
-    function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
-        const model = modelCache.getModel(device, cache, rarc, modelPath);
-        const modelInstance = new J3DModelInstanceSimple(model);
-        modelInstance.passMask = WindWakerPass.MAIN;
-        renderer.extraTextures.fillExtraTextures(modelInstance);
-        modelInstance.name = name;
-        modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-        const objectRenderer = new BMDObjectRenderer(modelInstance);
-        objectRenderer.layer = actor.layer;
-        return objectRenderer;
-    }
-
-    function setModelMatrix(m: mat4): void {
-        mat4.mul(m, worldModelMatrix, localModelMatrix);
-    }
-
-    function buildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
-        const objectRenderer = buildChildModel(rarc, modelPath);
-        setModelMatrix(objectRenderer.modelMatrix);
-        roomRenderer.objectRenderers.push(objectRenderer);
-        return objectRenderer;
-    }
-
-    function createEmitter(resourceId: number): JPA.JPABaseEmitter {
-        const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
-        // TODO(jstpierre): Scale, Rotation
-        return emitter;
-    }
-
     const relConstructor = kRelTable[actor.info.relName];
     if (relConstructor) {
         const actorObj = new relConstructor(renderer, actor);
         return;
     }
-    
-    // Generic Torch
-    if (actor.name === 'bonbori') {
-        const rarc = await fetchArchive(`Ep.arc`);
-        const ga = !!((actor.parameters >>> 6) & 0x01);
-        const obm = !!((actor.parameters >>> 7) & 0x01);
-        let type = (actor.parameters & 0x3F);
-        if (type === 0x3F)
-            type = 0;
 
-        setModelMatrix(scratchMat4a);
-        vec3.set(scratchVec3a, 0, 0, 0);
-        if (type === 0 || type === 3) {
-            const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
-            scratchVec3a[1] += 140;
-        }
-        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
-
-        // Create particle systems.
-        const pa = createEmitter(0x0001);
-        vec3.copy(pa.globalTranslation, scratchVec3a);
-        pa.globalTranslation[1] += -240 + 235 + 15;
-        if (type !== 2) {
-            const pb = createEmitter(0x4004);
-            vec3.copy(pb.globalTranslation, pa.globalTranslation);
-            pb.globalTranslation[1] += 20;
-        }
-        const pc = createEmitter(0x01EA);
-        vec3.copy(pc.globalTranslation, scratchVec3a);
-        pc.globalTranslation[1] += -240 + 235 + 8;
-        // TODO(jstpierre): ga
-    }
     // Doors: TODO(jstpierre)
     // else if (actor.name === 'KNOB00') return;
     // Treasure chests
@@ -1365,23 +1336,23 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     actor.name === 'tkrBMs' || actor.name === 'tkrCTf' || actor.name === 'tkrAOc' || actor.name === 'tkrAOs' || actor.name === 'Bitem') {
         // The treasure chest name does not matter, everything is in the parameters.
         // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
-        const rarc = await fetchArchive('Dalways.arc');
+        const rarc = await fetchArchive(renderer.modelCache, 'Dalways.arc');
         const type = (actor.parameters >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
-            const m = buildModel(rarc, `bdli/boxa.bdl`);
+            const m = buildModel(renderer, rarc, `bdli/boxa.bdl`, actor);
         } else if (type === 1) {
             // Dark Wood
-            const m = buildModel(rarc, `bdli/boxb.bdl`);
+            const m = buildModel(renderer, rarc, `bdli/boxb.bdl`, actor);
         } else if (type === 2) {
             // Metal
-            const m = buildModel(rarc, `bdli/boxc.bdl`);
+            const m = buildModel(renderer, rarc, `bdli/boxc.bdl`, actor);
             const b = parseBRK(rarc, 'brk/boxc.brk');
             b.loopMode = LoopMode.ONCE;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
-            const m = buildModel(rarc, `bdli/boxd.bdl`);
+            const m = buildModel(renderer, rarc, `bdli/boxd.bdl`, actor);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
@@ -1432,9 +1403,47 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     }
 }
 
-// ---------------------------------------------
-// Grass Actor
-// ---------------------------------------------
+
+// -------------------------------------------------------
+// Generic Torch
+// -------------------------------------------------------
+class ATorch implements ActorRel {
+    constructor(context: WindWakerRenderer, actor: Actor) {
+        const ga = !!((actor.parameters >>> 6) & 0x01);
+        const obm = !!((actor.parameters >>> 7) & 0x01);
+        let type = (actor.parameters & 0x3F);
+        if (type === 0x3F)
+            type = 0;
+
+        setModelMatrix(actor, scratchMat4a);
+        vec3.set(scratchVec3a, 0, 0, 0);
+        if (type === 0 || type === 3) {
+            fetchArchive(context.modelCache, `Ep.arc`).then(rarc => {
+                const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
+            });
+            scratchVec3a[1] += 140;
+        }
+        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
+
+        // Create particle systems.
+        const pa = createEmitter(context, 0x0001);
+        vec3.copy(pa.globalTranslation, scratchVec3a);
+        pa.globalTranslation[1] += -240 + 235 + 15;
+        if (type !== 2) {
+            const pb = createEmitter(context, 0x4004);
+            vec3.copy(pb.globalTranslation, pa.globalTranslation);
+            pb.globalTranslation[1] += 20;
+        }
+        const pc = createEmitter(context, 0x01EA);
+        vec3.copy(pc.globalTranslation, scratchVec3a);
+        pc.globalTranslation[1] += -240 + 235 + 8;
+        // TODO(jstpierre): ga
+    }
+}
+
+// -------------------------------------------------------
+// Grass/Flowers/Trees managed by their respective packets
+// -------------------------------------------------------
 class AGrass implements ActorRel {
     static kSpawnPatterns = [
         { group: 0, count: 1 },
@@ -1586,3 +1595,4 @@ class AGrass implements ActorRel {
     }
 }
 kRelTable['d_a_grass'] = AGrass;
+kRelTable['d_a_ep'] = ATorch;

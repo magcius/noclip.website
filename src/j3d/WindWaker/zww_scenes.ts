@@ -333,6 +333,9 @@ export class WindWakerRoomRenderer {
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
+    public roomToWorldMatrix = mat4.create();
+    public worldToRoomMatrix = mat4.create();
+
     constructor(device: GfxDevice, cache: GfxRenderCache, private extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
@@ -372,6 +375,9 @@ export class WindWakerRoomRenderer {
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
+        this.worldToRoomMatrix.set(modelMatrix);
+        mat4.invert(this.roomToWorldMatrix, this.worldToRoomMatrix);
+
         if (this.bg0 !== null)
             mat4.copy(this.bg0.modelMatrix, modelMatrix);
         if (this.bg1 !== null)
@@ -982,7 +988,7 @@ interface Destroyable {
     destroy(device: GfxDevice): void;
 }
 
-class ModelCache {
+export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archivePromiseCache = new Map<string, Promise<RARC.RARC>>();
@@ -1189,6 +1195,13 @@ class SceneDesc {
 
             renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
             renderer.stage = this.stageDir;
+            
+            const jpac: JPA.JPAC[] = [];
+            for (let i = 0; i < particleArchives.length; i++) {
+                const jpacData = modelCache.getFileData(particleArchives[i]);
+                jpac.push(JPA.parse(jpacData));
+            }
+            renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
@@ -1222,13 +1235,6 @@ class SceneDesc {
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;
                 this.spawnObjectsFromDZR(device, renderer, roomRenderer, dzr, modelMatrix, actorTable);
             }
-
-            const jpac: JPA.JPAC[] = [];
-            for (let i = 0; i < particleArchives.length; i++) {
-                const jpacData = modelCache.getFileData(particleArchives[i]);
-                jpac.push(JPA.parse(jpacData));
-            }
-            renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
             return modelCache.waitForLoad().then(() => {
                 return renderer;
@@ -1342,7 +1348,10 @@ class SceneDesc {
                 layer: layerIndex,
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(1, 1, 1),
-                rotationY: rotY
+                rotationY: rotY,
+
+                roomRenderer,
+                modelMatrix: localModelMatrix,
             };
 
             loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
@@ -1387,6 +1396,9 @@ class SceneDesc {
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(scaleX, scaleY, scaleZ),
                 rotationY: rotY,
+
+                roomRenderer,
+                modelMatrix: localModelMatrix,
             };
 
             loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
