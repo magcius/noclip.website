@@ -1453,6 +1453,12 @@ class SceneDesc {
             });
             // Small magic jar
             else if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
+            // Large magic jar
+            else if (itemId === 0x0A) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpodb.bdl`));
+            // Small key
+            else if (itemId === 0x15) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/vkeyl.bdl`));
+            // Joy pendant
+            else if (itemId === 0x1F) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/vhapl.bdl`));
             else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
         }
         // Heart Container
@@ -2309,8 +2315,15 @@ class SceneDesc {
         else if (name === 'keeth') fetchArchive(`Ki.arc`).then((rarc) => buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'Fkeeth') fetchArchive(`Ki.arc`).then((rarc) => buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'Puti') fetchArchive(`Pt.arc`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
-        else if (name === 'Rdead1') fetchArchive(`Rd.arc`).then((rarc) => buildModel(rarc, `bdlm/rd.bdl`).bindANK1(parseBCK(rarc, `bcks/walk.bck`)));
-        else if (name === 'Rdead2') fetchArchive(`Rd.arc`).then((rarc) => buildModel(rarc, `bdlm/rd.bdl`).bindANK1(parseBCK(rarc, `bcks/walk.bck`)));
+        else if (name === 'Rdead1' || name === 'Rdead2') fetchArchive(`Rd.arc`).then((rarc) => {
+            const m = buildModel(rarc, `bdlm/rd.bdl`);
+            const idleAnimType = (parameters & 0x00000001);
+            if (idleAnimType == 0) {
+                m.bindANK1(parseBCK(rarc, `bcks/tachip.bck`));
+            } else {
+                m.bindANK1(parseBCK(rarc, `bcks/suwarip.bck`));
+            }
+        });
         else if (name === 'wiz_r') fetchArchive(`Wz.arc`).then((rarc) => buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`)));
         else if (name === 'gmos') fetchArchive(`Gm.arc`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
         else if (name === 'mo2') fetchArchive(`Mo2.arc`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
@@ -2334,8 +2347,13 @@ class SceneDesc {
         else if (name === 'Oq') fetchArchive(`Oq.arc`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
         else if (name === 'Oqw') fetchArchive(`Oq.arc`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
         else if (name === 'Daiocta') fetchArchive(`Daiocta.arc`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-        else if (name === 'Fmastr1') fetchArchive(`fm.arc`).then((rarc) => buildModel(rarc, `bdl/fm.bdl`).bindANK1(parseBCK(rarc, `bcks/wait.bck`)));
-        else if (name === 'Fmastr2') fetchArchive(`fm.arc`).then((rarc) => buildModel(rarc, `bdl/fm.bdl`).bindANK1(parseBCK(rarc, `bcks/wait.bck`)));
+        else if (name === 'Fmastr1' || name == 'Fmastr2') fetchArchive(`fm.arc`).then((rarc) => { 
+            buildModel(rarc, `bdl/fm.bdl`).bindANK1(parseBCK(rarc, `bcks/wait.bck`));
+            const holeModel = buildModel(rarc, `bdlm/ypit00.bdl`);
+            holeModel.bindTTK1(parseBTK(rarc, `btk/ypit00.btk`));
+            // Move the hole just slightly up to prevent z-fighting with the ground.
+            mat4.translate(holeModel.modelMatrix, holeModel.modelMatrix, [0, 0.1, 0]);
+        });
         else if (name === 'magtail') fetchArchive(`Mt.arc`).then((rarc) => buildModel(rarc, `bdlm/mg_head.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'bable') fetchArchive(`Bl.arc`).then((rarc) => buildModel(rarc, `bdlm/bl.bdl`));
         else if (name === 'nezumi') fetchArchive(`Nz.arc`).then((rarc) => buildModel(rarc, `bdlm/nz.bdl`));
@@ -2617,12 +2635,29 @@ class SceneDesc {
             buildModel(rarc, `bmdm/yfire_00.bmd`);
             buildModel(rarc, `bmdm/yfirb_00.bmd`).bindTTK1(parseBTK(rarc, `btk/yfirb_00.btk`));
         });
+        else if (name === 'Zenfire') {
+            // Create particle emitters
+            const burningGroundEmitter = createEmitter(0x461);
+            const ringOfFlamesEmitter = createEmitter(0x462);
+            setModelMatrix(scratchMatrix);
+            vec3.set(scratchVec3a, 0, 0, 0);
+            vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
+            vec3.copy(burningGroundEmitter.globalTranslation, scratchVec3a);
+            vec3.copy(ringOfFlamesEmitter.globalTranslation, scratchVec3a);
+        }
         // Forest Haven
         else if (name === 'Ohatch') fetchArchive(`Ohatch.arc`).then((rarc) => buildModel(rarc, `bdl/ohatch.bdl`));
         else if (name === 'Ojtree') fetchArchive(`Ojtree.arc`).then((rarc) => buildModel(rarc, `bdl/ojtree.bdl`));
         else if (name === 'Olift') fetchArchive(`Olift.arc`).then((rarc) => buildModel(rarc, `bdl/olift.bdl`));
         else if (name === 'itemDek') fetchArchive(`Deku.arc`).then((rarc) => buildModel(rarc, `bdlm/vlfdm.bdl`));
-        else if (name === 'ho') fetchArchive(`Himo3.arc`).then((rarc) => buildModel(rarc, `bmd/h3_ga.bmd`));
+        else if (name === 'ho') fetchArchive(`Ff.arc`).then((rarc) => {
+            const fireflyModel = buildModel(rarc, `bmd/ho.bmd`);
+            fireflyModel.bindTRK1(parseBRK(rarc, `brk/ho.brk`));
+            const glowModel = buildChildModel(rarc, `bmd/hop.bmd`);
+            glowModel.setParentJoint(fireflyModel, `ho_B`);
+            glowModel.bindTRK1(parseBRK(rarc, `brk/hop.brk`));
+            mat4.translate(fireflyModel.modelMatrix, fireflyModel.modelMatrix, [0, 50, 0]);
+        });
         else if (name === 'jbaba') fetchArchive(`Jbo.arc`).then((rarc) => buildModel(rarc, `bmdm/jh.bmd`));
         else if (name === 'VigaH') fetchArchive(`VigaH.arc`).then((rarc) => buildModel(rarc, `bdl/vigah.bdl`));
         else if (name === 'Ss') fetchArchive(`Ss.arc`).then((rarc) => buildModel(rarc, `bdl/sw.bdl`));
@@ -2633,8 +2668,6 @@ class SceneDesc {
         else if (name === 'Turu3') fetchArchive(`Sk2.arc`).then((rarc) => buildModel(rarc, `bdlm/ksylf_01.bdl`));
         else if (name === 'Kita') fetchArchive(`kita.arc`).then((rarc) => buildModel(rarc, `bdl/vhlif_00.bdl`));
         else if (name === 'Klft') fetchArchive(`Klft.arc`).then((rarc) => buildModel(rarc, `bdlm/lift_00.bdl`));
-        else if (name === 'Kmi000x') fetchArchive(`Kmi00x.arc`).then((rarc) => buildModel(rarc, `bdlm/kmi_00x.bdl`));
-        else if (name === 'Kmi02') fetchArchive(`Kmi00x.arc`).then((rarc) => buildModel(rarc, `bdlm/kmi_00x.bdl`));
         else if (name === 'Kokiie') fetchArchive(`Kokiie.arc`).then((rarc) => buildModel(rarc, `bdl/koki_00.bdl`));
         else if (name === 'Vpbot') fetchArchive(`Vpbot_00.arc`).then((rarc) => buildModel(rarc, `bdl/vpbot_00.bdl`));
         else if (name === 'Vochi') fetchArchive(`Vochi.arc`).then((rarc) => buildModel(rarc, `bdl/vochi.bdl`));
@@ -2677,8 +2710,6 @@ class SceneDesc {
         else if (name === 'Humi5z') fetchArchive(`Humi.arc`).then((rarc) => buildModel(rarc, `bdlm/humi5.bdl`).bindTTK1(parseBTK(rarc, `btk/humi5.btk`)));
         else if (name === 'Htetu1') fetchArchive(`Htetu1.arc`).then((rarc) => buildModel(rarc, `bdl/htetu1.bdl`));
         else if (name === 'Htobi1') fetchArchive(`Htobi1.arc`).then((rarc) => buildModel(rarc, `bdl/htobi1.bdl`));
-        else if (name === 'Hbox2') fetchArchive(`Hbox2.arc`).then((rarc) => buildModel(rarc, `bdl/hbox2.bdl`));
-        else if (name === 'Hbox2S') fetchArchive(`Hbox2.arc`).then((rarc) => buildModel(rarc, `bdl/hbox2.bdl`));
         else if (name === 'Hmlif') fetchArchive(`Hmlif.arc`).then((rarc) => buildModel(rarc, `bdlm/hmlif.bdl`));
         else if (name === 'Hdai1') fetchArchive(`Hdai1.arc`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
         else if (name === 'Hdai2') fetchArchive(`Hdai1.arc`).then((rarc) => buildModel(rarc, `bdlm/hdai1.bdl`));
@@ -2713,6 +2744,19 @@ class SceneDesc {
         else if (name === 'Yswdr00') fetchArchive(`Yswdr00.arc`).then((rarc) => buildModel(rarc, `bdlm/yswdr00.bdl`).bindTTK1(parseBTK(rarc, `btk/yswdr00.btk`)));
         // Earth Temple.
         else if (name === 'MhmrSW0') fetchArchive(`MhmrSW.arc`).then((rarc) => buildModel(rarc, `bdl/mhmrsw.bdl`));
+        else if (name === 'Vds') fetchArchive(`Vds.arc`).then((rarc) => {
+            const rightHalfModel = buildModel(rarc, `bdlm/vdswt0.bdl`);
+            rightHalfModel.bindANK1(parseBCK(rarc, `bck/vdswt0.bck`));
+            rightHalfModel.bindTRK1(parseBRK(rarc, `brk/vdswt0.brk`));
+            const leftHalfModel = buildModel(rarc, `bdlm/vdswt1.bdl`);
+            leftHalfModel.bindANK1(parseBCK(rarc, `bck/vdswt1.bck`));
+            leftHalfModel.bindTRK1(parseBRK(rarc, `brk/vdswt1.brk`));
+        });
+        else if (name === 'MsuSWB') fetchArchive(`Mmirror.arc`).then((rarc) => {
+            const m = buildModel(rarc, `bdlm/msusw.bdl`);
+            m.bindANK1(parseBCK(rarc, `bck/msusw.bck`));
+            m.bindTTK1(parseBTK(rarc, `btk/msusw.btk`));
+        });
         // Nintendo Gallery
         else if (name === 'Figure') {
             fetchArchive(`Figure.arc`).then((rarc) => buildModel(rarc, `bdlm/vf_bs.bdl`))
