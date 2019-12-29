@@ -829,7 +829,7 @@ export class TreePacket {
 // ---------------------------------------------
 // Grass Packet
 // ---------------------------------------------
-enum GrassFlags {
+const enum GrassFlags {
     isFrustumCulled = 1 << 0,
     needsGroundCheck = 1 << 1,
 }
@@ -849,8 +849,6 @@ interface GrassAnim {
     rotationX: number;
     modelMtx: mat4;
 }
-
-const kMaxGrassDatas = 1500;
 
 class GrassModel {
     public grassTextureMapping = new TextureMapping();
@@ -925,7 +923,6 @@ class GrassModel {
 export class GrassPacket {
     private datas: GrassData[] = [];
 
-    private rooms: GrassData[] = [];
     private anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
 
     private model: GrassModel;
@@ -954,7 +951,7 @@ export class GrassPacket {
 
         const data: GrassData = {
             roomIdx,
-            flags: TreeFlags.needsGroundCheck,
+            flags: GrassFlags.needsGroundCheck,
             animIdx,
             itemIdx,
             pos: vec3.clone(pos),
@@ -993,9 +990,8 @@ export class GrassPacket {
             mat4.rotateY(anim.modelMtx, anim.modelMtx, anim.rotationY);
         }
 
-        for (let i = 0; i < kMaxGrassDatas; i++) {
+        for (let i = 0; i < this.datas.length; i++) {
             const data = this.datas[i];
-            if (!data) continue;
 
             // Perform ground checks for some limited number of data
             if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
