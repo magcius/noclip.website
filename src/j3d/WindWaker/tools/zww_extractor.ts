@@ -131,7 +131,11 @@ function main() {
     extractSymbol(datas, framework, 'd_grass.o', 'l_vtxDescList$4528');
 
     // d_stage.o
-    extractSymbol(datas, framework, `d_stage.o`, `l_objectName`);
+    extractSymbol(datas, framework, `d_stage.o`, `l_objectName`); // Maps actor names to ID and Subtype
+
+    // d_dylink.o
+    extractSymbol(datas, framework, `c_dylink.o`, `DynamicNameTable`); // Maps IDs to pointers to REL names in the string table
+    extractSymbol(datas, framework, `c_dylink.o`, `@stringBase0`); // List of Null-terminated REL names. Indexed by DynamicNameTable
 
     const crg1 = {
         SymbolData: datas,

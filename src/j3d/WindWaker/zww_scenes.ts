@@ -1172,7 +1172,8 @@ class SceneDesc {
             const mult = stageDzsHeaders.get('MULT');
             
             const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-            const objectNameTable = this.createObjectNameTable(symbolMap);
+            const actorTable = this.createActorNameTable(symbolMap);
+            const relTable = this.createRelNameTable(symbolMap);
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
@@ -1254,7 +1255,7 @@ class SceneDesc {
         }
     }
 
-    private createObjectNameTable(symbolMap: SymbolMap) {
+    private createActorNameTable(symbolMap: SymbolMap) {
         const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
         const data = entry.Data;
         const bytes = data.createTypedArray(Uint8Array);
@@ -1279,6 +1280,34 @@ class SceneDesc {
         }
 
         return objectNames;
+    }
+
+    private createRelNameTable(symbolMap: SymbolMap) {
+        const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
+        const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
+        const textDecoder = getTextDecoder('utf8') as TextDecoder;
+        
+        const nameTableView = nameTableBuf.Data.createDataView();
+        const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
+        const entryCount = nameTableView.byteLength / 8;
+        
+        // The REL table maps the 2-byte ID's from the Actor table to REL names
+        // E.g. ID 0x01B8 -> 'd_a_grass'
+        const relTable: { [id: number]: string } = {};
+
+        for (let i = 0; i < entryCount; i++) {
+            const offset = i * 8;
+            const id = nameTableView.getUint16(offset + 0);
+            const ptr = nameTableView.getUint32(offset + 4);
+
+            const strOffset = ptr - 0x8033a648;
+            const endOffset = stringsBytes.indexOf(0, strOffset);
+            const relName = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
+
+            relTable[id] = relName;
+        }
+
+        return relTable;
     }
 
     private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
