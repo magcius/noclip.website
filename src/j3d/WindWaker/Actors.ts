@@ -43,7 +43,8 @@ export interface Actor {
 interface ActorRel {
     // @TODO: Most actors have draw and update functions
 }
-const kRelTable: { [relName: string]: { new (context: WindWakerRenderer, actor: Actor): ActorRel } } = {};
+type ActorConstructor = { new (context: WindWakerRenderer, actor: Actor): ActorRel };
+let kRelTable: { [relName: string]: ActorConstructor };
 
 // Special-case actors
 
@@ -229,6 +230,291 @@ function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.find
 function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
 function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
 function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
+
+
+
+
+// -------------------------------------------------------
+// Generic Torch
+// -------------------------------------------------------
+class ATorch implements ActorRel {
+    constructor(context: WindWakerRenderer, actor: Actor) {
+        const ga = !!((actor.parameters >>> 6) & 0x01);
+        const obm = !!((actor.parameters >>> 7) & 0x01);
+        let type = (actor.parameters & 0x3F);
+        if (type === 0x3F)
+            type = 0;
+
+        setModelMatrix(actor, scratchMat4a);
+        vec3.set(scratchVec3a, 0, 0, 0);
+        if (type === 0 || type === 3) {
+            fetchArchive(context.modelCache, `Ep.arc`).then(rarc => {
+                const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
+            });
+            scratchVec3a[1] += 140;
+        }
+        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
+
+        // Create particle systems.
+        const pa = createEmitter(context, 0x0001);
+        vec3.copy(pa.globalTranslation, scratchVec3a);
+        pa.globalTranslation[1] += -240 + 235 + 15;
+        if (type !== 2) {
+            const pb = createEmitter(context, 0x4004);
+            vec3.copy(pb.globalTranslation, pa.globalTranslation);
+            pb.globalTranslation[1] += 20;
+        }
+        const pc = createEmitter(context, 0x01EA);
+        vec3.copy(pc.globalTranslation, scratchVec3a);
+        pc.globalTranslation[1] += -240 + 235 + 8;
+        // TODO(jstpierre): ga
+    }
+}
+
+// -------------------------------------------------------
+// Grass/Flowers/Trees managed by their respective packets
+// -------------------------------------------------------
+class AGrass implements ActorRel {
+    static kSpawnPatterns = [
+        { group: 0, count: 1 },
+        { group: 0, count: 7 },
+        { group: 1, count: 15 },
+        { group: 2, count: 3 },
+        { group: 3, count: 7 },
+        { group: 4, count: 11 },
+        { group: 5, count: 7 },
+        { group: 6, count: 5 },
+    ];
+    
+    static kSpawnOffsets = [
+        [
+            [0, 0, 0],
+            [3, 0, -50],
+            [-2, 0, 50],
+            [50, 0, 27],
+            [52, 0, -25],
+            [-50, 0, 22],
+            [-50, 0, -29],
+        ],
+        [
+            [-18, 0, 76],
+            [-15, 0, 26],
+            [133, 0, 0],
+            [80, 0, 23],
+            [86, 0, -83],
+            [33, 0, -56],
+            [83, 0, -27],
+            [-120, 0, -26],
+            [-18, 0, -65],
+            [-20, 0, -21],
+            [-73, 0, 1],
+            [-67, 0, -102],
+            [-21, 0, 126],
+            [-120, 0, -78],
+            [-70, 0, -49],
+            [32, 0, 103],
+            [34, 0, 51],
+            [-72, 0, 98],
+            [-68, 0, 47],
+            [33, 0, -5],
+            [135, 0, -53],
+        ],
+        [
+            [-75, 0, -50],
+            [75, 0, -25],
+            [14, 0, 106],
+        ],
+        [
+            [-24, 0, -28],
+            [27, 0, -28],
+            [-21, 0, 33],
+            [-18, 0, -34],
+            [44, 0, -4],
+            [41, 0, 10],
+            [24, 0, 39],
+        ],
+        [
+            [-55, 0, -22],
+            [-28, 0, -50],
+            [-77, 0, 11],
+            [55, 0, -44],
+            [83, 0, -71],
+            [11, 0, -48],
+            [97, 0, -34],
+            [-74, 0, -57],
+            [31, 0, 58],
+            [59, 0, 30],
+            [13, 0, 23],
+            [-12, 0, 54],
+            [55, 0, 97],
+            [10, 0, 92],
+            [33, 0, -10],
+            [-99, 0, -27],
+            [40, 0, -87],
+        ],
+        [
+            [0, 0, 3],
+            [-26, 0, -29],
+            [7, 0, -25],
+            [31, 0, -5],
+            [-7, 0, 40],
+            [-35, 0, 15],
+            [23, 0, 32],
+        ],
+        [
+            [-40, 0, 0],
+            [0, 0, 0],
+            [80, 0, 0],
+            [-80, 0, 0],
+            [40, 0, 0],
+        ]
+    ];
+
+    constructor(context: WindWakerRenderer, actor: Actor) {
+        const enum FoliageType {
+            Grass,
+            Tree,
+            WhiteFlower,
+            PinkFlower
+        };
+
+        const spawnPatternId = (actor.parameters & 0x00F) >> 0;
+        const type: FoliageType = (actor.parameters & 0x030) >> 4;
+        const itemIdx = (actor.parameters >> 6) & 0x3f; // Determines which item spawns when this is cut down
+
+        const pattern = AGrass.kSpawnPatterns[spawnPatternId];
+        const offsets = AGrass.kSpawnOffsets[pattern.group];
+        const count = pattern.count;
+
+        switch (type) {
+            case FoliageType.Grass:
+                for (let j = 0; j < count; j++) {
+                    // @NOTE: Grass does not observe actor rotation or scale
+                    const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
+                    context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
+                }
+            break;
+
+            case FoliageType.Tree:
+                const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
+
+                for (let j = 0; j < count; j++) {
+                    const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
+                    const pos = vec3.add(scratchVec3b, offset, actor.pos);
+                    context.treePacket.newData(pos, 0, actor.roomIndex);
+                }
+            break;
+
+            case FoliageType.WhiteFlower:
+            case FoliageType.PinkFlower:
+                for (let j = 0; j < count; j++) {
+                    const isPink = (type === FoliageType.PinkFlower);
+
+                    // @NOTE: Flowers do not observe actor rotation or scale
+                    const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
+                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
+                    context.flowerPacket.newData(pos, isPink, actor.roomIndex, itemIdx);
+                }
+            break;
+            default:
+                console.warn('Unknown grass actor type');
+        }
+
+        return this;
+    }
+}
+
+export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
+    // Let's just keep this here for now, for readability
+    kRelTable = {
+        'd_a_grass': AGrass,
+        'd_a_ep': ATorch,
+    }
+    
+    // Attempt to find an implementation of this Actor in our table
+    const relConstructor = kRelTable[actor.info.relName];
+    if (relConstructor) {
+        const actorObj = new relConstructor(renderer, actor);
+        return;
+    }
+
+    // Doors: TODO(jstpierre)
+    // else if (actor.name === 'KNOB00') return;
+    // Treasure chests
+    else if (actor.name === 'takara' || actor.name === 'takara2' || actor.name === 'takara3' || actor.name === 'takara4' || actor.name === 'takara5' || actor.name === 'takara6' || actor.name === 'takara7' || actor.name === 'takara8' ||
+    actor.name === 'takaraK' || actor.name === 'takaraI' || actor.name === 'takaraM' || actor.name === 'tkrASw' || actor.name === 'tkrAGc' || actor.name === 'tkrAKd' || actor.name === 'tkrASw' || actor.name === 'tkrAIk' ||
+    actor.name === 'tkrBMs' || actor.name === 'tkrCTf' || actor.name === 'tkrAOc' || actor.name === 'tkrAOs' || actor.name === 'Bitem') {
+        // The treasure chest name does not matter, everything is in the parameters.
+        // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
+        const rarc = await fetchArchive(renderer.modelCache, 'Dalways.arc');
+        const type = (actor.parameters >>> 20) & 0x0F;
+        if (type === 0) {
+            // Light Wood
+            const m = buildModel(renderer, rarc, `bdli/boxa.bdl`, actor);
+        } else if (type === 1) {
+            // Dark Wood
+            const m = buildModel(renderer, rarc, `bdli/boxb.bdl`, actor);
+        } else if (type === 2) {
+            // Metal
+            const m = buildModel(renderer, rarc, `bdli/boxc.bdl`, actor);
+            const b = parseBRK(rarc, 'brk/boxc.brk');
+            b.loopMode = LoopMode.ONCE;
+            m.bindTRK1(b);
+        } else if (type === 3) {
+            // Big Key
+            const m = buildModel(renderer, rarc, `bdli/boxd.bdl`, actor);
+        } else {
+            // Might be something else, not sure.
+            console.warn(`Unknown chest type: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+        }
+    }
+    // Under-water treasure points. Perhaps spawn at some point?
+    // else if (actor.name === 'Salvage' || actor.name === 'Salvag2' || actor.name === 'SalvagE' || actor.name === 'SalvagN' || actor.name === 'SalvFM') return;
+    // // Bushes. Procedurally generated by the engine.
+    // else if (actor.name === 'woodb' || actor.name === 'woodbx') return;
+    // // Rope. Procedurally generated by the engine.
+    // else if (actor.name === 'RopeR') return;
+    // // Bridges. Procedurally generated by the engine.
+    // else if (actor.name === 'bridge') return;
+    // // Gyorg spawners.
+    // else if (actor.name === 'GyCtrl' || actor.name === 'GyCtrlA' || actor.name === 'GyCtrlB') return;
+    // // Markers for Tingle Tuner
+    // else if (actor.name === 'agbTBOX' || actor.name === 'agbMARK' || actor.name === 'agbF' || actor.name === 'agbA' || actor.name === 'agbAT' || actor.name === 'agbA2' || actor.name === 'agbR' || actor.name === 'agbB' || actor.name === 'agbFA' || actor.name === 'agbCSW') return;
+    // // Logic flags used for gameplay, not spawnable objects.
+    // else if (actor.name === 'AND_SW0' || actor.name === 'AND_SW1' || actor.name === 'AND_SW2' || actor.name === 'SW_HIT0' || actor.name === 'ALLdie' || actor.name === 'SW_C00') return;
+    // // SWitch SaLVaGe?
+    // else if (actor.name === 'SwSlvg') return;
+    // // EVent SWitch
+    // else if (actor.name === 'Evsw') return;
+    // // Tags for fishmen?
+    // else if (actor.name === 'TagSo' || actor.name === 'TagMSo') return;
+    // // Photo tags
+    // else if (actor.name === 'TagPo') return;
+    // // Light tags?
+    // else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') return;
+    // // Environment tags (Kyanko)
+    // else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') return;
+    // // Other tags?
+    // else if (actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd') return;
+    // else if (actor.name === 'TagHt' || actor.name === 'TagMsg' || actor.name === 'TagMsg2' || actor.name === 'ReTag0') return;
+    // else if (actor.name === 'AttTag' || actor.name === 'AttTagB') return;
+    // else if (actor.name === 'VolTag' || actor.name === 'WindTag') return;
+    // // Misc. gameplay data
+    // else if (actor.name === 'HyoiKam') return;
+    // // Flags (only contains textures)
+    // else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
+    // // Collision
+    // else if (actor.name === 'Akabe') return;
+    else {
+        // Attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
+        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
+        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+    }
+}
+
+
 
 function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor) {
     const modelCache = renderer.modelCache;
@@ -1320,279 +1606,3 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
 
     return true;
 }
-
-export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
-    const relConstructor = kRelTable[actor.info.relName];
-    if (relConstructor) {
-        const actorObj = new relConstructor(renderer, actor);
-        return;
-    }
-
-    // Doors: TODO(jstpierre)
-    // else if (actor.name === 'KNOB00') return;
-    // Treasure chests
-    else if (actor.name === 'takara' || actor.name === 'takara2' || actor.name === 'takara3' || actor.name === 'takara4' || actor.name === 'takara5' || actor.name === 'takara6' || actor.name === 'takara7' || actor.name === 'takara8' ||
-    actor.name === 'takaraK' || actor.name === 'takaraI' || actor.name === 'takaraM' || actor.name === 'tkrASw' || actor.name === 'tkrAGc' || actor.name === 'tkrAKd' || actor.name === 'tkrASw' || actor.name === 'tkrAIk' ||
-    actor.name === 'tkrBMs' || actor.name === 'tkrCTf' || actor.name === 'tkrAOc' || actor.name === 'tkrAOs' || actor.name === 'Bitem') {
-        // The treasure chest name does not matter, everything is in the parameters.
-        // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
-        const rarc = await fetchArchive(renderer.modelCache, 'Dalways.arc');
-        const type = (actor.parameters >>> 20) & 0x0F;
-        if (type === 0) {
-            // Light Wood
-            const m = buildModel(renderer, rarc, `bdli/boxa.bdl`, actor);
-        } else if (type === 1) {
-            // Dark Wood
-            const m = buildModel(renderer, rarc, `bdli/boxb.bdl`, actor);
-        } else if (type === 2) {
-            // Metal
-            const m = buildModel(renderer, rarc, `bdli/boxc.bdl`, actor);
-            const b = parseBRK(rarc, 'brk/boxc.brk');
-            b.loopMode = LoopMode.ONCE;
-            m.bindTRK1(b);
-        } else if (type === 3) {
-            // Big Key
-            const m = buildModel(renderer, rarc, `bdli/boxd.bdl`, actor);
-        } else {
-            // Might be something else, not sure.
-            console.warn(`Unknown chest type: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
-        }
-    }
-    // Under-water treasure points. Perhaps spawn at some point?
-    // else if (actor.name === 'Salvage' || actor.name === 'Salvag2' || actor.name === 'SalvagE' || actor.name === 'SalvagN' || actor.name === 'SalvFM') return;
-    // // Bushes. Procedurally generated by the engine.
-    // else if (actor.name === 'woodb' || actor.name === 'woodbx') return;
-    // // Rope. Procedurally generated by the engine.
-    // else if (actor.name === 'RopeR') return;
-    // // Bridges. Procedurally generated by the engine.
-    // else if (actor.name === 'bridge') return;
-    // // Gyorg spawners.
-    // else if (actor.name === 'GyCtrl' || actor.name === 'GyCtrlA' || actor.name === 'GyCtrlB') return;
-    // // Markers for Tingle Tuner
-    // else if (actor.name === 'agbTBOX' || actor.name === 'agbMARK' || actor.name === 'agbF' || actor.name === 'agbA' || actor.name === 'agbAT' || actor.name === 'agbA2' || actor.name === 'agbR' || actor.name === 'agbB' || actor.name === 'agbFA' || actor.name === 'agbCSW') return;
-    // // Logic flags used for gameplay, not spawnable objects.
-    // else if (actor.name === 'AND_SW0' || actor.name === 'AND_SW1' || actor.name === 'AND_SW2' || actor.name === 'SW_HIT0' || actor.name === 'ALLdie' || actor.name === 'SW_C00') return;
-    // // SWitch SaLVaGe?
-    // else if (actor.name === 'SwSlvg') return;
-    // // EVent SWitch
-    // else if (actor.name === 'Evsw') return;
-    // // Tags for fishmen?
-    // else if (actor.name === 'TagSo' || actor.name === 'TagMSo') return;
-    // // Photo tags
-    // else if (actor.name === 'TagPo') return;
-    // // Light tags?
-    // else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') return;
-    // // Environment tags (Kyanko)
-    // else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') return;
-    // // Other tags?
-    // else if (actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd') return;
-    // else if (actor.name === 'TagHt' || actor.name === 'TagMsg' || actor.name === 'TagMsg2' || actor.name === 'ReTag0') return;
-    // else if (actor.name === 'AttTag' || actor.name === 'AttTagB') return;
-    // else if (actor.name === 'VolTag' || actor.name === 'WindTag') return;
-    // // Misc. gameplay data
-    // else if (actor.name === 'HyoiKam') return;
-    // // Flags (only contains textures)
-    // else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
-    // // Collision
-    // else if (actor.name === 'Akabe') return;
-    else {
-        // Attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
-        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
-        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
-        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
-    }
-}
-
-
-// -------------------------------------------------------
-// Generic Torch
-// -------------------------------------------------------
-class ATorch implements ActorRel {
-    constructor(context: WindWakerRenderer, actor: Actor) {
-        const ga = !!((actor.parameters >>> 6) & 0x01);
-        const obm = !!((actor.parameters >>> 7) & 0x01);
-        let type = (actor.parameters & 0x3F);
-        if (type === 0x3F)
-            type = 0;
-
-        setModelMatrix(actor, scratchMat4a);
-        vec3.set(scratchVec3a, 0, 0, 0);
-        if (type === 0 || type === 3) {
-            fetchArchive(context.modelCache, `Ep.arc`).then(rarc => {
-                const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
-            });
-            scratchVec3a[1] += 140;
-        }
-        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
-
-        // Create particle systems.
-        const pa = createEmitter(context, 0x0001);
-        vec3.copy(pa.globalTranslation, scratchVec3a);
-        pa.globalTranslation[1] += -240 + 235 + 15;
-        if (type !== 2) {
-            const pb = createEmitter(context, 0x4004);
-            vec3.copy(pb.globalTranslation, pa.globalTranslation);
-            pb.globalTranslation[1] += 20;
-        }
-        const pc = createEmitter(context, 0x01EA);
-        vec3.copy(pc.globalTranslation, scratchVec3a);
-        pc.globalTranslation[1] += -240 + 235 + 8;
-        // TODO(jstpierre): ga
-    }
-}
-
-// -------------------------------------------------------
-// Grass/Flowers/Trees managed by their respective packets
-// -------------------------------------------------------
-class AGrass implements ActorRel {
-    static kSpawnPatterns = [
-        { group: 0, count: 1 },
-        { group: 0, count: 7 },
-        { group: 1, count: 15 },
-        { group: 2, count: 3 },
-        { group: 3, count: 7 },
-        { group: 4, count: 11 },
-        { group: 5, count: 7 },
-        { group: 6, count: 5 },
-    ];
-    
-    static kSpawnOffsets = [
-        [
-            [0, 0, 0],
-            [3, 0, -50],
-            [-2, 0, 50],
-            [50, 0, 27],
-            [52, 0, -25],
-            [-50, 0, 22],
-            [-50, 0, -29],
-        ],
-        [
-            [-18, 0, 76],
-            [-15, 0, 26],
-            [133, 0, 0],
-            [80, 0, 23],
-            [86, 0, -83],
-            [33, 0, -56],
-            [83, 0, -27],
-            [-120, 0, -26],
-            [-18, 0, -65],
-            [-20, 0, -21],
-            [-73, 0, 1],
-            [-67, 0, -102],
-            [-21, 0, 126],
-            [-120, 0, -78],
-            [-70, 0, -49],
-            [32, 0, 103],
-            [34, 0, 51],
-            [-72, 0, 98],
-            [-68, 0, 47],
-            [33, 0, -5],
-            [135, 0, -53],
-        ],
-        [
-            [-75, 0, -50],
-            [75, 0, -25],
-            [14, 0, 106],
-        ],
-        [
-            [-24, 0, -28],
-            [27, 0, -28],
-            [-21, 0, 33],
-            [-18, 0, -34],
-            [44, 0, -4],
-            [41, 0, 10],
-            [24, 0, 39],
-        ],
-        [
-            [-55, 0, -22],
-            [-28, 0, -50],
-            [-77, 0, 11],
-            [55, 0, -44],
-            [83, 0, -71],
-            [11, 0, -48],
-            [97, 0, -34],
-            [-74, 0, -57],
-            [31, 0, 58],
-            [59, 0, 30],
-            [13, 0, 23],
-            [-12, 0, 54],
-            [55, 0, 97],
-            [10, 0, 92],
-            [33, 0, -10],
-            [-99, 0, -27],
-            [40, 0, -87],
-        ],
-        [
-            [0, 0, 3],
-            [-26, 0, -29],
-            [7, 0, -25],
-            [31, 0, -5],
-            [-7, 0, 40],
-            [-35, 0, 15],
-            [23, 0, 32],
-        ],
-        [
-            [-40, 0, 0],
-            [0, 0, 0],
-            [80, 0, 0],
-            [-80, 0, 0],
-            [40, 0, 0],
-        ]
-    ];
-
-    constructor(context: WindWakerRenderer, actor: Actor) {
-        const enum FoliageType {
-            Grass,
-            Tree,
-            WhiteFlower,
-            PinkFlower
-        };
-
-        const spawnPatternId = (actor.parameters & 0x00F) >> 0;
-        const type: FoliageType = (actor.parameters & 0x030) >> 4;
-        const itemIdx = (actor.parameters >> 6) & 0x3f; // Determines which item spawns when this is cut down
-
-        const pattern = AGrass.kSpawnPatterns[spawnPatternId];
-        const offsets = AGrass.kSpawnOffsets[pattern.group];
-        const count = pattern.count;
-
-        switch (type) {
-            case FoliageType.Grass:
-                for (let j = 0; j < count; j++) {
-                    // @NOTE: Grass does not observe actor rotation or scale
-                    const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
-                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
-                }
-            break;
-
-            case FoliageType.Tree:
-                const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
-
-                for (let j = 0; j < count; j++) {
-                    const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
-                    const pos = vec3.add(scratchVec3b, offset, actor.pos);
-                    context.treePacket.newData(pos, 0, actor.roomIndex);
-                }
-            break;
-
-            case FoliageType.WhiteFlower:
-            case FoliageType.PinkFlower:
-                for (let j = 0; j < count; j++) {
-                    const isPink = (type === FoliageType.PinkFlower);
-
-                    // @NOTE: Flowers do not observe actor rotation or scale
-                    const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
-                    const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.flowerPacket.newData(pos, isPink, actor.roomIndex, itemIdx);
-                }
-            break;
-            default:
-                console.warn('Unknown grass actor type');
-        }
-
-        return this;
-    }
-}
-kRelTable['d_a_grass'] = AGrass;
-kRelTable['d_a_ep'] = ATorch;
