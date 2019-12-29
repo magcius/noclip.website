@@ -375,9 +375,6 @@ export class WindWakerRoomRenderer {
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
-        this.worldToRoomMatrix.set(modelMatrix);
-        mat4.invert(this.roomToWorldMatrix, this.worldToRoomMatrix);
-
         if (this.bg0 !== null)
             mat4.copy(this.bg0.modelMatrix, modelMatrix);
         if (this.bg1 !== null)
@@ -1219,6 +1216,10 @@ class SceneDesc {
                 const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
+
+                // @HACK: Set up un-hacked room matrices
+                roomRenderer.worldToRoomMatrix.set(modelMatrix);
+                mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
 
                 // HACK: for single-purpose sea levels, translate the objects instead of the model.
                 if (isSea && !isFullSea) {
