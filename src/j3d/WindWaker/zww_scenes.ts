@@ -28,7 +28,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/Unifo
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType } from './Actors';
+import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
@@ -1051,6 +1051,14 @@ export class ModelCache {
         return p;
     }
 
+    public fetchObjectData(arcName: string): void {
+        this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
+    }
+
+    public getObjectData(arcName: string): RARC.RARC {
+        return this.getArchive(`${pathBase}/Object/${arcName}.arc`);
+    }
+
     public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelPath: string): J3DModelData {
         let p = this.modelCache.get(modelPath);
 
@@ -1076,8 +1084,6 @@ export class ModelCache {
 
 export const pathBase = `j3d/ww`;
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
 class SceneDesc {
     public id: string;
 
@@ -1089,7 +1095,7 @@ class SceneDesc {
             this.id = `Room${rooms[0]}.arc`;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = new ModelCache(context.dataFetcher);
         context.destroyablePool.push(modelCache);
 
@@ -1168,79 +1174,92 @@ class SceneDesc {
 
         modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 2);
 
-        return modelCache.waitForLoad().then(() => {
-            const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
+        await modelCache.waitForLoad();
 
-            const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
-            const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
-            const stageDzsHeaders = parseDZSHeaders(stageDzs);
-            const mult = stageDzsHeaders.get('MULT');
-            
-            const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-            const relTable = this.createRelNameTable(symbolMap);
-            const actorTable = this.createActorTable(symbolMap, relTable);
+        const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
 
-            const isSea = this.stageDir === 'sea';
-            const isFullSea = isSea && this.rooms.length > 1;
-            const renderer = new WindWakerRenderer(device, modelCache, symbolMap, isSea, stageRarc);
-            context.destroyablePool.push(renderer);
+        const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
+        const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
+        const stageDzsHeaders = parseDZSHeaders(stageDzs);
+        const mult = stageDzsHeaders.get('MULT');
+        
+        const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
+        const relTable = this.createRelNameTable(symbolMap);
+        const actorTable = this.createActorTable(symbolMap, relTable);
 
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const ZAtoon = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toon.bti`)!, `ZAtoon`).texture);
-            const ZBtoonEX = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toonex.bti`)!, `ZBtoonEX`).texture);
-            renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
+        const isSea = this.stageDir === 'sea';
+        const isFullSea = isSea && this.rooms.length > 1;
+        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, isSea, stageRarc);
+        context.destroyablePool.push(renderer);
 
-            renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
-            renderer.stage = this.stageDir;
-            
-            const jpac: JPA.JPAC[] = [];
-            for (let i = 0; i < particleArchives.length; i++) {
-                const jpacData = modelCache.getFileData(particleArchives[i]);
-                jpac.push(JPA.parse(jpacData));
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+        const ZAtoon = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toon.bti`)!, `ZAtoon`).texture);
+        const ZBtoonEX = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toonex.bti`)!, `ZBtoonEX`).texture);
+        renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
+
+        renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
+        renderer.stage = this.stageDir;
+        
+        const jpac: JPA.JPAC[] = [];
+        for (let i = 0; i < particleArchives.length; i++) {
+            const jpacData = modelCache.getFileData(particleArchives[i]);
+            jpac.push(JPA.parse(jpacData));
+        }
+        renderer.effectSystem = new SimpleEffectSystem(device, jpac);
+
+        for (let i = 0; i < this.rooms.length; i++) {
+            const roomIdx = Math.abs(this.rooms[i]);
+            const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
+            if (roomRarc.files.length === 0)
+                continue;
+
+            // Load any object archives.
+            const dzr = roomRarc.findFileData('dzr/room.dzr')!;
+            this.requestArchivesForActors(renderer, i, dzr, actorTable);
+        }
+
+        await modelCache.waitForLoad();
+
+        for (let i = 0; i < this.rooms.length; i++) {
+            const roomIdx = Math.abs(this.rooms[i]);
+            const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
+            if (roomRarc.files.length === 0)
+                continue;
+
+            const visible = this.rooms[i] >= 0;
+
+            const modelMatrix = mat4.create();
+            if (mult !== undefined)
+                this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
+
+            // Spawn the room.
+            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
+            roomRenderer.visible = visible;
+            renderer.roomRenderers.push(roomRenderer);
+
+            // @HACK: Set up un-hacked room matrices
+            roomRenderer.worldToRoomMatrix.set(modelMatrix);
+            mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
+
+            // HACK: for single-purpose sea levels, translate the objects instead of the model.
+            if (isSea && !isFullSea) {
+                mat4.invert(modelMatrix, modelMatrix);
+            } else {
+                roomRenderer.setModelMatrix(modelMatrix);
+                mat4.identity(modelMatrix);
             }
-            renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
-            for (let i = 0; i < this.rooms.length; i++) {
-                const roomIdx = Math.abs(this.rooms[i]);
-                const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
-                if (roomRarc.files.length === 0)
-                    continue;
+            mat4.copy(renderer.roomMatrix, modelMatrix);
+            mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
-                const visible = this.rooms[i] >= 0;
+            const dzr = roomRarc.findFileData('dzr/room.dzr')!;
+            this.spawnActors(renderer, roomRenderer, dzr, modelMatrix, actorTable);
+        }
 
-                const modelMatrix = mat4.create();
-                if (mult !== undefined)
-                    this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
+        // TODO(jstpierre): Not all the actors load in the requestArchives phase...
+        await modelCache.waitForLoad();
 
-                // Spawn the room.
-                const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
-                roomRenderer.visible = visible;
-                renderer.roomRenderers.push(roomRenderer);
-
-                // @HACK: Set up un-hacked room matrices
-                roomRenderer.worldToRoomMatrix.set(modelMatrix);
-                mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
-
-                // HACK: for single-purpose sea levels, translate the objects instead of the model.
-                if (isSea && !isFullSea) {
-                    mat4.invert(modelMatrix, modelMatrix);
-                } else {
-                    roomRenderer.setModelMatrix(modelMatrix);
-                    mat4.identity(modelMatrix);
-                }
-
-                mat4.copy(renderer.roomMatrix, modelMatrix);
-                mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
-
-                // Now spawn any objects that might show up in it.
-                const dzr = roomRarc.findFileData('dzr/room.dzr')!;
-                this.spawnObjectsFromDZR(device, renderer, roomRenderer, dzr, modelMatrix, actorTable);
-            }
-
-            return modelCache.waitForLoad().then(() => {
-                return renderer;
-            });
-        });
+        return renderer;
     }
 
     private getRoomMult(modelMatrix: mat4, buffer: ArrayBufferSlice, multHeader: DZSChunkHeader, roomIdx: number): void {
@@ -1320,7 +1339,7 @@ class SceneDesc {
         return actorTable;
     }
 
-    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layerIndex: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4, actorTable: ActorTable): void {
+    private iterActorLayerACTR(actorTable: ActorTable, roomIdx: number, layerIdx: number, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1338,30 +1357,24 @@ class SceneDesc {
             const flag = view.getUint16(actrTableIdx + 0x1C);
             const enemyNum = view.getUint16(actrTableIdx + 0x1E);
 
-            const localModelMatrix = mat4.create();
-            computeModelMatrixSRT(localModelMatrix, 1, 1, 1, 0, rotY, 0, posX, posY, posZ);
-
             const actor: Actor = {
                 name,
                 info: actorTable[name],
                 parameters,
-                roomIndex: roomRenderer.roomIdx,
-                layer: layerIndex,
+                roomIndex: roomIdx,
+                layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(1, 1, 1),
                 rotationY: rotY,
-
-                roomRenderer,
-                modelMatrix: localModelMatrix,
             };
 
-            loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+            callback(actor);
 
             actrTableIdx += 0x20;
         }
     }
 
-    private spawnObjectsFromSCOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layer: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4, actorTable: ActorTable): void {
+    private iterActorLayerSCOB(actorTable: ActorTable, roomIdx: number, layerIdx: number, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1383,32 +1396,24 @@ class SceneDesc {
             const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
             // const pad = view.getUint8(actrTableIdx + 0x23);
 
-            const localModelMatrix = mat4.create();
-            computeModelMatrixSRT(localModelMatrix, scaleX, scaleY, scaleZ, 0, rotY, 0, posX, posY, posZ);
-
-            const relName = actorTable[name].relName;
-
             const actor: Actor = {
                 name,
                 info: actorTable[name],
                 parameters,
-                roomIndex: roomRenderer.roomIdx,
-                layer,
+                roomIndex: roomIdx,
+                layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(scaleX, scaleY, scaleZ),
                 rotationY: rotY,
-
-                roomRenderer,
-                modelMatrix: localModelMatrix,
             };
 
-            loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+            callback(actor);
 
             actrTableIdx += 0x24;
         }
     }
 
-    private spawnObjectsFromDZR(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {
+    private iterActorLayers(actorTable: ActorTable, roomIdx: number, buffer: ArrayBufferSlice, callback: (it: Actor) => void): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
         function buildChunkLayerName(base: string, i: number): string {
@@ -1420,12 +1425,32 @@ class SceneDesc {
         }
 
         for (let i = -1; i < 16; i++) {
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('ACTR', i)), modelMatrix, actorTable);
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGOB', i)), modelMatrix, actorTable);
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TRES', i)), modelMatrix, actorTable);
-            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('SCOB', i)), modelMatrix, actorTable);
-            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGSC', i)), modelMatrix, actorTable);
-        }
+            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
+            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
+            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
+        }        
+    }
+
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {
+        this.iterActorLayers(actorTable, roomRenderer.roomIdx, buffer, (actor) => {
+            const placedActor: PlacedActor = actor as PlacedActor;
+            placedActor.modelMatrix = mat4.create();
+            placedActor.roomRenderer = roomRenderer;
+            computeModelMatrixSRT(placedActor.modelMatrix,
+                actor.scale[0], actor.scale[1], actor.scale[2],
+                0, actor.rotationY, 0,
+                actor.pos[0], actor.pos[1], actor.pos[2]);
+
+            loadActor(renderer, roomRenderer, modelMatrix, placedActor);
+        });
+    }
+
+    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, buffer: ArrayBufferSlice, actorTable: ActorTable): void {
+        this.iterActorLayers(actorTable, roomIdx, buffer, (actor) => {
+            requestArchiveForActor(renderer, actor);
+        });
     }
 }
 

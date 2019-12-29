@@ -19,9 +19,9 @@ import { colorFromRGBA } from '../../Color';
 import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 
 export interface ActorInfo { 
-    relName: string, 
-    subtype: number, 
-    unknown1: number 
+    relName: string; 
+    subtype: number;
+    unknown1: number;
 };
 
 export interface Actor {
@@ -33,8 +33,10 @@ export interface Actor {
     pos: vec3;
     scale: vec3;
     rotationY: number;
+};
 
-    // Derived values for convenience
+export interface PlacedActor extends Actor {
+    // TODO(jstpierre): Remove these fields.
     modelMatrix: mat4;
     roomRenderer: WindWakerRoomRenderer;
 };
@@ -50,7 +52,6 @@ export const enum LightTevColorType {
 }
 
 const scratchMat4a = mat4.create();
-const scratchMat4b = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
@@ -200,11 +201,11 @@ function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath:
     return objectRenderer;
 }
 
-function setModelMatrix(actor: Actor, m: mat4): void {
+function setModelMatrix(actor: PlacedActor, m: mat4): void {
     mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, actor.modelMatrix);
 }
 
-function buildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, actor: Actor): BMDObjectRenderer {
+function buildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, actor: PlacedActor): BMDObjectRenderer {
     const objectRenderer = buildChildModel(context, rarc, modelPath, actor.layer);
 
     // Transform Actor model from room space to world space
@@ -231,7 +232,7 @@ function animFrame(frame: number): AnimationController { const a = new Animation
 // Generic Torch
 // -------------------------------------------------------
 class ATorch implements ActorRel {
-    constructor(context: WindWakerRenderer, actor: Actor) {
+    constructor(context: WindWakerRenderer, actor: PlacedActor) {
         const ga = !!((actor.parameters >>> 6) & 0x01);
         const obm = !!((actor.parameters >>> 7) & 0x01);
         let type = (actor.parameters & 0x3F);
@@ -241,9 +242,8 @@ class ATorch implements ActorRel {
         setModelMatrix(actor, scratchMat4a);
         vec3.set(scratchVec3a, 0, 0, 0);
         if (type === 0 || type === 3) {
-            fetchArchive(context.modelCache, `Ep.arc`).then(rarc => {
-                const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
-            });
+            const rarc = context.modelCache.getObjectData(`Ep`);
+            const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
             scratchVec3a[1] += 140;
         }
         vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
@@ -262,10 +262,15 @@ class ATorch implements ActorRel {
         pc.globalTranslation[1] += -240 + 235 + 8;
         // TODO(jstpierre): ga
     }
+
+    public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
+        console.log('aaa');
+        context.modelCache.fetchObjectData(`Ep`);
+    }
 }
 
 class ATreasureChest implements ActorRel {
-    constructor(context: WindWakerRenderer, actor: Actor) {
+    constructor(context: WindWakerRenderer, actor: PlacedActor) {
         // The treasure chest name does not matter, everything is in the parameters.
         // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
         fetchArchive(context.modelCache, 'Dalways.arc').then(rarc => {
@@ -452,24 +457,36 @@ class AGrass implements ActorRel {
 interface ActorRel {
     // @TODO: Most actors have draw and update functions
 }
-type ActorConstructor = { new (context: WindWakerRenderer, actor: Actor): ActorRel };
-let kRelTable: { [relName: string]: ActorConstructor } = {
+
+interface ActorRelConstructor {
+    new(context: WindWakerRenderer, actor: PlacedActor): ActorRel;
+    requestArchives?(context: WindWakerRenderer, actor: Actor): void;
+}
+
+let kRelTable: { [relName: string]: ActorRelConstructor } = {
     'd_a_grass': AGrass,
     'd_a_ep': ATorch,
     'd_a_tbox': ATreasureChest,
 }
 
-export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
+export function requestArchiveForActor(renderer: WindWakerRenderer, actor: Actor): void {
+    const relConstructor = kRelTable[actor.info.relName];
+    console.log(actor.info.relName, relConstructor);
+    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined)
+        relConstructor.requestArchives(renderer, actor);
+}
+
+export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, worldModelMatrix: mat4, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
     const relConstructor = kRelTable[actor.info.relName];
     if (relConstructor) {
         const actorObj = new relConstructor(renderer, actor);
         return;
     }
-    
+
     // Otherwise attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
     else {
-        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+        const loaded = loadGenericActor(renderer, roomRenderer, actor.modelMatrix, worldModelMatrix, actor);
         if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
         else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
     }
