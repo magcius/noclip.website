@@ -282,7 +282,7 @@ class ATreasureChest implements ActorRel {
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
-            const m = buildModel(context, rarc, `bdli/boxd.bdl`, actor);
+            const m = buildModel(context, rarc, `bdlm/boxd.bdl`, actor);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
