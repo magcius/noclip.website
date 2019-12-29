@@ -1172,8 +1172,8 @@ class SceneDesc {
             const mult = stageDzsHeaders.get('MULT');
             
             const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-            const actorTable = this.createActorTable(symbolMap);
             const relTable = this.createRelNameTable(symbolMap);
+            const actorTable = this.createActorTable(symbolMap, relTable);
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
@@ -1255,31 +1255,6 @@ class SceneDesc {
         }
     }
 
-    private createActorTable(symbolMap: SymbolMap) {
-        const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
-        const data = entry.Data;
-        const bytes = data.createTypedArray(Uint8Array);
-        const dataView = data.createDataView();
-        const textDecoder = getTextDecoder('utf8') as TextDecoder;
-
-        // The object table consists of null-terminated ASCII strings of length 12.
-        // @NOTE: None are longer than 7 characters
-        const kNameLength = 12;
-        const objectCount = data.byteLength / kNameLength;
-        const objectTable = {} as { [name: string]: { type: number, subtype: number, unknown1: number } };
-        for (let i = 0; i < objectCount; i++) {
-            const offset = i * kNameLength;
-            const end = bytes.indexOf(0, offset); 
-            const name = textDecoder.decode(bytes.subarray(offset, end));
-            const type = dataView.getUint16(offset + 8, false);
-            const subtype = bytes[offset + 10];
-            const unknown1 = bytes[offset + 11];
-            objectTable[name] = { type, subtype, unknown1 };
-        }
-
-        return objectTable;
-    }
-
     private createRelNameTable(symbolMap: SymbolMap) {
         const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
         const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
@@ -1306,6 +1281,34 @@ class SceneDesc {
         }
 
         return relTable;
+    }
+
+    private createActorTable(symbolMap: SymbolMap, relTable: { [id: number]: string }) {
+        const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
+        const data = entry.Data;
+        const bytes = data.createTypedArray(Uint8Array);
+        const dataView = data.createDataView();
+        const textDecoder = getTextDecoder('utf8') as TextDecoder;
+
+        // The object table consists of null-terminated ASCII strings of length 12.
+        // @NOTE: None are longer than 7 characters
+        const kNameLength = 12;
+        const objectCount = data.byteLength / kNameLength;
+        const objectTable = {} as { [name: string]: { relName: string, subtype: number, unknown1: number } };
+        for (let i = 0; i < objectCount; i++) {
+            const offset = i * kNameLength;
+            const end = bytes.indexOf(0, offset); 
+            const name = textDecoder.decode(bytes.subarray(offset, end));
+            const id = dataView.getUint16(offset + 8, false);
+            const subtype = bytes[offset + 10];
+            const unknown1 = bytes[offset + 11];
+
+            const relName = relTable[id];
+
+            objectTable[name] = { relName, subtype, unknown1 };
+        }
+
+        return objectTable;
     }
 
     private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
