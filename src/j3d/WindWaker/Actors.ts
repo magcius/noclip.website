@@ -180,8 +180,12 @@ export class BMDObjectRenderer implements ObjectRenderer {
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
 
-export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
-    // TODO(jstpierre): Better actor implementations
+function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
+function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
+function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
+function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
+
+function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor) {
     const modelCache = renderer.modelCache;
     const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
@@ -190,7 +194,7 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     }
 
     function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
-        const model = modelCache.getModel(device, cache, rarc, modelPath);
+        const model = modelCache.getModel(renderer.device, cache, rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
         modelInstance.passMask = WindWakerPass.MAIN;
         renderer.extraTextures.fillExtraTextures(modelInstance);
@@ -215,21 +219,10 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
         const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
-        objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
+        objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(renderer.device, cache, bmt));
         renderer.extraTextures.fillExtraTextures(objectRenderer.modelInstance);
         return objectRenderer;
     }
-
-    function createEmitter(resourceId: number): JPA.JPABaseEmitter {
-        const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
-        // TODO(jstpierre): Scale, Rotation
-        return emitter;
-    }
-
-    function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
-    function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
-    function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
-    function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
     // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping
     // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
@@ -268,63 +261,7 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         else if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
         else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
     }
-    // Generic Torch
-    else if (actor.name === 'bonbori') {
-        const rarc = await fetchArchive(`Ep.arc`);
-        const ga = !!((actor.parameters >>> 6) & 0x01);
-        const obm = !!((actor.parameters >>> 7) & 0x01);
-        let type = (actor.parameters & 0x3F);
-        if (type === 0x3F)
-            type = 0;
 
-        setModelMatrix(scratchMatrix);
-        vec3.set(scratchVec3a, 0, 0, 0);
-        if (type === 0 || type === 3) {
-            const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
-            scratchVec3a[1] += 140;
-        }
-        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
-
-        // Create particle systems.
-        const pa = createEmitter(0x0001);
-        vec3.copy(pa.globalTranslation, scratchVec3a);
-        pa.globalTranslation[1] += -240 + 235 + 15;
-        if (type !== 2) {
-            const pb = createEmitter(0x4004);
-            vec3.copy(pb.globalTranslation, pa.globalTranslation);
-            pb.globalTranslation[1] += 20;
-        }
-        const pc = createEmitter(0x01EA);
-        vec3.copy(pc.globalTranslation, scratchVec3a);
-        pc.globalTranslation[1] += -240 + 235 + 8;
-        // TODO(jstpierre): ga
-    }
-    // Hyrule Ocean Warp
-    else if (actor.name === 'Ghrwp') {
-        const rarc = await fetchArchive(`Ghrwp.arc`);
-        const a00 = buildModel(rarc, `bdlm/ghrwpa00.bdl`);
-        a00.bindTTK1(parseBTK(rarc, `btk/ghrwpa00.btk`));
-        const b00 = buildModel(rarc, `bdlm/ghrwpb00.bdl`);
-        b00.bindTTK1(parseBTK(rarc, `btk/ghrwpb00.btk`));
-        b00.bindTRK1(parseBRK(rarc, `brk/ghrwpb00.brk`));
-    }
-    // Outset Island: Jabun's barrier (six parts)
-    else if (actor.name === 'Ajav') fetchArchive(`Ajav.arc`).then((rarc) => {
-        // Seems like there's one texture that's shared for all parts in ajava.bdl
-        // ref. daObjAjav::Act_c::set_tex( (void))
-        const ja = buildModel(rarc, `bdl/ajava.bdl`);
-        const txa = ja.modelInstance.getTextureMappingReference('Txa_jav_a')!;
-        const jb = buildModel(rarc, `bdl/ajavb.bdl`);
-        jb.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
-        const jc = buildModel(rarc, `bdl/ajavc.bdl`);
-        jc.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
-        const jd = buildModel(rarc, `bdl/ajavd.bdl`);
-        jd.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
-        const je = buildModel(rarc, `bdl/ajave.bdl`);
-        je.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
-        const jf = buildModel(rarc, `bdl/ajavf.bdl`);
-        jf.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
-    });
     // NPCs
     // Aryll
     else if (actor.name === 'Ls' || actor.name === 'Ls1') fetchArchive(`Ls.arc`).then((rarc) => {
@@ -350,9 +287,10 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     else if (actor.name === 'Ba1') {
         // Only allow the sleeping grandma through, because how else can you live in life...
         if (actor.parameters === 0x03) {
-            const rarc = await fetchArchive(`Ba.arc`);
-            const m = buildModel(rarc, `bdlm/ba.bdl`);
-            m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));
+            fetchArchive(`Ba.arc`).then(rarc => {
+                const m = buildModel(rarc, `bdlm/ba.bdl`);
+                m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));
+            });
         }
     }
     // Salvatore
@@ -361,17 +299,18 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     else if (actor.name === 'Ji1') fetchArchive(`Ji.arc`).then((rarc) => buildModel(rarc, `bdlm/ji.bdl`).bindANK1(parseBCK(rarc, `bck/ji_wait01.bck`)));
     // Medli
     else if (actor.name === 'Md1') {
-        const rarc = await fetchArchive(`Md.arc`);
-        const m = buildModel(rarc, `bdlm/md.bdl`);
-        m.bindANK1(parseBCK(rarc, `bcks/md_wait01.bck`));
-        const armL = buildChildModel(rarc, `bdlm/mdarm.bdl`);
-        armL.bindANK1(parseBCK(rarc, `bcks/mdarm_wait01.bck`));
-        armL.modelInstance.setShapeVisible(1, false);
-        armL.setParentJoint(m, `armL`);
-        const armR = buildChildModel(rarc, `bdlm/mdarm.bdl`);
-        armR.bindANK1(parseBCK(rarc, `bcks/mdarm_wait01.bck`));
-        armR.modelInstance.setShapeVisible(0, false);
-        armR.setParentJoint(m, `armR`);
+        fetchArchive(`Md.arc`).then(rarc => {
+            const m = buildModel(rarc, `bdlm/md.bdl`);
+            m.bindANK1(parseBCK(rarc, `bcks/md_wait01.bck`));
+            const armL = buildChildModel(rarc, `bdlm/mdarm.bdl`);
+            armL.bindANK1(parseBCK(rarc, `bcks/mdarm_wait01.bck`));
+            armL.modelInstance.setShapeVisible(1, false);
+            armL.setParentJoint(m, `armL`);
+            const armR = buildChildModel(rarc, `bdlm/mdarm.bdl`);
+            armR.bindANK1(parseBCK(rarc, `bcks/mdarm_wait01.bck`));
+            armR.modelInstance.setShapeVisible(0, false);
+            armR.setParentJoint(m, `armR`);
+        });
     }
     // Makar
     else if (actor.name === 'Cb1') fetchArchive(`Cb.arc`).then((rarc) => {
@@ -880,6 +819,35 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         buildChildModel(rarc, `bdl/ro_hat3.bdl`).setParentJoint(m, `head`);
         m.bindANK1(parseBCK(rarc, `bcks/ro_wait01.bck`));
     });
+
+    // Hyrule Ocean Warp
+    else if (actor.name === 'Ghrwp') {
+        fetchArchive(`Ghrwp.arc`).then(rarc => {
+            const a00 = buildModel(rarc, `bdlm/ghrwpa00.bdl`);
+            a00.bindTTK1(parseBTK(rarc, `btk/ghrwpa00.btk`));
+            const b00 = buildModel(rarc, `bdlm/ghrwpb00.bdl`);
+            b00.bindTTK1(parseBTK(rarc, `btk/ghrwpb00.btk`));
+            b00.bindTRK1(parseBRK(rarc, `brk/ghrwpb00.brk`));
+        });
+    }
+    // Outset Island: Jabun's barrier (six parts)
+    else if (actor.name === 'Ajav') fetchArchive(`Ajav.arc`).then((rarc) => {
+        // Seems like there's one texture that's shared for all parts in ajava.bdl
+        // ref. daObjAjav::Act_c::set_tex( (void))
+        const ja = buildModel(rarc, `bdl/ajava.bdl`);
+        const txa = ja.modelInstance.getTextureMappingReference('Txa_jav_a')!;
+        const jb = buildModel(rarc, `bdl/ajavb.bdl`);
+        jb.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
+        const jc = buildModel(rarc, `bdl/ajavc.bdl`);
+        jc.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
+        const jd = buildModel(rarc, `bdl/ajavd.bdl`);
+        jd.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
+        const je = buildModel(rarc, `bdl/ajave.bdl`);
+        je.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
+        const jf = buildModel(rarc, `bdl/ajavf.bdl`);
+        jf.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
+    });
+    
     // Small decoration (Always)
     else if (actor.name === 'kotubo') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_kotubo1.bdl`));
     else if (actor.name === 'ootubo1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
@@ -912,8 +880,7 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         const b = buildModel(rarc, `bdl/kanban.bdl`);
         b.lightTevColorType = LightTevColorType.BG0;
     });
-    // Doors: TODO(jstpierre)
-    else if (actor.name === 'KNOB00') return;
+
     // Forsaken Fortress door
     else if (actor.name === 'SMBdor') fetchArchive(`Mbdoor.arc`).then((rarc) => {
         // Frame
@@ -1086,10 +1053,11 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     else if (actor.name === 'Otble') fetchArchive(`Okmono.arc`).then((rarc) => buildModel(rarc, `bdl/otable.bdl`));
     else if (actor.name === 'OtbleL') fetchArchive(`Okmono.arc`).then((rarc) => buildModel(rarc, `bdl/otablel.bdl`));
     else if (actor.name === 'AjavW') {
-        const rarc = await fetchArchive(`AjavW.arc`);
-        const m = buildModel(rarc, `bdlm/ajavw.bdl`);
-        m.lightTevColorType = LightTevColorType.BG1;
-        m.bindTTK1(parseBTK(rarc, `btk/ajavw.btk`));
+        fetchArchive(`AjavW.arc`).then(rarc => {
+            const m = buildModel(rarc, `bdlm/ajavw.bdl`);
+            m.lightTevColorType = LightTevColorType.BG1;
+            m.bindTTK1(parseBTK(rarc, `btk/ajavw.btk`));
+        });
     } else if (actor.name === 'Vdora') fetchArchive(`Vdora.arc`).then((rarc) => buildModel(rarc, `bdl/vdora.bdl`));
     // Windfall Island
     else if (actor.name === 'Roten2') fetchArchive(`Roten.arc`).then((rarc) => buildModel(rarc, `bdl/roten02.bdl`));
@@ -1301,6 +1269,88 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
             buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
         });
     }
+    else {
+        return false;
+    }
+
+    return true;
+}
+
+export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
+    // TODO(jstpierre): Better actor implementations
+    const modelCache = renderer.modelCache;
+    const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+
+    function fetchArchive(objArcName: string): Promise<RARC.RARC> {
+        return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
+    }
+
+    function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
+        const model = modelCache.getModel(device, cache, rarc, modelPath);
+        const modelInstance = new J3DModelInstanceSimple(model);
+        modelInstance.passMask = WindWakerPass.MAIN;
+        renderer.extraTextures.fillExtraTextures(modelInstance);
+        modelInstance.name = name;
+        modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+        const objectRenderer = new BMDObjectRenderer(modelInstance);
+        objectRenderer.layer = actor.layer;
+        return objectRenderer;
+    }
+
+    function setModelMatrix(m: mat4): void {
+        mat4.mul(m, worldModelMatrix, localModelMatrix);
+    }
+
+    function buildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
+        const objectRenderer = buildChildModel(rarc, modelPath);
+        setModelMatrix(objectRenderer.modelMatrix);
+        roomRenderer.objectRenderers.push(objectRenderer);
+        return objectRenderer;
+    }
+
+    function createEmitter(resourceId: number): JPA.JPABaseEmitter {
+        const emitter = renderer.effectSystem!.createBaseEmitter(device, cache, resourceId);
+        // TODO(jstpierre): Scale, Rotation
+        return emitter;
+    }
+
+    // Attempt to load this actor generically
+    const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+    if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
+
+    // Generic Torch
+    if (actor.name === 'bonbori') {
+        const rarc = await fetchArchive(`Ep.arc`);
+        const ga = !!((actor.parameters >>> 6) & 0x01);
+        const obm = !!((actor.parameters >>> 7) & 0x01);
+        let type = (actor.parameters & 0x3F);
+        if (type === 0x3F)
+            type = 0;
+
+        setModelMatrix(scratchMatrix);
+        vec3.set(scratchVec3a, 0, 0, 0);
+        if (type === 0 || type === 3) {
+            const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
+            scratchVec3a[1] += 140;
+        }
+        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
+
+        // Create particle systems.
+        const pa = createEmitter(0x0001);
+        vec3.copy(pa.globalTranslation, scratchVec3a);
+        pa.globalTranslation[1] += -240 + 235 + 15;
+        if (type !== 2) {
+            const pb = createEmitter(0x4004);
+            vec3.copy(pb.globalTranslation, pa.globalTranslation);
+            pb.globalTranslation[1] += 20;
+        }
+        const pc = createEmitter(0x01EA);
+        vec3.copy(pc.globalTranslation, scratchVec3a);
+        pc.globalTranslation[1] += -240 + 235 + 8;
+        // TODO(jstpierre): ga
+    }
+    // Doors: TODO(jstpierre)
+    // else if (actor.name === 'KNOB00') return;
     // Treasure chests
     else if (actor.name === 'takara' || actor.name === 'takara2' || actor.name === 'takara3' || actor.name === 'takara4' || actor.name === 'takara5' || actor.name === 'takara6' || actor.name === 'takara7' || actor.name === 'takara8' ||
     actor.name === 'takaraK' || actor.name === 'takaraI' || actor.name === 'takaraM' || actor.name === 'tkrASw' || actor.name === 'tkrAGc' || actor.name === 'tkrAKd' || actor.name === 'tkrASw' || actor.name === 'tkrAIk' ||
@@ -1330,7 +1380,7 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         }
     }
     // Under-water treasure points. Perhaps spawn at some point?
-    else if (actor.name === 'Salvage' || actor.name === 'Salvag2' || actor.name === 'SalvagE' || actor.name === 'SalvagN' || actor.name === 'SalvFM') return;
+    // else if (actor.name === 'Salvage' || actor.name === 'Salvag2' || actor.name === 'SalvagE' || actor.name === 'SalvagN' || actor.name === 'SalvFM') return;
     // Grass/Flowers/Small Trees. Procedurally generated by the engine.
     // https://github.com/LagoLunatic/WW-Hacking-Docs/blob/6e1ecdadbdf5124e7f6ff037106deb29a5f7238b/Entity%20DZx%20Formats.txt#L695
     else if (
@@ -1342,41 +1392,41 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         if (actor.layer === -1 || actor.layer === 0)
             return AGrass.create(renderer, actor);
     }
-    // Bushes. Procedurally generated by the engine.
-    else if (actor.name === 'woodb' || actor.name === 'woodbx') return;
-    // Rope. Procedurally generated by the engine.
-    else if (actor.name === 'RopeR') return;
-    // Bridges. Procedurally generated by the engine.
-    else if (actor.name === 'bridge') return;
-    // Gyorg spawners.
-    else if (actor.name === 'GyCtrl' || actor.name === 'GyCtrlA' || actor.name === 'GyCtrlB') return;
-    // Markers for Tingle Tuner
-    else if (actor.name === 'agbTBOX' || actor.name === 'agbMARK' || actor.name === 'agbF' || actor.name === 'agbA' || actor.name === 'agbAT' || actor.name === 'agbA2' || actor.name === 'agbR' || actor.name === 'agbB' || actor.name === 'agbFA' || actor.name === 'agbCSW') return;
-    // Logic flags used for gameplay, not spawnable objects.
-    else if (actor.name === 'AND_SW0' || actor.name === 'AND_SW1' || actor.name === 'AND_SW2' || actor.name === 'SW_HIT0' || actor.name === 'ALLdie' || actor.name === 'SW_C00') return;
-    // SWitch SaLVaGe?
-    else if (actor.name === 'SwSlvg') return;
-    // EVent SWitch
-    else if (actor.name === 'Evsw') return;
-    // Tags for fishmen?
-    else if (actor.name === 'TagSo' || actor.name === 'TagMSo') return;
-    // Photo tags
-    else if (actor.name === 'TagPo') return;
-    // Light tags?
-    else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') return;
-    // Environment tags (Kyanko)
-    else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') return;
-    // Other tags?
-    else if (actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd') return;
-    else if (actor.name === 'TagHt' || actor.name === 'TagMsg' || actor.name === 'TagMsg2' || actor.name === 'ReTag0') return;
-    else if (actor.name === 'AttTag' || actor.name === 'AttTagB') return;
-    else if (actor.name === 'VolTag' || actor.name === 'WindTag') return;
-    // Misc. gameplay data
-    else if (actor.name === 'HyoiKam') return;
-    // Flags (only contains textures)
-    else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
-    // Collision
-    else if (actor.name === 'Akabe') return;
+    // // Bushes. Procedurally generated by the engine.
+    // else if (actor.name === 'woodb' || actor.name === 'woodbx') return;
+    // // Rope. Procedurally generated by the engine.
+    // else if (actor.name === 'RopeR') return;
+    // // Bridges. Procedurally generated by the engine.
+    // else if (actor.name === 'bridge') return;
+    // // Gyorg spawners.
+    // else if (actor.name === 'GyCtrl' || actor.name === 'GyCtrlA' || actor.name === 'GyCtrlB') return;
+    // // Markers for Tingle Tuner
+    // else if (actor.name === 'agbTBOX' || actor.name === 'agbMARK' || actor.name === 'agbF' || actor.name === 'agbA' || actor.name === 'agbAT' || actor.name === 'agbA2' || actor.name === 'agbR' || actor.name === 'agbB' || actor.name === 'agbFA' || actor.name === 'agbCSW') return;
+    // // Logic flags used for gameplay, not spawnable objects.
+    // else if (actor.name === 'AND_SW0' || actor.name === 'AND_SW1' || actor.name === 'AND_SW2' || actor.name === 'SW_HIT0' || actor.name === 'ALLdie' || actor.name === 'SW_C00') return;
+    // // SWitch SaLVaGe?
+    // else if (actor.name === 'SwSlvg') return;
+    // // EVent SWitch
+    // else if (actor.name === 'Evsw') return;
+    // // Tags for fishmen?
+    // else if (actor.name === 'TagSo' || actor.name === 'TagMSo') return;
+    // // Photo tags
+    // else if (actor.name === 'TagPo') return;
+    // // Light tags?
+    // else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') return;
+    // // Environment tags (Kyanko)
+    // else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') return;
+    // // Other tags?
+    // else if (actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd') return;
+    // else if (actor.name === 'TagHt' || actor.name === 'TagMsg' || actor.name === 'TagMsg2' || actor.name === 'ReTag0') return;
+    // else if (actor.name === 'AttTag' || actor.name === 'AttTagB') return;
+    // else if (actor.name === 'VolTag' || actor.name === 'WindTag') return;
+    // // Misc. gameplay data
+    // else if (actor.name === 'HyoiKam') return;
+    // // Flags (only contains textures)
+    // else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
+    // // Collision
+    // else if (actor.name === 'Akabe') return;
     else
         console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
 }
