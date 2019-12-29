@@ -471,10 +471,8 @@ let kRelTable: { [relName: string]: ActorRelConstructor } = {
 
 export function requestArchiveForActor(renderer: WindWakerRenderer, actor: Actor): void {
     const relConstructor = kRelTable[actor.info.relName];
-    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined) {
-        console.log(actor.name, actor.info.relName, relConstructor.requestArchives);
+    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined)
         relConstructor.requestArchives(renderer, actor);
-    }
 }
 
 export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, worldModelMatrix: mat4, actor: PlacedActor): Promise<void> {

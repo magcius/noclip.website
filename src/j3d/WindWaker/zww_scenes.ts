@@ -1179,10 +1179,10 @@ class SceneDesc {
         const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
 
         const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
-        const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
-        const stageDzsHeaders = parseDZSHeaders(stageDzs);
-        const mult = stageDzsHeaders.get('MULT');
-        
+        const dzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
+        const dzsHeaders = parseDZSHeaders(dzs);
+        const mult = dzsHeaders.get('MULT');
+
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const relTable = this.createRelNameTable(symbolMap);
         const actorTable = this.createActorTable(symbolMap, relTable);
@@ -1199,13 +1199,15 @@ class SceneDesc {
 
         renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
         renderer.stage = this.stageDir;
-        
+
         const jpac: JPA.JPAC[] = [];
         for (let i = 0; i < particleArchives.length; i++) {
             const jpacData = modelCache.getFileData(particleArchives[i]);
             jpac.push(JPA.parse(jpacData));
         }
         renderer.effectSystem = new SimpleEffectSystem(device, jpac);
+
+        this.requestArchivesForActors(renderer, -1, dzs, actorTable);
 
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
@@ -1230,7 +1232,7 @@ class SceneDesc {
 
             const modelMatrix = mat4.create();
             if (mult !== undefined)
-                this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
+                this.getRoomMult(modelMatrix, dzs, mult, roomIdx);
 
             // Spawn the room.
             const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
@@ -1255,6 +1257,10 @@ class SceneDesc {
             const dzr = roomRarc.findFileData('dzr/room.dzr')!;
             this.spawnActors(renderer, roomRenderer, dzr, modelMatrix, actorTable);
         }
+
+        // HACK(jstpierre): We spawn stage actors on the first room renderer.
+        mat4.identity(scratchMatrix);
+        this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix, actorTable);
 
         // TODO(jstpierre): Not all the actors load in the requestArchives phase...
         await modelCache.waitForLoad();
@@ -1415,7 +1421,6 @@ class SceneDesc {
 
     private iterActorLayers(actorTable: ActorTable, roomIdx: number, buffer: ArrayBufferSlice, callback: (it: Actor) => void): void {
         const chunkHeaders = parseDZSHeaders(buffer);
-        console.log(chunkHeaders);
 
         function buildChunkLayerName(base: string, i: number): string {
             if (i === -1) {
