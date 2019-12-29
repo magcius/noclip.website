@@ -75,8 +75,9 @@ void main() {
                 v_LightColor += lightColor;
             } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
                 vec3 lightDir = normalize(light.direction.xyz);
-                float diffuse = clamp(dot(t_Normal, lightDir), 0.0, 1.0);
+                float diffuse = max(dot(t_Normal, lightDir), 0.0);
                 v_LightColor += diffuse * lightColor;
+                v_LightColor = min(v_LightColor, vec3(1.0));
             }
         }
     }
