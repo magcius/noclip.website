@@ -172,14 +172,16 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, beta: boolean, gl
         texdic.delete();
     }
 
-    function loadEnt(asset: Assets.EntAsset): Ent {
-        const models: ModelData[] = [];
+    function makeEntWithNoModels(asset: Assets.EntAsset): Ent {
+        return { asset, models: [] };
+    }
 
+    function loadEntModels(ent: Ent) {
         function recurseModelInfo(id: number) {
             let model = dataHolder.modelCache.getByID(id);
 
             if (model) {
-                models.push(model);
+                ent.models.push(model);
             } else {
                 const modelInfo = dataHolder.modelInfoCache.getByID(id);
 
@@ -187,19 +189,20 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, beta: boolean, gl
                     for (let i = 0; i < modelInfo.NumModelInst; i++) {
                         recurseModelInfo(modelInfo.modelInst[i].ModelID);
                     }
+                } else {
+                    console.log(`Can't find model/model info ID ${id}`);
                 }
             }
         }
 
-        recurseModelInfo(asset.modelInfoID);
-        return { asset, models };
+        recurseModelInfo(ent.asset.modelInfoID);
     }
 
     loadAssets({
         [AssetType.BUTN]: (a) => {
             const stream = new DataStream(a.data, true);
             const asset = Assets.readButtonAsset(stream, beta);
-            const ent = loadEnt(asset.ent);
+            const ent = makeEntWithNoModels(asset.ent);
 
             dataHolder.buttonCache.add({ ent, asset }, a.name, a.id, global);
         },
@@ -249,14 +252,14 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, beta: boolean, gl
         [AssetType.PLAT]: (a) => {
             const stream = new DataStream(a.data, true);
             const asset = Assets.readPlatformAsset(stream, beta);
-            const ent = loadEnt(asset.ent);
+            const ent = makeEntWithNoModels(asset.ent);
 
             dataHolder.platformCache.add({ ent, asset }, a.name, a.id, global);
         },
         [AssetType.PLYR]: (a) => {
             const stream = new DataStream(a.data, true);
             const asset = Assets.readPlayerAsset(stream, beta);
-            const ent = loadEnt(asset.ent);
+            const ent = makeEntWithNoModels(asset.ent);
             
             dataHolder.playerCache.add({ ent, asset }, a.name, a.id, global);
         },
@@ -266,18 +269,36 @@ async function loadHIP(dataFetcher: DataFetcher, path: string, beta: boolean, gl
         [AssetType.SIMP]: (a) => {
             const stream = new DataStream(a.data, true);
             const asset = Assets.readSimpleObjAsset(stream, beta);
-            const ent = loadEnt(asset.ent);
+            const ent = makeEntWithNoModels(asset.ent);
 
             dataHolder.simpleObjCache.add({ ent, asset }, a.name, a.id, global);
         },
         [AssetType.VIL]: (a) => {
             const stream = new DataStream(a.data, true);
             const asset = Assets.readNPCAsset(stream, beta);
-            const ent = loadEnt(asset.ent);
+            const ent = makeEntWithNoModels(asset.ent);
 
             dataHolder.npcCache.add({ ent, asset }, a.name, a.id, global);
         }
     });
+
+    // Ent models have to be loaded at the end because of Industrial Park's incorrect layer asset sorting
+    // method, which causes some MINF assets to be loaded *after* ent assets that reference them
+
+    for (const butn of dataHolder.buttonCache.data())
+        loadEntModels(butn.ent);
+    
+    for (const npc of dataHolder.npcCache.data())
+        loadEntModels(npc.ent);
+
+    for (const plat of dataHolder.platformCache.data())
+        loadEntModels(plat.ent);
+
+    for (const simp of dataHolder.simpleObjCache.data())
+        loadEntModels(simp.ent);
+
+    for (const plyr of dataHolder.playerCache.data())
+        loadEntModels(plyr.ent);
 }
 
 class BFBBSceneDesc implements Viewer.SceneDesc {
