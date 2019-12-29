@@ -264,37 +264,37 @@ class ATorch implements ActorRel {
     }
 
     public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
-        console.log('aaa');
         context.modelCache.fetchObjectData(`Ep`);
     }
 }
 
 class ATreasureChest implements ActorRel {
     constructor(context: WindWakerRenderer, actor: PlacedActor) {
-        // The treasure chest name does not matter, everything is in the parameters.
-        // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
-        fetchArchive(context.modelCache, 'Dalways.arc').then(rarc => {
-            const type = (actor.parameters >>> 20) & 0x0F;
-            if (type === 0) {
-                // Light Wood
-                const m = buildModel(context, rarc, `bdli/boxa.bdl`, actor);
-            } else if (type === 1) {
-                // Dark Wood
-                const m = buildModel(context, rarc, `bdli/boxb.bdl`, actor);
-            } else if (type === 2) {
-                // Metal
-                const m = buildModel(context, rarc, `bdli/boxc.bdl`, actor);
-                const b = parseBRK(rarc, 'brk/boxc.brk');
-                b.loopMode = LoopMode.ONCE;
-                m.bindTRK1(b);
-            } else if (type === 3) {
-                // Big Key
-                const m = buildModel(context, rarc, `bdli/boxd.bdl`, actor);
-            } else {
-                // Might be something else, not sure.
-                console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
-            }
-        })
+        const rarc = context.modelCache.getObjectData(`Dalways`);
+        const type = (actor.parameters >>> 20) & 0x0F;
+        if (type === 0) {
+            // Light Wood
+            const m = buildModel(context, rarc, `bdli/boxa.bdl`, actor);
+        } else if (type === 1) {
+            // Dark Wood
+            const m = buildModel(context, rarc, `bdli/boxb.bdl`, actor);
+        } else if (type === 2) {
+            // Metal
+            const m = buildModel(context, rarc, `bdli/boxc.bdl`, actor);
+            const b = parseBRK(rarc, 'brk/boxc.brk');
+            b.loopMode = LoopMode.ONCE;
+            m.bindTRK1(b);
+        } else if (type === 3) {
+            // Big Key
+            const m = buildModel(context, rarc, `bdli/boxd.bdl`, actor);
+        } else {
+            // Might be something else, not sure.
+            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+        }
+    }
+
+    public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
+        context.modelCache.fetchObjectData(`Dalways`);
     }
 }
 
@@ -471,9 +471,10 @@ let kRelTable: { [relName: string]: ActorRelConstructor } = {
 
 export function requestArchiveForActor(renderer: WindWakerRenderer, actor: Actor): void {
     const relConstructor = kRelTable[actor.info.relName];
-    console.log(actor.info.relName, relConstructor);
-    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined)
+    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined) {
+        console.log(actor.name, actor.info.relName, relConstructor.requestArchives);
         relConstructor.requestArchives(renderer, actor);
+    }
 }
 
 export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, worldModelMatrix: mat4, actor: PlacedActor): Promise<void> {

@@ -1415,6 +1415,7 @@ class SceneDesc {
 
     private iterActorLayers(actorTable: ActorTable, roomIdx: number, buffer: ArrayBufferSlice, callback: (it: Actor) => void): void {
         const chunkHeaders = parseDZSHeaders(buffer);
+        console.log(chunkHeaders);
 
         function buildChunkLayerName(base: string, i: number): string {
             if (i === -1) {
