@@ -28,7 +28,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/Unifo
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { Actor, ObjectRenderer, BMDObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType } from './Actors';
+import { Actor, ActorInfo, ObjectRenderer, BMDObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
@@ -38,13 +38,7 @@ import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 import { AGrass, FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { getTextDecoder } from '../../util';
 
-interface ActorEntry { 
-    relName: string, 
-    subtype: number, 
-    unknown1: number 
-};
-
-type ActorTable = { [name: string]: ActorEntry };
+type ActorTable = { [name: string]: ActorInfo };
 
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
@@ -1226,7 +1220,7 @@ class SceneDesc {
 
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;
-                this.spawnObjectsFromDZR(device, renderer, roomRenderer, dzr, modelMatrix);
+                this.spawnObjectsFromDZR(device, renderer, roomRenderer, dzr, modelMatrix, actorTable);
             }
 
             const jpac: JPA.JPAC[] = [];
@@ -2522,7 +2516,7 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} / ${roomRenderer.name} Layer ${layer} / ${hexzero(parameters, 8)}`);
     }
 
-    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layerIndex: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layerIndex: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4, actorTable: ActorTable): void {
         if (actrHeader === undefined)
             return;
 
@@ -2545,6 +2539,7 @@ class SceneDesc {
 
             const actor: Actor = {
                 name,
+                info: actorTable[name],
                 parameters,
                 roomIndex: roomRenderer.roomIdx,
                 layer: layerIndex,
@@ -2559,7 +2554,7 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsFromSCOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layer: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+    private spawnObjectsFromSCOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, layer: number, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4, actorTable: ActorTable): void {
         if (actrHeader === undefined)
             return;
 
@@ -2584,8 +2579,11 @@ class SceneDesc {
             const localModelMatrix = mat4.create();
             computeModelMatrixSRT(localModelMatrix, scaleX, scaleY, scaleZ, 0, rotY, 0, posX, posY, posZ);
 
+            const relName = actorTable[name].relName;
+
             const actor: Actor = {
                 name,
+                info: actorTable[name],
                 parameters,
                 roomIndex: roomRenderer.roomIdx,
                 layer,
@@ -2600,7 +2598,7 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsFromDZR(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
+    private spawnObjectsFromDZR(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
         function buildChunkLayerName(base: string, i: number): string {
@@ -2612,11 +2610,11 @@ class SceneDesc {
         }
 
         for (let i = -1; i < 16; i++) {
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('ACTR', i)), modelMatrix);
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGOB', i)), modelMatrix);
-            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TRES', i)), modelMatrix);
-            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('SCOB', i)), modelMatrix);
-            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGSC', i)), modelMatrix);
+            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('ACTR', i)), modelMatrix, actorTable);
+            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGOB', i)), modelMatrix, actorTable);
+            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TRES', i)), modelMatrix, actorTable);
+            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('SCOB', i)), modelMatrix, actorTable);
+            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, i, chunkHeaders.get(buildChunkLayerName('TGSC', i)), modelMatrix, actorTable);
         }
     }
 }

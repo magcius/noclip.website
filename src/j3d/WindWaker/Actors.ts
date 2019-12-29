@@ -15,8 +15,15 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { colorFromRGBA } from '../../Color';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 
+export interface ActorInfo { 
+    relName: string, 
+    subtype: number, 
+    unknown1: number 
+};
+
 export interface Actor {
     name: string;
+    info: ActorInfo; 
     parameters: number;
     roomIndex: number;
     layer: number;
