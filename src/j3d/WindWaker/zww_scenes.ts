@@ -28,7 +28,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/Unifo
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { Actor, ActorInfo, spawnObjectsForActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType } from './Actors';
+import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
@@ -1345,7 +1345,7 @@ class SceneDesc {
                 rotationY: rotY
             };
 
-            spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layerIndex, localModelMatrix, worldModelMatrix, actor);
+            loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
 
             actrTableIdx += 0x20;
         }
@@ -1389,7 +1389,7 @@ class SceneDesc {
                 rotationY: rotY,
             };
 
-            spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, layer, localModelMatrix, worldModelMatrix, actor);
+            loadActor(device, renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
 
             actrTableIdx += 0x24;
         }
