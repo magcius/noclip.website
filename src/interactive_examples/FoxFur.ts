@@ -455,6 +455,7 @@ export class SceneRenderer implements SceneGfx {
 
                 const obj = this.fur;
                 obj.magnitude = t;
+                return true;
             },
         });
 

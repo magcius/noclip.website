@@ -187,9 +187,13 @@ export class Viewer {
 
     public update(nt: number): void {
         const dt = nt - this.rafTime;
+        this.updateDT(dt);
+    }
+
+    public updateDT(dt: number): void {
         if (dt < 0)
             return;
-        this.rafTime = nt;
+        this.rafTime += dt;
 
         const camera = this.camera;
 

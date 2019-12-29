@@ -326,6 +326,9 @@ class Main {
     }
 
     private _updateLoop = (time: number) => {
+        if (this.paused)
+            return;
+
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
