@@ -759,7 +759,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public roomMatrix = mat4.create();
     public roomInverseMatrix = mat4.create();
-    public stage: string;
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
     
@@ -769,10 +768,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
+    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
+        const wantsSeaPlane = this.stage === 'sea';
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.renderCache);
 
@@ -965,7 +965,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return indirectPassRenderer;
     }
 
-    public destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
@@ -976,6 +976,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.skyEnvironment.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
+        this.flowerPacket.destroy(device);
+        this.treePacket.destroy(device);
+        this.grassPacket.destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
     }
@@ -1189,7 +1192,7 @@ class SceneDesc {
 
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;
-        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, isSea, stageRarc);
+        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, this.stageDir, stageRarc);
         context.destroyablePool.push(renderer);
 
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;

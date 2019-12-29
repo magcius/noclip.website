@@ -463,6 +463,10 @@ export class FlowerPacket {
         }
         renderInstManager.popTemplateRenderInst();
     }
+
+    public destroy(device: GfxDevice): void {
+        this.flowerModel.destroy(device);
+    }
 }
 
 
@@ -824,6 +828,10 @@ export class TreePacket {
         }
         renderInstManager.popTemplateRenderInst();
     }
+
+    public destroy(device: GfxDevice): void {
+        this.treeModel.destroy(device);
+    }
 }
 
 // ---------------------------------------------
@@ -856,7 +864,6 @@ class GrassModel {
     public grassMaterial: GXMaterialHelperGfx;
 
     public shapeMain: GXShapeHelperGfx;
-    public shapeTop: GXShapeHelperGfx;
     public shapeShadow: GXShapeHelperGfx;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
@@ -886,17 +893,17 @@ class GrassModel {
         // Grass material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_matDL'));
         const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
         this.grassTextureData = new BTIData(device, cache, grassTexture);
         this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
 
-        // Tree Vert Format
+        // Grass Vert Format
         const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList$4529);
         const vcd = parseGxVtxDescList(l_vtxDescList);
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
-        // Tree Verts
+        // Grass Verts
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
         vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
@@ -914,7 +921,6 @@ class GrassModel {
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeMain.destroy(device);
-        this.shapeTop.destroy(device);
 
         this.grassTextureData.destroy(device);
     }
@@ -930,12 +936,11 @@ export class GrassPacket {
     constructor(private context: WindWakerRenderer) {
         this.model = new GrassModel(context.device, context.symbolMap, context.renderCache);
 
-        if (this.context.stage === 'kin' || this.context.stage === "Xboss1") {
+        if (this.context.stage.startsWith(`kin`) || this.context.stage === `Xboss1`) {
             // @TODO: Use VMori
         }
 
         // Random starting rotation for each idle anim
-        const dr = 2.0 * Math.PI / 8.0;
         for (let i = 0; i < 8; i++) {
             this.anims[i] = {
                 active: true,
@@ -1048,5 +1053,9 @@ export class GrassPacket {
             }
         }
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.model.destroy(device);
     }
 }

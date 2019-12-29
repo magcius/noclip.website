@@ -185,10 +185,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
 
-function fetchArchive(modelCache: ModelCache, objArcName: string): Promise<RARC.RARC> {
-    return modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
-}
-
 function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, layer: number): BMDObjectRenderer {
     const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
     const modelInstance = new J3DModelInstanceSimple(model);
@@ -463,7 +459,7 @@ interface ActorRelConstructor {
     requestArchives?(context: WindWakerRenderer, actor: Actor): void;
 }
 
-let kRelTable: { [relName: string]: ActorRelConstructor } = {
+const kRelTable: { [relName: string]: ActorRelConstructor } = {
     'd_a_grass': AGrass,
     'd_a_ep': ATorch,
     'd_a_tbox': ATreasureChest,
