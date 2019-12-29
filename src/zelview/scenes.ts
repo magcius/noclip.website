@@ -81,7 +81,7 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
                             rspOutput: headers.mesh.opaque[i],
                         }
                         const meshData = new MeshData(device, cache, mesh);
-                        const meshRenderer = new RootMeshRenderer(meshData);
+                        const meshRenderer = new RootMeshRenderer(device, cache, meshData);
                         renderer.meshRenderers.push(meshRenderer);
                     }
                 }

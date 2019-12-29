@@ -293,23 +293,34 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
     return buf;
 }
 
+function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
+    device.setResourceName(gfxTexture, texture.name);
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
+    device.submitPass(hostAccessPass);
+    return gfxTexture;
+}
+
+function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
+    return cache.createSampler(device, {
+        wrapS: translateCM(texture.tile.cmS),
+        wrapT: translateCM(texture.tile.cmT),
+        minFilter: GfxTexFilterMode.POINT,
+        magFilter: GfxTexFilterMode.POINT,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0, maxLOD: 0,
+    });
+}
+
 export class RenderData {
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
-    public textures: GfxTexture[] = [];
-    public samplers: GfxSampler[] = [];
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
-        const textures = sharedOutput.textureCache.textures;
-        for (let i = 0; i < textures.length; i++) {
-            const tex = textures[i];
-            this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, cache, tex));
-        }
-
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
         if (dynamic) {
             // there are vertex effects, so the vertex buffer data will change
@@ -347,29 +358,7 @@ export class RenderData {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
-    private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-        return gfxTexture;
-    }
-
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-        return cache.createSampler(device, {
-            wrapS: translateCM(texture.tile.cms),
-            wrapT: translateCM(texture.tile.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
-    }
-
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.textures.length; i++)
-            device.destroyTexture(this.textures[i]);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
@@ -405,13 +394,19 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(geometryData: RenderData, private drawMatrix: mat4[], private drawCall: DrawCall) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, geometryData: RenderData, private drawMatrix: mat4[], private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
-            if (i < this.drawCall.textureIndices.length) {
-                const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = geometryData.sharedOutput.textureCache.textures[idx];
-                this.textureMappings[i].gfxTexture = geometryData.textures[idx];
-                this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
+            // if (i < this.drawCall.textureIndices.length) {
+            //     const idx = this.drawCall.textureIndices[i];
+            //     this.textureEntry[i] = geometryData.sharedOutput.textureCache.textures[idx];
+            //     this.textureMappings[i].gfxTexture = geometryData.textures[idx];
+            //     this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
+            // }
+            const tex = drawCall.textures[i];
+            if (tex) {
+                this.textureEntry[i] = tex;
+                this.textureMappings[i].gfxTexture = translateTexture(device, tex);
+                this.textureMappings[i].gfxSampler = translateSampler(device, cache, tex);
             }
         }
 
@@ -423,7 +418,7 @@ class DrawCallInstance {
     private createProgram(): void {
         const program = new F3DZEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
 
-        if (this.texturesEnabled && this.drawCall.textureIndices.length)
+        if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
 
         // FIXME: For some reason, SHADE flag is off when it should be on
@@ -596,7 +591,7 @@ export class RootMeshRenderer {
     public objectFlags = 0;
     private rootNodeRenderer: MeshRenderer;
 
-    constructor(private geometryData: MeshData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private geometryData: MeshData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -607,16 +602,16 @@ export class RootMeshRenderer {
         const geo = this.geometryData.mesh;
 
         // Traverse the node tree.
-        this.rootNodeRenderer = this.buildGeoNodeRenderer(geo);
+        this.rootNodeRenderer = this.buildGeoNodeRenderer(device, cache, geo);
     }
 
-    private buildGeoNodeRenderer(node: Mesh): MeshRenderer {
+    private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Mesh): MeshRenderer {
         const geoNodeRenderer = new MeshRenderer();
 
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawMatrix = [mat4.create()];
-                const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, drawMatrix, node.rspOutput.drawCalls[i]);
+                const drawCallInstance = new DrawCallInstance(device, cache, this.geometryData.renderData, drawMatrix, node.rspOutput.drawCalls[i]);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
