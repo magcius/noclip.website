@@ -2311,7 +2311,75 @@ class SceneDesc {
         else if (name === 'kani') fetchArchive(`Kn.arc`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
         else if (name === 'NpcSo') fetchArchive(`So.arc`).then((rarc) => buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`)));
         // Enemies
+        // Phantom Ganon
         else if (name === 'Fganon') fetchArchive(`Fganon.arc`).then((rarc) => buildModel(rarc, `bdlm/bpg.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
+        // Gohma
+        else if (name === 'Btd') fetchArchive(`btd.arc`).then((rarc) => {
+            const m = buildModel(rarc, `bmdm/btd.bmd`);
+            m.bindANK1(parseBCK(rarc, `bck/btd_pose.bck`));
+            m.bindTRK1(parseBRK(rarc, `brk/btd.brk`));
+            m.bindTTK1(parseBTK(rarc, `btk/btd.btk`));
+        });
+        // Kalle Demos
+        else if (name === 'Bkm') fetchArchive(`Bmd.arc`).then((rarc) => {
+            buildModel(rarc, `bmdm/bkm.bmd`).bindANK1(parseBCK(rarc, `bck/hiraku_wait.bck`))
+            buildModel(rarc, `bmdm/bkm_coa.bmd`).bindANK1(parseBCK(rarc, `bck/coa_wait.bck`))
+        });
+        // Gohdan
+        else if (name === 'Bst') fetchArchive(`Bst.arc`).then((rarc) => {
+            const type = (parameters & 0x000000FF);
+            switch (type) {
+            case 0:
+                // Head
+                buildModel(rarc, `bdlm/bst.bdl`).bindTTK1(parseBTK(rarc, `btk/bst.btk`))
+            break;
+            case 1:
+                // Left hand
+                buildModel(rarc, `bdlm/lhand.bdl`).bindTTK1(parseBTK(rarc, `btk/lhand.btk`))
+                break;
+            case 2:
+                // Right hand
+                buildModel(rarc, `bdlm/rhand.bdl`).bindTTK1(parseBTK(rarc, `btk/rhand.btk`))
+                break;
+            }
+        });
+        // Jalhalla
+        else if (name === 'big_pow') fetchArchive(`Bpw.arc`).then((rarc) => {
+            const mainModel = buildModel(rarc, `bdlm/bpw.bdl`);
+            mainModel.bindANK1(parseBCK(rarc, `bck/wait1.bck`))
+            mat4.translate(mainModel.modelMatrix, mainModel.modelMatrix, [0, 400, 0]); // Bump him up a bit so he's not halfway inside the floor
+            const lanternModel = buildChildModel(rarc, `bdlm/bpw_kan1.bdl`);
+            lanternModel.setParentJoint(mainModel, `j_bpw_item`);
+            mat4.rotateZ(lanternModel.modelMatrix, lanternModel.modelMatrix, Math.PI);
+            // TODO: add flame particle emitter to lantern
+        });
+        // Molgera
+        else if (name === 'Bwd') fetchArchive(`Bwd.arc`).then((rarc) => {
+            const mainModel = buildModel(rarc, `bdlm/bwd.bdl`);
+            mainModel.bindTRK1(parseBRK(rarc, `brk/bwd.brk`), animFrame(0));
+
+            // Add the parts of Molgera's tail. It's procedurally animated ingame, but for now just give it a static pose.
+            let lastModel = mainModel;
+            for (let i = 0; i < 20; i++) {
+                let tailModel;
+                if (i == 19) {
+                    tailModel = buildChildModel(rarc, `bdlm/bwd_shippob.bdl`);
+                    tailModel.bindTRK1(parseBRK(rarc, `brk/bwd_shippob.brk`), animFrame(0));
+                } else {
+                    tailModel = buildChildModel(rarc, `bdlm/bwd_shippoa.bdl`);
+                    tailModel.bindTRK1(parseBRK(rarc, `brk/bwd_shippoa.brk`), animFrame(0));
+                }
+                if (i == 0) {
+                    tailModel.setParentJoint(lastModel, `hara`);
+                    mat4.rotateY(tailModel.modelMatrix, tailModel.modelMatrix, Math.PI * 1.5);
+                } else {
+                    tailModel.setParentJoint(lastModel, `bwd`);
+                }
+                mat4.rotateX(tailModel.modelMatrix, tailModel.modelMatrix, -Math.PI / 40);
+                mat4.translate(tailModel.modelMatrix, tailModel.modelMatrix, [0, 0, -200]);
+                lastModel = tailModel;
+            }
+        });
         else if (name === 'keeth') fetchArchive(`Ki.arc`).then((rarc) => buildModel(rarc, `bdlm/ki.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'Fkeeth') fetchArchive(`Ki.arc`).then((rarc) => buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'Puti') fetchArchive(`Pt.arc`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
