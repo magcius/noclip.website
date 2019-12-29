@@ -38,6 +38,14 @@ import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 import { AGrass, FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { getTextDecoder } from '../../util';
 
+interface ActorEntry { 
+    relName: string, 
+    subtype: number, 
+    unknown1: number 
+};
+
+type ActorTable = { [name: string]: ActorEntry };
+
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
     return v < 0.5 ? a : 1.0 - a;
@@ -1293,9 +1301,9 @@ class SceneDesc {
         // The object table consists of null-terminated ASCII strings of length 12.
         // @NOTE: None are longer than 7 characters
         const kNameLength = 12;
-        const objectCount = data.byteLength / kNameLength;
-        const objectTable = {} as { [name: string]: { relName: string, subtype: number, unknown1: number } };
-        for (let i = 0; i < objectCount; i++) {
+        const actorCount = data.byteLength / kNameLength;
+        const actorTable = {} as ActorTable;
+        for (let i = 0; i < actorCount; i++) {
             const offset = i * kNameLength;
             const end = bytes.indexOf(0, offset); 
             const name = textDecoder.decode(bytes.subarray(offset, end));
@@ -1305,10 +1313,10 @@ class SceneDesc {
 
             const relName = relTable[id];
 
-            objectTable[name] = { relName, subtype, unknown1 };
+            actorTable[name] = { relName, subtype, unknown1 };
         }
 
-        return objectTable;
+        return actorTable;
     }
 
     private async spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, layer: number, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
