@@ -39,13 +39,6 @@ export interface Actor {
     roomRenderer: WindWakerRoomRenderer;
 };
 
-// The REL table maps .rel names to our implementations
-interface ActorRel {
-    // @TODO: Most actors have draw and update functions
-}
-type ActorConstructor = { new (context: WindWakerRenderer, actor: Actor): ActorRel };
-let kRelTable: { [relName: string]: ActorConstructor };
-
 // Special-case actors
 
 export const enum LightTevColorType {
@@ -454,19 +447,31 @@ class AGrass implements ActorRel {
     }
 }
 
+// The REL table maps .rel names to our implementations
+// @NOTE: Let's just keep this down here for now, for navigability
+interface ActorRel {
+    // @TODO: Most actors have draw and update functions
+}
+type ActorConstructor = { new (context: WindWakerRenderer, actor: Actor): ActorRel };
+let kRelTable: { [relName: string]: ActorConstructor } = {
+    'd_a_grass': AGrass,
+    'd_a_ep': ATorch,
+    'd_a_tbox': ATreasureChest,
+}
+
 export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor): Promise<void> {
-    // Let's just keep this here for now, for readability
-    kRelTable = {
-        'd_a_grass': AGrass,
-        'd_a_ep': ATorch,
-        'd_a_tbox': ATreasureChest,
-    }
-    
     // Attempt to find an implementation of this Actor in our table
     const relConstructor = kRelTable[actor.info.relName];
     if (relConstructor) {
         const actorObj = new relConstructor(renderer, actor);
         return;
+    }
+    
+    // Otherwise attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
+    else {
+        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
+        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
     }
 
     // Doors: TODO(jstpierre)
@@ -508,12 +513,6 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     // else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
     // // Collision
     // else if (actor.name === 'Akabe') return;
-    else {
-        // Attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
-        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
-        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
-        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
-    }
 }
 
 
