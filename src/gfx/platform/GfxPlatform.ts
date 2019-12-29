@@ -179,6 +179,7 @@ export const enum GfxColorWriteMask {
     RED   = 0x01,
     GREEN = 0x02,
     BLUE  = 0x04,
+    COLOR = 0x07,
     ALPHA = 0x08,
     ALL   = 0x0F,
 }
