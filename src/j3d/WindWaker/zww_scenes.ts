@@ -1172,7 +1172,7 @@ class SceneDesc {
             const mult = stageDzsHeaders.get('MULT');
             
             const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-            const actorTable = this.createActorNameTable(symbolMap);
+            const actorTable = this.createActorTable(symbolMap);
             const relTable = this.createRelNameTable(symbolMap);
 
             const isSea = this.stageDir === 'sea';
@@ -1255,7 +1255,7 @@ class SceneDesc {
         }
     }
 
-    private createActorNameTable(symbolMap: SymbolMap) {
+    private createActorTable(symbolMap: SymbolMap) {
         const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
         const data = entry.Data;
         const bytes = data.createTypedArray(Uint8Array);
@@ -1266,7 +1266,6 @@ class SceneDesc {
         // @NOTE: None are longer than 7 characters
         const kNameLength = 12;
         const objectCount = data.byteLength / kNameLength;
-        const objectNames = [];
         const objectTable = {} as { [name: string]: { type: number, subtype: number, unknown1: number } };
         for (let i = 0; i < objectCount; i++) {
             const offset = i * kNameLength;
@@ -1275,11 +1274,10 @@ class SceneDesc {
             const type = dataView.getUint16(offset + 8, false);
             const subtype = bytes[offset + 10];
             const unknown1 = bytes[offset + 11];
-            objectNames[i] = name;
             objectTable[name] = { type, subtype, unknown1 };
         }
 
-        return objectNames;
+        return objectTable;
     }
 
     private createRelNameTable(symbolMap: SymbolMap) {
