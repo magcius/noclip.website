@@ -1313,11 +1313,7 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
         // TODO(jstpierre): Scale, Rotation
         return emitter;
     }
-
-    // Attempt to load this actor generically
-    const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
-    if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
-
+    
     // Generic Torch
     if (actor.name === 'bonbori') {
         const rarc = await fetchArchive(`Ep.arc`);
@@ -1427,6 +1423,10 @@ export async function loadActor(device: GfxDevice, renderer: WindWakerRenderer, 
     // else if (actor.name === 'MtFlag' || actor.name === 'SieFlag' || actor.name === 'Gflag' || actor.name === 'MjFlag') return;
     // // Collision
     // else if (actor.name === 'Akabe') return;
-    else
-        console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+    else {
+        // Attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
+        const loaded = loadGenericActor(renderer, roomRenderer, localModelMatrix, worldModelMatrix, actor);
+        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
+        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+    }
 }
