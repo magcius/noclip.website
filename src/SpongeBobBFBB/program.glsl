@@ -130,7 +130,7 @@ void main() {
 
 #ifdef SKY
     gl_FragDepth = float(SKY_DEPTH);
-#endif 
+#endif
 
     gl_FragColor = t_Color;
     

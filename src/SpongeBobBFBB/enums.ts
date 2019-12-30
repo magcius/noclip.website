@@ -1,4 +1,141 @@
 
+export const enum AssetType {
+    ALST = 0x414C5354, // Anim List
+    ANIM = 0x414E494D, // Anim
+    ATBL = 0x4154424C, // Anim Table
+    BOUL = 0x424F554C, // Boulder
+    BUTN = 0x4255544E, // Button
+    CAM  = 0x43414D20, // Camera
+    CNTR = 0x434E5452, // Counter
+    COLL = 0x434F4C4C, // Collision Table
+    COND = 0x434F4E44, // Conditional
+    CRDT = 0x43524454, // Credits
+    CSN  = 0x43534E20, // Cutscene
+    CSNM = 0x43534E4D, // Cutscene Mgr
+    CTOC = 0x43544F43, // Cutscene TOC
+    DPAT = 0x44504154, // Dispatcher
+    DSCO = 0x4453434F, // Disco Floor
+    DSTR = 0x44535452, // Destructible Object
+    DYNA = 0x44594E41, // Dynamic
+    EGEN = 0x4547454E, // Electric Arc Generator
+    ENV  = 0x454E5620, // Environment
+    FLY  = 0x464C5920, // Flythrough
+    FOG  = 0x464F4720, // Fog
+    GRUP = 0x47525550, // Group
+    JAW  = 0x4A415720, // Jaw Data
+    JSP  = 0x4A535020, // JSP
+    LKIT = 0x4C4B4954, // Light Kit
+    LODT = 0x4C4F4454, // LOD Table
+    MAPR = 0x4D415052, // Surface Mapper
+    MINF = 0x4D494E46, // Model Info
+    MODL = 0x4D4F444C, // Model
+    MRKR = 0x4D524B52, // Marker
+    MVPT = 0x4D565054, // Move Point
+    PARE = 0x50415245, // Particle Emitter
+    PARP = 0x50415250, // Particle Emitter Props
+    PARS = 0x50415253, // Particle System
+    PICK = 0x5049434B, // Pickup Table
+    PIPT = 0x50495054, // Pipe Info Table
+    PKUP = 0x504B5550, // Pickup
+    PLAT = 0x504C4154, // Platform
+    PLYR = 0x504C5952, // Player
+    PORT = 0x504F5254, // Portal
+    RAW  = 0x52415720, // Raw
+    RWTX = 0x52575458, // RenderWare Texture
+    SFX  = 0x53465820, // SFX
+    SHDW = 0x53484457, // Simple Shadow Table
+    SHRP = 0x53485250, // Shrapnel
+    SIMP = 0x53494D50, // Simple Object
+    SND  = 0x534E4420, // Sound
+    SNDI = 0x534E4449, // Sound Info
+    SNDS = 0x534E4453, // Streaming Sound
+    SURF = 0x53555246, // Surface
+    TEXT = 0x54455854, // Text
+    TIMR = 0x54494D52, // Timer
+    TRIG = 0x54524947, // Trigger
+    UI   = 0x55492020, // UI
+    UIFT = 0x55494654, // UI Font
+    VIL  = 0x56494C20, // Villain
+    VILP = 0x56494C50  // Villain Props
+}
+
+export const enum BaseType
+{
+	Unknown,
+	Trigger,
+	Villain,
+	Player,
+	Pickup,
+	Env,
+	Platform,
+	Camera,
+	Door,
+	SavePoint,
+	Item,
+	Static,
+	Dynamic,
+	MovePoint,
+	Timer,
+	Bubble,
+	Portal,
+	Group,
+	Pendulum,
+	SFX,
+	FFX,
+	VFX,
+	Counter,
+	Hangable,
+	Button,
+	Projectile,
+	Surface,
+	DestructObj,
+	Gust,
+	Volume,
+	Dispatcher,
+	Cond,
+	UI,
+	UIFont,
+	ProjectileType,
+	LobMaster,
+	Fog,
+	Light,
+	ParticleEmitter,
+	ParticleSystem,
+	CutsceneMgr,
+	EGenerator,
+	Script,
+	NPC,
+	Hud,
+	NPCProps,
+	ParticleEmitterProps,
+	Boulder,
+	CruiseBubble,
+	TeleportBox,
+	BusStop,
+	TextBox,
+	TalkBox,
+	TaskBox,
+	BoulderGenerator,
+	NPCSettings,
+	DiscoFloor,
+	Taxi,
+	HUD_model,
+	HUD_font_meter,
+	HUD_unit_meter,
+	BungeeHook,
+	CameraFly,
+	TrackPhysics,
+	ZipLine,
+	Arena,
+	Duplicator,
+	LaserBeam,
+	Turret,
+	CameraTweak,
+	SlideProps,
+	HUD_text,
+	Count
+};
+
 export const enum EventID
 {
 	Unknown,

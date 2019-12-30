@@ -1,9 +1,24 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { vec3, quat, mat4 } from 'gl-matrix';
+import { vec3, quat, mat4, mat3 } from 'gl-matrix';
 import { align } from '../util';
 import * as rw from 'librw';
 import { Color, colorNew } from '../Color';
+import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
+import { AABB } from '../Geometry';
+import { clamp } from '../MathHelpers';
+
+export function stringHash(str: string): number {
+    let hash = 0;
+    
+    for (let i = 0; i < str.length; i++) {
+        let ch = str.charCodeAt(i);
+        ch -= ch & (ch >>> 1) & 0x20; // quick and dirty lowercase
+        hash = ch + hash * 131;
+    }
+
+    return hash;
+}
 
 // based on RotationYawPitchRoll() from SharpDX
 // https://github.com/sharpdx/SharpDX/blob/master/Source/SharpDX.Mathematics/Quaternion.cs
@@ -23,6 +38,20 @@ export function quatFromYPR(out: quat, ypr: vec3) {
     out[1] = (sinYaw * cosPitch * cosRoll) - (cosYaw * sinPitch * sinRoll);
     out[2] = (cosYaw * cosPitch * sinRoll) - (sinYaw * sinPitch * cosRoll);
     out[3] = (cosYaw * cosPitch * cosRoll) + (sinYaw * sinPitch * sinRoll);
+}
+
+const scratchVec3 = vec3.create();
+
+export function aabbClosestPoint(out: vec3, aabb: AABB, v: vec3) {
+    out[0] = clamp(v[0], aabb.minX, aabb.maxX);
+    out[1] = clamp(v[1], aabb.minY, aabb.maxY);
+    out[2] = clamp(v[2], aabb.minZ, aabb.maxZ);
+}
+
+export function computeViewSpaceDepthFromWorldSpaceAABBClosestPoint(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
+    mat4.getTranslation(v, camera.worldMatrix);
+    aabbClosestPoint(v, aabb, v);
+    return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
 }
 
 const scratchQuat = quat.create();
@@ -166,16 +195,15 @@ export class DataCacheIDName<T> {
     private nameToLockMap = new Map<string, boolean>();
     private idToLockMap = new Map<number, boolean>();
 
-    private dataCount = 0;
-
-    public get count() { return this.dataCount; }
+    public get count() { return this.idToDataMap.size; }
 
     public add(data: T, name: string, id: number, lock: boolean = false) {
-        this.nameToDataMap.set(name, data);
-        this.idToDataMap.set(id, data);
-        this.nameToLockMap.set(name, lock);
-        this.idToLockMap.set(id, lock);
-        this.dataCount++;
+        if (!this.idToLockMap.get(id)) {
+            this.nameToDataMap.set(name, data);
+            this.idToDataMap.set(id, data);
+            this.nameToLockMap.set(name, lock);
+            this.idToLockMap.set(id, lock);
+        }
     }
 
     public getByName(name: string) {
