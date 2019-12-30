@@ -1370,6 +1370,8 @@ class SceneDesc {
                 name,
                 info: actorTable[name],
                 parameters,
+                auxParams1,
+                auxParams2,
                 roomIndex: roomIdx,
                 layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
