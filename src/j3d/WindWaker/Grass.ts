@@ -204,13 +204,9 @@ class FlowerModel {
         this.bessouTextureData = new BTIData(device, cache, bessouTexture);
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping);
 
-        // @TODO: These two symbols are being extracted as all 0. Need to investigate
-        const l_colorData = new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xB2, 0xB2, 0xB2, 0xFF]);
-        const l_color3Data = new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0xFF]);
-
         // White
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
-        const l_color = new ArrayBufferSlice(l_colorData.buffer);
+        const l_color = findSymbol(symbolMap, `d_flower.o`, `l_color`);
         const l_texCoord = findSymbol(symbolMap, `d_flower.o`, `l_texCoord`);
 
         // Pink
@@ -220,7 +216,7 @@ class FlowerModel {
 
         // Bessou
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
-        const l_color3 = new ArrayBufferSlice(l_color3Data.buffer);
+        const l_color3 = findSymbol(symbolMap, `d_flower.o`, `l_color3`);
         const l_texCoord3 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord3`);
 
         const l_Ohana_highDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_highDL`);

@@ -1175,7 +1175,7 @@ class SceneDesc {
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
         }
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 2);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 3);
 
         await modelCache.waitForLoad();
 
