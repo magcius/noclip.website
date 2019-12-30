@@ -13,7 +13,7 @@ import * as UI from '../../ui';
 
 import * as DZB from './DZB';
 import * as JPA from '../../Common/JSYSTEM/JPA';
-import { BMD, BTK, BRK, BCK } from '../../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BTK, BRK, BCK, BTP } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelInstanceSimple, J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
@@ -1361,15 +1361,17 @@ class SceneDesc {
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            // const auxParam = view.getInt16(actrTableIdx + 0x18);
+            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            const flag = view.getUint16(actrTableIdx + 0x1C);
+            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
             const enemyNum = view.getUint16(actrTableIdx + 0x1E);
 
             const actor: Actor = {
                 name,
                 info: actorTable[name],
                 parameters,
+                auxParams1,
+                auxParams2,
                 roomIndex: roomIdx,
                 layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
@@ -1396,9 +1398,9 @@ class SceneDesc {
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            // const auxParam = view.getInt16(actrTableIdx + 0x18);
+            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            // const unk1 = view.getInt16(actrTableIdx + 0x1C);
+            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
             // const unk2 = view.getInt16(actrTableIdx + 0x1E);
             const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
             const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
@@ -1409,6 +1411,8 @@ class SceneDesc {
                 name,
                 info: actorTable[name],
                 parameters,
+                auxParams1,
+                auxParams2,
                 roomIndex: roomIdx,
                 layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
@@ -1439,6 +1443,7 @@ class SceneDesc {
             this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
             this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
             this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
         }        
     }
 
