@@ -1596,7 +1596,20 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         mat4.translate(holeModel.modelMatrix, holeModel.modelMatrix, [0, 0.1, 0]);
     });
     else if (actor.name === 'magtail') fetchArchive(`Mt.arc`).then((rarc) => buildModel(rarc, `bdlm/mg_head.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actor.name === 'bable') fetchArchive(`Bl.arc`).then((rarc) => buildModel(rarc, `bdlm/bl.bdl`));
+    // Red and Blue Bubbles
+    else if (name === 'bable') fetchArchive(`Bl.arc`).then((rarc) => {
+        const m = buildModel(rarc, `bdlm/bl.bdl`);
+
+        const bubbleType = (actor.parameters & 0x000000FF);
+        
+        if (bubbleType == 0x80) {
+            m.bindTTK1(parseBTK(rarc, 'btk/off.btk'));
+        } else {
+            m.bindANK1(parseBCK(rarc, 'bck/fly.bck'));
+
+            // TODO: particles (0x8124 for red, 0x8123 for blue)
+        }
+    });
     else if (actor.name === 'nezumi') fetchArchive(`Nz.arc`).then((rarc) => buildModel(rarc, `bdlm/nz.bdl`));
     else if (actor.name === 'moZOU') fetchArchive(`Mozo.arc`).then((rarc) => buildModel(rarc, `bdlm/moz.bdl`));
     else if (actor.name === 'MtoriSU') fetchArchive(`MtoriSU.arc`).then((rarc) => buildModel(rarc, `bdl/mtorisu.bdl`));
@@ -1689,10 +1702,29 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         // Set a fake bbox for the main invisible skeleton model so it doesn't get culled when the camera isn't right on top of it.
         skeletonModel.modelInstance.modelData.bbox = new AABB(-80, -80, -80, 80, 80, 80);
     });
-    else if (actor.name === 'p_hat') fetchArchive(`Ph.arc`).then((rarc) => {
-        buildModel(rarc, `bdlm/phb.bdl`).bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
-        buildModel(rarc, `bdlm/php.bdl`).bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
-    });
+    // Peahats and Seahats
+    else if (actor.name === 'p_hat') {
+        const type = (actor.parameters & 0x000000FF);
+        if (type == 1) {
+            fetchArchive(`Sh.arc`).then((rarc) => {
+                const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
+                mainModel.bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
+                mat4.scale(mainModel.modelMatrix, mainModel.modelMatrix, [9, 9, 9]);
+                const propellerModel = buildModel(rarc, `bmdm/shp.bmd`);
+                propellerModel.bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
+                mat4.scale(propellerModel.modelMatrix, propellerModel.modelMatrix, [9, 9, 9]);
+                mat4.translate(propellerModel.modelMatrix, propellerModel.modelMatrix, [0, 50, 0]); // Estimated Y offset
+            });
+        } else {
+            fetchArchive(`Ph.arc`).then((rarc) => {
+                const mainModel = buildModel(rarc, `bdlm/phb.bdl`);
+                mainModel.bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
+                const propellerModel = buildModel(rarc, `bdlm/php.bdl`);
+                propellerModel.bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
+                mat4.translate(propellerModel.modelMatrix, propellerModel.modelMatrix, [0, 50, 0]); // Estimated Y offset
+            });
+        }
+    }
     else if (actor.name === 'bbaba') fetchArchive(`Bo.arc`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bo_sita1.bdl`);
         // TODO(jstpierre): animation?
