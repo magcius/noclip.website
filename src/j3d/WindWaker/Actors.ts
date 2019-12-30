@@ -568,11 +568,11 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         return objectRenderer;
     }
 
-    // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping
+    // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
     // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
 
     if (actor.name === 'item') {
-        // Item table provided with the help of the incredible LugoLunatic <3.
+        // Item table provided with the help of the incredible LagoLunatic <3.
         const itemId = (actor.parameters & 0x000000FF);
 
         // Heart
