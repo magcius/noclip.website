@@ -430,13 +430,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
-        if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.enable(gl.DEPTH_TEST);
-        else if (newMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.disable(gl.DEPTH_TEST);
-
-        if (newMegaState.depthCompare !== GfxCompareMode.ALWAYS)
-            gl.depthFunc(newMegaState.depthCompare);
+        gl.depthFunc(newMegaState.depthCompare);
         currentMegaState.depthCompare = newMegaState.depthCompare;
     }
 
@@ -617,7 +611,12 @@ void main() {
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
+        // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+        this._currentMegaState.depthWrite = false;
+
+        // We always have depth test enabled.
+        gl.enable(gl.DEPTH_TEST);
 
         this._checkForBugQuirks();
 

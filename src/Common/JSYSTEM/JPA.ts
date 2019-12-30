@@ -2711,7 +2711,7 @@ export class JPABaseParticle {
             vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
         vec3.set(this.fieldVel, 0, 0, 0);
-        vec3.add(this.baseVel, this.baseVel, this.accel);
+        vec3.scaleAndAdd(this.baseVel, this.baseVel, this.accel, workData.deltaTime);
 
         if (!(this.flags & 0x40))
             this.calcField(workData);
@@ -3732,12 +3732,12 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const disTime = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x4A));
 
             let fadeInRate = 1;
-            if (fadeIn > 0)
-                fadeInRate = 1 / fadeIn;
+            if (fadeIn > enTime)
+                fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > 0)
-                fadeOutRate = 1 / fadeOut;
+            if (fadeOut > disTime)
+                fadeOutRate = 1 / (disTime - fadeOut);
 
             let refDistanceSq = -1;
             let innerSpeed = -1;
@@ -4173,12 +4173,12 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const cycle = view.getUint8(dataBegin + 0x44);
 
             let fadeInRate = 1;
-            if (fadeIn > 0)
-                fadeInRate = 1 / fadeIn;
+            if (fadeIn > enTime)
+                fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > 0)
-                fadeOutRate = 1 / fadeOut;
+            if (fadeOut > disTime)
+                fadeOutRate = 1 / (disTime - fadeOut);
 
             let refDistanceSq = -1;
             let innerSpeed = -1;
@@ -4628,12 +4628,12 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const cycle = view.getUint8(tableIdx + 0x40);
 
             let fadeInRate = 1;
-            if (fadeIn > 0)
-                fadeInRate = 1 / fadeIn;
+            if (fadeIn > enTime)
+                fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > 0)
-                fadeOutRate = 1 / fadeOut;
+            if (fadeOut > disTime)
+                fadeOutRate = 1 / (disTime - fadeOut);
 
             // All of our parameters.
             let mag = 0;

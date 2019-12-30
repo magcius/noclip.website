@@ -47,6 +47,7 @@ import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
+import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -110,6 +111,8 @@ const sceneGroups = [
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
+    "Xbox",
+    Scenes_SpongeBobBFBB.sceneGroup,
     "Experimental",
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
@@ -323,6 +326,9 @@ class Main {
     }
 
     private _updateLoop = (time: number) => {
+        if (this.paused)
+            return;
+
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();

@@ -13,7 +13,7 @@ import { TextureMapping } from '../../../TextureHolder';
 import AnimationController from '../../../AnimationController';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput, Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
@@ -333,6 +333,15 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
+function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
+    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
+    if (en)
+        colorWriteMask |= bits;
+    else
+        colorWriteMask &= ~bits;
+    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
+}
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 export class MaterialInstance {
@@ -362,8 +371,8 @@ export class MaterialInstance {
         this.materialHelper.setMaterialHacks(materialHacks);
     }
 
-    public setColorWriteEnabled(colorWrite: boolean): void {
-        setAttachmentStateSimple(this.materialHelper.megaStateFlags, { colorWrite });
+    public setColorWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {

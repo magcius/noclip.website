@@ -68,15 +68,15 @@ export function makeMegaState(other: Partial<GfxMegaStateDescriptor> | null = nu
 }
 
 export interface AttachmentStateSimple {
-    colorWrite: boolean;
+    colorWriteMask: GfxColorWriteMask;
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
 }
 
 export function copyAttachmentStateFromSimple(dst: GfxAttachmentState, src: Partial<AttachmentStateSimple>): void {
-    if (src.colorWrite !== undefined)
-        dst.colorWriteMask = src.colorWrite ? GfxColorWriteMask.ALL : GfxColorWriteMask.NONE;
+    if (src.colorWriteMask !== undefined)
+        dst.colorWriteMask = src.colorWriteMask;
 
     if (src.blendMode !== undefined) {
         dst.rgbBlendState.blendMode = src.blendMode;
