@@ -733,8 +733,10 @@ export class MeshRenderer extends BaseRenderer {
     }
 
     public prepareToRender(renderState: RenderState) {
+        if (!this.visible || (!this.isAtomicVisible && !renderState.hacks.invisibleAtomics)) return;
+
         super.prepareToRender(renderState);
-        if (this.isCulled || !this.visible || (!this.isAtomicVisible && !renderState.hacks.invisibleAtomics)) return;
+        if (this.isCulled) return;
 
         for (let i = 0; i < this.renderers.length; i++) 
             this.renderers[i].prepareToRender(renderState);
@@ -760,6 +762,8 @@ export class ModelRenderer extends BaseRenderer {
     }
 
     public prepareToRender(renderState: RenderState) {
+        if (this.color.a === 0) return;
+
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
@@ -846,8 +850,10 @@ export class EntRenderer extends BaseRenderer {
 
     public prepareToRender(renderState: RenderState) {
         this.update(renderState);
-        super.prepareToRender(renderState);
 
+        if (this.color.a === 0) return;
+
+        super.prepareToRender(renderState);
         if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
 
         for (let i = 0; i < this.renderers.length; i++) {
