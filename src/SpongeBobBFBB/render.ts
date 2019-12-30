@@ -11,22 +11,21 @@ import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNew, Color, colorCopy, TransparentBlack } from '../Color';
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { DeviceProgram } from '../Program';
-import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
-import { GraphObjBase } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from '../Camera';
-import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
+import { FPSCameraController, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
-import { EventID } from './events';
+import { RWAtomicStruct, RWChunk, parseRWAtomic, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
+import { EventID } from './enums';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { Asset } from './hip';
+import { MathConstants } from '../MathHelpers';
 
 const MAX_DRAW_DISTANCE = 1000.0;
 
@@ -154,10 +153,27 @@ export function textureNameRW3(name: string) {
     return name + '.RW3';
 }
 
+function textureHasTransparentPixels(texture: Texture) {
+    assert(texture.pixelFormat === GfxFormat.U8_RGBA_NORM ||
+        texture.pixelFormat === GfxFormat.U8_RGB_NORM);
+    
+    if (texture.pixelFormat === GfxFormat.U8_RGB_NORM)
+        return false;
+
+    const level = texture.levels[0];
+    for (let i = 0; i < level.length; i += 4) {
+        if (level[i+3] < 255)
+            return true;
+    }
+    
+    return false;
+}
+
 class RWMeshFragData implements MeshFragData {
     public indices: Uint16Array;
     public textureData?: TextureData;
-    public transparent: boolean;
+    public transparentColors: boolean;
+    public transparentTexture: boolean;
 
     private baseColor = colorNewCopy(White);
     private indexMap: number[];
@@ -179,16 +195,18 @@ class RWMeshFragData implements MeshFragData {
         if (color)
             this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
 
-        this.transparent = false;
+        this.transparentColors = false;
+        this.transparentTexture = false;
 
-        if (this.textureData && this.textureData.texture.transparent)
-            this.transparent = true;
-        else if (color && color[3] < 0xFF)
-            this.transparent = true;
+        if (this.textureData && (textureHasTransparentPixels(this.textureData.texture) || this.textureData.name.startsWith('shadow')) /* meh */)
+            this.transparentTexture = true;
+        
+        if (color && color[3] < 0xFF)
+            this.transparentColors = true;
         else if (this.colors) {
             for (let i = 0; i < this.colors.length; i += 4) {
                 if (this.colors[i+3] < 0xFF) {
-                    this.transparent = true;
+                    this.transparentColors = true;
                     break;
                 }
             }
@@ -203,6 +221,25 @@ class RWMeshFragData implements MeshFragData {
 
     public get vertices() {
         return this.indexMap.length;
+    }
+
+    public distanceToCamera(cameraPosition: vec3, modelMatrix: mat4): number {
+        let minDist = Infinity;
+        const m = modelMatrix;
+        for (let i = 0; i < this.positions.length; i += 3) {
+            const vx = this.positions[i+0];
+            const vy = this.positions[i+1];
+            const vz = this.positions[i+2];
+            const x = m[0] * vx + m[4] * vy + m[8] * vz + m[12];
+            const y = m[1] * vx + m[5] * vy + m[9] * vz + m[13];
+            const z = m[2] * vx + m[6] * vy + m[10] * vz + m[14];
+            const dx = cameraPosition[0] - x;
+            const dy = cameraPosition[1] - y;
+            const dz = cameraPosition[2] - z;
+            const dist = dx*dx + dy*dy + dz*dz;
+            minDist = Math.min(dist, minDist);
+        }
+        return Math.sqrt(minDist);
     }
 
     public fillPosition(dst: vec3, index: number): void {
@@ -256,13 +293,9 @@ export interface ModelData {
 }
 
 export class ModelCache extends DataCacheIDName<ModelData> {
-    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, name: string, id: number, textures?: TextureData[], lock: boolean = false) {
-        let model = this.getByID(id);
-        if (!model) {
-            model = { meshes: [] };
-            this.add(model, name, id, lock);
-        }
+    private currentModelBeingAdded: ModelData | undefined;
 
+    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, textures?: TextureData[], lock: boolean = false) {
         const geom = atomic.geometry;
         const positions = geom.morphTarget(0).vertices!.slice();
         const normals = (geom.morphTarget(0).normals) ? geom.morphTarget(0).normals!.slice() : null;
@@ -275,7 +308,7 @@ export class ModelCache extends DataCacheIDName<ModelData> {
         for (let i = 0; i < meshHeader.numMeshes; i++)
             frags.push(new RWMeshFragData(meshHeader.mesh(i), meshHeader.tristrip, positions, normals, texCoords, colors, textures));
 
-        model.meshes.push({ frags, atomicStruct });
+        this.currentModelBeingAdded!.meshes.push({ frags, atomicStruct });
     }
 
     public addClump(chunk: RWChunk, clump: rw.Clump, name: string, id: number, textures?: TextureData[], lock: boolean = false) {
@@ -289,7 +322,15 @@ export class ModelCache extends DataCacheIDName<ModelData> {
 
             const atomicStruct = parseRWAtomic(structChunk);
 
-            this.addAtomic(atomic, atomicStruct, name, id, textures, lock);
+            this.currentModelBeingAdded = this.getByID(id);
+            if (!this.currentModelBeingAdded) {
+                this.currentModelBeingAdded = { meshes: [] };
+                this.add(this.currentModelBeingAdded, name, id, lock);
+            }
+
+            this.addAtomic(atomic, atomicStruct, textures, lock);
+
+            this.currentModelBeingAdded = undefined;
             atomic.delete();
         }
         
@@ -312,9 +353,19 @@ export interface Button {
     asset: Assets.ButtonAsset;
 }
 
+export interface DestructObj {
+    ent: Ent;
+    asset: Assets.DestructObjAsset;
+}
+
 export interface NPC {
     ent: Ent;
     asset: Assets.NPCAsset;
+}
+
+export interface Pickup {
+    ent: Ent;
+    asset: Assets.PickupAsset;
 }
 
 export interface Platform {
@@ -380,6 +431,8 @@ interface RenderState {
     device: GfxDevice;
     instManager: GfxRenderInstManager;
     viewerInput: Viewer.ViewerRenderInput;
+    deltaTime: number;
+    cameraPosition: vec3;
     drawDistance: number;
     hacks: RenderHacks;
 }
@@ -390,15 +443,11 @@ export class BaseRenderer {
     public modelMatrix = mat4.create();
     public transparent = false;
     public isCulled = false;
+    public drawDistance = -1;
 
     public renderers: BaseRenderer[] = [];
 
-    private scratchVec3 = vec3.create();
-
-    constructor(public parent?: BaseRenderer) {
-        if (parent)
-            mat4.copy(this.modelMatrix, parent.modelMatrix);
-    }
+    constructor(public parent?: BaseRenderer) {}
 
     public addRenderer(renderer: BaseRenderer) {
         this.bbox.union(this.bbox, renderer.bbox);
@@ -409,18 +458,23 @@ export class BaseRenderer {
         if (this.parent)
             mat4.copy(this.modelMatrix, this.parent.modelMatrix);
         
-        this.isCulled = false;
-        
         this.bboxModel.transform(this.bbox, this.modelMatrix);
+
+        this.isCulled = false;
+
+        if (this.parent && this.parent.isCulled) {
+            this.isCulled = true;
+            return;
+        }
+
         if (!renderState.viewerInput.camera.frustum.contains(this.bboxModel)) {
             this.isCulled = true;
             return;
         }
 
-        const camPosition = this.scratchVec3;
-        mat4.getTranslation(camPosition, renderState.viewerInput.camera.worldMatrix);
+        const drawDistance = this.drawDistance != -1 ? this.drawDistance : renderState.drawDistance;
 
-        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= renderState.drawDistance)
+        if (Math.sqrt(squaredDistanceFromPointToAABB(renderState.cameraPosition, this.bboxModel)) >= drawDistance)
             this.isCulled = true;
     }
 
@@ -534,7 +588,7 @@ export class FragRenderer extends BaseRenderer {
 
         this.megaStateFlags = {
             cullMode: GfxCullMode.NONE,
-            depthWrite: true,
+            depthWrite: !frag.transparentTexture,
             depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL)
         };
         let blendMode = GfxBlendMode.ADD;
@@ -586,8 +640,19 @@ export class FragRenderer extends BaseRenderer {
 
         setAttachmentStateSimple(this.megaStateFlags, { blendMode, blendDstFactor, blendSrcFactor });
 
-        this.transparent = frag.transparent || !this.megaStateFlags.depthWrite;
-        const renderLayer = this.transparent ? GfxRendererLayer.TRANSLUCENT : (defines.SKY ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE);
+        this.transparent = frag.transparentColors || frag.transparentTexture;
+        let renderLayer: number;
+
+        if (this.transparent) {
+            renderLayer = GfxRendererLayer.TRANSLUCENT;
+            if (!this.megaStateFlags.depthWrite)
+                renderLayer++;
+        }
+        else if (defines.SKY) {
+            renderLayer = GfxRendererLayer.BACKGROUND;
+        } else {
+            renderLayer = GfxRendererLayer.OPAQUE;
+        }
 
         this.program = new BFBBProgram(defines);
         this.gfxProgram = device.createProgram(this.program);
@@ -626,6 +691,7 @@ export class FragRenderer extends BaseRenderer {
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
+        //const depth = this.frag.distanceToCamera(renderState.cameraPosition, this.modelMatrix);
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera, this.bboxModel);
         this.prepareRenderInst(renderState.instManager, depth, false);
 
@@ -645,10 +711,7 @@ export class FragRenderer extends BaseRenderer {
 
 export class MeshRenderer extends BaseRenderer {
     public visible: boolean = true;
-
-    private isAtomicVisible() {
-        return (this.mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
-    }
+    private isAtomicVisible: boolean = true;
 
     constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef,
         public mesh: MeshData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
@@ -656,25 +719,27 @@ export class MeshRenderer extends BaseRenderer {
         super(parent);
 
         for (const frag of mesh.frags) {
+            const fragDefines = Object.assign({}, defines);
+
             if (frag.textureData) {
                 frag.textureData.setup(device);
-                defines.USE_TEXTURE = '1';
+                fragDefines.USE_TEXTURE = '1';
             }
             
-            this.addRenderer(new FragRenderer(this, device, cache, defines, frag, pipeInfo, subObject));
+            this.addRenderer(new FragRenderer(this, device, cache, fragDefines, frag, pipeInfo, subObject));
         }
+
+        this.isAtomicVisible = (this.mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
     }
 
     public prepareToRender(renderState: RenderState) {
+        if (!this.visible || (!this.isAtomicVisible && !renderState.hacks.invisibleAtomics)) return;
+
         super.prepareToRender(renderState);
-        if (this.isCulled || !this.visible || (!this.isAtomicVisible() && !renderState.hacks.invisibleAtomics)) return;
+        if (this.isCulled) return;
 
         for (let i = 0; i < this.renderers.length; i++) 
             this.renderers[i].prepareToRender(renderState);
-    }
-
-    public destroy(device: GfxDevice) {
-        super.destroy(device);
     }
 }
 
@@ -697,6 +762,8 @@ export class ModelRenderer extends BaseRenderer {
     }
 
     public prepareToRender(renderState: RenderState) {
+        if (this.color.a === 0) return;
+
         super.prepareToRender(renderState);
         if (this.isCulled) return;
 
@@ -712,10 +779,6 @@ export class ModelRenderer extends BaseRenderer {
             this.renderers[i].prepareToRender(renderState);
         
         renderState.instManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
     }
 }
 
@@ -734,11 +797,6 @@ export class JSPRenderer extends BaseRenderer {
         if (this.isCulled) return;
 
         this.modelRenderer.prepareToRender(renderState);
-    }
-
-    public destroy(device: GfxDevice) {
-        super.destroy(device);
-        this.modelRenderer.destroy(device);
     }
 }
 
@@ -780,20 +838,22 @@ export class EntRenderer extends BaseRenderer {
         mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
     }
 
-    public update(viewerInput: Viewer.ViewerRenderInput) {
+    public update(renderState: RenderState) {
         if (this.isSkydome) {
-            this.modelMatrix[12] = viewerInput.camera.worldMatrix[12];
-            this.modelMatrix[14] = viewerInput.camera.worldMatrix[14];
+            this.modelMatrix[12] = renderState.cameraPosition[0];
+            this.modelMatrix[14] = renderState.cameraPosition[2];
 
             if (this.skydomeLockY)
-                this.modelMatrix[13] = viewerInput.camera.worldMatrix[13];
+                this.modelMatrix[13] = renderState.cameraPosition[1];
         }
     }
 
     public prepareToRender(renderState: RenderState) {
-        this.update(renderState.viewerInput);
-        super.prepareToRender(renderState);
+        this.update(renderState);
 
+        if (this.color.a === 0) return;
+
+        super.prepareToRender(renderState);
         if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
 
         for (let i = 0; i < this.renderers.length; i++) {
@@ -806,6 +866,48 @@ export class EntRenderer extends BaseRenderer {
     public destroy(device: GfxDevice) {
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
+    }
+}
+
+export class PickupRenderer extends BaseRenderer {
+    public entRenderer: EntRenderer;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly pickup: Pickup, defines: BFBBProgramDef = {}) {
+        super();
+
+        defines.USE_LIGHTING = '0';
+        this.drawDistance = 144;
+
+        this.entRenderer = new EntRenderer(this, device, cache, pickup.ent, defines);
+        this.addRenderer(this.entRenderer);
+
+        mat4.copy(this.modelMatrix, this.entRenderer.modelMatrix);
+    }
+
+    private static pickupOrientation = mat4.create();
+
+    public static sceneUpdate(renderState: RenderState) {
+        const rotateSpeed = MathConstants.DEG_TO_RAD * 180 * renderState.deltaTime;
+        mat4.rotateY(PickupRenderer.pickupOrientation, PickupRenderer.pickupOrientation, rotateSpeed);
+    }
+
+    public update(renderState: RenderState) {
+        const x = this.modelMatrix[12];
+        const y = this.modelMatrix[13];
+        const z = this.modelMatrix[14];
+        mat4.copy(this.modelMatrix, PickupRenderer.pickupOrientation);
+        this.modelMatrix[12] = x;
+        this.modelMatrix[13] = y;
+        this.modelMatrix[14] = z;
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        this.update(renderState);
+
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        this.entRenderer.prepareToRender(renderState);
     }
 }
 
@@ -909,27 +1011,37 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         return controller;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(1);
-        this.renderHelper.pushTemplateRenderInst();
-        const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
+    public update(renderState: RenderState) {
+        PickupRenderer.sceneUpdate(renderState);
+    }
 
+    private scratchVec3 = vec3.create();
+
+    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const fogEnabled = this.renderHacks.fog && this.fog;
         this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
         const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
         const fogStart = fogEnabled ? this.fog!.fogStart : 0;
         const fogStop = fogEnabled ? this.fog!.fogStop : 0;
 
-        const drawDistance = fogStop ? Math.min(fogStop, MAX_DRAW_DISTANCE) : MAX_DRAW_DISTANCE;
+        viewerInput.camera.setClipPlanes(1);
+        mat4.getTranslation(this.scratchVec3, viewerInput.camera.worldMatrix);
 
         const renderState: RenderState = {
             device: device,
             instManager: this.renderHelper.renderInstManager,
             viewerInput: viewerInput,
+            deltaTime: viewerInput.deltaTime / 1000,
+            cameraPosition: this.scratchVec3,
             hacks: this.renderHacks,
-            drawDistance: drawDistance,
+            drawDistance: fogStop ? Math.min(fogStop, MAX_DRAW_DISTANCE) : MAX_DRAW_DISTANCE,
         }
+
+        this.update(renderState);
+
+        this.renderHelper.pushTemplateRenderInst();
+        const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + LIGHTKIT_SIZE*2);
         const mapped = template.mapUniformBufferF32(BFBBProgram.ub_SceneParams);

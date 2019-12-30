@@ -351,6 +351,51 @@ export function readButtonAsset(stream: DataStream, beta: boolean): ButtonAsset 
     return { ent, modelPressedInfoID, actMethod, initButtonState, isReset, resetDelay, buttonActFlags, motion };
 }
 
+export interface DestructObjAsset {
+    ent: EntAsset;
+    animSpeed: number;
+    initAnimState: number;
+    health: number;
+    spawnItemID: number;
+    dflags: number;
+    collType: number;
+    fxType: number;
+    pad: number[];
+    blast_radius: number;
+    blast_strength: number;
+    shrapnelID_destroy: number;
+    shrapnelID_hit: number;
+    sfx_destroy: number;
+    sfx_hit: number;
+    hitModel: number;
+    destroyModel: number;
+}
+
+export function readDestructObjAsset(stream: DataStream, beta: boolean): DestructObjAsset {
+    const ent = readEntAsset(stream, beta);
+    const animSpeed = stream.readFloat();
+    const initAnimState = stream.readUInt32();
+    const health = stream.readUInt32();
+    const spawnItemID = stream.readUInt32();
+    const dflags = stream.readUInt32();
+    const collType = stream.readUInt8();
+    const fxType = stream.readUInt8();
+    const pad: number[] = [0,0];
+    pad[0] = stream.readUInt8();
+    pad[1] = stream.readUInt8();
+    const blast_radius = stream.readFloat();
+    const blast_strength = stream.readFloat();
+    const shrapnelID_destroy = stream.readUInt32();
+    const shrapnelID_hit = stream.readUInt32();
+    const sfx_destroy = stream.readUInt32();
+    const sfx_hit = stream.readUInt32();
+    const hitModel = stream.readUInt32();
+    const destroyModel = stream.readUInt32();
+    readLinks(stream, ent);
+    return { ent, animSpeed, initAnimState, health, spawnItemID, dflags, collType, fxType, pad, blast_radius,
+        blast_strength, shrapnelID_destroy, shrapnelID_hit, sfx_destroy, sfx_hit, hitModel, destroyModel };
+}
+
 export interface NPCAsset {
     ent: EntAsset;
     npcFlags: number;
@@ -371,6 +416,22 @@ export function readNPCAsset(stream: DataStream, beta: boolean): NPCAsset {
     const taskWidgetSecond = stream.readUInt32();
     readLinks(stream, ent);
     return { ent, npcFlags, npcModel, npcProps, movepoint, taskWidgetPrime, taskWidgetSecond };
+}
+
+export interface PickupAsset {
+    ent: EntAsset;
+    pickupHash: number;
+    pickupFlags: number;
+    pickupValue: number;
+}
+
+export function readPickupAsset(stream: DataStream, beta: boolean): PickupAsset {
+    const ent = readEntAsset(stream, beta);
+    const pickupHash = stream.readUInt32();
+    const pickupFlags = stream.readUInt16();
+    const pickupValue = stream.readUInt16();
+    readLinks(stream, ent);
+    return { ent, pickupHash, pickupFlags, pickupValue };
 }
 
 interface PlatformERData { nodata: number;}
@@ -685,6 +746,40 @@ export function readModelInfo(stream: DataStream): ModelAssetInfo {
         modelInst.push({ ModelID, Flags, Parent, Bone, MatRight, MatUp, MatAt, MatPos });
     }
     return { Magic, NumModelInst, AnimTableID, CombatID, BrainID, modelInst };
+}
+
+// try not to confuse this with PickupAsset lol
+export interface PickupTableEntry {
+    pickupHash: number;
+    pickupType: number;
+    pickupIndex: number;
+    pickupFlags: number;
+    quantity: number;
+    modelID: number;
+    animID: number;
+}
+
+export interface PickupTableAsset {
+    Magic: number;
+    Count: number;
+    entries: PickupTableEntry[];
+}
+
+export function readPickupTable(stream: DataStream): PickupTableAsset {
+    const Magic = stream.readUInt32();
+    const Count = stream.readUInt32();
+    const entries: PickupTableEntry[] = [];
+    for (let i = 0; i < Count; i++) {
+        const pickupHash = stream.readUInt32();
+        const pickupType = stream.readUInt8();
+        const pickupIndex = stream.readUInt8();
+        const pickupFlags = stream.readUInt16();
+        const quantity = stream.readUInt32();
+        const modelID = stream.readUInt32();
+        const animID = stream.readUInt32();
+        entries.push({ pickupHash, pickupType, pickupIndex, pickupFlags, quantity, modelID, animID });
+    }
+    return { Magic, Count, entries };
 }
 
 export const enum PipeZWriteMode {
