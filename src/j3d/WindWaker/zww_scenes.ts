@@ -133,7 +133,7 @@ interface VirtColors {
     vr_kasumi_mae: Color;
 }
 
-export interface KyankoColors {
+export interface KankyoColors {
     actorC0: Color;
     actorK0: Color;
     bg0C0: Color;
@@ -170,7 +170,7 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): Map<string, DZSChunkHeader> 
     return chunkHeaders;
 }
 
-function kyankoColorsLerp(dst: KyankoColors, a: KyankoColors, b: KyankoColors, t: number): void {
+function kankyoColorsLerp(dst: KankyoColors, a: KankyoColors, b: KankyoColors, t: number): void {
     colorLerp(dst.actorK0, a.actorK0, b.actorK0, t);
     colorLerp(dst.actorC0, a.actorC0, b.actorC0, t);
     colorLerp(dst.bg0C0, a.bg0C0, b.bg0C0, t);
@@ -193,7 +193,7 @@ function kyankoColorsLerp(dst: KyankoColors, a: KyankoColors, b: KyankoColors, t
     }
 }
 
-export function getKyankoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): KyankoColors {
+export function getKankyoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): KankyoColors {
     const view = buffer.createDataView();
     const chunkHeaders = parseDZSHeaders(buffer);
 
@@ -383,7 +383,7 @@ export class WindWakerRoomRenderer {
             mat4.copy(this.bg3.modelMatrix, modelMatrix);
     }
 
-    public setKyankoColors(colors: KyankoColors): void {
+    public setKankyoColors(colors: KankyoColors): void {
         if (this.bg0 !== null)
             settingTevStruct(this.bg0, LightTevColorType.BG0, colors);
 
@@ -397,7 +397,7 @@ export class WindWakerRoomRenderer {
             settingTevStruct(this.bg3, LightTevColorType.BG3, colors);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setKyankoColors(colors);
+            this.objectRenderers[i].setKankyoColors(colors);
     }
 
     public setVisible(v: boolean): void {
@@ -521,8 +521,8 @@ class SeaPlane {
         offs += fillColor(d, offs, this.color);
     }
 
-    public setKyankoColors(kyankoColors: KyankoColors): void {
-        colorCopy(this.color, kyankoColors.bg1K0);
+    public setKankyoColors(kankyoColors: KankyoColors): void {
+        colorCopy(this.color, kankyoColors.bg1K0);
     }
 
     public destroy(device: GfxDevice) {
@@ -702,7 +702,7 @@ class SkyEnvironment {
         this.vr_back_cloud = createModelInstance(device, cache, stageRarc, `vr_back_cloud`, true);
     }
 
-    public setKyankoColors(colors: KyankoColors): void {
+    public setKankyoColors(colors: KankyoColors): void {
         const virtColors = colors.virtColors;
         if (virtColors === null)
             return;
@@ -759,28 +759,28 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public roomMatrix = mat4.create();
     public roomInverseMatrix = mat4.create();
-    public stage: string;
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
     
-    public currentColors: KyankoColors;
+    public currentColors: KankyoColors;
 
-    private timeOfDayColors: KyankoColors[] = [];
+    private timeOfDayColors: KankyoColors[] = [];
 
     public onstatechanged!: () => void;
 
-    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, wantsSeaPlane: boolean, private stageRarc: RARC.RARC) {
+    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
+        const wantsSeaPlane = this.stage === 'sea';
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.renderCache);
 
         // Build color palette.
         const dzsBuffer = this.stageRarc.findFileData(`dzs/stage.dzs`)!;
         for (let i = 0; i < 6; i++)
-            this.timeOfDayColors.push(getKyankoColorsFromDZS(dzsBuffer, 0, i));
-        this.currentColors = getKyankoColorsFromDZS(dzsBuffer, 0, 0);
+            this.timeOfDayColors.push(getKankyoColorsFromDZS(dzsBuffer, 0, i));
+        this.currentColors = getKankyoColorsFromDZS(dzsBuffer, 0, 0);
 
         this.treePacket = new TreePacket(this);
         this.flowerPacket = new FlowerPacket(this);
@@ -797,18 +797,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const i1 = ((timeOfDay + 1) % 6) | 0;
         const t = timeOfDay % 1;
 
-        kyankoColorsLerp(this.currentColors, this.timeOfDayColors[i0], this.timeOfDayColors[i1], t);
+        kankyoColorsLerp(this.currentColors, this.timeOfDayColors[i0], this.timeOfDayColors[i1], t);
 
         if (this.skyEnvironment !== null)
-            this.skyEnvironment.setKyankoColors(this.currentColors);
+            this.skyEnvironment.setKankyoColors(this.currentColors);
 
         if (this.seaPlane !== null)
-            this.seaPlane.setKyankoColors(this.currentColors);
+            this.seaPlane.setKankyoColors(this.currentColors);
 
         for (let i = 0; i < this.roomRenderers.length; i++) {
             // TODO(jstpierre): Use roomIdx for colors?
             // const roomColors = getColorsFromDZS(dzsBuffer, 0, timeOfDay);
-            this.roomRenderers[i].setKyankoColors(this.currentColors);
+            this.roomRenderers[i].setKankyoColors(this.currentColors);
         }
     }
 
@@ -965,7 +965,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return indirectPassRenderer;
     }
 
-    public destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
@@ -976,6 +976,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.skyEnvironment.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
+        this.flowerPacket.destroy(device);
+        this.treePacket.destroy(device);
+        this.grassPacket.destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
     }
@@ -1189,7 +1192,7 @@ class SceneDesc {
 
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;
-        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, isSea, stageRarc);
+        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, this.stageDir, stageRarc);
         context.destroyablePool.push(renderer);
 
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;

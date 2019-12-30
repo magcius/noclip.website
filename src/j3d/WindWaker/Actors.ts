@@ -9,7 +9,7 @@ import { hexzero, leftPad } from '../../util';
 import { J3DModelInstanceSimple, BMDModelMaterialData } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
-import { KyankoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
+import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
 import * as DZB from './DZB';
 import { ColorKind } from "../../gx/gx_render";
 import { AABB } from '../../Geometry';
@@ -59,7 +59,7 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
 // dScnKy_env_light_c::settingTevStruct
-export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevColorType, colors: KyankoColors): void {
+export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevColorType, colors: KankyoColors): void {
     if (type === LightTevColorType.ACTOR) {
         actor.setColorOverride(ColorKind.C0, colors.actorC0);
         actor.setColorOverride(ColorKind.K0, colors.actorK0);
@@ -81,7 +81,7 @@ export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevCo
 export interface ObjectRenderer {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
-    setKyankoColors(colors: KyankoColors): void;
+    setKankyoColors(colors: KankyoColors): void;
     setExtraTextures(v: ZWWExtraTextures): void;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
@@ -145,11 +145,11 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setExtraTextures(extraTextures);
     }
 
-    public setKyankoColors(colors: KyankoColors): void {
+    public setKankyoColors(colors: KankyoColors): void {
         settingTevStruct(this.modelInstance, this.lightTevColorType, colors);
 
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setKyankoColors(colors);
+            this.childObjects[i].setKankyoColors(colors);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -191,10 +191,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
 
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
-
-function fetchArchive(modelCache: ModelCache, objArcName: string): Promise<RARC.RARC> {
-    return modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
-}
 
 function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, layer: number): BMDObjectRenderer {
     const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
@@ -294,7 +290,7 @@ class ATreasureChest implements ActorRel {
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
-            const m = buildModel(context, rarc, `bdli/boxd.bdl`, actor);
+            const m = buildModel(context, rarc, `bdlm/boxd.bdl`, actor);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
@@ -471,7 +467,7 @@ interface ActorRelConstructor {
     requestArchives?(context: WindWakerRenderer, actor: Actor): void;
 }
 
-let kRelTable: { [relName: string]: ActorRelConstructor } = {
+const kRelTable: { [relName: string]: ActorRelConstructor } = {
     'd_a_grass': AGrass,
     'd_a_ep': ATorch,
     'd_a_tbox': ATreasureChest,
@@ -524,7 +520,7 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
     // else if (actor.name === 'TagPo') return;
     // // Light tags?
     // else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') return;
-    // // Environment tags (Kyanko)
+    // // Environment tags (Kankyo)
     // else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') return;
     // // Other tags?
     // else if (actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd') return;

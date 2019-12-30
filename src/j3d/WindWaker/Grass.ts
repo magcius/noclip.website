@@ -1,12 +1,11 @@
 
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assertExists } from '../../util';
+import { assertExists, nArray } from '../../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../../gx/gx_enum';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { SymbolMap, SymbolData } from './Actors';
-import { Actor } from './Actors';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
 import { Endianness } from '../../endian';
@@ -244,20 +243,20 @@ class FlowerModel {
 
         // Compute a CPU-side ArrayBuffers of indexes and interleaved vertices for each display list
         const vtxArrays: GX_Array[] = [];
-        const loadFlowerVerts = (pos: ArrayBufferSlice, color: ArrayBufferSlice, texCoord: ArrayBufferSlice, displayList: ArrayBufferSlice) => {
+        const loadVerts = (pos: ArrayBufferSlice, color: ArrayBufferSlice, texCoord: ArrayBufferSlice, displayList: ArrayBufferSlice) => {
             vtxArrays[GX.Attr.POS]  = { buffer: pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
             vtxArrays[GX.Attr.CLR0] = { buffer: color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
             vtxArrays[GX.Attr.TEX0] = { buffer: texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
             return vtxLoader.runVertices(vtxArrays, displayList);
-        }
+        };
 
         // Each flower type has a unique set of attribute buffers, and a cut and uncut display list
-        const lWhiteUncut = loadFlowerVerts(l_pos, l_color, l_texCoord, l_OhanaDL);
-        const lWhiteCut = loadFlowerVerts(l_pos, l_color, l_texCoord, l_Ohana_gutDL);
-        const lPinkUncut = loadFlowerVerts(l_pos2, l_color2, l_texCoord2, l_Ohana_highDL);
-        const lPinkCut = loadFlowerVerts(l_pos2, l_color2, l_texCoord2, l_Ohana_high_gutDL);
-        const lBessouUncut = loadFlowerVerts(l_pos3, l_color3, l_texCoord3, l_QbsfwDL);
-        const lBessouCut = loadFlowerVerts(l_pos3, l_color3, l_texCoord3, l_QbsafDL);
+        const lWhiteUncut = loadVerts(l_pos, l_color, l_texCoord, l_OhanaDL);
+        const lWhiteCut = loadVerts(l_pos, l_color, l_texCoord, l_Ohana_gutDL);
+        const lPinkUncut = loadVerts(l_pos2, l_color2, l_texCoord2, l_Ohana_highDL);
+        const lPinkCut = loadVerts(l_pos2, l_color2, l_texCoord2, l_Ohana_high_gutDL);
+        const lBessouUncut = loadVerts(l_pos3, l_color3, l_texCoord3, l_QbsfwDL);
+        const lBessouCut = loadVerts(l_pos3, l_color3, l_texCoord3, l_QbsafDL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ lWhiteUncut, lWhiteCut, lPinkUncut, lPinkCut, lBessouUncut, lBessouCut ]);
@@ -463,6 +462,10 @@ export class FlowerPacket {
         }
         renderInstManager.popTemplateRenderInst();
     }
+
+    public destroy(device: GfxDevice): void {
+        this.flowerModel.destroy(device);
+    }
 }
 
 
@@ -608,6 +611,7 @@ class TreeModel {
         this.bufferCoalescer.destroy(device);
         this.shapeMain.destroy(device);
         this.shapeTop.destroy(device);
+        this.shapeShadow.destroy(device);
 
         this.woodTextureData.destroy(device);
         this.shadowTextureData.destroy(device);
@@ -824,6 +828,10 @@ export class TreePacket {
         }
         renderInstManager.popTemplateRenderInst();
     }
+
+    public destroy(device: GfxDevice): void {
+        this.treeModel.destroy(device);
+    }
 }
 
 // ---------------------------------------------
@@ -855,9 +863,12 @@ class GrassModel {
     public grassTextureData: BTIData;
     public grassMaterial: GXMaterialHelperGfx;
 
+    public vmoriTextureMapping = new TextureMapping();
+    public vmoriTextureData: BTIData;
+    public vmoriMaterial: GXMaterialHelperGfx;
+
+    public shapeVmori: GXShapeHelperGfx;
     public shapeMain: GXShapeHelperGfx;
-    public shapeTop: GXShapeHelperGfx;
-    public shapeShadow: GXShapeHelperGfx;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -885,38 +896,51 @@ class GrassModel {
 
         // Grass material
         displayListRegistersInitGX(matRegisters);
+
         displayListRegistersRun(matRegisters, l_matDL);
-        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_matDL'));
         const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
         this.grassTextureData = new BTIData(device, cache, grassTexture);
         this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
 
-        // Tree Vert Format
+        displayListRegistersRun(matRegisters, l_Vmori_matDL);
+        this.vmoriMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
+        const vmoriTexture = createTexture(matRegisters, l_K_kusa_00TEX, 'l_K_kusa_00TEX');
+        this.vmoriTextureData = new BTIData(device, cache, vmoriTexture);
+        this.vmoriTextureData.fillTextureMapping(this.vmoriTextureMapping);
+
+        // Grass Vert Format
         const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList$4529);
         const vcd = parseGxVtxDescList(l_vtxDescList);
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
-        // Tree Verts
+        // Grass Verts
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS]  = { buffer: l_pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: l_color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
-        vtxArrays[GX.Attr.TEX0] = { buffer: l_texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
+        const loadVerts = (pos: ArrayBufferSlice, color: ArrayBufferSlice, texCoord: ArrayBufferSlice, displayList: ArrayBufferSlice) => {
+            vtxArrays[GX.Attr.POS]  = { buffer: pos, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.POS) };
+            vtxArrays[GX.Attr.CLR0] = { buffer: color, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.CLR0) };
+            vtxArrays[GX.Attr.TEX0] = { buffer: texCoord, offs: 0, stride: getAttributeByteSize(vatFormat, GX.Attr.TEX0) };
+            return vtxLoader.runVertices(vtxArrays, displayList);
+        };
 
-        const vtx_l_Oba_kusa_aDL = vtxLoader.runVertices(vtxArrays, l_Oba_kusa_aDL);
+        const vtx_l_Oba_kusa_aDL = loadVerts(l_pos, l_color, l_texCoord, l_Oba_kusa_aDL);
+        const vtx_l_Vmori_00DL = loadVerts(l_Vmori_pos, l_Vmori_color, l_Vmori_texCoord, l_Vmori_00DL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL, vtx_l_Vmori_00DL ]);
 
         // Build an input layout and input state from the vertex layout and data
         this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
+        this.shapeVmori = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
     }
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeMain.destroy(device);
-        this.shapeTop.destroy(device);
+        this.shapeVmori.destroy(device);
 
         this.grassTextureData.destroy(device);
+        this.vmoriTextureData.destroy(device);
     }
 }
 
@@ -926,16 +950,24 @@ export class GrassPacket {
     private anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
 
     private model: GrassModel;
+    private material: GXMaterialHelperGfx;
+    private textureMapping = nArray(1, () => new TextureMapping());
+    private shape: GXShapeHelperGfx;
 
     constructor(private context: WindWakerRenderer) {
         this.model = new GrassModel(context.device, context.symbolMap, context.renderCache);
 
-        if (this.context.stage === 'kin' || this.context.stage === "Xboss1") {
-            // @TODO: Use VMori
+        if (this.context.stage.startsWith(`kin`) || this.context.stage === `Xboss1`) {
+            this.material = this.model.vmoriMaterial;
+            this.textureMapping[0].copy(this.model.vmoriTextureMapping);
+            this.shape = this.model.shapeVmori;
+        } else {
+            this.material = this.model.grassMaterial;
+            this.textureMapping[0].copy(this.model.grassTextureMapping);
+            this.shape = this.model.shapeMain;
         }
 
         // Random starting rotation for each idle anim
-        const dr = 2.0 * Math.PI / 8.0;
         for (let i = 0; i < 8; i++) {
             this.anims[i] = {
                 active: true,
@@ -1026,10 +1058,10 @@ export class GrassPacket {
 
         template = renderInstManager.pushTemplateRenderInst();
         {
-            template.setSamplerBindingsFromTextureMappings([this.model.grassTextureMapping]);
-            const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.model.grassMaterial.materialParamsBufferSize);
-            this.model.grassMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.model.grassMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+            const materialParamsOffs = template.allocateUniformBuffer(ub_MaterialParams, this.material.materialParamsBufferSize);
+            this.material.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             colorCopy(materialParams.u_Color[ColorKind.C1], this.context.currentColors.bg0K0);
             colorCopy(materialParams.u_Color[ColorKind.C0], this.context.currentColors.bg0C0);
@@ -1042,11 +1074,15 @@ export class GrassPacket {
                 if (distanceCull(roomCamPos, data.pos))
                     continue;
 
-                const trunkRenderInst = this.model.shapeMain.pushRenderInst(renderInstManager);
+                const renderInst = this.shape.pushRenderInst(renderInstManager);
                 mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
-                this.model.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                this.shape.fillPacketParams(packetParams, renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.model.destroy(device);
     }
 }
