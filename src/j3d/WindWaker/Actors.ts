@@ -18,6 +18,7 @@ import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { colorFromRGBA } from '../../Color';
 import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
+import { computeModelMatrixSRT } from '../../MathHelpers';
 
 export interface ActorInfo { 
     relName: string; 
@@ -40,7 +41,6 @@ export interface Actor {
 
 export interface PlacedActor extends Actor {
     // TODO(jstpierre): Remove these fields.
-    modelMatrix: mat4;
     roomRenderer: WindWakerRoomRenderer;
 };
 
@@ -204,8 +204,16 @@ function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath:
     return objectRenderer;
 }
 
+function computeActorModelMatrix(m: mat4, actor: Actor): void {
+    computeModelMatrixSRT(m,
+        actor.scale[0], actor.scale[1], actor.scale[2],
+        0, actor.rotationY, 0,
+        actor.pos[0], actor.pos[1], actor.pos[2]);
+}
+
 function setModelMatrix(actor: PlacedActor, m: mat4): void {
-    mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, actor.modelMatrix);
+    computeActorModelMatrix(m, actor);
+    mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, m);
 }
 
 function buildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, actor: PlacedActor): BMDObjectRenderer {
@@ -489,7 +497,9 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
 
     // Otherwise attempt to load the model(s) and anims for this actor, even if it doesn't have any special logic implemented
     else {
-        const loaded = loadGenericActor(renderer, roomRenderer, actor.modelMatrix, worldModelMatrix, actor);
+        const modelMatrix = mat4.create();
+        computeActorModelMatrix(modelMatrix, actor);
+        const loaded = loadGenericActor(renderer, roomRenderer, modelMatrix, worldModelMatrix, actor);
         if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
         else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
     }

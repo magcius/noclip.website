@@ -1450,13 +1450,7 @@ class SceneDesc {
     private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {
         this.iterActorLayers(actorTable, roomRenderer.roomIdx, buffer, (actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
-            placedActor.modelMatrix = mat4.create();
             placedActor.roomRenderer = roomRenderer;
-            computeModelMatrixSRT(placedActor.modelMatrix,
-                actor.scale[0], actor.scale[1], actor.scale[2],
-                0, actor.rotationY, 0,
-                actor.pos[0], actor.pos[1], actor.pos[2]);
-
             loadActor(renderer, roomRenderer, modelMatrix, placedActor);
         });
     }
