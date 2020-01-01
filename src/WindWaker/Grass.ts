@@ -5,7 +5,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SymbolMap, SymbolData } from './Actors';
+import { SymbolMap, SymbolData } from './zww_scenes';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
 import { Endianness } from '../endian';

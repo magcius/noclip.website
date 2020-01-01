@@ -37,6 +37,9 @@ import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS } from './d_resorce';
 
+export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
+export type SymbolMap = { SymbolData: SymbolData[] };
+
 interface dStage__ObjectNameTableEntry {
     pname: number;
     subtype: number;
@@ -710,6 +713,7 @@ export const enum WindWakerPass {
     EFFECT_INDIRECT,
 }
 
+// TODO(jstpierre): d_a_vrbox / d_a_vrbox2
 class SkyEnvironment {
     private vr_sky: J3DModelInstanceSimple | null;
     private vr_uso_umi: J3DModelInstanceSimple | null;
@@ -761,9 +765,6 @@ class SkyEnvironment {
     }
 }
 
-type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
-type SymbolMap = { SymbolData: SymbolData[] };
-
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -781,8 +782,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
 
+    // TODO(jstpierre): Remove, these are junk
     public roomMatrix = mat4.create();
     public roomInverseMatrix = mat4.create();
+
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
     
@@ -1201,7 +1204,11 @@ class SceneDesc {
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
 
-            // Load any object archives.
+            const visible = this.rooms[i] >= 0;
+            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomIdx);
+            roomRenderer.visible = visible;
+            renderer.roomRenderers.push(roomRenderer);
+
             const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
             this.requestArchivesForActors(renderer, i, dzr);
         }
@@ -1209,41 +1216,34 @@ class SceneDesc {
         await modelCache.waitForLoad();
 
         for (let i = 0; i < this.rooms.length; i++) {
-            const roomIdx = Math.abs(this.rooms[i]);
+            const roomRenderer = renderer.roomRenderers[i];
+            const roomIdx = roomRenderer.roomIdx;
 
-            const visible = this.rooms[i] >= 0;
-
-            const modelMatrix = mat4.create();
             if (mult !== undefined)
-                this.getRoomMult(modelMatrix, dzs, mult, roomIdx);
-
-            // Spawn the room.
-            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomIdx);
-            roomRenderer.visible = visible;
-            renderer.roomRenderers.push(roomRenderer);
-
-            // @HACK: Set up un-hacked room matrices
-            roomRenderer.worldToRoomMatrix.set(modelMatrix);
-            mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
+                this.getRoomMult(roomRenderer.worldToRoomMatrix, dzs, mult, roomIdx);
 
             // HACK: for single-purpose sea levels, translate the objects instead of the model.
             if (isSea && !isFullSea) {
-                mat4.invert(modelMatrix, modelMatrix);
+                mat4.invert(roomRenderer.worldToRoomMatrix, roomRenderer.worldToRoomMatrix);
             } else {
-                roomRenderer.setModelMatrix(modelMatrix);
-                mat4.identity(modelMatrix);
+                roomRenderer.setModelMatrix(roomRenderer.worldToRoomMatrix);
+                mat4.identity(roomRenderer.worldToRoomMatrix);
             }
 
-            mat4.copy(renderer.roomMatrix, modelMatrix);
+            // @HACK: Set up un-hacked room matrices
+            mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
+
+            mat4.copy(renderer.roomMatrix, roomRenderer.worldToRoomMatrix);
             mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
             const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
-            this.spawnActors(renderer, roomRenderer, dzr, modelMatrix);
+            this.spawnActors(renderer, roomRenderer, dzr);
         }
 
         // HACK(jstpierre): We spawn stage actors on the first room renderer.
-        mat4.identity(scratchMatrix);
-        this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix);
+        // This probably doesn't work if the first room is translated with MULT. Need to better
+        // support the logic here...
+        this.spawnActors(renderer, renderer.roomRenderers[0], dzs);
 
         // TODO(jstpierre): Not all the actors load in the requestArchives phase...
         await modelCache.waitForLoad();
@@ -1372,14 +1372,14 @@ class SceneDesc {
             this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
             this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
             this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
-        }        
+        }
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, modelMatrix: mat4): void {
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS): void {
         this.iterActorLayers(roomRenderer.roomIdx, dzs, (actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
             placedActor.roomRenderer = roomRenderer;
-            loadActor(renderer, roomRenderer, modelMatrix, placedActor);
+            loadActor(renderer, roomRenderer, placedActor);
         });
     }
 
