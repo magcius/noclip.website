@@ -36,6 +36,7 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { getTextDecoder } from '../util';
+import { dRes_control_c, dRes_info_c, ResType, DZS } from './d_resorce';
 
 type ActorTable = { [name: string]: ActorInfo };
 
@@ -334,11 +335,18 @@ export class WindWakerRoomRenderer {
 
     public roomToWorldMatrix = mat4.create();
     public worldToRoomMatrix = mat4.create();
+    public extraTextures: ZWWExtraTextures;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.JKRArchive) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, renderer: WindWakerRenderer, public roomIdx: number) {
         this.name = `Room ${roomIdx}`;
 
-        this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
+        const resCtrl = renderer.modelCache.resCtrl;
+        this.dzb = resCtrl.getStageResByName(ResType.Dzb, `Room${roomIdx}`, `room.dzb`);
+
+        const resInfo = assertExists(resCtrl.findResInfo(`Room${roomIdx}`, resCtrl.resStg));
+        const roomRarc = resInfo.archive;
+
+        this.extraTextures = renderer.extraTextures;
 
         this.bg0 = createModelInstance(device, cache, roomRarc, `model`);
 
@@ -437,14 +445,6 @@ export class WindWakerRoomRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.bg0 !== null)
-            this.bg0.destroy(device);
-        if (this.bg1 !== null)
-            this.bg1.destroy(device);
-        if (this.bg2 !== null)
-            this.bg2.destroy(device);
-        if (this.bg3 !== null)
-            this.bg3.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
     }
@@ -991,10 +991,12 @@ export class ModelCache {
     private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
     private archiveCache = new Map<string, RARC.JKRArchive>();
     private modelCache = new Map<string, J3DModelData>();
-    public extraCache = new Map<string, Destroyable>();
-    public extraModels: J3DModelData[] = [];
+    public cache = new GfxRenderCache();
 
-    constructor(private dataFetcher: DataFetcher) {
+    public resCtrl = new dRes_control_c();
+    public currentStage: string;
+
+    constructor(public device: GfxDevice, private dataFetcher: DataFetcher) {
     }
 
     public waitForLoad(): Promise<any> {
@@ -1051,21 +1053,36 @@ export class ModelCache {
         return p;
     }
 
-    public fetchObjectData(arcName: string): void {
-        this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
+    public setCurrentStage(stageName: string): void {
+        this.currentStage = stageName;
+        this.resCtrl.destroyList(this.device, this.resCtrl.resStg);
+    }
+
+    public async fetchObjectData(arcName: string): Promise<void> {
+        const archive = await this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
+        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resObj);
+    }
+
+    public async fetchStageData(arcName: string): Promise<void> {
+        const archive = await this.fetchArchive(`${pathBase}/Stage/${this.currentStage}/${arcName}.arc`);
+        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
     }
 
     public getObjectData(arcName: string): RARC.JKRArchive {
         return this.getArchive(`${pathBase}/Object/${arcName}.arc`);
     }
 
-    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, modelPath: string): J3DModelData {
+    public getStageData(arcName: string): RARC.JKRArchive {
+        return this.getArchive(`${pathBase}/Stage/${this.currentStage}/${arcName}.arc`);
+    }
+
+    public getModel(rarc: RARC.JKRArchive, modelPath: string): J3DModelData {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
             const bmdData = rarc.findFileData(modelPath)!;
             const bmd = BMD.parse(bmdData);
-            p = new J3DModelData(device, cache, bmd);
+            p = new J3DModelData(this.device, this.cache, bmd);
             this.modelCache.set(modelPath, p);
         }
 
@@ -1073,12 +1090,9 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
+        this.cache.destroy(device);
         for (const model of this.modelCache.values())
             model.destroy(device);
-        for (let i = 0; i < this.extraModels.length; i++)
-            this.extraModels[i].destroy(device);
-        for (const x of this.extraCache.values())
-            x.destroy(device);
     }
 }
 
@@ -1096,71 +1110,19 @@ class SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const modelCache = new ModelCache(context.dataFetcher);
-        context.destroyablePool.push(modelCache);
+        const modelCache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
+            return new ModelCache(context.device, context.dataFetcher);
+        });
 
-        modelCache.fetchArchive(`${pathBase}/Object/System.arc`);
-        modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
+        modelCache.setCurrentStage(this.stageDir);
+
+        modelCache.fetchObjectData(`System`);
+        modelCache.fetchStageData(`Stage`);
+
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 3);
 
         const particleArchives = [
             `${pathBase}/Particle/common.jpc`,
-            // `${pathBase}/Particle/Pscene000.jpc`,
-            // `${pathBase}/Particle/Pscene001.jpc`,
-            // `${pathBase}/Particle/Pscene004.jpc`,
-            // `${pathBase}/Particle/Pscene005.jpc`,
-            // `${pathBase}/Particle/Pscene011.jpc`,
-            // `${pathBase}/Particle/Pscene013.jpc`,
-            // `${pathBase}/Particle/Pscene014.jpc`,
-            // `${pathBase}/Particle/Pscene020.jpc`,
-            // `${pathBase}/Particle/Pscene021.jpc`,
-            // `${pathBase}/Particle/Pscene022.jpc`,
-            // `${pathBase}/Particle/Pscene023.jpc`,
-            // `${pathBase}/Particle/Pscene026.jpc`,
-            // `${pathBase}/Particle/Pscene030.jpc`,
-            // `${pathBase}/Particle/Pscene035.jpc`,
-            // `${pathBase}/Particle/Pscene036.jpc`,
-            // `${pathBase}/Particle/Pscene043.jpc`,
-            // `${pathBase}/Particle/Pscene044.jpc`,
-            // `${pathBase}/Particle/Pscene050.jpc`,
-            // `${pathBase}/Particle/Pscene051.jpc`,
-            // `${pathBase}/Particle/Pscene060.jpc`,
-            // `${pathBase}/Particle/Pscene061.jpc`,
-            // `${pathBase}/Particle/Pscene070.jpc`,
-            // `${pathBase}/Particle/Pscene071.jpc`,
-            // `${pathBase}/Particle/Pscene078.jpc`,
-            // `${pathBase}/Particle/Pscene080.jpc`,
-            // `${pathBase}/Particle/Pscene081.jpc`,
-            // `${pathBase}/Particle/Pscene082.jpc`,
-            // `${pathBase}/Particle/Pscene083.jpc`,
-            // `${pathBase}/Particle/Pscene084.jpc`,
-            // `${pathBase}/Particle/Pscene085.jpc`,
-            // `${pathBase}/Particle/Pscene086.jpc`,
-            // `${pathBase}/Particle/Pscene090.jpc`,
-            // `${pathBase}/Particle/Pscene127.jpc`,
-            // `${pathBase}/Particle/Pscene150.jpc`,
-            // `${pathBase}/Particle/Pscene199.jpc`,
-            // `${pathBase}/Particle/Pscene200.jpc`,
-            // `${pathBase}/Particle/Pscene201.jpc`,
-            // `${pathBase}/Particle/Pscene202.jpc`,
-            // `${pathBase}/Particle/Pscene203.jpc`,
-            // `${pathBase}/Particle/Pscene204.jpc`,
-            // `${pathBase}/Particle/Pscene205.jpc`,
-            // `${pathBase}/Particle/Pscene206.jpc`,
-            // `${pathBase}/Particle/Pscene207.jpc`,
-            // `${pathBase}/Particle/Pscene208.jpc`,
-            // `${pathBase}/Particle/Pscene209.jpc`,
-            // `${pathBase}/Particle/Pscene210.jpc`,
-            // `${pathBase}/Particle/Pscene211.jpc`,
-            // `${pathBase}/Particle/Pscene213.jpc`,
-            // `${pathBase}/Particle/Pscene217.jpc`,
-            // `${pathBase}/Particle/Pscene218.jpc`,
-            // `${pathBase}/Particle/Pscene219.jpc`,
-            // `${pathBase}/Particle/Pscene220.jpc`,
-            // `${pathBase}/Particle/Pscene221.jpc`,
-            // `${pathBase}/Particle/Pscene222.jpc`,
-            // `${pathBase}/Particle/Pscene223.jpc`,
-            // `${pathBase}/Particle/Pscene224.jpc`,
-            // `${pathBase}/Particle/Pscene254.jpc`,
         ];
 
         for (let i = 0; i < particleArchives.length; i++)
@@ -1169,19 +1131,21 @@ class SceneDesc {
         // XXX(jstpierre): This is really terrible code.
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
-            modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
+            modelCache.fetchStageData(`Room${roomIdx}`);
         }
-
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 3);
 
         await modelCache.waitForLoad();
 
-        const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
+        const resCtrl = modelCache.resCtrl;
 
-        const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
-        const dzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
-        const dzsHeaders = parseDZSHeaders(dzs);
-        const mult = dzsHeaders.get('MULT');
+        // Load the toon textures, which require a bit of an extra push from the resource manager.
+        const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
+        const ZAtoon   = sysRes.forceLoadResource<BTIData>(device, modelCache.cache, 'TEX ', 0x03);
+        const ZBtoonEX = sysRes.forceLoadResource<BTIData>(device, modelCache.cache, 'TEX ', 0x04);
+
+        const stageRarc = modelCache.getStageData(`Stage`);
+        const dzs = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Stage`, `stage.dzs`);
+        const mult = dzs.headers.get('MULT');
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const relTable = this.createRelNameTable(symbolMap);
@@ -1193,8 +1157,6 @@ class SceneDesc {
         context.destroyablePool.push(renderer);
 
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        const ZAtoon = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toon.bti`)!, `ZAtoon`).texture);
-        const ZBtoonEX = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toonex.bti`)!, `ZBtoonEX`).texture);
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
         renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
@@ -1211,12 +1173,9 @@ class SceneDesc {
 
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
-            const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
-            if (roomRarc.files.length === 0)
-                continue;
 
             // Load any object archives.
-            const dzr = roomRarc.findFileData('dzr/room.dzr')!;
+            const dzr = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
             this.requestArchivesForActors(renderer, i, dzr, actorTable);
         }
 
@@ -1224,9 +1183,6 @@ class SceneDesc {
 
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
-            const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
-            if (roomRarc.files.length === 0)
-                continue;
 
             const visible = this.rooms[i] >= 0;
 
@@ -1235,7 +1191,7 @@ class SceneDesc {
                 this.getRoomMult(modelMatrix, dzs, mult, roomIdx);
 
             // Spawn the room.
-            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
+            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomIdx);
             roomRenderer.visible = visible;
             renderer.roomRenderers.push(roomRenderer);
 
@@ -1254,7 +1210,7 @@ class SceneDesc {
             mat4.copy(renderer.roomMatrix, modelMatrix);
             mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
-            const dzr = roomRarc.findFileData('dzr/room.dzr')!;
+            const dzr = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
             this.spawnActors(renderer, roomRenderer, dzr, modelMatrix, actorTable);
         }
 
@@ -1268,8 +1224,8 @@ class SceneDesc {
         return renderer;
     }
 
-    private getRoomMult(modelMatrix: mat4, buffer: ArrayBufferSlice, multHeader: DZSChunkHeader, roomIdx: number): void {
-        const view = buffer.createDataView();
+    private getRoomMult(modelMatrix: mat4, dzs: DZS, multHeader: DZSChunkHeader, roomIdx: number): void {
+        const view = dzs.buffer.createDataView();
 
         let multIdx = multHeader.offs;
         for (let i = 0; i < multHeader.count; i++) {
@@ -1297,7 +1253,7 @@ class SceneDesc {
         const nameTableView = nameTableBuf.Data.createDataView();
         const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
         const entryCount = nameTableView.byteLength / 8;
-        
+
         // The REL table maps the 2-byte ID's from the Actor table to REL names
         // E.g. ID 0x01B8 -> 'd_a_grass'
         const relTable: { [id: number]: string } = {};
@@ -1320,9 +1276,7 @@ class SceneDesc {
     private createActorTable(symbolMap: SymbolMap, relTable: { [id: number]: string }) {
         const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
         const data = entry.Data;
-        const bytes = data.createTypedArray(Uint8Array);
-        const dataView = data.createDataView();
-        const textDecoder = getTextDecoder('utf8') as TextDecoder;
+        const view = data.createDataView();
 
         // The object table consists of null-terminated ASCII strings of length 12.
         // @NOTE: None are longer than 7 characters
@@ -1331,24 +1285,22 @@ class SceneDesc {
         const actorTable = {} as ActorTable;
         for (let i = 0; i < actorCount; i++) {
             const offset = i * kNameLength;
-            const end = bytes.indexOf(0, offset); 
-            const name = textDecoder.decode(bytes.subarray(offset, end));
-            const id = dataView.getUint16(offset + 8, false);
-            const subtype = bytes[offset + 10];
-            const unknown1 = bytes[offset + 11];
-
+            const name = readString(data, offset + 0x00, kNameLength);
+            const id = view.getUint16(offset + 0x08, false);
+            const subtype = view.getUint8(offset + 0x0A);
+            const gbaName = view.getUint8(offset + 0x0B);
             const relName = relTable[id];
-
-            actorTable[name] = { relName, subtype, unknown1 };
+            actorTable[name] = { relName, subtype };
         }
 
         return actorTable;
     }
 
-    private iterActorLayerACTR(actorTable: ActorTable, roomIdx: number, layerIdx: number, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
+    private iterActorLayerACTR(actorTable: ActorTable, roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
         if (actrHeader === undefined)
             return;
 
+        const buffer = dzs.buffer;
         const view = buffer.createDataView();
 
         let actrTableIdx = actrHeader.offs;
@@ -1382,10 +1334,11 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayerSCOB(actorTable: ActorTable, roomIdx: number, layerIdx: number, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
+    private iterActorLayerSCOB(actorTable: ActorTable, roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
         if (actrHeader === undefined)
             return;
 
+        const buffer = dzs.buffer;
         const view = buffer.createDataView();
 
         let actrTableIdx = actrHeader.offs;
@@ -1423,8 +1376,8 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayers(actorTable: ActorTable, roomIdx: number, buffer: ArrayBufferSlice, callback: (it: Actor) => void): void {
-        const chunkHeaders = parseDZSHeaders(buffer);
+    private iterActorLayers(actorTable: ActorTable, roomIdx: number, dzs: DZS, callback: (it: Actor) => void): void {
+        const chunkHeaders = dzs.headers;
 
         function buildChunkLayerName(base: string, i: number): string {
             if (i === -1) {
@@ -1435,25 +1388,25 @@ class SceneDesc {
         }
 
         for (let i = -1; i < 16; i++) {
-            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
-            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
-            this.iterActorLayerACTR(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, buffer, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
+            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
+            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
+            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
+            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
         }        
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4, actorTable: ActorTable): void {
-        this.iterActorLayers(actorTable, roomRenderer.roomIdx, buffer, (actor) => {
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, modelMatrix: mat4, actorTable: ActorTable): void {
+        this.iterActorLayers(actorTable, roomRenderer.roomIdx, dzs, (actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer, roomRenderer, modelMatrix, placedActor);
         });
     }
 
-    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, buffer: ArrayBufferSlice, actorTable: ActorTable): void {
-        this.iterActorLayers(actorTable, roomIdx, buffer, (actor) => {
+    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS, actorTable: ActorTable): void {
+        this.iterActorLayers(actorTable, roomIdx, dzs, (actor) => {
             requestArchiveForActor(renderer, actor);
         });
     }

@@ -108,6 +108,15 @@ export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, le
     console.log(S);
 }
 
+export function magicstr(v: number): string {
+    v = v & 0xFFFFFFFF;
+    const a0 = String.fromCharCode((v >>> 24) & 0xFF);
+    const a1 = String.fromCharCode((v >>> 16) & 0xFF);
+    const a2 = String.fromCharCode((v >>>  8) & 0xFF);
+    const a3 = String.fromCharCode((v >>>  0) & 0xFF);
+    return a0 + a1 + a2 + a3;
+}
+
 export function wordCountFromByteCount(byteCount: number): number {
     return align(byteCount, 4) / 4;
 }

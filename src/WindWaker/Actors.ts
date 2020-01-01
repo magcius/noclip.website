@@ -9,7 +9,7 @@ import { hexzero, leftPad } from '../util';
 import { J3DModelInstanceSimple, BMDModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
+import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass } from "./zww_scenes";
 import * as DZB from './DZB';
 import { ColorKind } from "../gx/gx_render";
 import { AABB } from '../Geometry';
@@ -23,7 +23,6 @@ import { computeModelMatrixSRT } from '../MathHelpers';
 export interface ActorInfo { 
     relName: string; 
     subtype: number;
-    unknown1: number;
 };
 
 export interface Actor {
@@ -183,7 +182,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].destroy(device);
     }
@@ -193,11 +191,11 @@ export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBuff
 export type SymbolMap = { SymbolData: SymbolData[] };
 
 function buildChildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, layer: number): BMDObjectRenderer {
-    const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
+    const model = context.modelCache.getModel(rarc, modelPath);
     const modelInstance = new J3DModelInstanceSimple(model);
     modelInstance.passMask = WindWakerPass.MAIN;
     context.extraTextures.fillExtraTextures(modelInstance);
-    modelInstance.name = name;
+    modelInstance.name = modelPath;
     modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
     const objectRenderer = new BMDObjectRenderer(modelInstance);
     objectRenderer.layer = layer;
@@ -549,18 +547,17 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
 
 function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor) {
     const modelCache = renderer.modelCache;
-    const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
     function fetchArchive(objArcName: string): Promise<RARC.JKRArchive> {
         return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
     }
 
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
-        const model = modelCache.getModel(renderer.device, cache, rarc, modelPath);
+        const model = modelCache.getModel(rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
         modelInstance.passMask = WindWakerPass.MAIN;
         renderer.extraTextures.fillExtraTextures(modelInstance);
-        modelInstance.name = name;
+        modelInstance.name = actor.name;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         const objectRenderer = new BMDObjectRenderer(modelInstance);
         objectRenderer.layer = actor.layer;
@@ -581,6 +578,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
         const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
         objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(renderer.device, cache, bmt));
         renderer.extraTextures.fillExtraTextures(objectRenderer.modelInstance);
         return objectRenderer;

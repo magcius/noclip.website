@@ -53,7 +53,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined } from './util';
+import { hexdump, assertExists, assert, fallbackUndefined, magicstr } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -750,6 +750,7 @@ window.main = new Main();
 declare global {
     interface Window {
         hexdump: any;
+        magicstr: any;
         downloadBuffer: any;
         debug: any;
         debugObj: any;
@@ -757,6 +758,7 @@ declare global {
     }
 }
 window.hexdump = hexdump;
+window.magicstr = magicstr;
 window.downloadBuffer = (name: any, buffer: any) => {
     if (buffer instanceof ArrayBufferSlice)
         downloadBufferSlice(name, buffer);

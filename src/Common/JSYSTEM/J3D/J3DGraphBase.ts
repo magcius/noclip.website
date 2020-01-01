@@ -829,7 +829,7 @@ export class BMDModelMaterialData {
 }
 
 export class J3DModelData {
-    private realized: boolean = false;
+    public realized: boolean = false;
 
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -1000,6 +1000,7 @@ export class J3DModelInstance {
     private jointVisibility: boolean[];
 
     constructor(public modelData: J3DModelData, materialHacks?: GX_Material.GXMaterialHacks) {
+        assert(this.modelData.realized);
         this.modelMaterialData = this.modelData.modelMaterialData;
         this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
@@ -1030,6 +1031,7 @@ export class J3DModelInstance {
 
     public destroy(device: GfxDevice): void {
         this.modelData.destroy(device);
+        this.modelMaterialData.destroy(device);
     }
 
     public setVisible(v: boolean): void {
