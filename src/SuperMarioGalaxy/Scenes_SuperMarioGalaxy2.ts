@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
-import { RARC } from '../j3d/rarc';
+import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 
 class SMG2SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy2`;
@@ -14,7 +14,7 @@ class SMG2SceneDesc extends SMGSceneDescBase {
         const lightDataRarc = modelCache.getArchive(`StageData/${zoneName}/${zoneName}Light.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`csv/${zoneName}Light.bcsv`)!);
     }
-    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC {
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): JKRArchive {
         return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`)!;
     }
     public requestGlobalArchives(modelCache: ModelCache): void {

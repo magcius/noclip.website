@@ -8,7 +8,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -22,7 +22,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneDesc, SceneContext } from '../SceneBase';
 import { readString, nArray, concat, assertExists } from '../util';
-import { getKankyoColorsFromDZS, KankyoColors } from '../j3d/WindWaker/zww_scenes';
+import { getKankyoColorsFromDZS, KankyoColors } from '../WindWaker/zww_scenes';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { FakeTextureHolder } from '../TextureHolder';
 
@@ -174,7 +174,7 @@ class Plane {
     }
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -205,7 +205,7 @@ export class WindWakerRenderer implements SceneGfx {
     public modelData: J3DModelData[] = [];
     public textureHolder = new FakeTextureHolder([]);
 
-    constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: KankyoColors) {
+    constructor(device: GfxDevice, private stageRarc: RARC.JKRArchive, colors: KankyoColors) {
         this.renderHelper = new GXRenderHelperGfx(device);
         const cache = this.renderHelper.renderInstManager.gfxRenderCache;
 
@@ -278,7 +278,7 @@ export class WindWakerRenderer implements SceneGfx {
     }
 }
 
-function fetchArc(archivePath: string, dataFetcher: DataFetcher): Promise<RARC.RARC> {
+function fetchArc(archivePath: string, dataFetcher: DataFetcher): Promise<RARC.JKRArchive> {
     return dataFetcher.fetchData(archivePath).then((data) => {
         if (readString(data, 0, 0x04) === 'Yaz0')
             return Yaz0.decompress(data);

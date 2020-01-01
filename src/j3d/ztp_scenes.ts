@@ -8,7 +8,7 @@ import * as UI from '../ui';
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelData, J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
-import * as RARC from './rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';
@@ -94,7 +94,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public opaqueSceneTexture = new ColorTexture();
     public modelInstances: J3DModelInstanceSimple[] = [];
 
-    constructor(device: GfxDevice, public extraTextures: ZTPExtraTextures, public stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public extraTextures: ZTPExtraTextures, public stageRarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
@@ -251,7 +251,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             this.id = this.stageId;
     }
 
-    private createRoomScenes(device: GfxDevice, renderer: TwilightPrincessRenderer, rarc: RARC.RARC, rarcBasename: string): void {
+    private createRoomScenes(device: GfxDevice, renderer: TwilightPrincessRenderer, rarc: RARC.JKRArchive, rarcBasename: string): void {
         const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
         bmdFiles.forEach((bmdFile) => {
             const basename = bmdFile.name.split('.')[0];
@@ -292,7 +292,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
         const extraTextures = new ZTPExtraTextures();
 
-        return this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher).then((stageRarc_: RARC.RARC | null) => {
+        return this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher).then((stageRarc_: RARC.JKRArchive | null) => {
             const stageRarc = assertExists(stageRarc_);
 
             // Load stage shared textures.
@@ -335,8 +335,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
             }
 
-            return Promise.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, dataFetcher))).then((roomRarcs: (RARC.RARC | null)[]) => {
-                roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
+            return Promise.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, dataFetcher))).then((roomRarcs: (RARC.JKRArchive | null)[]) => {
+                roomRarcs.forEach((rarc: RARC.JKRArchive | null, i) => {
                     if (rarc === null) return;
                     this.createRoomScenes(device, renderer, rarc, roomNames[i]);
                 });
@@ -346,7 +346,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
+    private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.JKRArchive | null> {
         const buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
         if (buffer.byteLength === 0)
             return null;

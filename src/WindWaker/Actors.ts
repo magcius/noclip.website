@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import * as GX_Material from '../gx/gx_material';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
@@ -192,7 +192,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
 
-function buildChildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, layer: number): BMDObjectRenderer {
+function buildChildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, layer: number): BMDObjectRenderer {
     const model = context.modelCache.getModel(context.device, context.renderCache, rarc, modelPath);
     const modelInstance = new J3DModelInstanceSimple(model);
     modelInstance.passMask = WindWakerPass.MAIN;
@@ -216,7 +216,7 @@ function setModelMatrix(actor: PlacedActor, m: mat4): void {
     mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, m);
 }
 
-function buildModel(context: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, actor: PlacedActor): BMDObjectRenderer {
+function buildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, actor: PlacedActor): BMDObjectRenderer {
     const objectRenderer = buildChildModel(context, rarc, modelPath, actor.layer);
 
     // Transform Actor model from room space to world space
@@ -231,10 +231,10 @@ function createEmitter(context: WindWakerRenderer, resourceId: number): JPA.JPAB
     return emitter;
 }
 
-function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
-function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
-function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
-function parseBTP(rarc: RARC.RARC, path: string) { return BTP.parse(rarc.findFileData(path)!); }
+function parseBCK(rarc: RARC.JKRArchive, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
+function parseBRK(rarc: RARC.JKRArchive, path: string) { return BRK.parse(rarc.findFileData(path)!); }
+function parseBTK(rarc: RARC.JKRArchive, path: string) { return BTK.parse(rarc.findFileData(path)!); }
+function parseBTP(rarc: RARC.JKRArchive, path: string) { return BTP.parse(rarc.findFileData(path)!); }
 function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
 
@@ -551,11 +551,11 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     const modelCache = renderer.modelCache;
     const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
-    function fetchArchive(objArcName: string): Promise<RARC.RARC> {
+    function fetchArchive(objArcName: string): Promise<RARC.JKRArchive> {
         return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
     }
 
-    function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
+    function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
         const model = modelCache.getModel(renderer.device, cache, rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
         modelInstance.passMask = WindWakerPass.MAIN;
@@ -571,14 +571,14 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         mat4.mul(m, worldModelMatrix, localModelMatrix);
     }
 
-    function buildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
+    function buildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
         const objectRenderer = buildChildModel(rarc, modelPath);
         setModelMatrix(objectRenderer.modelMatrix);
         roomRenderer.objectRenderers.push(objectRenderer);
         return objectRenderer;
     }
 
-    function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
+    function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
         const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
         objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(renderer.device, cache, bmt));

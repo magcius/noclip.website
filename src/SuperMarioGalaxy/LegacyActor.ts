@@ -5,7 +5,7 @@ import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
-import { RARC } from "../j3d/rarc";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
@@ -181,7 +181,7 @@ export class NoclipLegacyActorSpawner {
                 setBckFrameAtRandom(actor);
         }
 
-        const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {
+        const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: JKRArchive, frame: number) => {
             if (isBrkExist(actor, 'ColorChange')) {
                 startBrk(actor, 'ColorChange');
                 setBrkFrameAndStop(actor, frame);
@@ -198,7 +198,7 @@ export class NoclipLegacyActorSpawner {
             }
         };
 
-        const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, RARC] | null> => {
+        const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, JKRArchive] | null> => {
             const data = await modelCache.requestObjectData(arcName);
 
             if (data === null)

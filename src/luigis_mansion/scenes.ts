@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as BIN from './bin';
 import { LuigisMansionRenderer } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';

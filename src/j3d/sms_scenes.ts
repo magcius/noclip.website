@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as RARC from './rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, getTextDecoder, assertExists, flatten } from '../util';
@@ -276,7 +276,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public opaqueSceneTexture = new ColorTexture();
     public modelInstances: J3DModelInstanceSimple[] = [];
 
-    constructor(device: GfxDevice, public rarc: RARC.RARC) {
+    constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
@@ -377,7 +377,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): J3DModelInstanceSimple | null {
+    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.JKRArchive, basename: string, isSkybox: boolean): J3DModelInstanceSimple | null {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -430,7 +430,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObj): J3DModelInstanceSimple[] {
+    private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, obj: SceneBinObj): J3DModelInstanceSimple[] {
         switch (obj.type) {
         case 'Group':
             const childTs: J3DModelInstanceSimple[][] = obj.children.map(c => this.createSceneBinObjects(device, cache, rarc, c));
@@ -447,7 +447,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObjModel): J3DModelInstanceSimple | null {
+    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, obj: SceneBinObjModel): J3DModelInstanceSimple | null {
         interface ModelLookup {
             k: string; // klass
             m: string; // model

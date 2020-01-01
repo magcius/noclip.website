@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
-import { RARC } from '../j3d/rarc';
+import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 import { NameObj } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength } from './ActorUtil';
 import { TicoRail, vecKillElement } from './MiscActor';
@@ -18,7 +18,7 @@ class SMG1SceneDesc extends SMGSceneDescBase {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`Light${zoneName}.bcsv`)!);
     }
-    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC {
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): JKRArchive {
         return modelCache.getArchive(`StageData/${zoneName}.arc`)!;
     }
     public requestGlobalArchives(modelCache: ModelCache): void {

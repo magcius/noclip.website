@@ -7,7 +7,7 @@ import { DataFetcher } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
@@ -30,7 +30,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../SceneBase';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { computeModelMatrixSRT, range } from '../MathHelpers';
+import { range } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
@@ -288,7 +288,7 @@ export function getKankyoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     };
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -335,7 +335,7 @@ export class WindWakerRoomRenderer {
     public roomToWorldMatrix = mat4.create();
     public worldToRoomMatrix = mat4.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.JKRArchive) {
         this.name = `Room ${roomIdx}`;
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
@@ -692,7 +692,7 @@ class SkyEnvironment {
     private vr_kasumi_mae: J3DModelInstanceSimple | null;
     private vr_back_cloud: J3DModelInstanceSimple | null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, stageRarc: RARC.JKRArchive) {
         this.vr_sky = createModelInstance(device, cache, stageRarc, `vr_sky`, true);
         this.vr_uso_umi = createModelInstance(device, cache, stageRarc, `vr_uso_umi`, true);
         this.vr_kasumi_mae = createModelInstance(device, cache, stageRarc, `vr_kasumi_mae`, true);
@@ -765,7 +765,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.RARC) {
+    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
@@ -988,8 +988,8 @@ interface Destroyable {
 export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
-    private archivePromiseCache = new Map<string, Promise<RARC.RARC>>();
-    private archiveCache = new Map<string, RARC.RARC>();
+    private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
+    private archiveCache = new Map<string, RARC.JKRArchive>();
     private modelCache = new Map<string, J3DModelData>();
     public extraCache = new Map<string, Destroyable>();
     public extraModels: J3DModelData[] = [];
@@ -1028,11 +1028,11 @@ export class ModelCache {
         return assertExists(this.fileDataCache.get(path));
     }
 
-    public getArchive(archivePath: string): RARC.RARC {
+    public getArchive(archivePath: string): RARC.JKRArchive {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
-    public fetchArchive(archivePath: string): Promise<RARC.RARC> {
+    public fetchArchive(archivePath: string): Promise<RARC.JKRArchive> {
         let p = this.archivePromiseCache.get(archivePath);
         if (p === undefined) {
             p = this.fetchFile(archivePath).then((data) => {
@@ -1055,11 +1055,11 @@ export class ModelCache {
         this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
     }
 
-    public getObjectData(arcName: string): RARC.RARC {
+    public getObjectData(arcName: string): RARC.JKRArchive {
         return this.getArchive(`${pathBase}/Object/${arcName}.arc`);
     }
 
-    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelPath: string): J3DModelData {
+    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, modelPath: string): J3DModelData {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {

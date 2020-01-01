@@ -10,7 +10,7 @@ import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, Whit
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
 import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
@@ -703,7 +703,7 @@ class NPCActorItem {
 export class NPCDirector {
     private scratchNPCActorItem = new NPCActorItem();
 
-    constructor(private npcDataArc: RARC.RARC) {
+    constructor(private npcDataArc: RARC.JKRArchive) {
     }
 
     public getNPCItemData(npcName: string, index: number, npcActorItem = this.scratchNPCActorItem): NPCActorItem | null {
@@ -3546,7 +3546,7 @@ class WarpPodPathDrawer {
     private materialHelper: GXMaterialHelperGfx;
     private ddraw: TDDraw;
 
-    constructor(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, private points: vec3[], private color: Color) {
+    constructor(sceneObjHolder: SceneObjHolder, arc: RARC.JKRArchive, private points: vec3[], private color: Color) {
         this.testColor = loadBTIData(sceneObjHolder, arc, `TestColor.bti`);
         // This doesn't seem to be used...
         // this.testMask = loadBTIData(sceneObjHolder, arc, `TestMask.bti`);

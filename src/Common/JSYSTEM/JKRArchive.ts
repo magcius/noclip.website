@@ -1,12 +1,12 @@
 
 // Nintendo RARC file format.
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, readString } from '../util';
-import * as Yay0 from '../Common/Compression/Yay0';
-import * as Yaz0 from '../Common/Compression/Yaz0';
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { assert, readString } from '../../util';
+import * as Yay0 from '../Compression/Yay0';
+import * as Yaz0 from '../Compression/Yaz0';
 
-export const enum RARCFileFlags {
+export const enum JKRFileAttr {
     Normal          = 0x01,
     Directory       = 0x02,
     Compressed      = 0x04,
@@ -14,7 +14,7 @@ export const enum RARCFileFlags {
     CompressionType = 0x80,
 }
 
-export const enum RARCCompressionType {
+export const enum JKRCompressionType {
     None = 0x00,
     Yay0 = 0x01, // SZP
     Yaz0 = 0x02, // SZS
@@ -24,8 +24,8 @@ export const enum RARCCompressionType {
 export interface RARCFile {
     id: number;
     name: string;
-    flags: RARCFileFlags;
-    compressionType: RARCCompressionType;
+    flags: JKRFileAttr;
+    compressionType: JKRCompressionType;
     buffer: ArrayBufferSlice;
 }
 
@@ -46,7 +46,7 @@ export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSl
     return file ? file.buffer : null;
 }
 
-export class RARC {
+export class JKRArchive {
     // All the files in a flat list.
     public files: RARCFile[];
     // Root directory.
@@ -93,7 +93,7 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): RARC {
+export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): JKRArchive {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'RARC');
@@ -136,7 +136,7 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
             if (name === '.' || name === '..')
                 continue;
 
-            const isDirectory = !!(flags & RARCFileFlags.Directory);
+            const isDirectory = !!(flags & JKRFileAttr.Directory);
             if (isDirectory) {
                 const subdirEntryIndex = entryDataOffs;
                 subdirIndexes.push(subdirEntryIndex);
@@ -144,19 +144,19 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
                 const offs = dataOffs + entryDataOffs;
                 const rawFileBuffer = buffer.slice(offs, offs + entryDataSize);
 
-                let compressionType: RARCCompressionType = RARCCompressionType.None;
+                let compressionType: JKRCompressionType = JKRCompressionType.None;
                 let fileBuffer: ArrayBufferSlice;
-                if (!!(flags & RARCFileFlags.Compressed))
-                    compressionType = (flags & RARCFileFlags.CompressionType) ? RARCCompressionType.Yaz0 : RARCCompressionType.Yay0;
+                if (!!(flags & JKRFileAttr.Compressed))
+                    compressionType = (flags & JKRFileAttr.CompressionType) ? JKRCompressionType.Yaz0 : JKRCompressionType.Yay0;
 
                 // Only decompress if we're expecting it.
-                if (compressionType !== RARCCompressionType.None && yaz0Decompressor !== null) {
-                    if (compressionType === RARCCompressionType.Yaz0) {
+                if (compressionType !== JKRCompressionType.None && yaz0Decompressor !== null) {
+                    if (compressionType === JKRCompressionType.Yaz0) {
                         fileBuffer = Yaz0.decompressSync(yaz0Decompressor, rawFileBuffer);
-                        compressionType = RARCCompressionType.None;
-                    } else if (compressionType === RARCCompressionType.Yay0) {
+                        compressionType = JKRCompressionType.None;
+                    } else if (compressionType === JKRCompressionType.Yay0) {
                         fileBuffer = Yay0.decompress(rawFileBuffer);
-                        compressionType = RARCCompressionType.None;
+                        compressionType = JKRCompressionType.None;
                     } else {
                         throw "whoops";
                     }
@@ -190,7 +190,7 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
     const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
-    const rarc = new RARC();
+    const rarc = new JKRArchive();
     rarc.files = allFiles;
     rarc.root = root;
     return rarc;

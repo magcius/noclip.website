@@ -15,7 +15,7 @@ import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from 
 import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
-import { RARC } from "../j3d/rarc";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { fillSceneParamsDataOnTemplate, ub_SceneParams, u_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
 import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
@@ -533,7 +533,7 @@ export function createRendererFromBuffers(context: SceneContext, buffers: NamedA
     return new Explorer(context, dst, effectNames);
 }
 
-export function createRendererFromSMGArchive(context: SceneContext, arc: RARC) {
+export function createRendererFromSMGArchive(context: SceneContext, arc: JKRArchive) {
     const effectNamesCSV = createCsvParser(arc.findFileData(`ParticleNames.bcsv`)!);
     const effectNames = effectNamesCSV.mapRecords((iter) => {
         return assertExists(iter.getValueString('name'));

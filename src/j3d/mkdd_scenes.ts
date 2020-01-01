@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
 import { mat4, quat } from 'gl-matrix';
-import * as RARC from './rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
@@ -21,7 +21,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: J3DModelInstanceSimple[] = [];
-    public rarc: RARC.RARC[] = [];
+    public rarc: RARC.JKRArchive[] = [];
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -149,7 +149,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: MKDDRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): J3DModelInstanceSimple {
+    private spawnBMD(device: GfxDevice, renderer: MKDDRenderer, rarc: RARC.JKRArchive, basename: string, modelMatrix: mat4 | null = null): J3DModelInstanceSimple {
         const bmdFileData = assertExists(rarc.findFileData(`${basename}.bmd`));
         const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
 

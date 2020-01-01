@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
