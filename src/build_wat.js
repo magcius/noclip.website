@@ -58,7 +58,7 @@ export function ${exportName}Instance(imports?: any): Promise<${exportName}Expor
     return WebAssembly.compile(Uint8Array.from(window.atob(${exportName}Code), function(c) { return c.charCodeAt(0); })).then((module: WebAssembly.Module) => {
         return WebAssembly.instantiate(module, imports);
     }).then((instance: WebAssembly.Instance) => {
-        return (<${exportName}Exports> instance.exports);
+        return (instance.exports as unknown) as ${exportName}Exports;
     });
 }
 `;
