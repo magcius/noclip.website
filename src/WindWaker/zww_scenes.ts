@@ -1028,7 +1028,6 @@ export class ModelCache {
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archivePromiseCache = new Map<string, Promise<RARC.JKRArchive>>();
     private archiveCache = new Map<string, RARC.JKRArchive>();
-    private modelCache = new Map<string, J3DModelData>();
     public cache = new GfxRenderCache();
 
     public resCtrl = new dRes_control_c();
@@ -1125,8 +1124,6 @@ export class ModelCache {
 
     public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
-        for (const model of this.modelCache.values())
-            model.destroy(device);
     }
 }
 
