@@ -1034,7 +1034,7 @@ export class ModelCache {
     public resCtrl = new dRes_control_c();
     public currentStage: string;
 
-    constructor(public device: GfxDevice, private dataFetcher: DataFetcher) {
+    constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private yaz0Decompressor: Yaz0.Yaz0Decompressor) {
     }
 
     public waitForLoad(): Promise<any> {
@@ -1072,22 +1072,23 @@ export class ModelCache {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
-    public fetchArchive(archivePath: string): Promise<RARC.JKRArchive> {
-        let p = this.archivePromiseCache.get(archivePath);
-        if (p === undefined) {
-            p = this.fetchFile(archivePath).then((data) => {
-                if (readString(data, 0, 0x04) === 'Yaz0')
-                    return Yaz0.decompress(data);
-                else
-                    return data;
-            }).then((data) => {
-                const arc = RARC.parse(data);
-                this.archiveCache.set(archivePath, arc);
-                return arc;
-            });
-            this.archivePromiseCache.set(archivePath, p);
-        }
+    private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {
+        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath);
 
+        if (readString(buffer, 0x00, 0x04) === 'Yaz0')
+            buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);
+
+        const rarc = RARC.parse(buffer, this.yaz0Decompressor);
+        this.archiveCache.set(archivePath, rarc);
+        return rarc;
+    }
+
+    public fetchArchive(archivePath: string): Promise<RARC.JKRArchive> {
+        if (this.archivePromiseCache.has(archivePath))
+            return this.archivePromiseCache.get(archivePath)!;
+
+        const p = this.requestArchiveDataInternal(archivePath);
+        this.archivePromiseCache.set(archivePath, p);
         return p;
     }
 
@@ -1144,7 +1145,8 @@ class SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
-            return new ModelCache(context.device, context.dataFetcher);
+            const yaz0Decompressor = await Yaz0.decompressor();
+            return new ModelCache(context.device, context.dataFetcher, yaz0Decompressor);
         });
 
         modelCache.setCurrentStage(this.stageDir);

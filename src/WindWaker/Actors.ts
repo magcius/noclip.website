@@ -5,7 +5,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, assertExists, fallbackUndefined } from '../util';
+import { hexzero, assertExists } from '../util';
 import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
@@ -225,11 +225,6 @@ export function createEmitter(context: WindWakerRenderer, resourceId: number): J
     return emitter;
 }
 
-function parseBRK(resCtrl: dRes_control_c, rarc: RARC.JKRArchive, path: string) {
-    const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
-    return resInfo.lazyLoadResource(ResType.Brk, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
-}
-
 export const enum ObjPName {
     d_a_grass = 0x01B8,
     d_a_ep    = 0x00BA,
@@ -282,7 +277,6 @@ class d_a_tbox implements fopAc_ac_c {
     public static pname = ObjPName.d_a_tbox;
 
     constructor(context: WindWakerRenderer, actor: PlacedActor) {
-        const rarc = context.modelCache.getObjectData(`Dalways`);
         const type = (actor.arg >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
