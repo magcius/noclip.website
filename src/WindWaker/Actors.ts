@@ -510,9 +510,7 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
     if (pf !== null) {
         const actorObj = new pf(renderer, actor);
     } else {
-        const modelMatrix = mat4.create();
-        computeActorModelMatrix(modelMatrix, actor);
-        const loaded = spawnLegacyActor(renderer, roomRenderer, modelMatrix, actor);
+        const loaded = spawnLegacyActor(renderer, roomRenderer, actor);
         if (loaded) {
             // Warn about legacy actors?
             // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);

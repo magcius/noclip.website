@@ -3,7 +3,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { fopAcM_prm_class, BMDObjectRenderer, LightTevColorType, createEmitter } from "./Actors";
+import { fopAcM_prm_class, BMDObjectRenderer, LightTevColorType, createEmitter, PlacedActor } from "./Actors";
 import { J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -12,6 +12,7 @@ import { assertExists, hexzero, leftPad } from '../util';
 import { ResType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
+import { computeModelMatrixSRT } from '../MathHelpers';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -19,7 +20,14 @@ const scratchVec3b = vec3.create();
 
 function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
-export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, actor: fopAcM_prm_class) {
+function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
+    computeModelMatrixSRT(m,
+        actor.scale[0], actor.scale[1], actor.scale[2],
+        0, actor.rotationY, 0,
+        actor.pos[0], actor.pos[1], actor.pos[2]);
+}
+
+export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: fopAcM_prm_class) {
     const modelCache = renderer.modelCache;
     const resCtrl = modelCache.resCtrl;
 
@@ -42,7 +50,8 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     }
 
     function setModelMatrix(m: mat4): void {
-        mat4.mul(m, worldModelMatrix, localModelMatrix);
+        computeActorModelMatrix(m, actor);
+        mat4.mul(m, worldModelMatrix, m);
     }
 
     function buildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
