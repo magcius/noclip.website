@@ -512,7 +512,8 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
             // Warn about legacy actors?
             // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
         } else {
-            console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
+            const dbgName = renderer.objNameGetDbgName(objName);
+            console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
         }
     }
 }

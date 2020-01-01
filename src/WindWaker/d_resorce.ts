@@ -143,10 +143,6 @@ export class dRes_info_c {
                 resEntry.res = BTP.parse(file.buffer) as ResAssetType<T>;
             } else if (resType === ResType.Btk) {
                 resEntry.res = BTK.parse(file.buffer) as ResAssetType<T>;
-            } else if (resType === ResType.Bti) {
-                const bti = new BTIData(assertExists(device), assertExists(cache), BTI.parse(file.buffer, file.name).texture);
-                resEntry.res = bti as ResAssetType<T>;
-                this.destroyables.push(bti);
             } else if (resType === ResType.Bva) {
                 resEntry.res = BVA.parse(file.buffer) as ResAssetType<T>;
             } else {
@@ -155,14 +151,6 @@ export class dRes_info_c {
         }
 
         return resEntry.res;
-    }
-
-    // there has to be a better way to do this junk lol
-    public lazyLoadResourceByID<T extends ResType, G extends OptionalGfx<T>, H extends true>(resType: T, resID: number, device: GfxDevice, cache: GfxRenderCache): ResAssetType<T>;
-    public lazyLoadResourceByID<T extends ResType, G extends OptionalGfx<T>, H extends false>(resType: T, resID: number): ResAssetType<T>;
-    public lazyLoadResourceByID<T extends ResType>(resType: T, resID: number, device?: GfxDevice, cache?: GfxRenderCache): ResAssetType<T> {
-        const resEntry = this.getResEntryByID(resType, resID);
-        return this.lazyLoadResource(resType, resEntry, device, cache);
     }
 
     private getResEntryByID<T extends ResType>(resType: T, resID: number): ResEntry<ResAssetType<T>> {
@@ -209,6 +197,18 @@ export class dRes_info_c {
             resEntry.res = DZB.parse(file.buffer);
         } else if (type === `DZS ` || type === `DZR `) {
             resEntry.res = parseDZSHeaders(file.buffer);
+        }
+
+        // This is a bit of a hack. dRes_info_c::loadResource doesn't normally preprocess texture data,
+        // but we do it here up-front for convenience. These are normally stored in the `TEX ` subdir,
+        // but not all the files in the `TEX ` subdir are BTI files (Always.arc stores raw .ci8 and stuff),
+        // and not all BTI files are in the `TEX ` subdir (System.arc has the toon textures located outside).
+        // So we match on the filename.
+
+        if (file.name.endsWith('.bti')) {
+            const res = new BTIData(device, cache, BTI.parse(file.buffer, file.name).texture);
+            this.destroyables.push(res);
+            resEntry.res = res;
         }
     }
 

@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assertExists, assert, nArray } from '../util';
+import { readString, assertExists, assert, nArray, hexzero, getTextDecoder } from '../util';
 import { DataFetcher } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
@@ -40,12 +40,38 @@ import { dRes_control_c, ResType, DZS } from './d_resorce';
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
 
-interface dStage__ObjectNameTableEntry {
+export interface dStage__ObjectNameTableEntry {
     pname: number;
     subtype: number;
     gbaName: number;
 };
 type dStage__ObjectNameTable = { [name: string]: dStage__ObjectNameTableEntry };
+
+function createRelNameTable(symbolMap: SymbolMap) {
+    const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
+    const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
+    const textDecoder = getTextDecoder('utf8') as TextDecoder;
+
+    const nameTableView = nameTableBuf.Data.createDataView();
+    const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
+    const entryCount = nameTableView.byteLength / 8;
+
+    // The REL table maps the 2-byte ID's from the Actor table to REL names
+    // E.g. ID 0x01B8 -> 'd_a_grass'
+    const relTable: { [id: number]: string } = {};
+
+    for (let i = 0; i < entryCount; i++) {
+        const offset = i * 8;
+        const id = nameTableView.getUint16(offset + 0);
+        const ptr = nameTableView.getUint32(offset + 4);
+        const strOffset = ptr - 0x8033a648;
+        const endOffset = stringsBytes.indexOf(0, strOffset);
+        const relName = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
+        relTable[id] = relName;
+    }
+
+    return relTable;
+}
 
 function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
     const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
@@ -793,6 +819,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private timeOfDayColors: KankyoColors[] = [];
 
+    private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
 
     public onstatechanged!: () => void;
@@ -801,6 +828,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
+        this.relNameTable = createRelNameTable(symbolMap);
         this.objectNameTable = createActorTable(symbolMap);
 
         const wantsSeaPlane = this.stage === 'sea';
@@ -818,8 +846,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.grassPacket = new GrassPacket(this);
     }
 
+    // dStage_searchName
     public searchName(name: string): dStage__ObjectNameTableEntry {
         return assertExists(this.objectNameTable[name]);
+    }
+
+    public objNameGetDbgName(objName: dStage__ObjectNameTableEntry): string {
+        const pnameStr = `0x${hexzero(objName.pname, 0x04)}`;
+        const relName = this.relNameTable[objName.pname] || 'built-in';
+        return `${relName} (${pnameStr})`;
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
@@ -1171,8 +1206,8 @@ class SceneDesc {
         const resCtrl = modelCache.resCtrl;
 
         const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
-        const ZAtoon   = sysRes.lazyLoadResourceByID(ResType.Bti, 0x03, device, modelCache.cache);
-        const ZBtoonEX = sysRes.lazyLoadResourceByID(ResType.Bti, 0x04, device, modelCache.cache);
+        const ZAtoon   = sysRes.getResByID(ResType.Bti, 0x03);
+        const ZBtoonEX = sysRes.getResByID(ResType.Bti, 0x04);
 
         const stageRarc = modelCache.getStageData(`Stage`);
         const dzs = resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`);
