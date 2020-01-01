@@ -491,7 +491,10 @@ const g_fpcPf_ProfileList_p: fpc_pc__Profile[] = [
 
 function fpcPf_Get(pname: number): fpc_pc__Profile | null {
     const pf = g_fpcPf_ProfileList_p.find((pf) => pf.pname === pname);
-    return fallbackUndefined(pf, null);
+    if (pf !== undefined)
+        return pf;
+    else
+        return null;
 }
 
 export function requestArchiveForActor(renderer: WindWakerRenderer, actor: fopAcM_prm_class): void {
