@@ -6,7 +6,7 @@ import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
 import { hexzero, assertExists, fallbackUndefined } from '../util';
-import { J3DModelInstanceSimple } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
 import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
@@ -188,12 +188,10 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 }
 
-function buildChildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, layer: number): BMDObjectRenderer {
-    const model = context.modelCache.getModel(rarc, modelPath);
-    const modelInstance = new J3DModelInstanceSimple(model);
+function buildChildModel(context: WindWakerRenderer, modelData: J3DModelData, layer: number): BMDObjectRenderer {
+    const modelInstance = new J3DModelInstanceSimple(modelData);
     modelInstance.passMask = WindWakerPass.MAIN;
     context.extraTextures.fillExtraTextures(modelInstance);
-    modelInstance.name = modelPath;
     modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
     const objectRenderer = new BMDObjectRenderer(modelInstance);
     objectRenderer.layer = layer;
@@ -212,8 +210,8 @@ function setModelMatrix(actor: PlacedActor, m: mat4): void {
     mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, m);
 }
 
-function buildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, actor: PlacedActor): BMDObjectRenderer {
-    const objectRenderer = buildChildModel(context, rarc, modelPath, actor.layer);
+function buildModel(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
+    const objectRenderer = buildChildModel(context, modelData, actor.layer);
 
     // Transform Actor model from room space to world space
     setModelMatrix(actor, objectRenderer.modelMatrix);
@@ -254,8 +252,8 @@ class d_a_ep implements fopAc_ac_c {
         setModelMatrix(actor, scratchMat4a);
         vec3.set(scratchVec3a, 0, 0, 0);
         if (type === 0 || type === 3) {
-            const rarc = context.modelCache.getObjectData(`Ep`);
-            const m = buildModel(context, rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`, actor);
+            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Ep`, obm ? 0x04 : 0x05);
+            const m = buildModel(context, res, actor);
             scratchVec3a[1] += 140;
         }
         vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
@@ -288,19 +286,23 @@ class d_a_tbox implements fopAc_ac_c {
         const type = (actor.arg >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
-            const m = buildModel(context, rarc, `bdli/boxa.bdl`, actor);
+            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
+            const m = buildModel(context, res, actor);
         } else if (type === 1) {
             // Dark Wood
-            const m = buildModel(context, rarc, `bdli/boxb.bdl`, actor);
+            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
+            const m = buildModel(context, res, actor);
         } else if (type === 2) {
             // Metal
-            const m = buildModel(context, rarc, `bdli/boxc.bdl`, actor);
-            const b = parseBRK(context.modelCache.resCtrl, rarc, 'brk/boxc.brk');
+            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
+            const m = buildModel(context, res, actor);
+            const b = context.modelCache.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
             b.loopMode = LoopMode.ONCE;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
-            const m = buildModel(context, rarc, `bdlm/boxd.bdl`, actor);
+            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
+            const m = buildModel(context, res, actor);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);

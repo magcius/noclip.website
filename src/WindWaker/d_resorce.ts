@@ -182,11 +182,11 @@ export class dRes_info_c {
     }
 
     public getResByID<T extends ResType>(resType: T, resID: number): ResAssetType<T> {
-        return assertExists(this.getResEntryByID(resType, resID).res);
+        return this.lazyLoadResource(resType, this.getResEntryByID(resType, resID));
     }
 
     public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> {
-        return assertExists(this.getResEntryByName(resType, resName).res);
+        return this.lazyLoadResource(resType, this.getResEntryByName(resType, resName));
     }
 
     private autoLoadResource(device: GfxDevice, cache: GfxRenderCache, type: string, resEntry: ResEntry<any>): void {
