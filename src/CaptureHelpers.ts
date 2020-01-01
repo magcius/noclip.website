@@ -3,7 +3,7 @@ import { assertExists, leftPad } from "./util";
 import { Viewer, resizeCanvas } from "./viewer";
 import { ZipFileEntry } from "./ZipFile";
 
-type Callback = (viewer: Viewer, t: number, f: number) => void;
+type Callback = (viewer: Viewer, t: number, f: number) => boolean;
 
 interface CaptureOptions {
     width: number;
@@ -28,13 +28,15 @@ export async function captureScene(viewer: Viewer, options: CaptureOptions): Pro
 
     // This is some ugliness to take over the main code... in an ideal world we'd do this offscreen...
     window.main.setPaused(true);
+    viewer.sceneTime = 0;
+    viewer.rafTime = 0;
     for (let i = 0; i < options.frameCount; i++) {
         const t = i / (options.frameCount - 1);
         resizeCanvas(viewer.canvas, options.width, options.height, 1);
-        viewer.sceneTime = 0;
-        viewer.rafTime = 0;
-        options.setupCallback(viewer, t, i);
-        viewer.update(0);
+        if (!options.setupCallback(viewer, t, i))
+            break;
+        // Delay by waiting a frame on the microtask queue.
+        await Promise.resolve();
         const canvas = viewer.takeScreenshotToCanvas(options.opaque);
         const blob = await convertCanvasToPNG(canvas);
         const data = await blobToArrayBuffer(blob);

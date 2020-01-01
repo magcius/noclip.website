@@ -379,6 +379,8 @@ export class WindWakerRoomRenderer {
             mat4.copy(this.bg0.modelMatrix, modelMatrix);
         if (this.bg1 !== null)
             mat4.copy(this.bg1.modelMatrix, modelMatrix);
+        if (this.bg2 !== null)
+            mat4.copy(this.bg2.modelMatrix, modelMatrix);
         if (this.bg3 !== null)
             mat4.copy(this.bg3.modelMatrix, modelMatrix);
     }
@@ -386,16 +388,12 @@ export class WindWakerRoomRenderer {
     public setKankyoColors(colors: KankyoColors): void {
         if (this.bg0 !== null)
             settingTevStruct(this.bg0, LightTevColorType.BG0, colors);
-
         if (this.bg1 !== null)
             settingTevStruct(this.bg1, LightTevColorType.BG1, colors);
-
         if (this.bg2 !== null)
             settingTevStruct(this.bg2, LightTevColorType.BG2, colors);
-
         if (this.bg3 !== null)
             settingTevStruct(this.bg3, LightTevColorType.BG3, colors);
-
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setKankyoColors(colors);
     }
@@ -927,18 +925,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        const kStartTime = TimeOfDay.DAY;
+        const kProgressTimeOfDay = true;
+        const kDayLengthInSeconds = 60.0;
+        const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
+        this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
+
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
-        const kStartTime = TimeOfDay.DAY;
-        const kProgressTimeOfDay = true;
-        const kDayLengthInSeconds = 60.0;
-        const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
-        this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);

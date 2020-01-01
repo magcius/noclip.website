@@ -1,8 +1,8 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
-import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../../../gx/gx_render';
@@ -171,11 +171,11 @@ export class ShapeInstance {
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
         for (let p = 0; p < shape.mtxGroups.length; p++) {
-            const packet = shape.mtxGroups[p];
+            const mtxGroup = shape.mtxGroups[p];
 
             let instVisible = false;
-            for (let i = 0; i < packet.useMtxTable.length; i++) {
-                const matrixIndex = packet.useMtxTable[i];
+            for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
+                const matrixIndex = mtxGroup.useMtxTable[i];
 
                 // Leave existing matrix.
                 if (matrixIndex === 0xFFFF)
