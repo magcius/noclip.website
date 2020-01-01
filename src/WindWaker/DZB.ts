@@ -3,10 +3,10 @@
 
 // Collision data for objects and rooms.
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, hexdump } from "../../util";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert } from "../util";
 import { vec3 } from "gl-matrix";
-import { Endianness } from "../../endian";
+import { Endianness } from "../endian";
 
 const enum OctreeNodeType {
     BRANCH = 0x00,

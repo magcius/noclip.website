@@ -1,42 +1,41 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { readString, assertExists, assert, nArray } from '../../util';
-import { DataFetcher } from '../../DataFetcher';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { readString, assertExists, assert, nArray } from '../util';
+import { DataFetcher } from '../DataFetcher';
 
-import * as Viewer from '../../viewer';
-import * as BYML from '../../byml';
-import * as RARC from '../rarc';
-import * as Yaz0 from '../../Common/Compression/Yaz0';
-import * as UI from '../../ui';
+import * as Viewer from '../viewer';
+import * as BYML from '../byml';
+import * as RARC from '../j3d/rarc';
+import * as Yaz0 from '../Common/Compression/Yaz0';
+import * as UI from '../ui';
 
 import * as DZB from './DZB';
-import * as JPA from '../../Common/JSYSTEM/JPA';
-import { BMD, BTK, BRK, BCK, BTP } from '../../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelInstanceSimple, J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
-import { DeviceProgram } from '../../Program';
-import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
-import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
-import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
-import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
-import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
-import AnimationController from '../../AnimationController';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import * as JPA from '../Common/JSYSTEM/JPA';
+import { BMD, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
+import { DeviceProgram } from '../Program';
+import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../Color';
+import { ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
+import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
-import { SceneContext } from '../../SceneBase';
-import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
-import { computeModelMatrixSRT, range } from '../../MathHelpers';
-import { TextureMapping } from '../../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
+import { SceneContext } from '../SceneBase';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { computeModelMatrixSRT, range } from '../MathHelpers';
+import { TextureMapping } from '../TextureHolder';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
-import { getTextDecoder } from '../../util';
+import { getTextDecoder } from '../util';
 
 type ActorTable = { [name: string]: ActorInfo };
 

@@ -1,9 +1,9 @@
 
-import ArrayBufferSlice from "../../../ArrayBufferSlice";
-import * as BYML from "../../../byml";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import * as BYML from "../../byml";
 import { openSync, readSync, closeSync, readFileSync, writeFileSync } from "fs";
-import { assertExists, hexzero, assert } from "../../../util";
-import { Endianness } from "../../../endian";
+import { assertExists, hexzero, assert } from "../../util";
+import { Endianness } from "../../endian";
 
 // Standalone tool designed for node to extract data.
 
@@ -15,8 +15,8 @@ function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: num
     return new ArrayBufferSlice(b.buffer as ArrayBuffer);
 }
 
-const pathBaseIn  = `../../../../data/zww_raw`;
-const pathBaseOut = `../../../../data/j3d/ww`;
+const pathBaseIn  = `../../../data/zww_raw`;
+const pathBaseOut = `../../../data/j3d/ww`;
 
 interface SymbolMapEntry {
     sectionTypeIdx: number;

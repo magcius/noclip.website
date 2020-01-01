@@ -1,26 +1,26 @@
 
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assertExists, nArray } from '../../util';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assertExists, nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import * as GX from '../../gx/gx_enum';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import * as GX from '../gx/gx_enum';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SymbolMap, SymbolData } from './Actors';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
-import { Endianness } from '../../endian';
+import { Endianness } from '../endian';
 
-import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../../gx/gx_displaylist';
-import { parseMaterial } from '../../gx/gx_material';
-import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../../gx/gx_displaylist';
-import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
-import { TextureMapping } from '../../TextureHolder';
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
-import { ViewerRenderInput } from '../../viewer';
-import { colorCopy, colorFromRGBA } from '../../Color';
+import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist';
+import { parseMaterial } from '../gx/gx_material';
+import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
+import { TextureMapping } from '../TextureHolder';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { ViewerRenderInput } from '../viewer';
+import { colorCopy, colorFromRGBA } from '../Color';
 
 // @TODO: This belongs somewhere else
 function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {

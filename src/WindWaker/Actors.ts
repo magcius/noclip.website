@@ -1,24 +1,24 @@
 
-import * as Viewer from '../../viewer';
-import * as GX_Material from '../../gx/gx_material';
-import * as RARC from '../rarc';
-import * as JPA from '../../Common/JSYSTEM/JPA';
+import * as Viewer from '../viewer';
+import * as GX_Material from '../gx/gx_material';
+import * as RARC from '../j3d/rarc';
+import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, leftPad } from '../../util';
-import { J3DModelInstanceSimple, BMDModelMaterialData } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
-import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../../Common/JSYSTEM/J3D/J3DLoader";
-import AnimationController from "../../AnimationController";
+import { hexzero, leftPad } from '../util';
+import { J3DModelInstanceSimple, BMDModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../Common/JSYSTEM/J3D/J3DLoader";
+import AnimationController from "../AnimationController";
 import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, pathBase, WindWakerPass, ModelCache } from "./zww_scenes";
 import * as DZB from './DZB';
-import { ColorKind } from "../../gx/gx_render";
-import { AABB } from '../../Geometry';
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
-import { GfxDevice } from '../../gfx/platform/GfxPlatform';
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { colorFromRGBA } from '../../Color';
-import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
-import { computeModelMatrixSRT } from '../../MathHelpers';
+import { ColorKind } from "../gx/gx_render";
+import { AABB } from '../Geometry';
+import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { colorFromRGBA } from '../Color';
+import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { computeModelMatrixSRT } from '../MathHelpers';
 
 export interface ActorInfo { 
     relName: string; 
