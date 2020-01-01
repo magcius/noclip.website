@@ -306,10 +306,10 @@ export class WindWakerWater implements SceneDesc {
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             const model_bmd = new J3DModelData(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')!));
-            concat(renderer.textureHolder.viewerTextures, model_bmd.modelMaterialData.tex1Data.viewerTextures);
+            concat(renderer.textureHolder.viewerTextures, model_bmd.modelMaterialData.tex1Data!.viewerTextures);
             renderer.modelData.push(model_bmd);
             const model1_bmd = new J3DModelData(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')!));
-            concat(renderer.textureHolder.viewerTextures, model1_bmd.modelMaterialData.tex1Data.viewerTextures);
+            concat(renderer.textureHolder.viewerTextures, model1_bmd.modelMaterialData.tex1Data!.viewerTextures);
             renderer.modelData.push(model1_bmd);
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk')!);
 

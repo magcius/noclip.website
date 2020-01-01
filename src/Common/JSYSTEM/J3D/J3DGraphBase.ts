@@ -741,6 +741,8 @@ export class MaterialInstance {
 // TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
 // based on hashing texture data?
 export class TEX1Data {
+    private realized: boolean = true;
+
     private gfxSamplers: GfxSampler[] = [];
     private gfxTextures: (GfxTexture | null)[] = [];
     public viewerTextures: (Texture | null)[] = [];
@@ -783,22 +785,25 @@ export class TEX1Data {
     }
 
     public destroy(device: GfxDevice): void {
+        if (!this.realized)
+            return;
+
         for (let i = 0; i < this.gfxTextures.length; i++)
             if (this.gfxTextures[i] !== null)
                 device.destroyTexture(this.gfxTextures[i]!);
+
+        this.realized = false;
     }
 }
 
 interface MaterialRes {
     mat3: MAT3 | null;
-    tex1: TEX1;
+    tex1: TEX1 | null;
 }
 
 export class BMDModelMaterialData {
-    private realized: boolean = true;
-
     public materialData: MaterialData[] | null = null;
-    public tex1Data: TEX1Data;
+    public tex1Data: TEX1Data | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, materialRes: MaterialRes) {
         const mat3 = materialRes.mat3, tex1 = materialRes.tex1;
@@ -808,11 +813,12 @@ export class BMDModelMaterialData {
                 this.materialData.push(new MaterialData(mat3.materialEntries[i]));
         }
 
-        this.tex1Data = new TEX1Data(device, cache, tex1);
+        if (tex1 !== null)
+            this.tex1Data = new TEX1Data(device, cache, tex1);
     }
 
     public createDefaultTextureMappings(): TextureMapping[] {
-        const tex1Data = this.tex1Data;
+        const tex1Data = assertExists(this.tex1Data);
         const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
         for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
             tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
@@ -820,11 +826,8 @@ export class BMDModelMaterialData {
     }
 
     public destroy(device: GfxDevice): void {
-        if (!this.realized)
-            return;
-
-        this.tex1Data.destroy(device);
-        this.realized = false;
+        if (this.tex1Data !== null)
+            this.tex1Data.destroy(device);
     }
 }
 
@@ -923,7 +926,7 @@ export class J3DModelData {
         this.bufferCoalescer.destroy(device);
         for (let i = 0; i < this.shapeData.length; i++)
             this.shapeData[i].destroy(device);
-        this.modelMaterialData.destroy(device);
+        this.modelMaterialData.tex1Data!.destroy(device);
         this.realized = false;
     }
 }
@@ -996,15 +999,18 @@ export class J3DModelInstance {
     public shapeInstanceState = new ShapeInstanceState();
 
     public modelMaterialData: BMDModelMaterialData;
+    public tex1Data: TEX1Data;
 
     private jointVisibility: boolean[];
 
     constructor(public modelData: J3DModelData, materialHacks?: GX_Material.GXMaterialHacks) {
         assert(this.modelData.realized);
+
         this.modelMaterialData = this.modelData.modelMaterialData;
         this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
         });
+        this.tex1Data = this.modelMaterialData.tex1Data!;
 
         this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
@@ -1031,7 +1037,7 @@ export class J3DModelInstance {
 
     public destroy(device: GfxDevice): void {
         this.modelData.destroy(device);
-        this.modelMaterialData.destroy(device);
+        this.tex1Data.destroy(device);
     }
 
     public setVisible(v: boolean): void {
@@ -1049,7 +1055,8 @@ export class J3DModelInstance {
         }
 
         // Set up our new texture mappings.
-        this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
+        if (modelMaterialData.tex1Data !== null)
+            this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
     }
 
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
@@ -1111,7 +1118,7 @@ export class J3DModelInstance {
      */
     public getTextureMappingReference(samplerName: string): TextureMapping | null {
         // Find the correct slot for the texture name.
-        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
+        const samplers = this.tex1Data.tex1.samplers;
         for (let i = 0; i < samplers.length; i++)
             if (samplers[i].name === samplerName)
                 return this.materialInstanceState.textureMappings[i];
@@ -1124,11 +1131,11 @@ export class J3DModelInstance {
      */
     public fillDefaultTextureMapping(m: TextureMapping, samplerName: string): void {
         // Find the correct slot for the texture name.
-        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
+        const samplers = this.tex1Data.tex1.samplers;
         const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
         if (samplerIndex < 0)
             throw new Error(`Cannot find texture by name ${samplerName}`);
-        this.modelMaterialData.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
+        this.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
     }
 
     /**

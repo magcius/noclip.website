@@ -91,9 +91,9 @@ export class ZWWExtraTextures {
     @UI.dfRange(1, 15, 0.01)
     public toonTexPower: number = 15;
 
-    constructor(device: GfxDevice, public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
-        this.ZAtoon.fillTextureMapping(this.textureMapping[0]);
-        this.ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
+    constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
+        ZAtoon.fillTextureMapping(this.textureMapping[0]);
+        ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
         this.dynToonTex = new DynToonTex(device);
     }
 
@@ -120,8 +120,6 @@ export class ZWWExtraTextures {
     }
 
     public destroy(device: GfxDevice): void {
-        this.ZAtoon.destroy(device);
-        this.ZBtoonEX.destroy(device);
         this.dynToonTex.destroy(device);
     }
 }
@@ -1058,9 +1056,10 @@ export class ModelCache {
         this.resCtrl.destroyList(this.device, this.resCtrl.resStg);
     }
 
-    public async fetchObjectData(arcName: string): Promise<void> {
+    public async fetchObjectData(arcName: string): Promise<RARC.JKRArchive> {
         const archive = await this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resObj);
+        return archive;
     }
 
     public async fetchStageData(arcName: string): Promise<void> {
@@ -1076,17 +1075,11 @@ export class ModelCache {
         return this.getArchive(`${pathBase}/Stage/${this.currentStage}/${arcName}.arc`);
     }
 
-    public getModel(rarc: RARC.JKRArchive, modelPath: string): J3DModelData {
-        let p = this.modelCache.get(modelPath);
-
-        if (p === undefined) {
-            const bmdData = rarc.findFileData(modelPath)!;
-            const bmd = BMD.parse(bmdData);
-            p = new J3DModelData(this.device, this.cache, bmd);
-            this.modelCache.set(modelPath, p);
-        }
-
-        return p;
+    // For compatibility.
+    public getModel(archive: RARC.JKRArchive, modelPath: string): J3DModelData {
+        const resInfo = assertExists(this.resCtrl.findResInfoByArchive(archive, this.resCtrl.resObj));
+        const resEntry = assertExists(resInfo.res.find((g) => modelPath.endsWith(g.file.name)));
+        return resEntry.res;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1138,13 +1131,12 @@ class SceneDesc {
 
         const resCtrl = modelCache.resCtrl;
 
-        // Load the toon textures, which require a bit of an extra push from the resource manager.
         const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
-        const ZAtoon   = sysRes.forceLoadResource<BTIData>(device, modelCache.cache, 'TEX ', 0x03);
-        const ZBtoonEX = sysRes.forceLoadResource<BTIData>(device, modelCache.cache, 'TEX ', 0x04);
+        const ZAtoon   = sysRes.lazyLoadResourceByID(ResType.Bti, 0x03, device, modelCache.cache);
+        const ZBtoonEX = sysRes.lazyLoadResourceByID(ResType.Bti, 0x04, device, modelCache.cache);
 
         const stageRarc = modelCache.getStageData(`Stage`);
-        const dzs = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Stage`, `stage.dzs`);
+        const dzs = resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`);
         const mult = dzs.headers.get('MULT');
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
@@ -1175,7 +1167,7 @@ class SceneDesc {
             const roomIdx = Math.abs(this.rooms[i]);
 
             // Load any object archives.
-            const dzr = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
+            const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
             this.requestArchivesForActors(renderer, i, dzr, actorTable);
         }
 
@@ -1210,7 +1202,7 @@ class SceneDesc {
             mat4.copy(renderer.roomMatrix, modelMatrix);
             mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
-            const dzr = resCtrl.getStageResByName<DZS>(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
+            const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
             this.spawnActors(renderer, roomRenderer, dzr, modelMatrix, actorTable);
         }
 

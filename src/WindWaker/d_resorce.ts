@@ -1,5 +1,5 @@
 
-import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 import * as DZB from './DZB';
 
@@ -10,6 +10,7 @@ import { assert, readString, assertExists } from "../util";
 import { J3DModelData, BMDModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { Destroyable } from "../SceneBase";
 
 interface DZSChunkHeader {
     type: string;
@@ -40,8 +41,24 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): DZS {
 }
 
 export const enum ResType {
-    Model, Bmt, Bck, Bpk, Brk, Btk, Bti, Dzb, Dzs, Bva,
+    Model, Bmt, Bck, Bpk, Brk, Btp, Btk, Bti, Dzb, Dzs, Bva,
 }
+
+export type ResAssetType<T extends ResType> =
+    T extends ResType.Model ? J3DModelData :
+    T extends ResType.Bmt ? BMDModelMaterialData :
+    T extends ResType.Bck ? ANK1 :
+    T extends ResType.Bpk ? TPT1 :
+    T extends ResType.Brk ? TRK1 :
+    T extends ResType.Btp ? TPT1 :
+    T extends ResType.Btk ? TTK1 :
+    T extends ResType.Bti ? BTIData :
+    T extends ResType.Dzb ? DZB.DZB :
+    T extends ResType.Dzs ? DZS :
+    T extends ResType.Bva ? VAF1 :
+    never;
+
+type OptionalGfx<T extends ResType> = T extends ResType.Bti ? true : false;
 
 export class dRes_control_c {
     public resObj: dRes_info_c[] = [];
@@ -54,25 +71,34 @@ export class dRes_control_c {
         return null;
     }
 
-    public getStageResByName<T>(resType: ResType, arcName: string, resName: string): T {
+    public findResInfoByArchive(archive: JKRArchive, resList: dRes_info_c[]): dRes_info_c | null {
+        for (let i = 0; i < resList.length; i++)
+            if (resList[i].archive === archive)
+                return resList[i];
+        return null;
+    }
+
+    public getStageResByName<T extends ResType>(resType: T, arcName: string, resName: string): ResAssetType<T> {
         return this.getResByName(resType, arcName, resName, this.resStg);
     }
 
-    public getObjectRes<T>(resType: ResType, arcName: string, resID: number): T {
+    public getObjectRes<T extends ResType>(resType: T, arcName: string, resID: number): ResAssetType<T> {
         return this.getResByID(resType, arcName, resID, this.resObj);
     }
 
-    public getResByName<T>(resType: ResType, arcName: string, resName: string, resList: dRes_info_c[]): T {
+    public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByName(resType, resName);
     }
 
-    public getResByID<T>(resType: ResType, arcName: string, resID: number, resList: dRes_info_c[]): T {
+    public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByID(resType, resID);
     }
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
+        if (this.findResInfo(arcName, resList) !== null)
+            return;
         resList.push(new dRes_info_c(device, cache, arcName, archive));
     }
 
@@ -99,147 +125,113 @@ interface ResEntry<T> {
 // contents into J3DModelData, etc. classes, but we can't do that here since we have
 // to load our data into the GPU, sometimes.
 export class dRes_info_c {
-    public resModel: ResEntry<J3DModelData>[] = [];
-    public resBmt: ResEntry<BMDModelMaterialData>[] = [];
-    public resBck: ResEntry<ANK1>[] = [];
-    public resBpk: ResEntry<TRK1>[] = [];
-    public resBrk: ResEntry<TRK1>[] = [];
-    public resBtk: ResEntry<TTK1>[] = [];
-    public resBti: ResEntry<BTIData>[] = [];
-    public resDzb: ResEntry<DZB.DZB>[] = [];
-    public resDzs: ResEntry<DZS>[] = [];
-    public resBva: ResEntry<VAF1>[] = [];
+    public res: ResEntry<any | null>[] = [];
+    public destroyables: Destroyable[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public name: string, public archive: JKRArchive) {
         this.loadResource(device, cache);
     }
 
-    private getResList<T>(resType: ResType): ResEntry<T>[] {
-        if (resType === ResType.Model)
-            return this.resModel as unknown as ResEntry<T>[];
-        if (resType === ResType.Bmt)
-            return this.resBmt as unknown as ResEntry<T>[];
-        if (resType === ResType.Bck)
-            return this.resBck as unknown as ResEntry<T>[];
-        if (resType === ResType.Bpk)
-            return this.resBpk as unknown as ResEntry<T>[];
-        if (resType === ResType.Brk)
-            return this.resBrk as unknown as ResEntry<T>[];
-        if (resType === ResType.Btk)
-            return this.resBtk as unknown as ResEntry<T>[];
-        if (resType === ResType.Bti)
-            return this.resBti as unknown as ResEntry<T>[];
-        if (resType === ResType.Dzb)
-            return this.resDzb as unknown as ResEntry<T>[];
-        if (resType === ResType.Dzs)
-            return this.resDzs as unknown as ResEntry<T>[];
-        if (resType === ResType.Bva)
-            return this.resBva as unknown as ResEntry<T>[];
-        else
-            throw "whoops";
+    public lazyLoadResource<T extends ResType>(resType: T, resEntry: ResEntry<ResAssetType<T> | null>, device?: GfxDevice, cache?: GfxRenderCache): ResAssetType<T> {
+        if (resEntry.res === null) {
+            const file = resEntry.file;
+            if (resType === ResType.Bpk) {
+                resEntry.res = BPK.parse(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Brk) {
+                resEntry.res = BRK.parse(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Btp) {
+                resEntry.res = BTP.parse(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Btk) {
+                resEntry.res = BTK.parse(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Bti) {
+                const bti = new BTIData(assertExists(device), assertExists(cache), BTI.parse(file.buffer, file.name).texture);
+                resEntry.res = bti as ResAssetType<T>;
+                this.destroyables.push(bti);
+            } else if (resType === ResType.Bva) {
+                resEntry.res = BVA.parse(file.buffer) as ResAssetType<T>;
+            } else {
+                throw "whoops";
+            }
+        }
+
+        return resEntry.res;
     }
 
-    public getResByIDFromList<T>(resList: ResEntry<T>[], resID: number): T {
+    // there has to be a better way to do this junk lol
+    public lazyLoadResourceByID<T extends ResType, G extends OptionalGfx<T>, H extends true>(resType: T, resID: number, device: GfxDevice, cache: GfxRenderCache): ResAssetType<T>;
+    public lazyLoadResourceByID<T extends ResType, G extends OptionalGfx<T>, H extends false>(resType: T, resID: number): ResAssetType<T>;
+    public lazyLoadResourceByID<T extends ResType>(resType: T, resID: number, device?: GfxDevice, cache?: GfxRenderCache): ResAssetType<T> {
+        const resEntry = this.getResEntryByID(resType, resID);
+        return this.lazyLoadResource(resType, resEntry, device, cache);
+    }
+
+    private getResEntryByID<T extends ResType>(resType: T, resID: number): ResEntry<ResAssetType<T>> {
+        const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++)
             if (resList[i].file.id === resID)
-                return resList[i].res;
+                return resList[i];
         throw "whoops";
     }
 
-    public getResByNameFromList<T>(resList: ResEntry<T>[], resName: string): T {
+    private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> {
+        const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++)
             if (resList[i].file.name === resName)
-                return resList[i].res;
+                return resList[i];
         throw "whoops";
     }
 
-    public getResByID<T>(resType: ResType, resID: number): T {
-        return this.getResByIDFromList(this.getResList(resType), resID);
+    public getResByID<T extends ResType>(resType: T, resID: number): ResAssetType<T> {
+        return assertExists(this.getResEntryByID(resType, resID).res);
     }
 
-    public getResByName<T>(resType: ResType, resName: string): T {
-        return this.getResByNameFromList(this.getResList(resType), resName);
+    public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> {
+        return assertExists(this.getResEntryByName(resType, resName).res);
     }
 
-    private pushRes<T>(resList: ResEntry<T>[], file: RARCFile, res: T): T {
-        resList.push({ file, res });
-        return res;
-    }
-
-    private loadResourceOfType(device: GfxDevice, cache: GfxRenderCache, type: string, file: RARCFile): any {
+    private autoLoadResource(device: GfxDevice, cache: GfxRenderCache, type: string, resEntry: ResEntry<any>): void {
+        const file = resEntry.file;
         if (type === `BMD ` || type === `BMDM` || type === `BMDC` || type === `BMDS` || type === `BSMD` ||
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI`) {
             // J3D models.
             const res = new J3DModelData(device, cache, BMD.parse(file.buffer));
-            return this.pushRes(this.resModel, file, res);
-        } else if (type === `BMT `) {
+            this.destroyables.push(res);
+            resEntry.res = res;
+        } else if (type === `BMT ` || type === `BMTM`) {
             // J3D material table.
             const res = new BMDModelMaterialData(device, cache, BMT.parse(file.buffer));
-            return this.pushRes(this.resBmt, file, res);
+            this.destroyables.push(res);
+            resEntry.res = res;
         } else if (type === `BCK ` || type === `BCKS`) {
             // TODO(jstpierre): BCKS sound data.
-            const res = BCK.parse(file.buffer);
-            return this.pushRes(this.resBck, file, res);
-        } else if (type === `BPK `) {
-            const res = BPK.parse(file.buffer);
-            return this.pushRes(this.resBpk, file, res);
-        } else if (type === `BRK `) {
-            const res = BRK.parse(file.buffer);
-            return this.pushRes(this.resBrk, file, res);
-        } else if (type === `BTP `) {
-            const res = BTK.parse(file.buffer);
-            return this.pushRes(this.resBtk, file, res);
-        } else if (type === `BTK `) {
-            const res = BTK.parse(file.buffer);
-            return this.pushRes(this.resBtk, file, res);
-        } else if (type === `TEX `) {
-            const res = new BTIData(device, cache, BTI.parse(file.buffer, file.name).texture);
-            return this.pushRes(this.resBti, file, res);
+            resEntry.res = BCK.parse(file.buffer);
         } else if (type === `DZB `) {
-            const res = DZB.parse(file.buffer);
-            return this.pushRes(this.resDzb, file, res);
+            resEntry.res = DZB.parse(file.buffer);
         } else if (type === `DZS ` || type === `DZR `) {
-            const res = parseDZSHeaders(file.buffer);
-            return this.pushRes(this.resDzs, file, res);
-        } else if (type === `BVA `) {
-            const res = BVA.parse(file.buffer);
-            return this.pushRes(this.resBva, file, res);
-        } else if (type === `BAS `) {
-            // Known; anim sound data, can't handle.
-        } else if (type === `MSG `) {
-            // Known; MESG data, can't handle.
-        } else if (type === `STB `) {
-            // Known; JStudio Binary, can't handle.
-        } else if (type === `DAT `) {
-            // Known; Misc data, cant' handle.
-        } else {
-            console.warn(`Unsupported resource type: ${type} / ${file.name}`);
-            debugger;
+            resEntry.res = parseDZSHeaders(file.buffer);
         }
     }
 
     private loadResource(device: GfxDevice, cache: GfxRenderCache): void {
+        for (let i = 0; i < this.archive.files.length; i++) {
+            const res = { file: this.archive.files[i], res: null };
+            this.res.push(res);
+        }
+
         const root = this.archive!.root;
         for (let i = 0; i < root.subdirs.length; i++) {
-            const resourceType = root.subdirs[i];
-            assert(resourceType.subdirs.length === 0);
+            const subdir = root.subdirs[i];
+            assert(subdir.subdirs.length === 0);
 
-            for (let j = 0; j < resourceType.files.length; j++)
-                this.loadResourceOfType(device, cache, resourceType.type, resourceType.files[j]);
+            for (let j = 0; j < subdir.files.length; j++) {
+                const res = this.res.find((res) => res.file === subdir.files[j])!;
+                this.autoLoadResource(device, cache, subdir.type, res);
+            }
         }
     }
 
-    public forceLoadResource<T>(device: GfxDevice, cache: GfxRenderCache, type: string, resID: number): T {
-        const file = assertExists(this.archive.files.find((file) => file.id === resID));
-        return this.loadResourceOfType(device, cache, type, file);
-    }
-
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.resModel.length; i++)
-            this.resModel[i].res.destroy(device);
-        for (let i = 0; i < this.resBmt.length; i++)
-            this.resBmt[i].res.destroy(device);
-        for (let i = 0; i < this.resBti.length; i++)
-            this.resBti[i].res.destroy(device);
+        for (let i = 0; i < this.destroyables.length; i++)
+            this.destroyables[i].destroy(device);
     }
 }
