@@ -27,18 +27,44 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
+import { fopAcM_prm_class, loadActor, ObjectRenderer, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../SceneBase';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { range } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
+import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
-import { getTextDecoder } from '../util';
-import { dRes_control_c, dRes_info_c, ResType, DZS } from './d_resorce';
+import { dRes_control_c, ResType, DZS } from './d_resorce';
 
-type ActorTable = { [name: string]: ActorInfo };
+interface dStage__ObjectNameTableEntry {
+    pname: number;
+    subtype: number;
+    gbaName: number;
+};
+type dStage__ObjectNameTable = { [name: string]: dStage__ObjectNameTableEntry };
+
+function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
+    const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
+    const data = entry.Data;
+    const view = data.createDataView();
+
+    // The object table consists of null-terminated ASCII strings of length 12.
+    // @NOTE: None are longer than 7 characters
+    const kNameLength = 12;
+    const actorCount = data.byteLength / kNameLength;
+    const actorTable: dStage__ObjectNameTable = {};
+    for (let i = 0; i < actorCount; i++) {
+        const offset = i * kNameLength;
+        const name = readString(data, offset + 0x00, kNameLength);
+        const id = view.getUint16(offset + 0x08, false);
+        const subtype = view.getUint8(offset + 0x0A);
+        const gbaName = view.getUint8(offset + 0x0B);
+        actorTable[name] = { pname: id, subtype, gbaName };
+    }
+
+    return actorTable;
+}
 
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
@@ -735,6 +761,9 @@ class SkyEnvironment {
     }
 }
 
+type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
+type SymbolMap = { SymbolData: SymbolData[] };
+
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -761,11 +790,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private timeOfDayColors: KankyoColors[] = [];
 
+    private objectNameTable: dStage__ObjectNameTable;
+
     public onstatechanged!: () => void;
 
     constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
+
+        this.objectNameTable = createActorTable(symbolMap);
 
         const wantsSeaPlane = this.stage === 'sea';
         if (wantsSeaPlane)
@@ -780,6 +813,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.treePacket = new TreePacket(this);
         this.flowerPacket = new FlowerPacket(this);
         this.grassPacket = new GrassPacket(this);
+    }
+
+    public searchName(name: string): dStage__ObjectNameTableEntry {
+        return assertExists(this.objectNameTable[name]);
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
@@ -1140,8 +1177,6 @@ class SceneDesc {
         const mult = dzs.headers.get('MULT');
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-        const relTable = this.createRelNameTable(symbolMap);
-        const actorTable = this.createActorTable(symbolMap, relTable);
 
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;
@@ -1161,14 +1196,14 @@ class SceneDesc {
         }
         renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
-        this.requestArchivesForActors(renderer, -1, dzs, actorTable);
+        this.requestArchivesForActors(renderer, -1, dzs);
 
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
 
             // Load any object archives.
             const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
-            this.requestArchivesForActors(renderer, i, dzr, actorTable);
+            this.requestArchivesForActors(renderer, i, dzr);
         }
 
         await modelCache.waitForLoad();
@@ -1203,12 +1238,12 @@ class SceneDesc {
             mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
 
             const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
-            this.spawnActors(renderer, roomRenderer, dzr, modelMatrix, actorTable);
+            this.spawnActors(renderer, roomRenderer, dzr, modelMatrix);
         }
 
         // HACK(jstpierre): We spawn stage actors on the first room renderer.
         mat4.identity(scratchMatrix);
-        this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix, actorTable);
+        this.spawnActors(renderer, renderer.roomRenderers[0], dzs, scratchMatrix);
 
         // TODO(jstpierre): Not all the actors load in the requestArchives phase...
         await modelCache.waitForLoad();
@@ -1237,58 +1272,7 @@ class SceneDesc {
         }
     }
 
-    private createRelNameTable(symbolMap: SymbolMap) {
-        const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
-        const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
-        const textDecoder = getTextDecoder('utf8') as TextDecoder;
-        
-        const nameTableView = nameTableBuf.Data.createDataView();
-        const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
-        const entryCount = nameTableView.byteLength / 8;
-
-        // The REL table maps the 2-byte ID's from the Actor table to REL names
-        // E.g. ID 0x01B8 -> 'd_a_grass'
-        const relTable: { [id: number]: string } = {};
-
-        for (let i = 0; i < entryCount; i++) {
-            const offset = i * 8;
-            const id = nameTableView.getUint16(offset + 0);
-            const ptr = nameTableView.getUint32(offset + 4);
-
-            const strOffset = ptr - 0x8033a648;
-            const endOffset = stringsBytes.indexOf(0, strOffset);
-            const relName = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
-
-            relTable[id] = relName;
-        }
-
-        return relTable;
-    }
-
-    private createActorTable(symbolMap: SymbolMap, relTable: { [id: number]: string }) {
-        const entry = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_stage.o' && e.SymbolName === 'l_objectName'));
-        const data = entry.Data;
-        const view = data.createDataView();
-
-        // The object table consists of null-terminated ASCII strings of length 12.
-        // @NOTE: None are longer than 7 characters
-        const kNameLength = 12;
-        const actorCount = data.byteLength / kNameLength;
-        const actorTable = {} as ActorTable;
-        for (let i = 0; i < actorCount; i++) {
-            const offset = i * kNameLength;
-            const name = readString(data, offset + 0x00, kNameLength);
-            const id = view.getUint16(offset + 0x08, false);
-            const subtype = view.getUint8(offset + 0x0A);
-            const gbaName = view.getUint8(offset + 0x0B);
-            const relName = relTable[id];
-            actorTable[name] = { relName, subtype };
-        }
-
-        return actorTable;
-    }
-
-    private iterActorLayerACTR(actorTable: ActorTable, roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
+    private iterActorLayerACTR(roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1307,17 +1291,18 @@ class SceneDesc {
             const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
             const enemyNum = view.getUint16(actrTableIdx + 0x1E);
 
-            const actor: Actor = {
+            const actor: fopAcM_prm_class = {
                 name,
-                info: actorTable[name],
-                parameters,
+                arg: parameters,
                 auxParams1,
                 auxParams2,
-                roomIndex: roomIdx,
+                roomNo: roomIdx,
                 layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(1, 1, 1),
                 rotationY: rotY,
+                subtype: 0,
+                gbaName: 0,
             };
 
             callback(actor);
@@ -1326,7 +1311,7 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayerSCOB(actorTable: ActorTable, roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: Actor) => void): void {
+    private iterActorLayerSCOB(roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1349,17 +1334,18 @@ class SceneDesc {
             const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
             // const pad = view.getUint8(actrTableIdx + 0x23);
 
-            const actor: Actor = {
+            const actor: fopAcM_prm_class = {
                 name,
-                info: actorTable[name],
-                parameters,
+                arg: parameters,
                 auxParams1,
                 auxParams2,
-                roomIndex: roomIdx,
+                roomNo: roomIdx,
                 layer: layerIdx,
                 pos: vec3.fromValues(posX, posY, posZ),
                 scale: vec3.fromValues(scaleX, scaleY, scaleZ),
                 rotationY: rotY,
+                subtype: 0,
+                gbaName: 0,
             };
 
             callback(actor);
@@ -1368,7 +1354,7 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayers(actorTable: ActorTable, roomIdx: number, dzs: DZS, callback: (it: Actor) => void): void {
+    private iterActorLayers(roomIdx: number, dzs: DZS, callback: (it: fopAcM_prm_class) => void): void {
         const chunkHeaders = dzs.headers;
 
         function buildChunkLayerName(base: string, i: number): string {
@@ -1380,25 +1366,25 @@ class SceneDesc {
         }
 
         for (let i = -1; i < 16; i++) {
-            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
-            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
-            this.iterActorLayerACTR(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
-            this.iterActorLayerSCOB(actorTable, roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
+            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
+            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
+            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
+            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
+            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
+            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
         }        
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, modelMatrix: mat4, actorTable: ActorTable): void {
-        this.iterActorLayers(actorTable, roomRenderer.roomIdx, dzs, (actor) => {
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, modelMatrix: mat4): void {
+        this.iterActorLayers(roomRenderer.roomIdx, dzs, (actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer, roomRenderer, modelMatrix, placedActor);
         });
     }
 
-    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS, actorTable: ActorTable): void {
-        this.iterActorLayers(actorTable, roomIdx, dzs, (actor) => {
+    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS): void {
+        this.iterActorLayers(roomIdx, dzs, (actor) => {
             requestArchiveForActor(renderer, actor);
         });
     }

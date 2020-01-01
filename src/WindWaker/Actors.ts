@@ -5,9 +5,9 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, leftPad, assertExists } from '../util';
+import { hexzero, leftPad, assertExists, fallback, fallbackUndefined } from '../util';
 import { J3DModelInstanceSimple, BMDModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { ANK1, TTK1, TRK1, TPT1, LoopMode, BMT } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
 import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
 import * as DZB from './DZB';
@@ -21,26 +21,26 @@ import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRendere
 import { computeModelMatrixSRT } from '../MathHelpers';
 import { dRes_control_c, ResType } from './d_resorce';
 
-export interface ActorInfo { 
-    relName: string; 
-    subtype: number;
-};
-
-export interface Actor {
+export interface fopAcM_prm_class {
+    // NOTE(jstpierre): This is normally passed separately.
     name: string;
-    info: ActorInfo; 
-    parameters: number;
-    auxParams1: number;
-    auxParams2: number;
-    roomIndex: number;
-    layer: number;
+    arg: number;
     pos: vec3;
     scale: vec3;
+    // These are all "rot", according to the game.
+    auxParams1: number;
     rotationY: number;
+    auxParams2: number;
+    roomNo: number;
+    subtype: number;
+    gbaName: number;
+    // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
+    // load inactive layers...
+    layer: number;
 };
 
-export interface PlacedActor extends Actor {
-    // TODO(jstpierre): Remove these fields.
+// TODO(jstpierre): Remove this.
+export interface PlacedActor extends fopAcM_prm_class {
     roomRenderer: WindWakerRoomRenderer;
 };
 
@@ -60,6 +60,7 @@ const scratchVec3b = vec3.create();
 
 // dScnKy_env_light_c::settingTevStruct
 export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevColorType, colors: KankyoColors): void {
+    // This is way more complex than this.
     if (type === LightTevColorType.ACTOR) {
         actor.setColorOverride(ColorKind.C0, colors.actorC0);
         actor.setColorOverride(ColorKind.K0, colors.actorK0);
@@ -188,9 +189,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 }
 
-export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
-export type SymbolMap = { SymbolData: SymbolData[] };
-
 function buildChildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, modelPath: string, layer: number): BMDObjectRenderer {
     const model = context.modelCache.getModel(rarc, modelPath);
     const modelInstance = new J3DModelInstanceSimple(model);
@@ -203,7 +201,7 @@ function buildChildModel(context: WindWakerRenderer, rarc: RARC.JKRArchive, mode
     return objectRenderer;
 }
 
-function computeActorModelMatrix(m: mat4, actor: Actor): void {
+function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
     computeModelMatrixSRT(m,
         actor.scale[0], actor.scale[1], actor.scale[2],
         0, actor.rotationY, 0,
@@ -230,19 +228,29 @@ function createEmitter(context: WindWakerRenderer, resourceId: number): JPA.JPAB
     return emitter;
 }
 
+function parseBRK(resCtrl: dRes_control_c, rarc: RARC.JKRArchive, path: string) {
+    const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
+    return resInfo.lazyLoadResource(ResType.Brk, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
+}
+
 function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
-
-
+export const enum ObjPName {
+    d_a_grass = 0x01B8,
+    d_a_ep    = 0x00BA,
+    d_a_tbox  = 0x0126,
+};
 
 // -------------------------------------------------------
 // Generic Torch
 // -------------------------------------------------------
-class ATorch implements ActorRel {
+class d_a_ep implements ActorRel {
+    public static pname = ObjPName.d_a_ep;
+
     constructor(context: WindWakerRenderer, actor: PlacedActor) {
-        const ga = !!((actor.parameters >>> 6) & 0x01);
-        const obm = !!((actor.parameters >>> 7) & 0x01);
-        let type = (actor.parameters & 0x3F);
+        const ga = !!((actor.arg >>> 6) & 0x01);
+        const obm = !!((actor.arg >>> 7) & 0x01);
+        let type = (actor.arg & 0x3F);
         if (type === 0x3F)
             type = 0;
 
@@ -270,20 +278,17 @@ class ATorch implements ActorRel {
         // TODO(jstpierre): ga
     }
 
-    public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
+    public static requestArchives(context: WindWakerRenderer, actor: fopAcM_prm_class): void {
         context.modelCache.fetchObjectData(`Ep`);
     }
 }
 
-function parseBRK(resCtrl: dRes_control_c, rarc: RARC.JKRArchive, path: string) {
-    const resInfo = assertExists(resCtrl.findResInfoByArchive(rarc, resCtrl.resObj));
-    return resInfo.lazyLoadResource(ResType.Brk, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
-}
+class d_a_tbox implements ActorRel {
+    public static pname = ObjPName.d_a_tbox;
 
-class ATreasureChest implements ActorRel {
     constructor(context: WindWakerRenderer, actor: PlacedActor) {
         const rarc = context.modelCache.getObjectData(`Dalways`);
-        const type = (actor.parameters >>> 20) & 0x0F;
+        const type = (actor.arg >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
             const m = buildModel(context, rarc, `bdli/boxa.bdl`, actor);
@@ -301,11 +306,11 @@ class ATreasureChest implements ActorRel {
             const m = buildModel(context, rarc, `bdlm/boxd.bdl`, actor);
         } else {
             // Might be something else, not sure.
-            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
         }
     }
 
-    public static requestArchives(context: WindWakerRenderer, actor: Actor): void {
+    public static requestArchives(context: WindWakerRenderer, actor: fopAcM_prm_class): void {
         context.modelCache.fetchObjectData(`Dalways`);
     }
 }
@@ -313,7 +318,9 @@ class ATreasureChest implements ActorRel {
 // -------------------------------------------------------
 // Grass/Flowers/Trees managed by their respective packets
 // -------------------------------------------------------
-class AGrass implements ActorRel {
+class d_a_grass implements ActorRel {
+    public static pname = ObjPName.d_a_grass;
+
     static kSpawnPatterns = [
         { group: 0, count: 1 },
         { group: 0, count: 7 },
@@ -409,7 +416,7 @@ class AGrass implements ActorRel {
         ]
     ];
 
-    constructor(context: WindWakerRenderer, actor: Actor) {
+    constructor(context: WindWakerRenderer, actor: fopAcM_prm_class) {
         const enum FoliageType {
             Grass,
             Tree,
@@ -417,12 +424,12 @@ class AGrass implements ActorRel {
             PinkFlower
         };
 
-        const spawnPatternId = (actor.parameters & 0x00F) >> 0;
-        const type: FoliageType = (actor.parameters & 0x030) >> 4;
-        const itemIdx = (actor.parameters >> 6) & 0x3f; // Determines which item spawns when this is cut down
+        const spawnPatternId = (actor.arg & 0x00F) >> 0;
+        const type: FoliageType = (actor.arg & 0x030) >> 4;
+        const itemIdx = (actor.arg >> 6) & 0x3f; // Determines which item spawns when this is cut down
 
-        const pattern = AGrass.kSpawnPatterns[spawnPatternId];
-        const offsets = AGrass.kSpawnOffsets[pattern.group];
+        const pattern = d_a_grass.kSpawnPatterns[spawnPatternId];
+        const offsets = d_a_grass.kSpawnOffsets[pattern.group];
         const count = pattern.count;
 
         switch (type) {
@@ -431,7 +438,7 @@ class AGrass implements ActorRel {
                     // @NOTE: Grass does not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.grassPacket.newData(pos, actor.roomIndex, itemIdx);
+                    context.grassPacket.newData(pos, actor.roomNo, itemIdx);
                 }
             break;
 
@@ -441,7 +448,7 @@ class AGrass implements ActorRel {
                 for (let j = 0; j < count; j++) {
                     const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
                     const pos = vec3.add(scratchVec3b, offset, actor.pos);
-                    context.treePacket.newData(pos, 0, actor.roomIndex);
+                    context.treePacket.newData(pos, 0, actor.roomNo);
                 }
             break;
 
@@ -453,7 +460,7 @@ class AGrass implements ActorRel {
                     // @NOTE: Flowers do not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.flowerPacket.newData(pos, isPink, actor.roomIndex, itemIdx);
+                    context.flowerPacket.newData(pos, isPink, actor.roomNo, itemIdx);
                 }
             break;
             default:
@@ -470,28 +477,39 @@ interface ActorRel {
     // @TODO: Most actors have draw and update functions
 }
 
-interface ActorRelConstructor {
+interface fpc_pc__Profile {
+    pname: ObjPName;
+
     new(context: WindWakerRenderer, actor: PlacedActor): ActorRel;
-    requestArchives?(context: WindWakerRenderer, actor: Actor): void;
+    requestArchives?(context: WindWakerRenderer, actor: fopAcM_prm_class): void;
 }
 
-const kRelTable: { [relName: string]: ActorRelConstructor } = {
-    'd_a_grass': AGrass,
-    'd_a_ep': ATorch,
-    'd_a_tbox': ATreasureChest,
+const g_fpcPf_ProfileList_p: fpc_pc__Profile[] = [
+    d_a_ep,
+    d_a_tbox,
+    d_a_grass,
+];
+
+function fpcPf_Get(pname: number): fpc_pc__Profile | null {
+    const pf = g_fpcPf_ProfileList_p.find((pf) => pf.pname === pname);
+    return fallbackUndefined(pf, null);
 }
 
-export function requestArchiveForActor(renderer: WindWakerRenderer, actor: Actor): void {
-    const relConstructor = kRelTable[actor.info.relName];
-    if (relConstructor !== undefined && relConstructor.requestArchives !== undefined)
-        relConstructor.requestArchives(renderer, actor);
+export function requestArchiveForActor(renderer: WindWakerRenderer, actor: fopAcM_prm_class): void {
+    const objName = renderer.searchName(actor.name);
+
+    const pf = fpcPf_Get(objName.pname);
+    if (pf !== null && pf.requestArchives !== undefined)
+        pf.requestArchives(renderer, actor);
 }
 
 export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, worldModelMatrix: mat4, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
-    const relConstructor = kRelTable[actor.info.relName];
-    if (relConstructor) {
-        const actorObj = new relConstructor(renderer, actor);
+    const objName = renderer.searchName(actor.name);
+
+    const pf = fpcPf_Get(objName.pname);
+    if (pf !== null) {
+        const actorObj = new pf(renderer, actor);
         return;
     }
 
@@ -500,8 +518,8 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
         const modelMatrix = mat4.create();
         computeActorModelMatrix(modelMatrix, actor);
         const loaded = loadGenericActor(renderer, roomRenderer, modelMatrix, worldModelMatrix, actor);
-        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`); }
-        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+        if (loaded) { return console.warn(`Unimplemented behavior: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`); }
+        else console.warn(`Unknown object: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
     }
 
     // Doors: TODO(jstpierre)
@@ -547,7 +565,7 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
 
 
 
-function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: Actor) {
+function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, localModelMatrix: mat4, worldModelMatrix: mat4, actor: fopAcM_prm_class) {
     const modelCache = renderer.modelCache;
     const resCtrl = modelCache.resCtrl;
 
@@ -622,7 +640,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
 
     if (actor.name === 'item') {
         // Item table provided with the help of the incredible LagoLunatic <3.
-        const itemId = (actor.parameters & 0x000000FF);
+        const itemId = (actor.arg & 0x000000FF);
 
         // Heart
         if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhrtl.bdl`));
@@ -697,7 +715,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     // Grandma
     else if (actor.name === 'Ba1') {
         // Only allow the sleeping grandma through, because how else can you live in life...
-        if (actor.parameters === 0x03) {
+        if (actor.arg === 0x03) {
             fetchArchive(`Ba`).then(rarc => {
                 const m = buildModel(rarc, `bdlm/ba.bdl`);
                 m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));
@@ -1245,7 +1263,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         actor.name === 'Okioke'  || actor.name === 'Kmi02'   || actor.name === 'Ptubo' ||
         actor.name === 'KkibaB'   || actor.name === 'Kmi00'   || actor.name === 'Hbox2S'
     ) {
-        const type = (actor.parameters & 0x0F000000) >> 24;
+        const type = (actor.arg & 0x0F000000) >> 24;
         let model;
         switch (type) {
         case 0:
@@ -1378,8 +1396,6 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         const b = buildModel(rarc, `bdl/kanban.bdl`);
         b.lightTevColorType = LightTevColorType.BG0;
     });
-    // Doors: TODO(jstpierre)
-    else if (actor.name === 'KNOB00') return;
     // Forsaken Fortress door
     else if (actor.name === 'SMBdor') fetchArchive(`Mbdoor`).then((rarc) => {
         // Frame
@@ -1445,7 +1461,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         actor.name === 'Hbox1'   || actor.name === 'MpwrB'   || actor.name === 'DBLK0' ||
         actor.name === 'DBLK1'   || actor.name === 'DKkiba'  || actor.name === 'Hbox2'
     ) {
-        const type = (actor.parameters & 0x0F000000) >> 24;
+        const type = (actor.arg & 0x0F000000) >> 24;
         switch (type) {
         case 0:
         case 4:
@@ -1533,7 +1549,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     });
     // Gohdan
     else if (actor.name === 'Bst') fetchArchive(`Bst`).then((rarc) => {
-        const type = (actor.parameters & 0x000000FF);
+        const type = (actor.arg & 0x000000FF);
         switch (type) {
         case 0:
             // Head
@@ -1591,7 +1607,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     else if (actor.name === 'Puti') fetchArchive(`Pt`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
     else if (actor.name === 'Rdead1' || actor.name === 'Rdead2') fetchArchive(`Rd`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rd.bdl`);
-        const idleAnimType = (actor.parameters & 0x00000001);
+        const idleAnimType = (actor.arg & 0x00000001);
         if (idleAnimType == 0) {
             m.bindANK1(parseBCK(rarc, `bcks/tachip.bck`));
         } else {
@@ -1602,7 +1618,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     else if (actor.name === 'gmos') fetchArchive(`Gm`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
     else if (actor.name === 'mo2') fetchArchive(`Mo2`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
     else if (actor.name === 'pow') fetchArchive(`Pw`).then(async (rarc) => {
-        let color = (actor.parameters & 0x0000FE00) >> 9;
+        let color = (actor.arg & 0x0000FE00) >> 9;
         if (color > 5)
             color = 0;
 
@@ -1633,7 +1649,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     else if (name === 'bable') fetchArchive(`Bl`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bl.bdl`);
 
-        const bubbleType = (actor.parameters & 0x000000FF);
+        const bubbleType = (actor.arg & 0x000000FF);
         
         if (bubbleType == 0x80) {
             m.bindTTK1(parseBTK(rarc, 'btk/off.btk'));
@@ -1649,7 +1665,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     // Darknut
     else if (actor.name === 'Tn') fetchArchive(`Tn`).then(async (rarc) => {
         const equipmentType = (actor.auxParams1 & 0x00E0) >>> 5;
-        const armorColor = (actor.parameters & 0x000000F0) >>> 4;
+        const armorColor = (actor.arg & 0x000000F0) >>> 4;
         
         const mainModel = buildModel(rarc, `bmdm/tn_main.bmd`);
         const mainAnim = parseBCK(rarc, `bck/aniou1.bck`);
@@ -1737,7 +1753,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     });
     // Peahats and Seahats
     else if (actor.name === 'p_hat') {
-        const type = (actor.parameters & 0x000000FF);
+        const type = (actor.arg & 0x000000FF);
         if (type == 1) {
             fetchArchive(`Sh`).then((rarc) => {
                 const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
@@ -1767,7 +1783,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         const cc = buildModel(rarc, `bmdm/cc.bmd`);
         cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
 
-        const chuchuType = (actor.parameters & 0x0000FF00) >>> 8;
+        const chuchuType = (actor.arg & 0x0000FF00) >>> 8;
         let frameNum;
         switch (chuchuType) {
         case 0:
@@ -1854,7 +1870,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)));
     // Triangle Island Statue: TODO(jstpierre): finish the submodels
     else if (actor.name === 'Doguu') fetchArchive(`Doguu`).then((rarc) => {
-        const which = actor.parameters & 0xFF;
+        const which = actor.arg & 0xFF;
         const bmtPaths = ['bmt/vgsmd.bmt', 'bmt/vgsmf.bmt', 'bmt/vgsmn.bmt'];
         const brkPaths = ['brk/vgsmd.brk', 'brk/vgsmf.brk', 'brk/vgsmn.brk'];
         const m = buildModelBMT(rarc, `bdlm/vgsma.bdl`, bmtPaths[which]);
@@ -2067,7 +2083,7 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
     // Nintendo Gallery
     else if (actor.name === 'Figure') {
         fetchArchive(`Figure`).then((rarc) => buildModel(rarc, `bdlm/vf_bs.bdl`))
-        const figureId = actor.parameters & 0x000000FF;
+        const figureId = actor.arg & 0x000000FF;
         const baseFilename = `vf_${leftPad(''+figureId, 3)}`;
         const base = `bdl/${baseFilename}`;
 
