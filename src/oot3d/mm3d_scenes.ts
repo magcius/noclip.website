@@ -857,6 +857,13 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
         }
 
+        else if (actor.actorId === ActorId.En_Vm) { 
+            const gar = await fetchArchive(`zelda_vm.gar.lzs`);
+            const b = buildModel(gar, `model/beamos.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/vm_akesime.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+
 
 
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 2)} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
