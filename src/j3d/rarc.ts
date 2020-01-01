@@ -3,10 +3,29 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, readString } from '../util';
+import * as Yay0 from '../Common/Compression/Yay0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
+
+export const enum RARCFileFlags {
+    Normal          = 0x01,
+    Directory       = 0x02,
+    Compressed      = 0x04,
+    // These flags decide MRAM/ARAM placement.
+    CompressionType = 0x80,
+}
+
+export const enum RARCCompressionType {
+    None = 0x00,
+    Yay0 = 0x01, // SZP
+    Yaz0 = 0x02, // SZS
+    ASR  = 0x03, // ASR (Seen only in the Wii Home menu)
+}
 
 export interface RARCFile {
     id: number;
     name: string;
+    flags: RARCFileFlags;
+    compressionType: RARCCompressionType;
     buffer: ArrayBufferSlice;
 }
 
@@ -74,7 +93,7 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export function parse(buffer: ArrayBufferSlice): RARC {
+export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): RARC {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'RARC');
@@ -106,7 +125,7 @@ export function parse(buffer: ArrayBufferSlice): RARC {
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
             const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04);
-            const flags = (flagsAndNameOffs >>> 24) & 0xFF;
+            let flags = (flagsAndNameOffs >>> 24) & 0xFF;
             const nameOffs = flagsAndNameOffs & 0x00FFFFFF;
             const name = readString(buffer, strTableOffs + nameOffs, -1, true);
 
@@ -117,14 +136,35 @@ export function parse(buffer: ArrayBufferSlice): RARC {
             if (name === '.' || name === '..')
                 continue;
 
-            const isDirectory = !!(flags & 0x02);
+            const isDirectory = !!(flags & RARCFileFlags.Directory);
             if (isDirectory) {
                 const subdirEntryIndex = entryDataOffs;
                 subdirIndexes.push(subdirEntryIndex);
             } else {
                 const offs = dataOffs + entryDataOffs;
-                const fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                const file: RARCFile = { id, name, buffer: fileBuffer };
+                const rawFileBuffer = buffer.slice(offs, offs + entryDataSize);
+
+                let compressionType: RARCCompressionType = RARCCompressionType.None;
+                let fileBuffer: ArrayBufferSlice;
+                if (!!(flags & RARCFileFlags.Compressed))
+                    compressionType = (flags & RARCFileFlags.CompressionType) ? RARCCompressionType.Yaz0 : RARCCompressionType.Yay0;
+
+                // Only decompress if we're expecting it.
+                if (compressionType !== RARCCompressionType.None && yaz0Decompressor !== null) {
+                    if (compressionType === RARCCompressionType.Yaz0) {
+                        fileBuffer = Yaz0.decompressSync(yaz0Decompressor, rawFileBuffer);
+                        compressionType = RARCCompressionType.None;
+                    } else if (compressionType === RARCCompressionType.Yay0) {
+                        fileBuffer = Yay0.decompress(rawFileBuffer);
+                        compressionType = RARCCompressionType.None;
+                    } else {
+                        throw "whoops";
+                    }
+                } else {
+                    fileBuffer = rawFileBuffer;
+                }
+
+                const file: RARCFile = { id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
             }
