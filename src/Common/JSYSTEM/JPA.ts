@@ -3736,7 +3736,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > disTime)
+            if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
             let refDistanceSq = -1;
@@ -4177,7 +4177,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > disTime)
+            if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
             let refDistanceSq = -1;
@@ -4632,7 +4632,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 fadeInRate = 1 / (fadeIn - enTime);
 
             let fadeOutRate = 1;
-            if (fadeOut > disTime)
+            if (fadeOut < disTime)
                 fadeOutRate = 1 / (disTime - fadeOut);
 
             // All of our parameters.
