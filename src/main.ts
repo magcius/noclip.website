@@ -8,7 +8,7 @@ import ArrayBufferSlice from './ArrayBufferSlice';
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes';
 import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
-import * as Scenes_Zelda_TheWindWaker from './j3d/WindWaker/zww_scenes';
+import * as Scenes_Zelda_TheWindWaker from './WindWaker/zww_scenes';
 import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes';
 import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1';
