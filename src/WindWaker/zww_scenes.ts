@@ -1481,7 +1481,7 @@ const sceneDescs = [
     new SceneDesc("Adanmae", "Pond"),
     new SceneDesc("Comori", "Komali's Room"),
     new SceneDesc("Atorizk", "Postal Service"),
-    new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+    new SceneDesc("M_NewD2", "Dragon Roost Cavern", [0, 1, 2, -3, 4, -5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("M_DragB", "Boss Room"),
     new SceneDesc("M_Dra09", "Mini Boss Room", [9]),
 

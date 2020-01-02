@@ -1,5 +1,5 @@
 
-import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 import * as DZB from './DZB';
 
@@ -145,6 +145,8 @@ export class dRes_info_c {
                 resEntry.res = BTK.parse(file.buffer) as ResAssetType<T>;
             } else if (resType === ResType.Bva) {
                 resEntry.res = BVA.parse(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Dzs) {
+                resEntry.res = parseDZSHeaders(file.buffer) as ResAssetType<T>;
             } else {
                 throw "whoops";
             }
@@ -182,9 +184,15 @@ export class dRes_info_c {
         if (type === `BMD ` || type === `BMDM` || type === `BMDC` || type === `BMDS` || type === `BSMD` ||
             type === `BDL ` || type === `BDLM` || type === `BDLC` || type === `BDLI`) {
             // J3D models.
-            const res = new J3DModelData(device, cache, BMD.parse(file.buffer));
-            this.destroyables.push(res);
-            resEntry.res = res;
+
+            // XXX(jstpierre): Sometimes there are J3D2bmd2 files we can't parse, like
+            // Ff.arc / ff.bmd. Skip over these.
+            const j3d = new JSystemFileReaderHelper(file.buffer);
+            if (j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4') {
+                const res = new J3DModelData(device, cache, BMD.parseReader(j3d));
+                this.destroyables.push(res);
+                resEntry.res = res;
+            }
         } else if (type === `BMT ` || type === `BMTM`) {
             // J3D material table.
             const res = new BMDModelMaterialData(device, cache, BMT.parse(file.buffer));
@@ -195,8 +203,6 @@ export class dRes_info_c {
             resEntry.res = BCK.parse(file.buffer);
         } else if (type === `DZB `) {
             resEntry.res = DZB.parse(file.buffer);
-        } else if (type === `DZS ` || type === `DZR `) {
-            resEntry.res = parseDZSHeaders(file.buffer);
         }
 
         // This is a bit of a hack. dRes_info_c::loadResource doesn't normally preprocess texture data,

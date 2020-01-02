@@ -1189,11 +1189,8 @@ function assocHierarchy(bmd: BMD): void {
 }
 
 export class BMD {
-    public static parse(buffer: ArrayBufferSlice): BMD {
+    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
         const bmd = new BMD();
-
-        const j3d = new JSystemFileReaderHelper(buffer);
-        assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
 
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
@@ -1208,6 +1205,12 @@ export class BMD {
         assocHierarchy(bmd);
 
         return bmd;
+    }
+
+    public static parse(buffer: ArrayBufferSlice): BMD {
+        const j3d = new JSystemFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
+        return this.parseReader(j3d);
     }
 
     public inf1: INF1;
