@@ -375,12 +375,8 @@ export class FlowerPacket {
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
         let template;
 
-        // @TODO: This should probably be precomputed and stored in the context
-        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
-
-        // Transform camera to room space for distance culling
+        const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
-        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
 
         // Draw white flowers
         template = renderInstManager.pushTemplateRenderInst();
@@ -397,11 +393,11 @@ export class FlowerPacket {
 
                 if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE)
                     continue;
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
 
                 const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
             }
         }
@@ -422,11 +418,11 @@ export class FlowerPacket {
 
                 if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK)
                     continue;
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
 
                 const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
             }
         }
@@ -448,11 +444,11 @@ export class FlowerPacket {
 
                 if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU)
                     continue;
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
 
                 const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMatrix);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
             }
         }
@@ -760,13 +756,8 @@ export class TreePacket {
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice) {
         let template;
 
-        // @TODO: This should probably be precomputed and stored in the context
-        // TODO(jstpierre): This doesn't seem right, since we overwrite roomMatrix at load time?
-        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
-
-        // Transform camera to room space for distance culling
+        const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
-        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
 
         // Draw shadows
         template = renderInstManager.pushTemplateRenderInst();
@@ -783,10 +774,10 @@ export class TreePacket {
             this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             for (let i = 0; i < this.datas.length; i++) {
                 const data = this.datas[i];
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
                 const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.shadowModelMtx);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
                 this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
             }
         }
@@ -810,15 +801,15 @@ export class TreePacket {
 
                 if (data.flags & TreeFlags.isFrustumCulled)
                     continue;
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
 
                 const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.trunkModelMtx);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
                 this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
 
                 const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.topModelMtx);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
                 this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
             }
         }
@@ -1045,12 +1036,8 @@ export class GrassPacket {
     public draw(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
         let template;
 
-        // @TODO: This should probably be precomputed and stored in the context
-        const roomToView = mat4.mul(scratchMat4a, viewerInput.camera.viewMatrix, this.context.roomMatrix);
-
-        // Transform camera to room space for distance culling
+        const worldToView = viewerInput.camera.viewMatrix;
         const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
-        const roomCamPos = vec3.transformMat4(scratchVec3b, worldCamPos, this.context.roomInverseMatrix);
 
         template = renderInstManager.pushTemplateRenderInst();
         {
@@ -1067,11 +1054,11 @@ export class GrassPacket {
 
                 if (data.flags & GrassFlags.isFrustumCulled)
                     continue;
-                if (distanceCull(roomCamPos, data.pos))
+                if (distanceCull(worldCamPos, data.pos))
                     continue;
 
                 const renderInst = this.shape.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], roomToView, data.modelMtx);
+                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMtx);
                 this.shape.fillPacketParams(packetParams, renderInst);
             }
         }

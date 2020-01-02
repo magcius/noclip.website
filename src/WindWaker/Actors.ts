@@ -1,11 +1,10 @@
 
 import * as Viewer from '../viewer';
 import * as GX_Material from '../gx/gx_material';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, assertExists } from '../util';
+import { hexzero } from '../util';
 import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
@@ -17,7 +16,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { colorFromRGBA } from '../Color';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeModelMatrixSRT } from '../MathHelpers';
-import { dRes_control_c, ResType } from './d_resorce';
+import { ResType } from './d_resorce';
 import { spawnLegacyActor } from './LegacyActor';
 
 export interface fopAcM_prm_class {
@@ -207,13 +206,10 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
 
 function setModelMatrix(actor: PlacedActor, m: mat4): void {
     computeActorModelMatrix(m, actor);
-    mat4.mul(m, actor.roomRenderer.roomToWorldMatrix, m);
 }
 
 function buildModel(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
     const objectRenderer = buildChildModel(context, modelData, actor.layer);
-
-    // Transform Actor model from room space to world space
     setModelMatrix(actor, objectRenderer.modelMatrix);
     actor.roomRenderer.objectRenderers.push(objectRenderer);
     return objectRenderer;

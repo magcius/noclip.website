@@ -31,8 +31,6 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     const modelCache = renderer.modelCache;
     const resCtrl = modelCache.resCtrl;
 
-    const worldModelMatrix = roomRenderer.roomToWorldMatrix;
-
     function fetchArchive(objArcName: string): Promise<RARC.JKRArchive> {
         return renderer.modelCache.fetchObjectData(objArcName);
     }
@@ -51,7 +49,6 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     function setModelMatrix(m: mat4): void {
         computeActorModelMatrix(m, actor);
-        mat4.mul(m, worldModelMatrix, m);
     }
 
     function buildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {

@@ -386,8 +386,6 @@ export class WindWakerRoomRenderer {
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
-    public roomToWorldMatrix = mat4.create();
-    public worldToRoomMatrix = mat4.create();
     public extraTextures: ZWWExtraTextures;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, renderer: WindWakerRenderer, public roomIdx: number) {
@@ -807,10 +805,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
-
-    // TODO(jstpierre): Remove, these are junk
-    public roomMatrix = mat4.create();
-    public roomInverseMatrix = mat4.create();
 
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
@@ -1249,34 +1243,37 @@ class SceneDesc {
 
         await modelCache.waitForLoad();
 
+        const roomMultMtx = mat4.create();
+        let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
             const roomRenderer = renderer.roomRenderers[i];
             const roomIdx = roomRenderer.roomIdx;
 
+            // The MULT affects BG actors, but not actors.
+            mat4.identity(roomMultMtx);
             if (mult !== undefined)
-                this.getRoomMult(roomRenderer.worldToRoomMatrix, dzs, mult, roomIdx);
+                this.getRoomMult(roomMultMtx, dzs, mult, roomIdx);
 
-            // HACK: for single-purpose sea levels, translate the objects instead of the model.
+            // Actors are stored in world-space normally.
+            actorMultMtx = null;
+
             if (isSea && !isFullSea) {
-                mat4.invert(roomRenderer.worldToRoomMatrix, roomRenderer.worldToRoomMatrix);
-            } else {
-                roomRenderer.setModelMatrix(roomRenderer.worldToRoomMatrix);
-                mat4.identity(roomRenderer.worldToRoomMatrix);
+                // HACK(jstpierre): For non-full sea levels, we apply the inverse of the MULT, so that
+                // the room is located at 0, 0. This is for convenience and back-compat with existing
+                // savestates.
+                actorMultMtx = scratchMatrix;
+                mat4.invert(actorMultMtx, roomMultMtx);
+                mat4.identity(roomMultMtx);
             }
 
-            // @HACK: Set up un-hacked room matrices
-            mat4.invert(roomRenderer.roomToWorldMatrix, roomRenderer.worldToRoomMatrix);
-
-            mat4.copy(renderer.roomMatrix, roomRenderer.worldToRoomMatrix);
-            mat4.invert(renderer.roomInverseMatrix, renderer.roomMatrix);
+            // Spawn the BG actors in their proper location.
+            roomRenderer.setModelMatrix(roomMultMtx);
 
             const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
-            this.spawnActors(renderer, roomRenderer, dzr);
+            this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
         }
 
         // HACK(jstpierre): We spawn stage actors on the first room renderer.
-        // This probably doesn't work if the first room is translated with MULT. Need to better
-        // support the logic here...
         this.spawnActors(renderer, renderer.roomRenderers[0], dzs);
 
         // TODO(jstpierre): Not all the actors load in the requestArchives phase...
@@ -1409,9 +1406,11 @@ class SceneDesc {
         }
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS): void {
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, actorMultMtx: mat4 | null = null): void {
         this.iterActorLayers(roomRenderer.roomIdx, dzs, (actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
+            if (actorMultMtx !== null)
+                vec3.transformMat4(actor.pos, actor.pos, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer, roomRenderer, placedActor);
         });
