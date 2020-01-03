@@ -3,7 +3,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { fopAcM_prm_class, BMDObjectRenderer, LightTevColorType, createEmitter, PlacedActor } from "./Actors";
+import { fopAcM_prm_class, BMDObjectRenderer, createEmitter } from "./Actors";
 import { J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -13,6 +13,7 @@ import { ResType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
 import { computeModelMatrixSRT } from '../MathHelpers';
+import { LightType, dKy_tevstr_init } from './d_kankyo';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -43,6 +44,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         modelInstance.name = actor.name;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         const objectRenderer = new BMDObjectRenderer(modelInstance);
+        dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
         objectRenderer.layer = actor.layer;
         return objectRenderer;
     }
@@ -842,7 +844,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Bigger trees
     else if (actor.name === 'lwood') fetchArchive(`Lwood`).then((rarc) => {
         const b = buildModel(rarc, `bdl/alwd.bdl`);
-        b.lightTevColorType = LightTevColorType.BG0;
+        b.lightTevColorType = LightType.BG0;
     });
     else if (actor.name === 'Oyashi') fetchArchive(`Oyashi`).then((rarc) => buildModel(rarc, `bdl/oyashi.bdl`));
     else if (actor.name === 'Vyasi') fetchArchive(`Vyasi`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
@@ -856,22 +858,22 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Sign
     else if (actor.name === 'Kanban') fetchArchive(`Kanban`).then((rarc) => {
         const b = buildModel(rarc, `bdl/kanban.bdl`);
-        b.lightTevColorType = LightTevColorType.BG0;
+        b.lightTevColorType = LightType.BG0;
     });
     // Forsaken Fortress door
     else if (actor.name === 'SMBdor') fetchArchive(`Mbdoor`).then((rarc) => {
         // Frame
         const fu = buildModel(rarc, `bdl/s_mbdfu.bdl`);
-        fu.lightTevColorType = LightTevColorType.BG0;
+        fu.lightTevColorType = LightType.BG0;
         // Left door
         const l = buildModel(rarc, `bdl/s_mbd_l.bdl`);
-        l.lightTevColorType = LightTevColorType.BG0;
+        l.lightTevColorType = LightType.BG0;
         // Right door
         const r = buildModel(rarc, `bdl/s_mbd_r.bdl`);
-        r.lightTevColorType = LightTevColorType.BG0;
+        r.lightTevColorType = LightType.BG0;
         // Barricade. Not set to the correct default unlocked position.
         const to = buildModel(rarc, `bdl/s_mbdto.bdl`);
-        to.lightTevColorType = LightTevColorType.BG0;
+        to.lightTevColorType = LightType.BG0;
     });
     // Forsaken Fortress water gate
     else if (actor.name === 'MjDoor') fetchArchive(`S_MSPDo`).then((rarc) => buildModel(rarc, `bdl/s_mspdo.bdl`));
@@ -1353,7 +1355,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'AjavW') {
         fetchArchive(`AjavW`).then(rarc => {
             const m = buildModel(rarc, `bdlm/ajavw.bdl`);
-            m.lightTevColorType = LightTevColorType.BG1;
+            m.lightTevColorType = LightType.BG1;
             m.bindTTK1(parseBTK(rarc, `btk/ajavw.btk`));
         });
     } else if (actor.name === 'Vdora') fetchArchive(`Vdora`).then((rarc) => buildModel(rarc, `bdl/vdora.bdl`));

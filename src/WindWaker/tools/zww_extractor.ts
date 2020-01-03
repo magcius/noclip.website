@@ -177,6 +177,10 @@ function main() {
     extractSymbol(datas, dolHeader, framework, `c_dylink.o`, `DynamicNameTable`); // Maps IDs to pointers to REL names in the string table
     extractSymbol(datas, dolHeader, framework, `c_dylink.o`, `@stringBase0`); // List of Null-terminated REL names. Indexed by DynamicNameTable
 
+    // d_kankyo_data.o
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute`);
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute_boss`);
+
     const crg1 = {
         SymbolData: datas,
     };

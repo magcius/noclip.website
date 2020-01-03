@@ -99,6 +99,14 @@ export function lightSetWorldDirection(light: Light, camera: Camera, x: number, 
     return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
 }
 
+export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
+    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
+    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
+    vec3.copy(dst.DistAtten, worldLight.DistAtten);
+    vec3.copy(dst.CosAtten, worldLight.CosAtten);
+    colorCopy(dst.Color, worldLight.Color);
+}
+
 export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
     if (cutoff <= 0 || cutoff >= 90)
         spotFunc = GX.SpotFunction.OFF;

@@ -12,7 +12,7 @@ import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Destroyable } from "../SceneBase";
 
-interface DZSChunkHeader {
+export interface DZSChunkHeader {
     type: string;
     count: number;
     offs: number;

@@ -8,8 +8,7 @@ import { hexzero } from '../util';
 import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { KankyoColors, ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
-import { ColorKind } from "../gx/gx_render";
+import { ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, dGlobals } from "./zww_scenes";
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -17,6 +16,7 @@ import { colorFromRGBA } from '../Color';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import { ResType } from './d_resorce';
+import { LightType, dKy_tevstr_c, settingTevStruct, setLightTevColorType, dKy_tevstr_init } from './d_kankyo';
 import { spawnLegacyActor } from './LegacyActor';
 
 export interface fopAcM_prm_class {
@@ -44,43 +44,13 @@ export interface PlacedActor extends fopAcM_prm_class {
 
 // Special-case actors
 
-export const enum LightTevColorType {
-    ACTOR = 0,
-    BG0 = 1,
-    BG1 = 2,
-    BG2 = 3,
-    BG3 = 4,
-}
-
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
-// dScnKy_env_light_c::settingTevStruct
-export function settingTevStruct(actor: J3DModelInstanceSimple, type: LightTevColorType, colors: KankyoColors): void {
-    // This is way more complex than this.
-    if (type === LightTevColorType.ACTOR) {
-        actor.setColorOverride(ColorKind.C0, colors.actorC0);
-        actor.setColorOverride(ColorKind.K0, colors.actorK0);
-    } else if (type === LightTevColorType.BG0) {
-        actor.setColorOverride(ColorKind.C0, colors.bg0C0);
-        actor.setColorOverride(ColorKind.K0, colors.bg0K0);
-    } else if (type === LightTevColorType.BG1) {
-        actor.setColorOverride(ColorKind.C0, colors.bg1C0);
-        actor.setColorOverride(ColorKind.K0, colors.bg1K0);
-    } else if (type === LightTevColorType.BG2) {
-        actor.setColorOverride(ColorKind.C0, colors.bg2C0);
-        actor.setColorOverride(ColorKind.K0, colors.bg2K0);
-    } else if (type === LightTevColorType.BG3) {
-        actor.setColorOverride(ColorKind.C0, colors.bg3C0);
-        actor.setColorOverride(ColorKind.K0, colors.bg3K0);
-    }
-}
-
 export interface ObjectRenderer {
-    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
+    prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
-    setKankyoColors(colors: KankyoColors): void;
     setExtraTextures(v: ZWWExtraTextures): void;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
@@ -93,8 +63,9 @@ const screenProjection = new ScreenSpaceProjection();
 export class BMDObjectRenderer implements ObjectRenderer {
     public visible = true;
     public modelMatrix: mat4 = mat4.create();
-    public lightTevColorType = LightTevColorType.ACTOR;
+    public lightTevColorType = LightType.Actor;
     public layer: number;
+    public tevstr = new dKy_tevstr_c();
 
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
@@ -144,14 +115,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setExtraTextures(extraTextures);
     }
 
-    public setKankyoColors(colors: KankyoColors): void {
-        settingTevStruct(this.modelInstance, this.lightTevColorType, colors);
-
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setKankyoColors(colors);
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -168,33 +132,18 @@ export class BMDObjectRenderer implements ObjectRenderer {
                 return;
         }
 
-        const light = this.modelInstance.getGXLightReference(0);
-        GX_Material.lightSetWorldPosition(light, viewerInput.camera, 250, 250, 250);
-        GX_Material.lightSetWorldDirection(light, viewerInput.camera, -250, -250, -250);
-        // Toon lighting works by setting the color to red.
-        colorFromRGBA(light.Color, 1, 0, 0, 0);
-        vec3.set(light.CosAtten, 1.075, 0, 0);
-        vec3.set(light.DistAtten, 1.075, 0, 0);
+        settingTevStruct(globals.g_env_light, this.lightTevColorType, null, this.tevstr);
+        setLightTevColorType(globals.g_env_light, this.modelInstance, this.tevstr, viewerInput.camera);
 
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(device, renderInstManager, viewerInput);
+            this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].destroy(device);
     }
-}
-
-function buildChildModel(context: WindWakerRenderer, modelData: J3DModelData, layer: number): BMDObjectRenderer {
-    const modelInstance = new J3DModelInstanceSimple(modelData);
-    modelInstance.passMask = WindWakerPass.MAIN;
-    context.extraTextures.fillExtraTextures(modelInstance);
-    modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-    const objectRenderer = new BMDObjectRenderer(modelInstance);
-    objectRenderer.layer = layer;
-    return objectRenderer;
 }
 
 function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
@@ -209,7 +158,13 @@ function setModelMatrix(actor: PlacedActor, m: mat4): void {
 }
 
 function buildModel(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
-    const objectRenderer = buildChildModel(context, modelData, actor.layer);
+    const modelInstance = new J3DModelInstanceSimple(modelData);
+    modelInstance.passMask = WindWakerPass.MAIN;
+    context.extraTextures.fillExtraTextures(modelInstance);
+    modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+    const objectRenderer = new BMDObjectRenderer(modelInstance);
+    dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
+    objectRenderer.layer = actor.layer;
     setModelMatrix(actor, objectRenderer.modelMatrix);
     actor.roomRenderer.objectRenderers.push(objectRenderer);
     return objectRenderer;
@@ -488,7 +443,7 @@ function fpcPf_Get(pname: number): fpc_pc__Profile | null {
 }
 
 export function requestArchiveForActor(renderer: WindWakerRenderer, actor: fopAcM_prm_class): void {
-    const objName = renderer.searchName(actor.name);
+    const objName = renderer.globals.dStage_searchName(actor.name);
 
     const pf = fpcPf_Get(objName.pname);
     if (pf !== null && pf.requestArchives !== undefined)
@@ -497,7 +452,7 @@ export function requestArchiveForActor(renderer: WindWakerRenderer, actor: fopAc
 
 export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
-    const objName = renderer.searchName(actor.name);
+    const objName = renderer.globals.dStage_searchName(actor.name);
 
     const pf = fpcPf_Get(objName.pname);
     if (pf !== null) {
@@ -508,7 +463,7 @@ export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindW
             // Warn about legacy actors?
             // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
         } else {
-            const dbgName = renderer.objNameGetDbgName(objName);
+            const dbgName = renderer.globals.objNameGetDbgName(objName);
             console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
         }
     }
