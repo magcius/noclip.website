@@ -7,13 +7,13 @@ import { hexzero } from '../util';
 import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, dGlobals, ModelCache } from "./zww_scenes";
+import { ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, dGlobals } from "./zww_scenes";
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeModelMatrixSRT } from '../MathHelpers';
-import { ResType, dRes_control_c } from './d_resorce';
+import { ResType } from './d_resorce';
 import { LightType, dKy_tevstr_c, settingTevStruct, setLightTevColorType, dKy_tevstr_init } from './d_kankyo';
 import { spawnLegacyActor } from './LegacyActor';
 
@@ -130,7 +130,8 @@ export class BMDObjectRenderer implements ObjectRenderer {
                 return;
         }
 
-        settingTevStruct(globals, this.lightTevColorType, null, this.tevstr);
+        mat4.getTranslation(scratchVec3a, this.modelMatrix);
+        settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);

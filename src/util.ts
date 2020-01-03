@@ -142,5 +142,7 @@ export function fallbackUndefined<T>(v: T | null | undefined, fallback: T): T {
 }
 
 export function arrayRemove<T>(L: T[], n: T): void {
-    L.splice(L.indexOf(n), 1);
+    const idx = L.indexOf(n);
+    assert(idx >= 0);
+    L.splice(idx, 1);
 }

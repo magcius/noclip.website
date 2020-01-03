@@ -105,6 +105,11 @@ export class dGlobals {
     public dStage_dt: dStage_stageDt_c;
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
 
+    // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
+    public playerPosition = vec3.create();
+    // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera.mPos
+    public cameraPosition = vec3.create();
+
     public resCtrl: dRes_control_c;
     // TODO(jstpierre): Remove
     public renderer: WindWakerRenderer;
@@ -745,6 +750,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
         const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 60;
+
+        // Update the "player position" from the camera.
+        mat4.getTranslation(this.globals.playerPosition, viewerInput.camera.worldMatrix);
+        vec3.copy(this.globals.cameraPosition, this.globals.playerPosition);
 
         // Execute.
         dKy_Execute(this.globals, deltaTimeInFrames);
