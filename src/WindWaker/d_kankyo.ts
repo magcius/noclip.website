@@ -257,7 +257,7 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
 
         if (envLight.colSetMode === 0) {
             if (globals.stageName === 'sea' && pselenvr.pselIdxPrev !== pselenvr.pselIdxCurr) {
-                pselenvr.blendPsel += changeRateNormal;
+                pselenvr.blendPsel += changeRateNormal / 10.0;
             } else if (pselCurr.changeRate > 0) {
                 pselenvr.blendPsel += changeRateNormal / pselCurr.changeRate;
             }
@@ -571,10 +571,32 @@ function dice_rain_minus(envLight: dScnKy_env_light_c): void {
 const S_wether_table = [0, 1, 3, 2, 0, 1, 3, 2];
 const S_wether_time_table = [120, 150, 90, 120, 120, 150, 150, 120];
 const S_wether_mode_pat = [
-    [DiceWeatherMode.Overcast, 2, DiceWeatherMode.Overcast, DiceWeatherMode.Done],
-    [4, 5, 4, 0xFF],
-    [2, 3, 2, 0xFF],
-    [4, 0xFF],
+    // Pattern 1: Dip into light rain
+    [
+        DiceWeatherMode.Overcast,
+        DiceWeatherMode.LightRain,
+        DiceWeatherMode.Overcast,
+        DiceWeatherMode.Done,
+    ],
+    // Pattern 2: Dip into heavy thunder
+    [
+        DiceWeatherMode.LightThunder,
+        DiceWeatherMode.HeavyThunder,
+        DiceWeatherMode.LightThunder,
+        DiceWeatherMode.Done,
+    ],
+    // Pattern 3: Dip into heavy rain
+    [
+        DiceWeatherMode.LightRain,
+        DiceWeatherMode.HeavyRain,
+        DiceWeatherMode.LightRain,
+        DiceWeatherMode.Done,
+    ],
+    // Pattern 3: Light thunder for a bit.
+    [
+        DiceWeatherMode.LightThunder,
+        DiceWeatherMode.Done,
+    ],
 ];
 const S_wether_time_pat = [
     [5, 10, 5],
@@ -953,7 +975,7 @@ export function dKy_vrbox_addcol_kasumi_set(envLight: dScnKy_env_light_c, ratio:
     colorSetRatio(envLight.vrKasumiAdd, ratio, r, g, b);
 }
 
-export function dKy_vrbox_addcol_fog_set(envLight: dScnKy_env_light_c, ratio: number, r: number, g: number, b: number): void {
+export function dKy_addcol_fog_set(envLight: dScnKy_env_light_c, ratio: number, r: number, g: number, b: number): void {
     // TODO(jstpierre): Fog colors
 }
 
@@ -962,5 +984,7 @@ export function dKy_efplight_set(envLight: dScnKy_env_light_c, plight: LIGHT_INF
 }
 
 export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INFLUENCE): void {
-    arrayRemove(envLight.eflights, plight);
+    const idx = arrayRemove(envLight.eflights, plight);
+    if (envLight.playerEflightIdx === idx)
+        envLight.playerEflightIdx = -1;
 }

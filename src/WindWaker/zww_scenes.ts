@@ -37,7 +37,8 @@ import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
-import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute } from './d_kankyo';
+import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
+import { dKyeff_c__execute } from './d_kankyo_wether';
 
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
@@ -749,7 +750,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.time = viewerInput.time;
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
-        const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 60;
+        const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
 
         // Update the "player position" from the camera.
         mat4.getTranslation(this.globals.playerPosition, viewerInput.camera.worldMatrix);
@@ -757,6 +758,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // Execute.
         dKy_Execute(this.globals, deltaTimeInFrames);
+        dKyeff_c__execute(this.globals);
+
+        // Not sure exactly where this is ordered...
+        dKy_setLight(this.globals);
 
         drawKankyo(this.globals);
 
