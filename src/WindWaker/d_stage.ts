@@ -24,7 +24,10 @@ export class stage_palet_info_class {
 }
 
 export class stage_pselect_info_class {
-    constructor(public palIdx: Uint8Array) {
+    public palIdx: Uint8Array;
+    public changeRate: number;
+
+    constructor() {
     }
 }
 
@@ -89,8 +92,12 @@ function dStage_paletInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, co
 
 function dStage_pselectInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
     let offs = 0;
+    const view = buffer.createDataView();
     for (let i = 0; i < count; i++) {
-        dt.colo.push(new stage_pselect_info_class(buffer.createTypedArray(Uint8Array, offs, 0x0C)));
+        const colo = new stage_pselect_info_class();
+        colo.palIdx = buffer.createTypedArray(Uint8Array, offs, 0x08);
+        colo.changeRate = view.getFloat32(offs + 0x08);
+        dt.colo.push(colo);
         offs += 0x0C;
     }
 }

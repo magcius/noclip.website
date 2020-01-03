@@ -37,7 +37,7 @@ import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
-import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init } from './d_kankyo';
+import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute } from './d_kankyo';
 
 export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 export type SymbolMap = { SymbolData: SymbolData[] };
@@ -101,13 +101,20 @@ export class dGlobals {
     public g_env_light = new dScnKy_env_light_c();
 
     // This is tucked away somewhere in dComInfoPlay
+    public stageName: string;
     public dStage_dt: dStage_stageDt_c;
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+
+    public resCtrl: dRes_control_c;
+    // TODO(jstpierre): Remove
+    public renderer: WindWakerRenderer;
 
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
 
-    constructor(private symbolMap: SymbolMap) {
+    constructor(public modelCache: ModelCache, private symbolMap: SymbolMap) {
+        this.resCtrl = this.modelCache.resCtrl;
+
         this.relNameTable = createRelNameTable(symbolMap);
         this.objectNameTable = createActorTable(symbolMap);
 
@@ -293,12 +300,12 @@ export class WindWakerRoomRenderer {
             const bg = this.bg[i];
             if (bg !== null) {
                 const tevstr = this.tevstr[i];
-                settingTevStruct(globals.g_env_light, LightType.BG0 + i, null, tevstr);
-                setLightTevColorType(globals.g_env_light, bg, tevstr, viewerInput.camera);
+                settingTevStruct(globals, LightType.BG0 + i, null, tevstr);
+                setLightTevColorType(globals, bg, tevstr, viewerInput.camera);
                 bg.prepareToRender(device, renderInstManager, viewerInput);
             }
         }
-        settingTevStruct(globals.g_env_light, LightType.BG0, null, globals.roomStatus[this.roomNo].tevStr);
+        settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[this.roomNo].tevStr);
 
         if (this.objectsVisible) {
             for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -652,8 +659,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
-        this.globals = new dGlobals(symbolMap);
+        this.globals = new dGlobals(modelCache, symbolMap);
         this.globals.dStage_dt = dStage_dt;
+        this.globals.stageName = this.stage;
+        this.globals.resCtrl = this.modelCache.resCtrl;
+        this.globals.renderer = this;
 
         const wantsSeaPlane = this.stage === 'sea';
         if (wantsSeaPlane)
@@ -663,16 +673,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.flowerPacket = new FlowerPacket(this);
         this.grassPacket = new GrassPacket(this);
 
-        envcolor_init(this.globals, this.globals.g_env_light);
+        envcolor_init(this.globals);
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
         const roomRenderer = assertExists(this.roomRenderers.find((r) => r.roomNo === roomIdx));
         return roomRenderer.dzb;
-    }
-
-    private setTimeOfDay(timeOfDay: number): void {
-        this.globals.g_env_light.curTime = timeOfDay % 360;
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -738,7 +744,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.time = viewerInput.time;
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
-        drawKankyo(this.globals.g_env_light);
+        const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 60;
+
+        // Execute.
+        dKy_Execute(this.globals, deltaTimeInFrames);
+
+        drawKankyo(this.globals);
 
         this.extraTextures.prepareToRender(device);
 
@@ -791,17 +802,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        const kProgressTimeOfDay = true;
-
-        if (kProgressTimeOfDay) {
-            const kDayLengthInSeconds = 60.0;
-            const viewerTimeInSeconds = viewerInput.time / 1000;
-            const time = (viewerTimeInSeconds / kDayLengthInSeconds) * 360.0;
-            this.setTimeOfDay(time);
-        } else {
-            this.setTimeOfDay(180);
-        }
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
@@ -1220,13 +1220,13 @@ class SceneDesc {
             if (actorMultMtx !== null)
                 vec3.transformMat4(actor.pos, actor.pos, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
-            loadActor(renderer, roomRenderer, placedActor);
+            loadActor(renderer.globals, roomRenderer, placedActor);
         });
     }
 
     private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS): void {
         this.iterActorLayers(roomIdx, dzs, (actor) => {
-            requestArchiveForActor(renderer, actor);
+            requestArchiveForActor(renderer.globals, actor);
         });
     }
 }

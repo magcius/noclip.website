@@ -1,6 +1,5 @@
 
 import * as Viewer from '../viewer';
-import * as GX_Material from '../gx/gx_material';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { mat4, vec3 } from "gl-matrix";
@@ -8,14 +7,13 @@ import { hexzero } from '../util';
 import { J3DModelInstanceSimple, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, TTK1, TRK1, TPT1, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, dGlobals } from "./zww_scenes";
+import { ZWWExtraTextures, WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, dGlobals, ModelCache } from "./zww_scenes";
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { colorFromRGBA } from '../Color';
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeModelMatrixSRT } from '../MathHelpers';
-import { ResType } from './d_resorce';
+import { ResType, dRes_control_c } from './d_resorce';
 import { LightType, dKy_tevstr_c, settingTevStruct, setLightTevColorType, dKy_tevstr_init } from './d_kankyo';
 import { spawnLegacyActor } from './LegacyActor';
 
@@ -132,8 +130,8 @@ export class BMDObjectRenderer implements ObjectRenderer {
                 return;
         }
 
-        settingTevStruct(globals.g_env_light, this.lightTevColorType, null, this.tevstr);
-        setLightTevColorType(globals.g_env_light, this.modelInstance, this.tevstr, viewerInput.camera);
+        settingTevStruct(globals, this.lightTevColorType, null, this.tevstr);
+        setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
@@ -188,7 +186,7 @@ export const enum ObjPName {
 class d_a_ep implements fopAc_ac_c {
     public static pname = ObjPName.d_a_ep;
 
-    constructor(context: WindWakerRenderer, actor: PlacedActor) {
+    constructor(globals: dGlobals, actor: PlacedActor) {
         const ga = !!((actor.arg >>> 6) & 0x01);
         const obm = !!((actor.arg >>> 7) & 0x01);
         let type = (actor.arg & 0x3F);
@@ -198,64 +196,64 @@ class d_a_ep implements fopAc_ac_c {
         setModelMatrix(actor, scratchMat4a);
         vec3.set(scratchVec3a, 0, 0, 0);
         if (type === 0 || type === 3) {
-            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Ep`, obm ? 0x04 : 0x05);
-            const m = buildModel(context, res, actor);
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Ep`, obm ? 0x04 : 0x05);
+            const m = buildModel(globals.renderer, res, actor);
             scratchVec3a[1] += 140;
         }
         vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
 
         // Create particle systems.
-        const pa = createEmitter(context, 0x0001);
+        const pa = createEmitter(globals.renderer, 0x0001);
         vec3.copy(pa.globalTranslation, scratchVec3a);
         pa.globalTranslation[1] += -240 + 235 + 15;
         if (type !== 2) {
-            const pb = createEmitter(context, 0x4004);
+            const pb = createEmitter(globals.renderer, 0x4004);
             vec3.copy(pb.globalTranslation, pa.globalTranslation);
             pb.globalTranslation[1] += 20;
         }
-        const pc = createEmitter(context, 0x01EA);
+        const pc = createEmitter(globals.renderer, 0x01EA);
         vec3.copy(pc.globalTranslation, scratchVec3a);
         pc.globalTranslation[1] += -240 + 235 + 8;
         // TODO(jstpierre): ga
     }
 
-    public static requestArchives(context: WindWakerRenderer, actor: fopAcM_prm_class): void {
-        context.modelCache.fetchObjectData(`Ep`);
+    public static requestArchives(globals: dGlobals, actor: fopAcM_prm_class): void {
+        globals.modelCache.fetchObjectData(`Ep`);
     }
 }
 
 class d_a_tbox implements fopAc_ac_c {
     public static pname = ObjPName.d_a_tbox;
 
-    constructor(context: WindWakerRenderer, actor: PlacedActor) {
+    constructor(globals: dGlobals, actor: PlacedActor) {
         const type = (actor.arg >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
-            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
-            const m = buildModel(context, res, actor);
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
+            const m = buildModel(globals.renderer, res, actor);
         } else if (type === 1) {
             // Dark Wood
-            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
-            const m = buildModel(context, res, actor);
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
+            const m = buildModel(globals.renderer, res, actor);
         } else if (type === 2) {
             // Metal
-            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
-            const m = buildModel(context, res, actor);
-            const b = context.modelCache.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
+            const m = buildModel(globals.renderer, res, actor);
+            const b = globals.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
             b.loopMode = LoopMode.ONCE;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
-            const res = context.modelCache.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
-            const m = buildModel(context, res, actor);
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
+            const m = buildModel(globals.renderer, res, actor);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
         }
     }
 
-    public static requestArchives(context: WindWakerRenderer, actor: fopAcM_prm_class): void {
-        context.modelCache.fetchObjectData(`Dalways`);
+    public static requestArchives(globals: dGlobals, actor: fopAcM_prm_class): void {
+        globals.modelCache.fetchObjectData(`Dalways`);
     }
 }
 
@@ -360,7 +358,7 @@ class d_a_grass implements fopAc_ac_c {
         ]
     ];
 
-    constructor(context: WindWakerRenderer, actor: fopAcM_prm_class) {
+    constructor(globals: dGlobals, actor: fopAcM_prm_class) {
         const enum FoliageType {
             Grass,
             Tree,
@@ -375,6 +373,8 @@ class d_a_grass implements fopAc_ac_c {
         const pattern = d_a_grass.kSpawnPatterns[spawnPatternId];
         const offsets = d_a_grass.kSpawnOffsets[pattern.group];
         const count = pattern.count;
+
+        const context = globals.renderer;
 
         switch (type) {
             case FoliageType.Grass:
@@ -424,8 +424,8 @@ interface fopAc_ac_c {
 interface fpc_pc__Profile {
     pname: ObjPName;
 
-    new(context: WindWakerRenderer, actor: PlacedActor): fopAc_ac_c;
-    requestArchives?(context: WindWakerRenderer, actor: fopAcM_prm_class): void;
+    new(globals: dGlobals, actor: PlacedActor): fopAc_ac_c;
+    requestArchives?(globals: dGlobals, actor: fopAcM_prm_class): void;
 }
 
 const g_fpcPf_ProfileList_p: fpc_pc__Profile[] = [
@@ -442,29 +442,29 @@ function fpcPf_Get(pname: number): fpc_pc__Profile | null {
         return null;
 }
 
-export function requestArchiveForActor(renderer: WindWakerRenderer, actor: fopAcM_prm_class): void {
-    const objName = renderer.globals.dStage_searchName(actor.name);
+export function requestArchiveForActor(globals: dGlobals, actor: fopAcM_prm_class): void {
+    const objName = globals.dStage_searchName(actor.name);
 
     const pf = fpcPf_Get(objName.pname);
     if (pf !== null && pf.requestArchives !== undefined)
-        pf.requestArchives(renderer, actor);
+        pf.requestArchives(globals, actor);
 }
 
-export async function loadActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor): Promise<void> {
+export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
-    const objName = renderer.globals.dStage_searchName(actor.name);
+    const objName = globals.dStage_searchName(actor.name);
 
     const pf = fpcPf_Get(objName.pname);
     if (pf !== null) {
-        const actorObj = new pf(renderer, actor);
+        const actorObj = new pf(globals, actor);
     } else {
-        const loaded = spawnLegacyActor(renderer, roomRenderer, actor);
+        const loaded = spawnLegacyActor(globals.renderer, roomRenderer, actor);
         if (loaded) {
             // Warn about legacy actors?
             // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
         } else {
-            const dbgName = renderer.globals.objNameGetDbgName(objName);
-            console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
+            const dbgName = globals.objNameGetDbgName(objName);
+            // console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
         }
     }
 }
