@@ -1066,6 +1066,11 @@ class SceneDesc {
                 // savestates.
                 actorMultMtx = scratchMatrix;
                 mat4.invert(actorMultMtx, roomMultMtx);
+
+                // Hack up the DZB as well.
+                const dzb = roomRenderer.dzb;
+                vec3.transformMat4(dzb.pos, dzb.pos, roomMultMtx);
+
                 mat4.identity(roomMultMtx);
             }
 

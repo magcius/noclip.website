@@ -115,7 +115,6 @@ function uShortTo2PI(x: number) {
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
 function checkGroundY(context: WindWakerRenderer, roomIdx: number, pos: vec3) {
-    // @TODO: This is using the last loaded room. It needs to use the room that this flower is in.
     const dzb = context.getRoomDZB(roomIdx);
 
     const down = vec3.set(scratchVec3b, 0, -1, 0);
@@ -645,7 +644,6 @@ export class TreePacket {
     }
 
     private checkGroundY(context: WindWakerRenderer, treeData: TreeData): number {
-        // @TODO: This is using the last loaded room. It needs to use the room that this data is in.
         const dzb = context.getRoomDZB(treeData.roomIdx);
 
         const down = vec3.set(scratchVec3b, 0, -1, 0);
