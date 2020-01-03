@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 
 export const enum LightType {
@@ -91,6 +91,8 @@ export class dScnKy_env_light_c {
     // Weather.
     public weatherPselIdx = 0;
 
+    // TODO(jstpierre): Move these weather states to their own structs?
+
     // Dice weather system
     public diceWeatherMode: DiceWeatherMode = DiceWeatherMode.Sunny;
     public diceWeatherChangeTime: number;
@@ -106,7 +108,7 @@ export class dScnKy_env_light_c {
     // Thunder.
     public thunderMode: number = 0;
     public thunderActive: boolean = false;
-    public thunderStateTimer: number = 0;
+    public thunderState: ThunderState = ThunderState.Clear;
     public thunderFlashTimer: number = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 }
