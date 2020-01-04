@@ -29,11 +29,11 @@ function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
 }
 
 export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: fopAcM_prm_class) {
-    const modelCache = renderer.modelCache;
+    const modelCache = renderer.globals.modelCache;
     const resCtrl = modelCache.resCtrl;
 
     function fetchArchive(objArcName: string): Promise<RARC.JKRArchive> {
-        return renderer.modelCache.fetchObjectData(objArcName);
+        return modelCache.fetchObjectData(objArcName);
     }
 
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {

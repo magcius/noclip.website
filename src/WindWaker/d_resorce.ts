@@ -11,6 +11,8 @@ import { J3DModelData, BMDModelMaterialData } from "../Common/JSYSTEM/J3D/J3DGra
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Destroyable } from "../SceneBase";
+import { dGlobals } from "./zww_scenes";
+import { cPhs__Status } from "./framework";
 
 export interface DZSChunkHeader {
     type: string;
@@ -240,4 +242,8 @@ export class dRes_info_c {
         for (let i = 0; i < this.destroyables.length; i++)
             this.destroyables[i].destroy(device);
     }
+}
+
+export function dComIfG_resLoad(globals: dGlobals, archiveName: string): cPhs__Status {
+    return globals.modelCache.requestObjectData(archiveName);
 }

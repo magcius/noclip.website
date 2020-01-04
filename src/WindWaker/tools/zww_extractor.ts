@@ -131,24 +131,25 @@ function pushSymbolEntry(datas: SymbolData[], entry: SymbolMapEntry, data: Array
     return data;
 }
 
-function extractSymbolEntryREL(datas: SymbolData[], relFile: RelFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
+function getSymbolDataREL(relFile: RelFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
     const sectionIdx = mapFile.sectionNames.indexOf(entry.sectionName);
     assert(sectionIdx >= 0);
     const offs = relFile.offs[sectionIdx] + entry.addr;
     const data = relFile.buffer.subarray(offs, entry.size);
-    return pushSymbolEntry(datas, entry, data);
+    return data;
 }
 
-function extractSymbolEntryDOL(datas: SymbolData[], dolFile: DolFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
+function getSymbolDataDOL(dolFile: DolFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
     const sectionTypeIdx = sectionTypeStringToIdx(entry.sectionName);
     const offs = dolFile.offs[sectionTypeIdx] + entry.addr;
     const data = fetchDataFragmentSync(dolFile.filename, offs, entry.size);
-    return pushSymbolEntry(datas, entry, data);
+    return data;
 }
 
 function extractSymbol(datas: SymbolData[], dolHeader: DolFile, mapFile: SymbolMap, symFile: string, symName: string): void {
     const entry = assertExists(mapFile.entries.find((e) => e.filename === symFile && e.symbolName === symName));
-    extractSymbolEntryDOL(datas, dolHeader, mapFile, entry);
+    const data = getSymbolDataDOL(dolHeader, mapFile, entry);
+    pushSymbolEntry(datas, entry, data);
 }
 
 interface DolFile {
@@ -294,7 +295,7 @@ function extractExtra() {
 }
 
 async function extractProfiles() {
-    const datas: SymbolData[] = [];
+    const datas: ArrayBufferSlice[] = [];
 
     function iterProfileSymbols(m: SymbolMap, callback: (mapFile: SymbolMap, e: SymbolMapEntry) => void): void {
         for (let i = 0; i < m.entries.length; i++) {
@@ -303,10 +304,25 @@ async function extractProfiles() {
         }
     }
 
+    function processProfile(data: ArrayBufferSlice, rel: boolean): void {
+        const view = data.createDataView();
+
+        if (rel) {
+            // sanity check
+            const layer = view.getUint32(0x00);
+            assert(layer === 0xFFFFFFFD);
+        }
+
+        const pcName = view.getUint16(0x08);
+        datas[pcName] = data;
+    }
+
     // Grab DOL profiles.
     const dolHeader = parseDolFile(`${pathBaseIn}/main.dol`);
     const framework = parseMapFile(`${pathBaseIn}/maps/framework.map`);
-    iterProfileSymbols(framework, (mapFile, entry) => extractSymbolEntryDOL(datas, dolHeader, mapFile, entry));
+    iterProfileSymbols(framework, (mapFile, entry) => {
+        processProfile(getSymbolDataDOL(dolHeader, mapFile, entry), false);
+    });
 
     // Grab REL profiles.
     const rels = readdirSync(`${pathBaseIn}/rels`);
@@ -316,21 +332,12 @@ async function extractProfiles() {
         const rel = parseRelFile(relFilename);
         const map = parseMapFile(mapFilename);
         iterProfileSymbols(map, (mapFile, entry) => {
-            const data = extractSymbolEntryREL(datas, rel, mapFile, entry);
-            // sanity check
-            const layer = data.createTypedArray(Uint32Array, 0x00, 0x01, Endianness.BIG_ENDIAN)[0];
-            assert(layer === 0xFFFFFFFD);
+            processProfile(getSymbolDataREL(rel, mapFile, entry), true);
         });
     }
 
-    // HACK(jstpierre): Slim down on filesizes by removing the filename. We don't need it,
-    // everything is guaranteed unique.
-    for (let i = 0; i < datas.length; i++) {
-        delete datas[i].SymbolName;
-    }
-
     const crg1 = {
-        SymbolData: datas,
+        Profiles: datas,
     };
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);

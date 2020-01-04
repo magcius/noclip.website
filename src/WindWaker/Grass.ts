@@ -1,11 +1,11 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assertExists, nArray } from '../util';
+import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SymbolMap, SymbolData, dGlobals } from './zww_scenes';
+import { dGlobals } from './zww_scenes';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
 import { Endianness } from '../endian';
@@ -21,12 +21,6 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../viewer';
 import { colorCopy, colorFromRGBA } from '../Color';
-
-// @TODO: This belongs somewhere else
-function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string): ArrayBufferSlice {
-    const entry = assertExists(symbolMap.SymbolData.find((e: SymbolData) => e.Filename === filename && e.SymbolName === symbolName));
-    return entry.Data;
-}
 
 function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {
     const attrFmts = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
@@ -178,13 +172,15 @@ class FlowerModel {
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
-        const l_matDL = findSymbol(symbolMap, `d_flower.o`, `l_matDL`);
-        const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
-        const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
-        const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
-        const l_Txo_ob_flower_white_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
-        const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
+    constructor(globals: dGlobals) {
+        const device = globals.modelCache.device, cache = globals.renderer.renderCache;
+
+        const l_matDL = globals.findExtraSymbolData(`d_flower.o`, `l_matDL`);
+        const l_matDL2 = globals.findExtraSymbolData(`d_flower.o`, `l_matDL2`);
+        const l_matDL3 = globals.findExtraSymbolData(`d_flower.o`, `l_matDL3`);
+        const l_Txo_ob_flower_pink_64x64TEX = globals.findExtraSymbolData(`d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
+        const l_Txo_ob_flower_white_64x64TEX = globals.findExtraSymbolData(`d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
+        const l_Txq_bessou_hanaTEX = globals.findExtraSymbolData(`d_flower.o`, `l_Txq_bessou_hanaTEX`);
 
         const matRegisters = new DisplayListRegisters();
         displayListRegistersInitGX(matRegisters);
@@ -208,26 +204,26 @@ class FlowerModel {
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping[0]);
 
         // White
-        const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
-        const l_color = findSymbol(symbolMap, `d_flower.o`, `l_color`);
-        const l_texCoord = findSymbol(symbolMap, `d_flower.o`, `l_texCoord`);
+        const l_pos = globals.findExtraSymbolData(`d_flower.o`, `l_pos`);
+        const l_color = globals.findExtraSymbolData(`d_flower.o`, `l_color`);
+        const l_texCoord = globals.findExtraSymbolData(`d_flower.o`, `l_texCoord`);
 
         // Pink
-        const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
-        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
-        const l_texCoord2 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord2`);
+        const l_pos2 = globals.findExtraSymbolData(`d_flower.o`, `l_pos2`);
+        const l_color2 = globals.findExtraSymbolData(`d_flower.o`, `l_color2`);
+        const l_texCoord2 = globals.findExtraSymbolData(`d_flower.o`, `l_texCoord2`);
 
         // Bessou
-        const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
-        const l_color3 = findSymbol(symbolMap, `d_flower.o`, `l_color3`);
-        const l_texCoord3 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord3`);
+        const l_pos3 = globals.findExtraSymbolData(`d_flower.o`, `l_pos3`);
+        const l_color3 = globals.findExtraSymbolData(`d_flower.o`, `l_color3`);
+        const l_texCoord3 = globals.findExtraSymbolData(`d_flower.o`, `l_texCoord3`);
 
-        const l_Ohana_highDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_highDL`);
-        const l_Ohana_high_gutDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_high_gutDL`);
-        const l_OhanaDL = findSymbol(symbolMap, `d_flower.o`, `l_OhanaDL`);
-        const l_Ohana_gutDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_gutDL`);
-        const l_QbsafDL = findSymbol(symbolMap, `d_flower.o`, `l_QbsafDL`);
-        const l_QbsfwDL = findSymbol(symbolMap, `d_flower.o`, `l_QbsfwDL`);
+        const l_Ohana_highDL = globals.findExtraSymbolData(`d_flower.o`, `l_Ohana_highDL`);
+        const l_Ohana_high_gutDL = globals.findExtraSymbolData(`d_flower.o`, `l_Ohana_high_gutDL`);
+        const l_OhanaDL = globals.findExtraSymbolData(`d_flower.o`, `l_OhanaDL`);
+        const l_Ohana_gutDL = globals.findExtraSymbolData(`d_flower.o`, `l_Ohana_gutDL`);
+        const l_QbsafDL = globals.findExtraSymbolData(`d_flower.o`, `l_QbsafDL`);
+        const l_QbsfwDL = globals.findExtraSymbolData(`d_flower.o`, `l_QbsfwDL`);
 
         // All flowers share the same vertex format
         const vatFormat: GX_VtxAttrFmt[] = [];
@@ -294,8 +290,8 @@ export class FlowerPacket {
 
     private flowerModel: FlowerModel;
 
-    constructor(private context: WindWakerRenderer) {
-        this.flowerModel = new FlowerModel(context.device, context.symbolMap, context.renderCache);
+    constructor(globals: dGlobals) {
+        this.flowerModel = new FlowerModel(globals);
 
         // Random starting rotation for each idle anim
         const dy = 2.0 * Math.PI / 8.0;
@@ -309,12 +305,12 @@ export class FlowerPacket {
         }
     }
 
-    public newData(pos: vec3, isPink: boolean, roomIdx: number, itemIdx: number): FlowerData {
+    public newData(globals: dGlobals, pos: vec3, isPink: boolean, roomIdx: number, itemIdx: number): FlowerData {
         const animIdx = Math.floor(Math.random() * 8);
         let type = isPink ? FlowerType.PINK : FlowerType.WHITE;
 
         // Island 0x21 uses the Bessou flower (the game does this check here as well)
-        if (this.context.stage === 'sea' && roomIdx === 0x21 && isPink) {
+        if (globals.stageName === 'sea' && roomIdx === 0x21 && isPink) {
             type = FlowerType.BESSOU;
         }
 
@@ -333,17 +329,17 @@ export class FlowerPacket {
         return data;
     }
 
-    public calc(): void {
+    public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            const theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
+            const theta = Math.cos(uShortTo2PI(1000.0 * (frameCount + 0xfa * i)));
             this.anims[i].rotationX = uShortTo2PI(1000.0 + 1000.0 * theta);
         }
 
         // @TODO: Hit checks
     }
 
-    public update(): void {
+    public update(globals: dGlobals): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -360,7 +356,7 @@ export class FlowerPacket {
 
                 // Perform ground checks for some limited number of flowers
                 if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = checkGroundY(this.context, roomIdx, data.pos);
+                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
                     data.flags &= ~FlowerFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
                 }
@@ -462,7 +458,8 @@ export class FlowerPacket {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
         for (let i = 0; i < this.rooms.length; i++)
             this.drawRoom(globals, i, renderInstManager, viewerInput, device);
     }
@@ -527,31 +524,33 @@ class TreeModel {
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
-        const l_matDL = findSymbol(symbolMap, `d_tree.o`, `l_matDL`);
-        const l_pos = findSymbol(symbolMap, `d_tree.o`, `l_pos`);
-        const l_color = findSymbol(symbolMap, `d_tree.o`, `l_color`);
-        const l_texCoord = findSymbol(symbolMap, `d_tree.o`, `l_texCoord`);
-        const l_vtxAttrFmtList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxAttrFmtList$4670');
-        const l_vtxDescList = findSymbol(symbolMap, 'd_tree.o', 'l_vtxDescList$4669');
+    constructor(globals: dGlobals) {
+        const device = globals.modelCache.device, cache = globals.renderer.renderCache;
 
-        const l_shadowVtxDescList = findSymbol(symbolMap, 'd_tree.o', 'l_shadowVtxDescList$4654');
-        const l_shadowVtxAttrFmtList = findSymbol(symbolMap, 'd_tree.o', 'l_shadowVtxAttrFmtList$4655');
-        const l_shadowPos = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_shadowPos');
-        const l_shadowMatDL = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_shadowMatDL');
+        const l_matDL = globals.findExtraSymbolData(`d_tree.o`, `l_matDL`);
+        const l_pos = globals.findExtraSymbolData(`d_tree.o`, `l_pos`);
+        const l_color = globals.findExtraSymbolData(`d_tree.o`, `l_color`);
+        const l_texCoord = globals.findExtraSymbolData(`d_tree.o`, `l_texCoord`);
+        const l_vtxAttrFmtList = globals.findExtraSymbolData('d_tree.o', 'l_vtxAttrFmtList$4670');
+        const l_vtxDescList = globals.findExtraSymbolData('d_tree.o', 'l_vtxDescList$4669');
+
+        const l_shadowVtxDescList = globals.findExtraSymbolData('d_tree.o', 'l_shadowVtxDescList$4654');
+        const l_shadowVtxAttrFmtList = globals.findExtraSymbolData('d_tree.o', 'l_shadowVtxAttrFmtList$4655');
+        const l_shadowPos = globals.findExtraSymbolData('d_tree.o', 'g_dTree_shadowPos');
+        const l_shadowMatDL = globals.findExtraSymbolData('d_tree.o', 'g_dTree_shadowMatDL');
 
         // @HACK: The tex coord array is being read as all zero. Hardcode it.
         const l_shadowTexCoord = new ArrayBufferSlice(new Uint8Array([0, 0, 1, 0, 1, 1, 0, 1]).buffer);
 
-        const l_Oba_swood_noneDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_noneDL');
-        const l_Oba_swood_a_cuttDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
-        const l_Oba_swood_a_cutuDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
-        const l_Oba_swood_a_hapaDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
-        const l_Oba_swood_a_mikiDL = findSymbol(symbolMap, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
-        const g_dTree_Oba_kage_32DL = findSymbol(symbolMap, 'd_tree.o', 'g_dTree_Oba_kage_32DL');
+        const l_Oba_swood_noneDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_noneDL');
+        const l_Oba_swood_a_cuttDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cuttDL');
+        const l_Oba_swood_a_cutuDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_cutuDL');
+        const l_Oba_swood_a_hapaDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_hapaDL');
+        const l_Oba_swood_a_mikiDL = globals.findExtraSymbolData('d_tree.o', 'l_Oba_swood_a_mikiDL');
+        const g_dTree_Oba_kage_32DL = globals.findExtraSymbolData('d_tree.o', 'g_dTree_Oba_kage_32DL');
 
-        const l_Txa_kage_32TEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_kage_32TEX');
-        const l_Txa_swood_aTEX = findSymbol(symbolMap, 'd_tree.o', 'l_Txa_swood_aTEX');
+        const l_Txa_kage_32TEX = globals.findExtraSymbolData('d_tree.o', 'l_Txa_kage_32TEX');
+        const l_Txa_swood_aTEX = globals.findExtraSymbolData('d_tree.o', 'l_Txa_swood_aTEX');
 
         const matRegisters = new DisplayListRegisters();
 
@@ -628,8 +627,8 @@ export class TreePacket {
 
     private treeModel: TreeModel;
 
-    constructor(private context: WindWakerRenderer) {
-        this.treeModel = new TreeModel(context.device, context.symbolMap, context.renderCache);
+    constructor(globals: dGlobals) {
+        this.treeModel = new TreeModel(globals);
 
         // Random starting rotation for each idle anim
         const dr = 2.0 * Math.PI / 8.0;
@@ -704,20 +703,20 @@ export class TreePacket {
         return data;
     }
 
-    public calc(): void {
+    public calc(frameCount: number): void {
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(uShortTo2PI(4000.0 * (this.context.frameCount + 0xfa * i)));
+            let theta = Math.cos(uShortTo2PI(4000.0 * (frameCount + 0xfa * i)));
             this.anims[i].topRotationY = uShortTo2PI(100.0 + this.anims[i].initialRotationShort + 100.0 * theta);
 
-            theta = Math.cos(uShortTo2PI(1000.0 * (this.context.frameCount + 0xfa * i)));
+            theta = Math.cos(uShortTo2PI(1000.0 * (frameCount + 0xfa * i)));
             this.anims[i].topRotationX = uShortTo2PI(100 + 100 * theta);
         }
 
         // @TODO: Hit checks
     }
 
-    public update(): void {
+    public update(globals: dGlobals): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -739,7 +738,7 @@ export class TreePacket {
 
                 // Perform ground checks for some limited number of data
                 if ((data.flags & TreeFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = this.checkGroundY(this.context, roomIdx, data);
+                    data.pos[1] = this.checkGroundY(globals.renderer, roomIdx, data);
                     data.flags &= ~TreeFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
                 }
@@ -833,7 +832,8 @@ export class TreePacket {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
         for (let i = 0; i < this.rooms.length; i++)
             this.drawRoom(globals, i, renderInstManager, viewerInput, device);
     }
@@ -880,25 +880,27 @@ class GrassModel {
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
-        const l_matDL = findSymbol(symbolMap, `d_grass.o`, `l_matDL`);
-        const l_vtxAttrFmtList$4529 = findSymbol(symbolMap, 'd_grass.o', 'l_vtxAttrFmtList$4529');
-        const l_vtxDescList = findSymbol(symbolMap, 'd_grass.o', 'l_vtxDescList$4528');
-        const l_pos = findSymbol(symbolMap, 'd_grass.o', 'l_pos');
-        const l_color = findSymbol(symbolMap, 'd_grass.o', 'l_color');
-        const l_texCoord = findSymbol(symbolMap, 'd_grass.o', 'l_texCoord');
+    constructor(globals: dGlobals) {
+        const device = globals.modelCache.device, cache = globals.renderer.renderCache;
 
-        const l_Oba_kusa_a_cutDL = findSymbol(symbolMap, 'd_grass.o', 'l_Oba_kusa_a_cutDL');
-        const l_Oba_kusa_aDL = findSymbol(symbolMap, 'd_grass.o', 'l_Oba_kusa_aDL');
-        const l_Vmori_00DL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_00DL');
-        const l_Vmori_01DL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_01DL');
-        const l_Vmori_color = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_color');
-        const l_Vmori_pos = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_pos');
-        const l_Vmori_texCoord = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_texCoord');
-        const l_Vmori_matDL = findSymbol(symbolMap, 'd_grass.o', 'l_Vmori_matDL');
+        const l_matDL = globals.findExtraSymbolData(`d_grass.o`, `l_matDL`);
+        const l_vtxAttrFmtList$4529 = globals.findExtraSymbolData('d_grass.o', 'l_vtxAttrFmtList$4529');
+        const l_vtxDescList = globals.findExtraSymbolData('d_grass.o', 'l_vtxDescList$4528');
+        const l_pos = globals.findExtraSymbolData('d_grass.o', 'l_pos');
+        const l_color = globals.findExtraSymbolData('d_grass.o', 'l_color');
+        const l_texCoord = globals.findExtraSymbolData('d_grass.o', 'l_texCoord');
 
-        const l_K_kusa_00TEX = findSymbol(symbolMap, 'd_grass.o', 'l_K_kusa_00TEX');
-        const l_Txa_ob_kusa_aTEX = findSymbol(symbolMap, 'd_grass.o', 'l_Txa_ob_kusa_aTEX');
+        const l_Oba_kusa_a_cutDL = globals.findExtraSymbolData('d_grass.o', 'l_Oba_kusa_a_cutDL');
+        const l_Oba_kusa_aDL = globals.findExtraSymbolData('d_grass.o', 'l_Oba_kusa_aDL');
+        const l_Vmori_00DL = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_00DL');
+        const l_Vmori_01DL = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_01DL');
+        const l_Vmori_color = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_color');
+        const l_Vmori_pos = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_pos');
+        const l_Vmori_texCoord = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_texCoord');
+        const l_Vmori_matDL = globals.findExtraSymbolData('d_grass.o', 'l_Vmori_matDL');
+
+        const l_K_kusa_00TEX = globals.findExtraSymbolData('d_grass.o', 'l_K_kusa_00TEX');
+        const l_Txa_ob_kusa_aTEX = globals.findExtraSymbolData('d_grass.o', 'l_Txa_ob_kusa_aTEX');
 
         const matRegisters = new DisplayListRegisters();
 
@@ -962,10 +964,10 @@ export class GrassPacket {
     private textureMapping = nArray(1, () => new TextureMapping());
     private shape: GXShapeHelperGfx;
 
-    constructor(private context: WindWakerRenderer) {
-        this.model = new GrassModel(context.device, context.symbolMap, context.renderCache);
+    constructor(globals: dGlobals) {
+        this.model = new GrassModel(globals);
 
-        if (this.context.stage.startsWith(`kin`) || this.context.stage === `Xboss1`) {
+        if (globals.stageName.startsWith(`kin`) || globals.stageName === `Xboss1`) {
             this.material = this.model.vmoriMaterial;
             this.textureMapping[0].copy(this.model.vmoriTextureMapping);
             this.shape = this.model.shapeVmori;
@@ -1002,7 +1004,7 @@ export class GrassPacket {
         return data;
     }
 
-    public calc(): void {
+    public calc(frameCount: number): void {
         // @TODO: Use value from the wind system
         const kWindSystemWindPower = 0.0;
 
@@ -1011,14 +1013,14 @@ export class GrassPacket {
 
         // Idle animation updates
         for (let i = 0; i < 8; i++) {
-            let theta = Math.cos(uShortTo2PI(windPower * (this.context.frameCount + 0xfa * i)));
+            let theta = Math.cos(uShortTo2PI(windPower * (frameCount + 0xfa * i)));
             this.anims[i].rotationX = uShortTo2PI(windPower + windPower * theta);
         }
 
         // @TODO: Hit checks
     }
 
-    public update(): void {
+    public update(globals: dGlobals): void {
         let groundChecksThisFrame = 0;
 
         // Update all animation matrices
@@ -1037,7 +1039,7 @@ export class GrassPacket {
 
                 // Perform ground checks for some limited number of data
                 if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = checkGroundY(this.context, roomIdx, data.pos);
+                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
                     data.flags &= ~GrassFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
                 }
@@ -1093,7 +1095,8 @@ export class GrassPacket {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
         for (let i = 0; i < this.rooms.length; i++)
             this.drawRoom(globals, i, renderInstManager, viewerInput, device);
     }

@@ -16,6 +16,7 @@ import { computeModelMatrixSRT } from '../MathHelpers';
 import { ResType } from './d_resorce';
 import { LightType, dKy_tevstr_c, settingTevStruct, setLightTevColorType, dKy_tevstr_init } from './d_kankyo';
 import { spawnLegacyActor } from './LegacyActor';
+import { fpc__ProcessName, fopAcM_create } from './framework';
 
 export interface fopAcM_prm_class {
     parameter: number;
@@ -27,18 +28,17 @@ export interface fopAcM_prm_class {
     parentPcId: number;
     subtype: number;
     roomNo: number;
-
-    // NOTE(jstpierre): This is normally passed separately.
-    name: string;
     // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
     // load inactive layers...
     layer: number;
-    // TODO(jstpierre): Remove
-    rotationY: number;
 };
 
 // TODO(jstpierre): Remove this.
 export interface PlacedActor extends fopAcM_prm_class {
+    // NOTE(jstpierre): This is normally passed separately.
+    name: string;
+    // TODO(jstpierre): Remove
+    rotationY: number;
     roomRenderer: WindWakerRoomRenderer;
 };
 
@@ -147,7 +147,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 }
 
-function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
+function computeActorModelMatrix(m: mat4, actor: PlacedActor): void {
     computeModelMatrixSRT(m,
         actor.scale[0], actor.scale[1], actor.scale[2],
         0, actor.rotationY, 0,
@@ -177,17 +177,11 @@ export function createEmitter(context: WindWakerRenderer, resourceId: number): J
     return emitter;
 }
 
-export const enum ObjPName {
-    d_a_grass = 0x01B8,
-    d_a_ep    = 0x00BA,
-    d_a_tbox  = 0x0126,
-};
-
 // -------------------------------------------------------
 // Generic Torch
 // -------------------------------------------------------
-class d_a_ep implements fopAc_ac_c {
-    public static pname = ObjPName.d_a_ep;
+class d_a_ep implements fopAc_ac_c_L2 {
+    public static pname = fpc__ProcessName.d_a_ep;
 
     constructor(globals: dGlobals, actor: PlacedActor) {
         const ga = !!((actor.parameter >>> 6) & 0x01);
@@ -225,8 +219,8 @@ class d_a_ep implements fopAc_ac_c {
     }
 }
 
-class d_a_tbox implements fopAc_ac_c {
-    public static pname = ObjPName.d_a_tbox;
+class d_a_tbox implements fopAc_ac_c_L2 {
+    public static pname = fpc__ProcessName.d_a_tbox;
 
     constructor(globals: dGlobals, actor: PlacedActor) {
         const type = (actor.parameter >>> 20) & 0x0F;
@@ -263,8 +257,8 @@ class d_a_tbox implements fopAc_ac_c {
 // -------------------------------------------------------
 // Grass/Flowers/Trees managed by their respective packets
 // -------------------------------------------------------
-class d_a_grass implements fopAc_ac_c {
-    public static pname = ObjPName.d_a_grass;
+class d_a_grass implements fopAc_ac_c_L2 {
+    public static pname = fpc__ProcessName.d_a_grass;
 
     static kSpawnPatterns = [
         { group: 0, count: 1 },
@@ -377,25 +371,23 @@ class d_a_grass implements fopAc_ac_c {
         const offsets = d_a_grass.kSpawnOffsets[pattern.group];
         const count = pattern.count;
 
-        const context = globals.renderer;
-
         switch (type) {
             case FoliageType.Grass:
                 for (let j = 0; j < count; j++) {
                     // @NOTE: Grass does not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.grassPacket.newData(pos, actor.roomNo, itemIdx);
+                    globals.scnPlay.grassPacket.newData(pos, actor.roomNo, itemIdx);
                 }
             break;
 
             case FoliageType.Tree:
-                const rotation = mat4.fromYRotation(scratchMat4a, actor.rotationY);
+                const rotation = mat4.fromYRotation(scratchMat4a, actor.rot[1]);
 
                 for (let j = 0; j < count; j++) {
                     const offset = vec3.transformMat4(scratchVec3a, offsets[j], rotation);
                     const pos = vec3.add(scratchVec3b, offset, actor.pos);
-                    context.treePacket.newData(pos, 0, actor.roomNo);
+                    globals.scnPlay.treePacket.newData(pos, 0, actor.roomNo);
                 }
             break;
 
@@ -407,7 +399,7 @@ class d_a_grass implements fopAc_ac_c {
                     // @NOTE: Flowers do not observe actor rotation or scale
                     const offset = vec3.set(scratchVec3a, offsets[j][0], offsets[j][1], offsets[j][2]);
                     const pos = vec3.add(scratchVec3a, offset, actor.pos);
-                    context.flowerPacket.newData(pos, isPink, actor.roomNo, itemIdx);
+                    globals.scnPlay.flowerPacket.newData(globals, pos, isPink, actor.roomNo, itemIdx);
                 }
             break;
             default:
@@ -420,54 +412,60 @@ class d_a_grass implements fopAc_ac_c {
 
 // The REL table maps .rel names to our implementations
 // @NOTE: Let's just keep this down here for now, for navigability
-interface fopAc_ac_c {
-    // @TODO: Most actors have draw and update functions
+interface fopAc_ac_c_L2 {
 }
 
 interface fpc_pc__Profile {
-    pname: ObjPName;
-
-    new(globals: dGlobals, actor: PlacedActor): fopAc_ac_c;
+    pname: fpc__ProcessName;
+    new(globals: dGlobals, actor: PlacedActor): fopAc_ac_c_L2;
     requestArchives?(globals: dGlobals, actor: fopAcM_prm_class): void;
 }
 
 const g_fpcPf_ProfileList_p: fpc_pc__Profile[] = [
     d_a_ep,
-    d_a_tbox,
     d_a_grass,
+    d_a_tbox,
 ];
 
-function fpcPf_Get(pname: number): fpc_pc__Profile | null {
-    const pf = g_fpcPf_ProfileList_p.find((pf) => pf.pname === pname);
+function fpcPf_Get__Constructor(globals: dGlobals, pcName: number): fpc_pc__Profile | null {
+    const pf = g_fpcPf_ProfileList_p.find((pf) => pf.pname === pcName);
     if (pf !== undefined)
         return pf;
     else
         return null;
 }
 
-export function requestArchiveForActor(globals: dGlobals, actor: fopAcM_prm_class): void {
-    const objName = globals.dStage_searchName(actor.name);
+export function requestArchiveForActor(globals: dGlobals, processName: string, actor: fopAcM_prm_class): void {
+    const objName = globals.dStage_searchName(processName);
 
-    const pf = fpcPf_Get(objName.pname);
+    const pf = fpcPf_Get__Constructor(globals, objName.pcName);
     if (pf !== null && pf.requestArchives !== undefined)
         pf.requestArchives(globals, actor);
 }
 
-export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor): Promise<void> {
+export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRenderer, processName: string, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
-    const objName = globals.dStage_searchName(actor.name);
+    const objName = globals.dStage_searchName(processName);
 
-    const pf = fpcPf_Get(objName.pname);
+    // New-style system.
+    if (fopAcM_create(globals.frameworkGlobals, objName.pcName, actor.parameter, actor.pos, actor.roomNo, actor.rot, actor.scale, actor.subtype, actor.parentPcId))
+        return;
+
+    // Legacy system 1.
+    // TODO(jstpierre): Remove this guy first.
+    const pf = fpcPf_Get__Constructor(globals, objName.pcName);
     if (pf !== null) {
         const actorObj = new pf(globals, actor);
+        return;
+    }
+
+    // Legacy system 2.
+    const loaded = spawnLegacyActor(globals.renderer, roomRenderer, actor);
+    if (loaded) {
+        // Warn about legacy actors?
+        // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
     } else {
-        const loaded = spawnLegacyActor(globals.renderer, roomRenderer, actor);
-        if (loaded) {
-            // Warn about legacy actors?
-            // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
-        } else {
-            const dbgName = globals.objNameGetDbgName(objName);
-            // console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
-        }
+        const dbgName = globals.objNameGetDbgName(objName);
+        // console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
     }
 }

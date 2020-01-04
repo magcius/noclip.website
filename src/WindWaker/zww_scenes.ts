@@ -39,12 +39,13 @@ import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
 import { dKyeff_c__execute } from './d_kankyo_wether';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register } from './framework';
 
-export type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
-export type SymbolMap = { SymbolData: SymbolData[] };
+type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
+type SymbolMap = { SymbolData: SymbolData[] };
 
 export interface dStage__ObjectNameTableEntry {
-    pname: number;
+    pcName: number;
     subtype: number;
     gbaName: number;
 };
@@ -92,7 +93,7 @@ function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
         const id = view.getUint16(offset + 0x08, false);
         const subtype = view.getUint8(offset + 0x0A);
         const gbaName = view.getUint8(offset + 0x0B);
-        actorTable[name] = { pname: id, subtype, gbaName };
+        actorTable[name] = { pcName: id, subtype, gbaName };
     }
 
     return actorTable;
@@ -103,8 +104,10 @@ export class dGlobals {
 
     // This is tucked away somewhere in dComInfoPlay
     public stageName: string;
-    public dStage_dt: dStage_stageDt_c;
+    public dStage_dt = new dStage_stageDt_c();
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+
+    public scnPlay: d_s_play;
 
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
     public playerPosition = vec3.create();
@@ -118,11 +121,11 @@ export class dGlobals {
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
 
-    constructor(public modelCache: ModelCache, private symbolMap: SymbolMap) {
+    constructor(public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
 
-        this.relNameTable = createRelNameTable(symbolMap);
-        this.objectNameTable = createActorTable(symbolMap);
+        this.relNameTable = createRelNameTable(extraSymbolData);
+        this.objectNameTable = createActorTable(extraSymbolData);
 
         for (let i = 0; i < this.roomStatus.length; i++)
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
@@ -133,13 +136,13 @@ export class dGlobals {
     }
 
     public objNameGetDbgName(objName: dStage__ObjectNameTableEntry): string {
-        const pnameStr = `0x${hexzero(objName.pname, 0x04)}`;
-        const relName = this.relNameTable[objName.pname] || 'built-in';
+        const pnameStr = `0x${hexzero(objName.pcName, 0x04)}`;
+        const relName = this.relNameTable[objName.pcName] || 'built-in';
         return `${relName} (${pnameStr})`;
     }
 
     public findExtraSymbolData(filename: string, symname: string): ArrayBufferSlice {
-        return assertExists(this.symbolMap.SymbolData.find((e) => e.Filename === filename && e.SymbolName === symname)).Data;
+        return assertExists(this.extraSymbolData.SymbolData.find((e) => e.Filename === filename && e.SymbolName === symname)).Data;
     }
 }
 
@@ -274,7 +277,7 @@ export class WindWakerRoomRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, renderer: WindWakerRenderer, public roomNo: number) {
         this.name = `Room ${roomNo}`;
 
-        const resCtrl = renderer.modelCache.resCtrl;
+        const resCtrl = renderer.globals.modelCache.resCtrl;
         this.dzb = resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`);
 
         const resInfo = assertExists(resCtrl.findResInfo(`Room${roomNo}`, resCtrl.resStg));
@@ -650,36 +653,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
-    public flowerPacket: FlowerPacket;
-    public treePacket: TreePacket;
-    public grassPacket: GrassPacket;
-
     public time: number; // In milliseconds, affected by pause and time scaling
     public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
 
-    public globals: dGlobals;
-
     public onstatechanged!: () => void;
 
-    constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, dStage_dt: dStage_stageDt_c) {
+    constructor(public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
-        this.globals = new dGlobals(modelCache, symbolMap);
-        this.globals.dStage_dt = dStage_dt;
-        this.globals.stageName = this.stage;
-        this.globals.resCtrl = this.modelCache.resCtrl;
-        this.globals.renderer = this;
-
-        const wantsSeaPlane = this.stage === 'sea';
+        const wantsSeaPlane = globals.stageName === 'sea';
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.renderCache);
-
-        this.treePacket = new TreePacket(this);
-        this.flowerPacket = new FlowerPacket(this);
-        this.grassPacket = new GrassPacket(this);
-
-        envcolor_init(this.globals);
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
@@ -763,6 +748,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
 
+        fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
+
         drawKankyo(this.globals);
 
         this.extraTextures.prepareToRender(device);
@@ -776,19 +763,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.skyEnvironment.prepareToRender(this.globals, device, renderInstManager, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(this.globals, device, renderInstManager, viewerInput);
-
-        // Grass/Flowers/Trees
-        this.flowerPacket.calc();
-        this.treePacket.calc();
-        this.grassPacket.calc();
-
-        this.flowerPacket.update();
-        this.treePacket.update();
-        this.grassPacket.update();
-
-        this.flowerPacket.draw(this.globals, renderInstManager, viewerInput, device);
-        this.treePacket.draw(this.globals, renderInstManager, viewerInput, device);
-        this.grassPacket.draw(this.globals, renderInstManager, viewerInput, device);
 
         {
             this.effectSystem.calc(viewerInput);
@@ -860,9 +834,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.skyEnvironment.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
-        this.flowerPacket.destroy(device);
-        this.treePacket.destroy(device);
-        this.grassPacket.destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
     }
@@ -877,6 +848,7 @@ export class ModelCache {
 
     public resCtrl = new dRes_control_c();
     public currentStage: string;
+    public onloadedcallback: (() => void) | null = null;
 
     constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private yaz0Decompressor: Yaz0.Yaz0Decompressor) {
     }
@@ -903,6 +875,8 @@ export class ModelCache {
         } else {
             return this.fetchFile(path, cacheBust).then((data) => {
                 this.fileDataCache.set(path, data);
+                if (this.onloadedcallback !== null)
+                    this.onloadedcallback();
                 return data;
             });
         }
@@ -947,6 +921,16 @@ export class ModelCache {
         return archive;
     }
 
+    public requestObjectData(archivePath: string): cPhs__Status {
+        if (this.archiveCache.has(archivePath))
+            return cPhs__Status.Next;
+
+        if (!this.archivePromiseCache.has(archivePath))
+            this.fetchObjectData(archivePath);
+
+        return cPhs__Status.Loading;
+    }
+
     public async fetchStageData(arcName: string): Promise<void> {
         const archive = await this.fetchArchive(`${pathBase}/Stage/${this.currentStage}/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
@@ -971,6 +955,54 @@ export class ModelCache {
 
 export const pathBase = `j3d/ww`;
 
+class d_s_play extends fopScn {
+    public flowerPacket: FlowerPacket;
+    public treePacket: TreePacket;
+    public grassPacket: GrassPacket;
+
+    public load(globals: dGlobals, userData: any): cPhs__Status {
+        super.load(globals, userData);
+
+        this.treePacket = new TreePacket(globals);
+        this.flowerPacket = new FlowerPacket(globals);
+        this.grassPacket = new GrassPacket(globals);
+
+        globals.scnPlay = this;
+
+        return cPhs__Status.Complete;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(globals, renderInstManager, viewerInput);
+
+        // Grass/Flowers/Trees
+        const frameCount = viewerInput.time / 1000.0 * 30;
+
+        this.flowerPacket.calc(frameCount);
+        this.treePacket.calc(frameCount);
+        this.grassPacket.calc(frameCount);
+
+        this.flowerPacket.update(globals);
+        this.treePacket.update(globals);
+        this.grassPacket.update(globals);
+
+        fopDw_Draw(globals.frameworkGlobals, globals, renderInstManager, viewerInput);
+
+        this.flowerPacket.draw(globals, renderInstManager, viewerInput);
+        this.treePacket.draw(globals, renderInstManager, viewerInput);
+        this.grassPacket.draw(globals, renderInstManager, viewerInput);
+    }
+
+    public delete(globals: dGlobals): void {
+        super.delete(globals);
+
+        const device = globals.modelCache.device;
+        this.flowerPacket.destroy(device);
+        this.treePacket.destroy(device);
+        this.grassPacket.destroy(device);
+    }
+}
+
 class SceneDesc {
     public id: string;
 
@@ -988,12 +1020,14 @@ class SceneDesc {
             return new ModelCache(context.device, context.dataFetcher, yaz0Decompressor);
         });
 
+        modelCache.onloadedcallback = null;
         modelCache.setCurrentStage(this.stageDir);
 
         modelCache.fetchObjectData(`System`);
         modelCache.fetchStageData(`Stage`);
 
         modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 5);
+        modelCache.fetchFileData(`${pathBase}/f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
             `${pathBase}/Particle/common.jpc`,
@@ -1010,6 +1044,29 @@ class SceneDesc {
 
         await modelCache.waitForLoad();
 
+        const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`${pathBase}/f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
+        const frameworkGlobals = new fGlobals(f_pc_profiles);
+
+        fpcPf__Register(frameworkGlobals, fpc__ProcessName.d_s_play, d_s_play);
+
+        const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
+        const globals = new dGlobals(modelCache, symbolMap, frameworkGlobals);
+        globals.stageName = this.stageDir;
+
+        const renderer = new WindWakerRenderer(device, globals);
+        context.destroyablePool.push(renderer);
+        globals.renderer = renderer;
+
+        modelCache.onloadedcallback = () => {
+            fpcCt_Handler(globals.frameworkGlobals, globals);
+        };
+
+        const ret = fpcSCtRq_Request(frameworkGlobals, null, fpc__ProcessName.d_s_play, null);
+        assert(ret);
+
+        fpcCt_Handler(globals.frameworkGlobals, globals);
+        assert(globals.scnPlay !== undefined);
+
         const resCtrl = modelCache.resCtrl;
 
         const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
@@ -1019,23 +1076,18 @@ class SceneDesc {
         const stageRarc = modelCache.getStageData(`Stage`);
         const dzs = resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`);
 
-        const dStage_dt = new dStage_stageDt_c();
-        dStage_dt_c_initStageLoader(dStage_dt, dzs);
+        dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
+
+        envcolor_init(globals);
 
         const mult = dzs.headers.get('MULT');
 
-        const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;
-        const renderer = new WindWakerRenderer(device, modelCache, symbolMap, this.stageDir, dStage_dt);
-        context.destroyablePool.push(renderer);
 
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
-
         renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
-        renderer.stage = this.stageDir;
 
         const jpac: JPA.JPAC[] = [];
         for (let i = 0; i < particleArchives.length; i++) {
@@ -1125,7 +1177,7 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
+    private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1142,7 +1194,6 @@ class SceneDesc {
             const angleX = view.getInt16(actrTableIdx + 0x18);
             const angleY = view.getInt16(actrTableIdx + 0x1A);
             const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const rotationY = angleY / 0x7FFF * Math.PI;
             const enemyNo = view.getUint16(actrTableIdx + 0x1E);
 
             const actor: fopAcM_prm_class = {
@@ -1155,17 +1206,15 @@ class SceneDesc {
                 subtype: 0,
                 gbaName: 0,
                 parentPcId: 0xFFFFFFFF,
-                name,
                 layer,
-                rotationY,
             };
 
-            callback(actor);
+            callback(name, actor);
             actrTableIdx += 0x20;
         }
     }
 
-    private iterActorLayerSCOB(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
+    private iterActorLayerSCOB(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (name: string, it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1182,7 +1231,6 @@ class SceneDesc {
             const angleX = view.getInt16(actrTableIdx + 0x18);
             const angleY = view.getInt16(actrTableIdx + 0x1A);
             const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const rotationY = angleY / 0x7FFF * Math.PI;
             const enemyNo = view.getUint16(actrTableIdx + 0x1E);
             const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
             const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
@@ -1199,17 +1247,15 @@ class SceneDesc {
                 subtype: 0,
                 gbaName: 0,
                 parentPcId: 0xFFFFFFFF,
-                name,
                 layer,
-                rotationY,
             };
 
-            callback(actor);
+            callback(name, actor);
             actrTableIdx += 0x24;
         }
     }
 
-    private iterActorLayers(roomIdx: number, dzs: DZS, callback: (it: fopAcM_prm_class) => void): void {
+    private iterActorLayers(roomIdx: number, dzs: DZS, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
         const chunkHeaders = dzs.headers;
 
         function buildChunkLayerName(base: string, i: number): string {
@@ -1231,18 +1277,19 @@ class SceneDesc {
     }
 
     private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, actorMultMtx: mat4 | null = null): void {
-        this.iterActorLayers(roomRenderer.roomNo, dzs, (actor) => {
+        this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
+            placedActor.rotationY = actor.rot[1] / 0x7FFF * Math.PI;
             if (actorMultMtx !== null)
                 vec3.transformMat4(actor.pos, actor.pos, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
-            loadActor(renderer.globals, roomRenderer, placedActor);
+            loadActor(renderer.globals, roomRenderer, processName, placedActor);
         });
     }
 
     private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS): void {
-        this.iterActorLayers(roomIdx, dzs, (actor) => {
-            requestArchiveForActor(renderer.globals, actor);
+        this.iterActorLayers(roomIdx, dzs, (processName, actor) => {
+            requestArchiveForActor(renderer.globals, processName, actor);
         });
     }
 }
