@@ -3,7 +3,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { fopAcM_prm_class, BMDObjectRenderer, createEmitter } from "./Actors";
+import { fopAcM_prm_class, BMDObjectRenderer, createEmitter, PlacedActor } from "./Actors";
 import { J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -21,14 +21,14 @@ const scratchVec3b = vec3.create();
 
 function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
-function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
+function computeActorModelMatrix(m: mat4, actor: PlacedActor): void {
     computeModelMatrixSRT(m,
         actor.scale[0], actor.scale[1], actor.scale[2],
         0, actor.rotationY, 0,
         actor.pos[0], actor.pos[1], actor.pos[2]);
 }
 
-export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: fopAcM_prm_class) {
+export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor) {
     const modelCache = renderer.globals.modelCache;
     const resCtrl = modelCache.resCtrl;
 
@@ -104,7 +104,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     if (actor.name === 'item') {
         // Item table provided with the help of the incredible LagoLunatic <3.
-        const itemId = (actor.parameter & 0x000000FF);
+        const itemId = (actor.parameters & 0x000000FF);
 
         // Heart
         if (itemId === 0x00) fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/vhrtl.bdl`));
@@ -179,7 +179,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Grandma
     else if (actor.name === 'Ba1') {
         // Only allow the sleeping grandma through, because how else can you live in life...
-        if (actor.parameter === 0x03) {
+        if (actor.parameters === 0x03) {
             fetchArchive(`Ba`).then(rarc => {
                 const m = buildModel(rarc, `bdlm/ba.bdl`);
                 m.bindANK1(parseBCK(rarc, `bcks/wait02.bck`));
@@ -727,7 +727,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         actor.name === 'Okioke'  || actor.name === 'Kmi02'   || actor.name === 'Ptubo' ||
         actor.name === 'KkibaB'   || actor.name === 'Kmi00'   || actor.name === 'Hbox2S'
     ) {
-        const type = (actor.parameter & 0x0F000000) >> 24;
+        const type = (actor.parameters & 0x0F000000) >> 24;
         let model;
         switch (type) {
         case 0:
@@ -925,7 +925,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         actor.name === 'Hbox1'   || actor.name === 'MpwrB'   || actor.name === 'DBLK0' ||
         actor.name === 'DBLK1'   || actor.name === 'DKkiba'  || actor.name === 'Hbox2'
     ) {
-        const type = (actor.parameter & 0x0F000000) >> 24;
+        const type = (actor.parameters & 0x0F000000) >> 24;
         switch (type) {
         case 0:
         case 4:
@@ -1013,7 +1013,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     });
     // Gohdan
     else if (actor.name === 'Bst') fetchArchive(`Bst`).then((rarc) => {
-        const type = (actor.parameter & 0x000000FF);
+        const type = (actor.parameters & 0x000000FF);
         switch (type) {
         case 0:
             // Head
@@ -1071,7 +1071,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'Puti') fetchArchive(`Pt`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
     else if (actor.name === 'Rdead1' || actor.name === 'Rdead2') fetchArchive(`Rd`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rd.bdl`);
-        const idleAnimType = (actor.parameter & 0x00000001);
+        const idleAnimType = (actor.parameters & 0x00000001);
         if (idleAnimType == 0) {
             m.bindANK1(parseBCK(rarc, `bcks/tachip.bck`));
         } else {
@@ -1082,7 +1082,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'gmos') fetchArchive(`Gm`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
     else if (actor.name === 'mo2') fetchArchive(`Mo2`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
     else if (actor.name === 'pow') fetchArchive(`Pw`).then(async (rarc) => {
-        let color = (actor.parameter & 0x0000FE00) >> 9;
+        let color = (actor.parameters & 0x0000FE00) >> 9;
         if (color > 5)
             color = 0;
 
@@ -1113,7 +1113,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (name === 'bable') fetchArchive(`Bl`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bl.bdl`);
 
-        const bubbleType = (actor.parameter & 0x000000FF);
+        const bubbleType = (actor.parameters & 0x000000FF);
         
         if (bubbleType == 0x80) {
             m.bindTTK1(parseBTK(rarc, 'btk/off.btk'));
@@ -1129,7 +1129,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Darknut
     else if (actor.name === 'Tn') fetchArchive(`Tn`).then(async (rarc) => {
         const equipmentType = (actor.rot[0] & 0x00E0) >>> 5;
-        const armorColor = (actor.parameter & 0x000000F0) >>> 4;
+        const armorColor = (actor.parameters & 0x000000F0) >>> 4;
         
         const mainModel = buildModel(rarc, `bmdm/tn_main.bmd`);
         const mainAnim = parseBCK(rarc, `bck/aniou1.bck`);
@@ -1217,7 +1217,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     });
     // Peahats and Seahats
     else if (actor.name === 'p_hat') {
-        const type = (actor.parameter & 0x000000FF);
+        const type = (actor.parameters & 0x000000FF);
         if (type == 1) {
             fetchArchive(`Sh`).then((rarc) => {
                 const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
@@ -1247,7 +1247,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         const cc = buildModel(rarc, `bmdm/cc.bmd`);
         cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
 
-        const chuchuType = (actor.parameter & 0x0000FF00) >>> 8;
+        const chuchuType = (actor.parameters & 0x0000FF00) >>> 8;
         let frameNum;
         switch (chuchuType) {
         case 0:
@@ -1334,7 +1334,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)));
     // Triangle Island Statue: TODO(jstpierre): finish the submodels
     else if (actor.name === 'Doguu') fetchArchive(`Doguu`).then((rarc) => {
-        const which = actor.parameter & 0xFF;
+        const which = actor.parameters & 0xFF;
         const bmtPaths = ['bmt/vgsmd.bmt', 'bmt/vgsmf.bmt', 'bmt/vgsmn.bmt'];
         const brkPaths = ['brk/vgsmd.brk', 'brk/vgsmf.brk', 'brk/vgsmn.brk'];
         const m = buildModelBMT(rarc, `bdlm/vgsma.bdl`, bmtPaths[which]);
@@ -1547,7 +1547,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Nintendo Gallery
     else if (actor.name === 'Figure') {
         fetchArchive(`Figure`).then((rarc) => buildModel(rarc, `bdlm/vf_bs.bdl`))
-        const figureId = actor.parameter & 0x000000FF;
+        const figureId = actor.parameters & 0x000000FF;
         const baseFilename = `vf_${leftPad(''+figureId, 3)}`;
         const base = `bdl/${baseFilename}`;
 

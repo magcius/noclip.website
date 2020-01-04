@@ -40,6 +40,7 @@ import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } fr
 import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
 import { dKyeff_c__execute } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register } from './framework';
+import { registerActors } from './d_a';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -1048,6 +1049,7 @@ class SceneDesc {
         const frameworkGlobals = new fGlobals(f_pc_profiles);
 
         fpcPf__Register(frameworkGlobals, fpc__ProcessName.d_s_play, d_s_play);
+        registerActors(frameworkGlobals);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const globals = new dGlobals(modelCache, symbolMap, frameworkGlobals);
@@ -1197,7 +1199,7 @@ class SceneDesc {
             const enemyNo = view.getUint16(actrTableIdx + 0x1E);
 
             const actor: fopAcM_prm_class = {
-                parameter,
+                parameters: parameter,
                 roomNo,
                 pos: vec3.fromValues(posX, posY, posZ),
                 rot: vec3.fromValues(angleX, angleY, angleZ),
@@ -1238,7 +1240,7 @@ class SceneDesc {
             // const pad = view.getUint8(actrTableIdx + 0x23);
 
             const actor: fopAcM_prm_class = {
-                parameter,
+                parameters: parameter,
                 roomNo,
                 pos: vec3.fromValues(posX, posY, posZ),
                 rot: vec3.fromValues(angleX, angleY, angleZ),

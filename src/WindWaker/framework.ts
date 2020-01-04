@@ -418,6 +418,7 @@ export class fopAc_ac_c extends leafdraw_class {
     public scale = vec3.create();
     public parentPcId: number;
     public subtype: number;
+    public roomNo: number;
 
     private loadInit: boolean = false;
 
@@ -428,6 +429,8 @@ export class fopAc_ac_c extends leafdraw_class {
             vec3.copy(this.scale, prm.scale);
             this.subtype = prm.subtype;
             this.parentPcId = prm.parentPcId;
+            this.parameters = prm.parameters;
+            this.roomNo = prm.roomNo;
             this.loadInit = true;
         }
 
@@ -449,7 +452,7 @@ export class fopAc_ac_c extends leafdraw_class {
 export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameter: number, pos: vec3, roomNo: number, rot: vec3, scale: vec3, subtype: number, parentPcId: number): boolean {
     // Create on current layer.
     const prm: fopAcM_prm_class = {
-        parameter, pos, roomNo, rot, scale, subtype, parentPcId,
+        parameters: parameter, pos, roomNo, rot, scale, subtype, parentPcId,
         enemyNo: -1, gbaName: 0x00, layer: -1,
     };
 
