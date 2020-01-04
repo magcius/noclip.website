@@ -1,25 +1,31 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as BYML from "../../byml";
-import { openSync, readSync, closeSync, readFileSync, writeFileSync } from "fs";
-import { assertExists, hexzero, assert } from "../../util";
+import * as Yaz0 from './Yaz0_NoWASM';
+import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync } from "fs";
+import { assertExists, hexzero, assert, hexdump, readString } from "../../util";
 import { Endianness } from "../../endian";
 
 // Standalone tool designed for node to extract data.
+
+function fetchDataSync(path: string): ArrayBufferSlice {
+    const b: Buffer = readFileSync(path);
+    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
+}
 
 function fetchDataFragmentSync(path: string, byteOffset: number, byteLength: number): ArrayBufferSlice {
     const fd = openSync(path, 'r');
     const b = Buffer.alloc(byteLength);
     readSync(fd, b, 0, byteLength, byteOffset);
     closeSync(fd);
-    return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+    return new ArrayBufferSlice(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
 }
 
 const pathBaseIn  = `../../../data/zww_raw`;
 const pathBaseOut = `../../../data/j3d/ww`;
 
 interface SymbolMapEntry {
-    sectionTypeIdx: number;
+    sectionName: string;
     addr: number;
     size: number;
     vaddr: number;
@@ -28,6 +34,7 @@ interface SymbolMapEntry {
 }
 
 interface SymbolMap {
+    sectionNames: string[];
     entries: SymbolMapEntry[];
 }
 
@@ -35,8 +42,9 @@ const sectionNames = [
     '.text', '.text1', '.text2', '.text3', '.text4', '.text5', '.text6',
     'extab', 'extabindex', '.ctors', '.dtors', '.rodata', '.data', '.sdata', '.sdata2',
     '.bss', '.sbss', '.sbss2',
-]
+];
 
+// TODO(jstpierre): This is a bit junk.
 function sectionTypeStringToIdx(sectionName: string): number {
     const idx = sectionNames.indexOf(sectionName);
     assert(idx >= 0);
@@ -47,26 +55,68 @@ function parseMapFile(filename: string): SymbolMap {
     const S = readFileSync(filename, { encoding: 'utf8' });
     const lines = S.split('\n');
     const entries: SymbolMapEntry[] = [];
-    let sectionTypeIdx: number = -1;
-    for (let i = 0; i < lines.length; i++) {
+
+    const sectionNames: string[] = [];
+
+    let sectionName: string;
+    let i = 0;
+
+    for (; i < lines.length; i++) {
         const line = lines[i].trim();
 
         if (line.endsWith(' section layout')) {
             // Switch the section.
-            const sectionName = line.split(' ')[0];
-            sectionTypeIdx = sectionTypeStringToIdx(sectionName);
+            sectionName = line.split(' ')[0];
+            continue;
         }
 
+        // Done with the symbol tables.
+        if (line === 'Memory map:')
+            break;
+
+        if (line.startsWith('>>>'))
+            continue;
+
+        if (sectionName === undefined)
+            continue;
+
         const [addrStr, sizeStr, vaddrStr, unk2Str, symbolName, filename] = line.split(/\s+/);
+        if (symbolName === undefined)
+            continue;
+
         if (unk2Str === undefined || unk2Str.startsWith('...'))
             continue;
 
         const addr = parseInt(addrStr, 16);
         const size = parseInt(sizeStr, 16);
         const vaddr = parseInt(vaddrStr, 16);
-        entries.push({ sectionTypeIdx, addr, size, vaddr, symbolName, filename });
+        entries.push({ sectionName, addr, size, vaddr, symbolName, filename });
     }
-    return { entries };
+
+    // Memory map.
+    for (; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (!line.startsWith('.'))
+            continue;
+
+        const [sectionName, addrStr, sizeStr, offsStr] = line.split(/\s+/);
+        if (offsStr === undefined) {
+            // Stripped section, like .debug_*
+            continue;
+        }
+
+        const addr = parseInt(addrStr, 16);
+        const size = parseInt(sizeStr, 16);
+        const offs = parseInt(offsStr, 16);
+
+        if (size === 0)
+            continue;
+
+        sectionNames.push(sectionName);
+    }
+
+    return { entries, sectionNames };
 }
 
 interface SymbolData {
@@ -75,22 +125,40 @@ interface SymbolData {
     Data: ArrayBufferSlice;
 }
 
-function extractSymbol(datas: SymbolData[], dolHeader: DolHeader, map: SymbolMap, symFile: string, symName: string): void {
-    const entry = assertExists(map.entries.find((e) => e.filename === symFile && e.symbolName === symName));
-    const offs = dolHeader.offs[entry.sectionTypeIdx] + entry.addr;
-    const data = fetchDataFragmentSync(dolHeader.filename, offs, entry.size);
-    console.log(entry.filename, entry.symbolName, hexzero(dolHeader.offs[entry.sectionTypeIdx], 8), hexzero(entry.addr, 8), hexzero(offs, 8), entry.size);
+function pushSymbolEntry(datas: SymbolData[], entry: SymbolMapEntry, data: ArrayBufferSlice): ArrayBufferSlice {
+    console.log(entry.filename, entry.symbolName, hexzero(entry.addr, 8), entry.size);
     datas.push({ Filename: entry.filename, SymbolName: entry.symbolName, Data: data });
+    return data;
 }
 
-interface DolHeader {
+function extractSymbolEntryREL(datas: SymbolData[], relFile: RelFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
+    const sectionIdx = mapFile.sectionNames.indexOf(entry.sectionName);
+    assert(sectionIdx >= 0);
+    const offs = relFile.offs[sectionIdx] + entry.addr;
+    const data = relFile.buffer.subarray(offs, entry.size);
+    return pushSymbolEntry(datas, entry, data);
+}
+
+function extractSymbolEntryDOL(datas: SymbolData[], dolFile: DolFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
+    const sectionTypeIdx = sectionTypeStringToIdx(entry.sectionName);
+    const offs = dolFile.offs[sectionTypeIdx] + entry.addr;
+    const data = fetchDataFragmentSync(dolFile.filename, offs, entry.size);
+    return pushSymbolEntry(datas, entry, data);
+}
+
+function extractSymbol(datas: SymbolData[], dolHeader: DolFile, mapFile: SymbolMap, symFile: string, symName: string): void {
+    const entry = assertExists(mapFile.entries.find((e) => e.filename === symFile && e.symbolName === symName));
+    extractSymbolEntryDOL(datas, dolHeader, mapFile, entry);
+}
+
+interface DolFile {
     filename: string;
     offs: Uint32Array;
     addr: Uint32Array;
     size: Uint32Array;
 }
 
-function parseDolFile(filename: string): DolHeader {
+function parseDolFile(filename: string): DolFile {
     const buffer = fetchDataFragmentSync(filename, 0x00, 0xE4);
     const offs = buffer.createTypedArray(Uint32Array, 0x00, 18, Endianness.BIG_ENDIAN);
     const addr = buffer.createTypedArray(Uint32Array, 0x48, 18, Endianness.BIG_ENDIAN);
@@ -98,7 +166,39 @@ function parseDolFile(filename: string): DolHeader {
     return { filename, offs, addr, size };
 }
 
-function main() {
+// We don't do a full relocation, we just hardcode the pointer to the .data section.
+interface RelFile {
+    buffer: ArrayBufferSlice;
+    offs: number[];
+    size: number[];
+}
+
+function parseRelFile(filename: string): RelFile {
+    let buffer = fetchDataSync(filename);
+    if (readString(buffer, 0x00, 0x04) === 'Yaz0')
+        buffer = Yaz0.decompress(buffer);
+
+    const view = buffer.createDataView();
+    const sectionTableCount = view.getUint32(0x0C);
+    let sectionTableOffs = view.getUint32(0x10);
+
+    const offs: number[] = [];
+    const size: number[] = [];
+    for (let i = 0; i < sectionTableCount; i++) {
+        // Skip section 0.
+        if (i !== 0) {
+            const sectionOffs = view.getUint32(sectionTableOffs + 0x00);
+            const sectionSize = view.getUint32(sectionTableOffs + 0x04);
+            offs.push(sectionOffs);
+            size.push(sectionSize);
+        }
+        sectionTableOffs += 0x08;
+    }
+
+    return { buffer, offs, size };
+}
+
+function extractExtra() {
     const dolHeader = parseDolFile(`${pathBaseIn}/main.dol`);
     const framework = parseMapFile(`${pathBaseIn}/maps/framework.map`);
     const datas: SymbolData[] = [];
@@ -187,6 +287,55 @@ function main() {
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/extra.crg1_arc`, Buffer.from(data));
+}
+
+async function extractProfiles() {
+    const datas: SymbolData[] = [];
+
+    function iterProfileSymbols(m: SymbolMap, callback: (mapFile: SymbolMap, e: SymbolMapEntry) => void): void {
+        for (let i = 0; i < m.entries.length; i++) {
+            if (m.entries[i].symbolName.startsWith('g_profile_'))
+                callback(m, m.entries[i]);
+        }
+    }
+
+    // Grab DOL profiles.
+    const dolHeader = parseDolFile(`${pathBaseIn}/main.dol`);
+    const framework = parseMapFile(`${pathBaseIn}/maps/framework.map`);
+    iterProfileSymbols(framework, (mapFile, entry) => extractSymbolEntryDOL(datas, dolHeader, mapFile, entry));
+
+    // Grab REL profiles.
+    const rels = readdirSync(`${pathBaseIn}/rels`);
+    for (let i = 0; i < rels.length; i++) {
+        const relFilename = `${pathBaseIn}/rels/${rels[i]}`;
+        const mapFilename = `${pathBaseIn}/maps/${rels[i].replace('.rel', '.map')}`;
+        const rel = parseRelFile(relFilename);
+        const map = parseMapFile(mapFilename);
+        iterProfileSymbols(map, (mapFile, entry) => {
+            const data = extractSymbolEntryREL(datas, rel, mapFile, entry);
+            // sanity check
+            const layer = data.createTypedArray(Uint32Array, 0x00, 0x01, Endianness.BIG_ENDIAN)[0];
+            assert(layer === 0xFFFFFFFD);
+        });
+    }
+
+    // HACK(jstpierre): Slim down on filesizes by removing the filename. We don't need it,
+    // everything is guaranteed unique.
+    for (let i = 0; i < datas.length; i++) {
+        delete datas[i].SymbolName;
+    }
+
+    const crg1 = {
+        SymbolData: datas,
+    };
+
+    const data = BYML.write(crg1, BYML.FileType.CRG1);
+    writeFileSync(`${pathBaseOut}/f_pc_profiles.crg1_arc`, Buffer.from(data));
+}
+
+function main() {
+    extractExtra();
+    extractProfiles();
 }
 
 main();

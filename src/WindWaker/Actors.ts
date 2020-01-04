@@ -18,21 +18,23 @@ import { LightType, dKy_tevstr_c, settingTevStruct, setLightTevColorType, dKy_te
 import { spawnLegacyActor } from './LegacyActor';
 
 export interface fopAcM_prm_class {
+    parameter: number;
+    pos: vec3;
+    rot: vec3;
+    enemyNo: number;
+    scale: vec3;
+    gbaName: number;
+    parentPcId: number;
+    subtype: number;
+    roomNo: number;
+
     // NOTE(jstpierre): This is normally passed separately.
     name: string;
-    arg: number;
-    pos: vec3;
-    scale: vec3;
-    // These are all "rot", according to the game.
-    auxParams1: number;
-    rotationY: number;
-    auxParams2: number;
-    roomNo: number;
-    subtype: number;
-    gbaName: number;
     // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
     // load inactive layers...
     layer: number;
+    // TODO(jstpierre): Remove
+    rotationY: number;
 };
 
 // TODO(jstpierre): Remove this.
@@ -188,9 +190,9 @@ class d_a_ep implements fopAc_ac_c {
     public static pname = ObjPName.d_a_ep;
 
     constructor(globals: dGlobals, actor: PlacedActor) {
-        const ga = !!((actor.arg >>> 6) & 0x01);
-        const obm = !!((actor.arg >>> 7) & 0x01);
-        let type = (actor.arg & 0x3F);
+        const ga = !!((actor.parameter >>> 6) & 0x01);
+        const obm = !!((actor.parameter >>> 7) & 0x01);
+        let type = (actor.parameter & 0x3F);
         if (type === 0x3F)
             type = 0;
 
@@ -227,7 +229,7 @@ class d_a_tbox implements fopAc_ac_c {
     public static pname = ObjPName.d_a_tbox;
 
     constructor(globals: dGlobals, actor: PlacedActor) {
-        const type = (actor.arg >>> 20) & 0x0F;
+        const type = (actor.parameter >>> 20) & 0x0F;
         if (type === 0) {
             // Light Wood
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
@@ -249,7 +251,7 @@ class d_a_tbox implements fopAc_ac_c {
             const m = buildModel(globals.renderer, res, actor);
         } else {
             // Might be something else, not sure.
-            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
+            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameter, 8)}`);
         }
     }
 
@@ -367,9 +369,9 @@ class d_a_grass implements fopAc_ac_c {
             PinkFlower
         };
 
-        const spawnPatternId = (actor.arg & 0x00F) >> 0;
-        const type: FoliageType = (actor.arg & 0x030) >> 4;
-        const itemIdx = (actor.arg >> 6) & 0x3f; // Determines which item spawns when this is cut down
+        const spawnPatternId = (actor.parameter & 0x00F) >> 0;
+        const type: FoliageType = (actor.parameter & 0x030) >> 4;
+        const itemIdx = (actor.parameter >> 6) & 0x3f; // Determines which item spawns when this is cut down
 
         const pattern = d_a_grass.kSpawnPatterns[spawnPatternId];
         const offsets = d_a_grass.kSpawnOffsets[pattern.group];

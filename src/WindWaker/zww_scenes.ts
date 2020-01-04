@@ -1125,7 +1125,7 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayerACTR(roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
+    private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1135,36 +1135,37 @@ class SceneDesc {
         let actrTableIdx = actrHeader.offs;
         for (let i = 0; i < actrHeader.count; i++) {
             const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameters = view.getUint32(actrTableIdx + 0x08, false);
+            const parameter = view.getUint32(actrTableIdx + 0x08, false);
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
-            const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
-            const enemyNum = view.getUint16(actrTableIdx + 0x1E);
+            const angleX = view.getInt16(actrTableIdx + 0x18);
+            const angleY = view.getInt16(actrTableIdx + 0x1A);
+            const angleZ = view.getInt16(actrTableIdx + 0x1C);
+            const rotationY = angleY / 0x7FFF * Math.PI;
+            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
 
             const actor: fopAcM_prm_class = {
-                name,
-                arg: parameters,
-                auxParams1,
-                auxParams2,
-                roomNo: roomIdx,
-                layer: layerIdx,
+                parameter,
+                roomNo,
                 pos: vec3.fromValues(posX, posY, posZ),
+                rot: vec3.fromValues(angleX, angleY, angleZ),
+                enemyNo,
                 scale: vec3.fromValues(1, 1, 1),
-                rotationY: rotY,
                 subtype: 0,
                 gbaName: 0,
+                parentPcId: 0xFFFFFFFF,
+                name,
+                layer,
+                rotationY,
             };
 
             callback(actor);
-
             actrTableIdx += 0x20;
         }
     }
 
-    private iterActorLayerSCOB(roomIdx: number, layerIdx: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
+    private iterActorLayerSCOB(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (it: fopAcM_prm_class) => void): void {
         if (actrHeader === undefined)
             return;
 
@@ -1174,35 +1175,36 @@ class SceneDesc {
         let actrTableIdx = actrHeader.offs;
         for (let i = 0; i < actrHeader.count; i++) {
             const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameters = view.getUint32(actrTableIdx + 0x08, false);
+            const parameter = view.getUint32(actrTableIdx + 0x08, false);
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const auxParams1 = view.getInt16(actrTableIdx + 0x18);
-            const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            const auxParams2 = view.getUint16(actrTableIdx + 0x1C);
-            // const unk2 = view.getInt16(actrTableIdx + 0x1E);
+            const angleX = view.getInt16(actrTableIdx + 0x18);
+            const angleY = view.getInt16(actrTableIdx + 0x1A);
+            const angleZ = view.getInt16(actrTableIdx + 0x1C);
+            const rotationY = angleY / 0x7FFF * Math.PI;
+            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
             const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
             const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
             const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
             // const pad = view.getUint8(actrTableIdx + 0x23);
 
             const actor: fopAcM_prm_class = {
-                name,
-                arg: parameters,
-                auxParams1,
-                auxParams2,
-                roomNo: roomIdx,
-                layer: layerIdx,
+                parameter,
+                roomNo,
                 pos: vec3.fromValues(posX, posY, posZ),
+                rot: vec3.fromValues(angleX, angleY, angleZ),
+                enemyNo,
                 scale: vec3.fromValues(scaleX, scaleY, scaleZ),
-                rotationY: rotY,
                 subtype: 0,
                 gbaName: 0,
+                parentPcId: 0xFFFFFFFF,
+                name,
+                layer,
+                rotationY,
             };
 
             callback(actor);
-
             actrTableIdx += 0x24;
         }
     }

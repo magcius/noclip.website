@@ -1,6 +1,17 @@
 {
     "version": "0.2.0",
     "configurations": [
+    {
+        "type": "node",
+        "request": "launch",
+        "name": "Launch ZWW Extractor",
+        "program": "${workspaceFolder}/src/WindWaker/tools/zww_extractor.ts",
+        "cwd": "${fileDirname}",
+        "outFiles": ["${fileDirname}/**/*.js"],
+        "skipFiles": [
+            "<node_internals>/**"
+        ]
+    },
         {
             "type": "chrome",
             "request": "launch",
