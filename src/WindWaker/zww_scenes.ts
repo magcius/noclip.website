@@ -27,7 +27,6 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { fopAcM_prm_class, loadActor, ObjectRenderer, PlacedActor } from './Actors';
 import { SceneContext } from '../SceneBase';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { range } from '../MathHelpers';
@@ -37,10 +36,11 @@ import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
-import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
+import { dScnKy_env_light_c, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
 import { dKyeff_c__execute, dKyw__RegisterConstructors } from './d_kankyo_wether';
-import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register } from './framework';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class } from './framework';
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
+import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -276,11 +276,12 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
     return modelInstance;
 }
 
+// Legacy
 export class WindWakerRoomRenderer {
     public name: string;
     public visible: boolean = true;
     public objectsVisible = true;
-    public objectRenderers: ObjectRenderer[] = [];
+    public objectRenderers: BMDObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
     public extraTextures: ZWWExtraTextures;
@@ -290,9 +291,6 @@ export class WindWakerRoomRenderer {
 
         const resCtrl = renderer.globals.modelCache.resCtrl;
         this.dzb = assertExists(resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`));
-
-        const resInfo = assertExists(resCtrl.findResInfo(`Room${roomNo}`, resCtrl.resStg));
-        const roomRarc = resInfo.archive;
 
         this.extraTextures = renderer.extraTextures;
     }

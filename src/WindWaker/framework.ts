@@ -2,7 +2,6 @@
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { vec3 } from "gl-matrix";
-import { fopAcM_prm_class } from "./Actors";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assertExists, nArray, arrayRemove } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
@@ -468,6 +467,21 @@ export class fopAc_ac_c extends leafdraw_class {
         return cPhs__Status.Next;
     }
 }
+
+export interface fopAcM_prm_class {
+    parameters: number;
+    pos: vec3 | null;
+    rot: vec3 | null;
+    enemyNo: number;
+    scale: vec3 | null;
+    gbaName: number;
+    parentPcId: number;
+    subtype: number;
+    roomNo: number;
+    // NOTE(jstpierre): This isn't part of the original struct, it simply doesn't
+    // load inactive layers...
+    layer: number;
+};
 
 export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, roomNo: number, rot: vec3 | null, scale: vec3 | null, subtype: number, parentPcId: number): boolean {
     // Create on current layer.
