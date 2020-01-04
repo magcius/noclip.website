@@ -21,13 +21,35 @@ export class stage_palet_info_class {
     // fogColor
     public virtIdx: number;
     // fogStartZ / fogEndZ
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+        colorFromRGB8(this.actCol.C0, view.getUint32(0x00));
+        colorFromRGB8(this.actCol.K0, view.getUint32(0x03));
+        colorFromRGB8(this.bgCol[0].C0, view.getUint32(0x06));
+        colorFromRGB8(this.bgCol[0].K0, view.getUint32(0x09));
+        colorFromRGB8(this.bgCol[1].C0, view.getUint32(0x0C));
+        colorFromRGB8(this.bgCol[1].K0, view.getUint32(0x0F));
+        colorFromRGB8(this.bgCol[2].C0, view.getUint32(0x12));
+        colorFromRGB8(this.bgCol[2].K0, view.getUint32(0x15));
+        colorFromRGB8(this.bgCol[3].C0, view.getUint32(0x18));
+        colorFromRGB8(this.bgCol[3].K0, view.getUint32(0x1B));
+        // fogColor
+        this.virtIdx = view.getUint8(0x21);
+        // fogStartZ, fogEndZ
+        return 0x24;
+    }
 }
 
 export class stage_pselect_info_class {
     public palIdx: Uint8Array;
     public changeRate: number;
 
-    constructor() {
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+        this.palIdx = buffer.createTypedArray(Uint8Array, 0x00, 0x08);
+        this.changeRate = view.getFloat32(0x08);
+        return 0x0C;
     }
 }
 
@@ -37,10 +59,24 @@ export class stage_vrbox_info_class {
     public skyColor = colorNewCopy(White);
     public usoUmiColor = colorNewCopy(White);
     public kasumiMaeColor = colorNewCopy(White);
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+        colorFromRGBA8(this.kumoColor, view.getUint32(0x10));
+        colorFromRGBA8(this.kumoCenterColor, view.getUint32(0x14));
+        colorFromRGB8(this.skyColor, view.getUint32(0x18));
+        colorFromRGB8(this.usoUmiColor, view.getUint32(0x1B));
+        colorFromRGB8(this.kasumiMaeColor, view.getUint32(0x1E));
+        return 0x24;
+    }
 }
 
 export class stage_envr_info_class {
-    constructor(public pselIdx: Uint8Array) {
+    public pselIdx: Uint8Array;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        this.pselIdx = buffer.createTypedArray(Uint8Array, 0x00, 0x08);
+        return 0x08;
     }
 }
 
@@ -69,59 +105,37 @@ function colorFromRGB8(dst: Color, n: number): void {
 
 function dStage_paletInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
     let offs = 0;
-    const view = buffer.createDataView();
     for (let i = 0; i < count; i++) {
         const pale = new stage_palet_info_class();
-        colorFromRGB8(pale.actCol.C0, view.getUint32(offs + 0x00));
-        colorFromRGB8(pale.actCol.K0, view.getUint32(offs + 0x03));
-        colorFromRGB8(pale.bgCol[0].C0, view.getUint32(offs + 0x06));
-        colorFromRGB8(pale.bgCol[0].K0, view.getUint32(offs + 0x09));
-        colorFromRGB8(pale.bgCol[1].C0, view.getUint32(offs + 0x0C));
-        colorFromRGB8(pale.bgCol[1].K0, view.getUint32(offs + 0x0F));
-        colorFromRGB8(pale.bgCol[2].C0, view.getUint32(offs + 0x12));
-        colorFromRGB8(pale.bgCol[2].K0, view.getUint32(offs + 0x15));
-        colorFromRGB8(pale.bgCol[3].C0, view.getUint32(offs + 0x18));
-        colorFromRGB8(pale.bgCol[3].K0, view.getUint32(offs + 0x1B));
-        // fogColor
-        pale.virtIdx = view.getUint8(offs + 0x21);
-        // fogStartZ, fogEndZ
+        offs += pale.parse(buffer.slice(offs));
         dt.pale.push(pale);
-        offs += 0x2C;
     }
 }
 
 function dStage_pselectInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
     let offs = 0;
-    const view = buffer.createDataView();
     for (let i = 0; i < count; i++) {
         const colo = new stage_pselect_info_class();
-        colo.palIdx = buffer.createTypedArray(Uint8Array, offs, 0x08);
-        colo.changeRate = view.getFloat32(offs + 0x08);
+        offs += colo.parse(buffer.slice(offs));
         dt.colo.push(colo);
-        offs += 0x0C;
     }
 }
 
 function dStage_virtInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
     let offs = 0;
-    const view = buffer.createDataView();
     for (let i = 0; i < count; i++) {
         const virt = new stage_vrbox_info_class();
-        colorFromRGBA8(virt.kumoColor, view.getUint32(offs + 0x10));
-        colorFromRGBA8(virt.kumoCenterColor, view.getUint32(offs + 0x14));
-        colorFromRGB8(virt.skyColor, view.getUint32(offs + 0x18));
-        colorFromRGB8(virt.usoUmiColor, view.getUint32(offs + 0x1B));
-        colorFromRGB8(virt.kasumiMaeColor, view.getUint32(offs + 0x1E));
+        offs += virt.parse(buffer.slice(offs));
         dt.virt.push(virt);
-        offs += 0x24;
     }
 }
 
 function dStage_envrInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
     let offs = 0;
     for (let i = 0; i < count; i++) {
-        dt.envr.push(new stage_envr_info_class(buffer.createTypedArray(Uint8Array, offs, 0x08)));
-        offs += 0x08;
+        const envr = new stage_envr_info_class();
+        offs += envr.parse(buffer.slice(offs));
+        dt.envr.push(envr);
     }
 }
 

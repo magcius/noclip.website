@@ -232,6 +232,13 @@ interface setLight_palno_pselenvr {
 }
 
 function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_pselenvr, globals: dGlobals, envLight: dScnKy_env_light_c): setLight_palno_ret {
+    // NOTE(jstpierre): This is not part of the original game, but it happens on some test maps.
+    // I think the game will just read uninitialized data here.
+    if (pselenvr.envrIdxPrev >= envLight.envr.length)
+        pselenvr.envrIdxPrev = 0;
+    if (pselenvr.envrIdxCurr >= envLight.envr.length)
+        pselenvr.envrIdxCurr = 0;
+
     const envrPrev = envLight.envr[pselenvr.envrIdxPrev], envrCurr = envLight.envr[pselenvr.envrIdxCurr];
     const pselPrev = envLight.colo[envrPrev.pselIdx[pselenvr.pselIdxPrev]], pselCurr = envLight.colo[envrCurr.pselIdx[pselenvr.pselIdxCurr]];
 
@@ -896,13 +903,77 @@ export function dKy_setLight(globals: dGlobals): void {
     // Light loading is done in setTev
 }
 
+function dKyd_dmpalet_getp(globals: dGlobals): stage_palet_info_class[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_field_data`);
+    const pale: stage_palet_info_class[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 16; i++) {
+        const entry = new stage_palet_info_class();
+        offs += entry.parse(buffer.slice(offs));
+        pale.push(entry);
+    }
+
+    return pale;
+}
+
+function dKyd_dmpselect_getp(globals: dGlobals): stage_pselect_info_class[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_pselect_default`);
+    const colo: stage_pselect_info_class[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 2; i++) {
+        const entry = new stage_pselect_info_class();
+        offs += entry.parse(buffer.slice(offs));
+        colo.push(entry);
+    }
+
+    return colo;
+}
+
+function dKyd_dmenvr_getp(globals: dGlobals): stage_envr_info_class[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_pselect_default`);
+    const envr: stage_envr_info_class[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 2; i++) {
+        const entry = new stage_envr_info_class();
+        offs += entry.parse(buffer.slice(offs));
+        envr.push(entry);
+    }
+
+    return envr;
+}
+
+function dKyd_dmvrbox_getp(globals: dGlobals): stage_vrbox_info_class[] {
+    const buffer = globals.findExtraSymbolData(`d_kankyo_data.o`, `l_vr_box_data`);
+    const envr: stage_vrbox_info_class[] = [];
+
+    let offs = 0x00;
+    for (let i = 0; i < 8; i++) {
+        const entry = new stage_vrbox_info_class();
+        offs += entry.parse(buffer.slice(offs));
+        envr.push(entry);
+    }
+
+    return envr;
+}
+
 export function envcolor_init(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
     envLight.pale = globals.dStage_dt.pale;
+    if (envLight.pale.length === 0)
+        envLight.pale = dKyd_dmpalet_getp(globals);
     envLight.colo = globals.dStage_dt.colo;
+    if (envLight.colo.length === 0)
+        envLight.colo = dKyd_dmpselect_getp(globals);
     envLight.envr = globals.dStage_dt.envr;
+    if (envLight.envr.length === 0)
+        envLight.envr = dKyd_dmenvr_getp(globals);
     envLight.virt = globals.dStage_dt.virt;
+    if (envLight.virt.length === 0)
+        envLight.virt = dKyd_dmvrbox_getp(globals);
 
     const schejuleName = `l_time_attribute`;
     envLight.schejule = new dScnKy__Schedule(globals.findExtraSymbolData(`d_kankyo_data.o`, schejuleName));

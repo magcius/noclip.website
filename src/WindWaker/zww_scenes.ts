@@ -993,7 +993,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`System`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 4);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 5);
 
         const particleArchives = [
             `${pathBase}/Particle/common.jpc`,

@@ -280,6 +280,10 @@ function extractExtra() {
     // d_kankyo_data.o
     extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute`);
     extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute_boss`);
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_envr_default`);
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_field_data`);
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_pselect_default`);
+    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_vr_box_data`);
 
     const crg1 = {
         SymbolData: datas,
