@@ -13,21 +13,21 @@ import { cLib_addCalc2 } from "./SComponent";
 
 // Framework'd actors
 
-function mDoMtx_XrotM(dst: mat4, n: number): void {
+export function mDoMtx_XrotM(dst: mat4, n: number): void {
     mat4.rotateX(dst, dst, n * Math.PI / 0x7FFF);
 }
 
-function mDoMtx_YrotM(dst: mat4, n: number): void {
+export function mDoMtx_YrotM(dst: mat4, n: number): void {
     mat4.rotateY(dst, dst, n * Math.PI / 0x7FFF);
 }
 
-function mDoMtx_ZrotM(dst: mat4, n: number): void {
+export function mDoMtx_ZrotM(dst: mat4, n: number): void {
     mat4.rotateZ(dst, dst, n * Math.PI / 0x7FFF);
 }
 
-const calc_mtx = mat4.create();
+export const calc_mtx = mat4.create();
 
-function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
+export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
     if (concat) {
         mat4.translate(calc_mtx, calc_mtx, pos);
     } else {
@@ -35,7 +35,7 @@ function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
     }
 }
 
-function MtxPosition(dst: vec3, src: vec3 = dst, m: mat4 = calc_mtx): void {
+export function MtxPosition(dst: vec3, src: vec3 = dst, m: mat4 = calc_mtx): void {
     vec3.transformMat4(dst, src, m);
 }
 
@@ -329,7 +329,7 @@ interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
 
-export function registerActors(globals: fGlobals): void {
+export function d_a__RegisterConstructors(globals: fGlobals): void {
     function R(constructor: constructor): void {
         fpcPf__Register(globals, constructor.PROCESS_NAME, constructor);
     }

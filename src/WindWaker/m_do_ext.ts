@@ -7,12 +7,12 @@ import { ViewerRenderInput } from "../viewer";
 import { dGlobals } from "./zww_scenes";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
-    public frameCtrl: J3DFrameCtrl;
+    public frameCtrl = new J3DFrameCtrl(0);
     public anm: T;
 
-    public initPlay(duration: number, loopMode: LoopMode, speed: number = 1.0, startFrame: number = 0, endFrame: number = -1, i_modify: boolean = false) {
+    protected initPlay(duration: number, loopMode: LoopMode, speed: number = 1.0, startFrame: number = 0, endFrame: number = -1, i_modify: boolean = false) {
         if (!i_modify) {
-            this.frameCtrl = new J3DFrameCtrl(0);
+            this.frameCtrl.init(0);
         }
 
         // Logic bug in Wind Waker: startFrame is assigned before calling init, so this doesn't do anything.
@@ -45,13 +45,15 @@ abstract class mDoExt_baseAnm<T extends AnimationBase> {
 }
 
 export class mDoExt_btkAnm extends mDoExt_baseAnm<TTK1> {
-    public entry(modelInstance: J3DModelInstance): void {
+    public entry(modelInstance: J3DModelInstance, curTime: number = this.frameCtrl.currentTimeInFrames): void {
+        this.frameCtrl.currentTimeInFrames = curTime;
         entryTexMtxAnimator(modelInstance, this.anm, this.frameCtrl);
     }
 }
 
 export class mDoExt_brkAnm extends mDoExt_baseAnm<TRK1> {
-    public entry(modelInstance: J3DModelInstance): void {
+    public entry(modelInstance: J3DModelInstance, curTime: number = this.frameCtrl.currentTimeInFrames): void {
+        this.frameCtrl.currentTimeInFrames = curTime;
         entryTevRegAnimator(modelInstance, this.anm, this.frameCtrl);
     }
 }
@@ -59,13 +61,15 @@ export class mDoExt_brkAnm extends mDoExt_baseAnm<TRK1> {
 export type mDoExt_bpkAnm = mDoExt_brkAnm;
 
 export class mDoExt_btpAnm extends mDoExt_baseAnm<TPT1> {
-    public entry(modelInstance: J3DModelInstance): void {
+    public entry(modelInstance: J3DModelInstance, curTime: number = this.frameCtrl.currentTimeInFrames): void {
+        this.frameCtrl.currentTimeInFrames = curTime;
         entryTexNoAnimator(modelInstance, this.anm, this.frameCtrl);
     }
 }
 
 export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
-    public entry(modelInstance: J3DModelInstance): void {
+    public entry(modelInstance: J3DModelInstance, curTime: number = this.frameCtrl.currentTimeInFrames): void {
+        this.frameCtrl.currentTimeInFrames = curTime;
         // TODO(jstpierre): J3DVisibilityManager?
         for (let i = 0; i < modelInstance.shapeInstances.length; i++)
             modelInstance.shapeInstances[i].visible = VAF1_getVisibility(this.anm, i, this.frameCtrl.currentTimeInFrames);

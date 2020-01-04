@@ -7,6 +7,15 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assertExists, nArray, arrayRemove } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
 
+export const enum fpc__ProcessName {
+    d_s_play  = 0x0007,
+
+    d_a_ep    = 0x00BA,
+    d_a_tbox  = 0x0126,
+    d_a_grass = 0x01B8,
+    d_thunder = 0x01B9,
+};
+
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
 
 interface GlobalUserData {
@@ -98,6 +107,10 @@ function fpcDt_Handler(globals: fGlobals, globalUserData: GlobalUserData): void 
         arrayRemove(globals.liQueue[pc.pi.listID], pc);
         pc.delete(globalUserData);
     }
+}
+
+function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
+    fpcDt_ToDeleteQ(globals, pc);
 }
 
 //#endregion
@@ -231,7 +244,7 @@ function fpcLy_CurrentLayer(globals: fGlobals): layer_class {
 }
 
 export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): void {
-    globals.lyCurr = layer;
+    globals.lyCurr = assertExists(layer);
 }
 
 //#endregion
@@ -250,8 +263,8 @@ function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData): void 
 
 function fpcEx_ToExecuteQ(globals: fGlobals, process: base_process_class): void {
     // fpcLyTg_ToQueue
-    const layer = fpcLy_Layer(globals, process.pi.layerID);
-    layer.pcQueue.push(process);
+    process.ly = fpcLy_Layer(globals, process.pi.layerID);
+    process.ly.pcQueue.push(process);
 
     // fpcEx_ToLineQ
 
@@ -303,14 +316,6 @@ export class base_process_class {
     public delete(globals: GlobalUserData): void {
     }
 }
-
-export const enum fpc__ProcessName {
-    d_s_play  = 0x0007,
-
-    d_a_grass = 0x01B8,
-    d_a_ep    = 0x00BA,
-    d_a_tbox  = 0x0126,
-};
 
 function fpcPf_Get__ProfileBinary(globals: fGlobals, pcName: fpc__ProcessName): ArrayBufferSlice {
     return assertExists(globals.f_pc_profiles.Profiles[pcName]);
@@ -410,8 +415,14 @@ function fopDwTg_DrawQTo(globals: fGlobals, dw: leafdraw_class, priority: number
 
 //#endregion
 
+//#region fopScn
+
 export class fopScn extends process_node_class {
 }
+
+//#endregion
+
+//#region fopAc
 
 export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
@@ -454,14 +465,71 @@ export class fopAc_ac_c extends leafdraw_class {
     }
 }
 
-export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameter: number, pos: vec3, roomNo: number, rot: vec3, scale: vec3, subtype: number, parentPcId: number): boolean {
+export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3, roomNo: number, rot: vec3, scale: vec3, subtype: number, parentPcId: number): boolean {
     // Create on current layer.
     const prm: fopAcM_prm_class = {
-        parameters: parameter, pos, roomNo, rot, scale, subtype, parentPcId,
+        parameters, pos, roomNo, rot, scale, subtype, parentPcId,
         enemyNo: -1, gbaName: 0x00, layer: -1,
     };
 
     return fpcSCtRq_Request(globals, null, pcName, prm);
 }
+
+//#endregion
+
+//#region fopKy
+
+export class kankyo_class extends leafdraw_class {
+    public pos = vec3.create();
+    public scale = vec3.create();
+
+    private loadInit: boolean = false;
+
+    public load(globals: GlobalUserData, prm: fopKyM_prm_class): cPhs__Status {
+        if (!this.loadInit) {
+            this.loadInit = true;
+
+            if (prm.pos !== null)
+                vec3.copy(this.pos, prm.pos);
+            if (prm.scale !== null)
+                vec3.copy(this.scale, prm.scale);
+            this.parameters = prm.parameters;
+        }
+
+        const status = this.subload(globals);
+        if (status === cPhs__Status.Next)
+            fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
+        return status;
+    }
+
+    public delete(globals: GlobalUserData): void {
+        fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
+    }
+
+    protected subload(globals: GlobalUserData): cPhs__Status {
+        return cPhs__Status.Next;
+    }
+}
+
+interface fopKyM_prm_class {
+    parameters: number;
+    pos: vec3 | null;
+    scale: vec3 | null;
+}
+
+export function fopKyM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, scale: vec3 | null): boolean {
+    // Create on current layer.
+    const prm: fopKyM_prm_class = {
+        parameters, pos, scale,
+    };
+
+    return fpcSCtRq_Request(globals, null, pcName, prm);
+}
+
+export function fopKyM_Delete(globals: fGlobals, ky: kankyo_class): void {
+    fpcDt_Delete(globals, ky);
+}
+
+//#endregion
 
 //#endregion

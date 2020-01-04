@@ -38,9 +38,9 @@ import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
-import { dKyeff_c__execute } from './d_kankyo_wether';
+import { dKyeff_c__execute, dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register } from './framework';
-import { registerActors } from './d_a';
+import { d_a__RegisterConstructors } from './d_a';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -114,6 +114,7 @@ export class dGlobals {
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera.mPos
     public cameraPosition = vec3.create();
+    public cameraFwd = vec3.create();
 
     public resCtrl: dRes_control_c;
     // TODO(jstpierre): Remove
@@ -121,6 +122,8 @@ export class dGlobals {
 
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
+
+    public deltaTimeInFrames: number = 0.0;
 
     constructor(public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
@@ -737,10 +740,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
         const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
+        this.globals.deltaTimeInFrames = deltaTimeInFrames;
 
+        mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
+        viewerInput.camera.getWorldForward(this.globals.cameraFwd);
         // Update the "player position" from the camera.
-        mat4.getTranslation(this.globals.playerPosition, viewerInput.camera.worldMatrix);
-        vec3.copy(this.globals.cameraPosition, this.globals.playerPosition);
+        vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
 
         // Execute.
         dKy_Execute(this.globals, deltaTimeInFrames);
@@ -1027,6 +1032,7 @@ class SceneDesc {
         modelCache.setCurrentStage(this.stageDir);
 
         modelCache.fetchObjectData(`System`);
+        modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
         modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 5);
@@ -1051,7 +1057,8 @@ class SceneDesc {
         const frameworkGlobals = new fGlobals(f_pc_profiles);
 
         fpcPf__Register(frameworkGlobals, fpc__ProcessName.d_s_play, d_s_play);
-        registerActors(frameworkGlobals);
+        d_a__RegisterConstructors(frameworkGlobals);
+        dKyw__RegisterConstructors(frameworkGlobals);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const globals = new dGlobals(modelCache, symbolMap, frameworkGlobals);
@@ -1099,8 +1106,6 @@ class SceneDesc {
             jpac.push(JPA.parse(jpacData));
         }
         renderer.effectSystem = new SimpleEffectSystem(device, jpac);
-
-        this.requestArchivesForActors(renderer, -1, dzs);
 
         const roomMultMtx = mat4.create();
         let actorMultMtx: mat4 | null = null;
@@ -1278,12 +1283,6 @@ class SceneDesc {
                 vec3.transformMat4(actor.pos, actor.pos, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer.globals, roomRenderer, processName, placedActor);
-        });
-    }
-
-    private requestArchivesForActors(renderer: WindWakerRenderer, roomIdx: number, dzs: DZS): void {
-        this.iterActorLayers(roomIdx, dzs, (processName, actor) => {
-            requestArchiveForActor(renderer.globals, processName, actor);
         });
     }
 }
