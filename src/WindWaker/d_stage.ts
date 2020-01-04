@@ -37,7 +37,7 @@ export class stage_palet_info_class {
         // fogColor
         this.virtIdx = view.getUint8(0x21);
         // fogStartZ, fogEndZ
-        return 0x24;
+        return 0x2C;
     }
 }
 
