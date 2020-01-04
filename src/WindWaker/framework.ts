@@ -5,6 +5,7 @@ import { vec3 } from "gl-matrix";
 import { fopAcM_prm_class } from "./Actors";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assertExists, nArray, arrayRemove } from "../util";
+import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
 
@@ -103,7 +104,7 @@ function fpcDt_Handler(globals: fGlobals, globalUserData: GlobalUserData): void 
 
 //#region cPhs, fpcCt, fpcSCtRq
 
-interface fpc_bs__Constructor {
+export interface fpc_bs__Constructor {
     new(globalUserData: fGlobals, profile: DataView): base_process_class;
 }
 
@@ -229,7 +230,7 @@ function fpcLy_CurrentLayer(globals: fGlobals): layer_class {
     return globals.lyCurr;
 }
 
-function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): void {
+export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): void {
     globals.lyCurr = layer;
 }
 
@@ -419,11 +420,14 @@ export class fopAc_ac_c extends leafdraw_class {
     public parentPcId: number;
     public subtype: number;
     public roomNo: number;
+    public tevStr = new dKy_tevstr_c();
 
     private loadInit: boolean = false;
 
     public load(globals: GlobalUserData, prm: fopAcM_prm_class): cPhs__Status {
         if (!this.loadInit) {
+            this.loadInit = true;
+
             vec3.copy(this.pos, prm.pos);
             vec3.copy(this.rot, prm.rot);
             vec3.copy(this.scale, prm.scale);
@@ -431,11 +435,12 @@ export class fopAc_ac_c extends leafdraw_class {
             this.parentPcId = prm.parentPcId;
             this.parameters = prm.parameters;
             this.roomNo = prm.roomNo;
-            this.loadInit = true;
+
+            dKy_tevstr_init(this.tevStr, this.roomNo);
         }
 
         const status = this.subload(globals);
-        if (status === cPhs__Status.Complete)
+        if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;
     }
@@ -445,7 +450,7 @@ export class fopAc_ac_c extends leafdraw_class {
     }
 
     protected subload(globals: GlobalUserData): cPhs__Status {
-        return cPhs__Status.Complete;
+        return cPhs__Status.Next;
     }
 }
 
@@ -456,8 +461,7 @@ export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, param
         enemyNo: -1, gbaName: 0x00, layer: -1,
     };
 
-    const layer = fpcLy_CurrentLayer(globals);
-    return fpcSCtRq_Request(globals, layer, pcName, prm);
+    return fpcSCtRq_Request(globals, null, pcName, prm);
 }
 
 //#endregion

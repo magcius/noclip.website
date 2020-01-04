@@ -3,8 +3,8 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { fopAcM_prm_class, BMDObjectRenderer, createEmitter, PlacedActor } from "./Actors";
-import { J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { BMDObjectRenderer, PlacedActor } from "./Actors";
+import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as DZB from './DZB';
@@ -14,6 +14,8 @@ import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import { LightType, dKy_tevstr_init } from './d_kankyo';
+import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
+import { fpc__ProcessName } from './framework';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -60,6 +62,20 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return objectRenderer;
     }
 
+    function buildModelRes(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
+        const modelInstance = new J3DModelInstanceSimple(modelData);
+        modelInstance.passMask = WindWakerPass.MAIN;
+        context.extraTextures.fillExtraTextures(modelInstance);
+        modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+        const objectRenderer = new BMDObjectRenderer(modelInstance);
+        dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
+        objectRenderer.layer = actor.layer;
+        setModelMatrix(objectRenderer.modelMatrix);
+        actor.roomRenderer.objectRenderers.push(objectRenderer);
+        return objectRenderer;
+    }
+
+
     function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
         const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
@@ -99,10 +115,47 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return resInfo.lazyLoadResource(ResType.Btp, assertExists(resInfo.res.find((res) => path.endsWith(res.file.name))));
     }
 
+    function createEmitter(context: WindWakerRenderer, resourceId: number): JPABaseEmitter {
+        const emitter = context.effectSystem!.createBaseEmitter(context.device, context.renderCache, resourceId);
+        // TODO(jstpierre): Scale, Rotation
+        return emitter;
+    }
+
+    const globals = renderer.globals;
+
+    const objName = globals.dStage_searchName(actor.name);
+    const pcName = objName.pcName;
+
     // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
     // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
 
-    if (actor.name === 'item') {
+    if (pcName === fpc__ProcessName.d_a_tbox) fetchArchive(`Dalways`).then(() => {
+        const type = (actor.parameters >>> 20) & 0x0F;
+        if (type === 0) {
+            // Light Wood
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
+            const m = buildModelRes(globals.renderer, res, actor);
+        } else if (type === 1) {
+            // Dark Wood
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
+            const m = buildModelRes(globals.renderer, res, actor);
+        } else if (type === 2) {
+            // Metal
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
+            const m = buildModelRes(globals.renderer, res, actor);
+            const b = globals.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
+            b.loopMode = LoopMode.ONCE;
+            m.bindTRK1(b);
+        } else if (type === 3) {
+            // Big Key
+            const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
+            const m = buildModelRes(globals.renderer, res, actor);
+        } else {
+            // Might be something else, not sure.
+            console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+        }
+    });
+    else if (actor.name === 'item') {
         // Item table provided with the help of the incredible LagoLunatic <3.
         const itemId = (actor.parameters & 0x000000FF);
 

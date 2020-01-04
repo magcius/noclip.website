@@ -27,7 +27,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { fopAcM_prm_class, loadActor, ObjectRenderer, PlacedActor, requestArchiveForActor } from './Actors';
+import { fopAcM_prm_class, loadActor, ObjectRenderer, PlacedActor } from './Actors';
 import { SceneContext } from '../SceneBase';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { range } from '../MathHelpers';
@@ -922,12 +922,14 @@ export class ModelCache {
         return archive;
     }
 
-    public requestObjectData(archivePath: string): cPhs__Status {
+    public requestObjectData(arcName: string): cPhs__Status {
+        const archivePath = `${pathBase}/Object/${arcName}.arc`;
+
         if (this.archiveCache.has(archivePath))
-            return cPhs__Status.Next;
+            return cPhs__Status.Complete;
 
         if (!this.archivePromiseCache.has(archivePath))
-            this.fetchObjectData(archivePath);
+            this.fetchObjectData(arcName);
 
         return cPhs__Status.Loading;
     }
@@ -1100,6 +1102,8 @@ class SceneDesc {
 
         this.requestArchivesForActors(renderer, -1, dzs);
 
+        const roomMultMtx = mat4.create();
+        let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
 
@@ -1107,18 +1111,6 @@ class SceneDesc {
             const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomIdx);
             roomRenderer.visible = visible;
             renderer.roomRenderers.push(roomRenderer);
-
-            const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
-            this.requestArchivesForActors(renderer, i, dzr);
-        }
-
-        await modelCache.waitForLoad();
-
-        const roomMultMtx = mat4.create();
-        let actorMultMtx: mat4 | null = null;
-        for (let i = 0; i < this.rooms.length; i++) {
-            const roomRenderer = renderer.roomRenderers[i];
-            const roomIdx = roomRenderer.roomNo;
 
             // The MULT affects BG actors, but not actors.
             mat4.identity(roomMultMtx);

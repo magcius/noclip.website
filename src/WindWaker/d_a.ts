@@ -1,15 +1,51 @@
 
-import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName } from "./framework";
+import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
 import { dGlobals } from "./zww_scenes";
 import { vec3, mat4 } from "gl-matrix";
+import { dComIfG_resLoad, ResType } from "./d_resorce";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../viewer";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut } from "./d_kankyo";
+import { mDoExt_modelUpdateDL } from "./m_do_ext";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
+import { cLib_addCalc2 } from "./SComponent";
 
 // Framework'd actors
+
+function mDoMtx_XrotM(dst: mat4, n: number): void {
+    mat4.rotateX(dst, dst, n * Math.PI / 0x7FFF);
+}
+
+function mDoMtx_YrotM(dst: mat4, n: number): void {
+    mat4.rotateY(dst, dst, n * Math.PI / 0x7FFF);
+}
+
+function mDoMtx_ZrotM(dst: mat4, n: number): void {
+    mat4.rotateZ(dst, dst, n * Math.PI / 0x7FFF);
+}
+
+const calc_mtx = mat4.create();
+
+function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
+    if (concat) {
+        mat4.translate(calc_mtx, calc_mtx, pos);
+    } else {
+        mat4.fromTranslation(calc_mtx, pos);
+    }
+}
+
+function MtxPosition(dst: vec3, src: vec3 = dst, m: mat4 = calc_mtx): void {
+    vec3.transformMat4(dst, src, m);
+}
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_grass;
+
     static kSpawnPatterns = [
         { group: 0, count: 1 },
         { group: 0, count: 7 },
@@ -156,10 +192,148 @@ class d_a_grass extends fopAc_ac_c {
                 console.warn('Unknown grass actor type');
         }
 
-        return cPhs__Status.Complete;
+        return cPhs__Status.Next;
     }
 }
 
+// TODO(jstpierre): Bad hack
+export function createEmitter(globals: dGlobals, resourceId: number): JPABaseEmitter {
+    const renderer = globals.renderer;
+    const emitter = renderer.effectSystem!.createBaseEmitter(renderer.device, renderer.renderCache, resourceId);
+    return emitter;
+}
+
+// -------------------------------------------------------
+// Generic Torch
+// -------------------------------------------------------
+class d_a_ep extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_ep;
+
+    private type: number;
+    private hasGa: boolean;
+    private hasObm: boolean;
+    private model: J3DModelInstance;
+    private posTop = vec3.create();
+    private light = new LIGHT_INFLUENCE();
+    private state: number = 0;
+    private lightPower: number = 0.0;
+    private lightPowerTarget: number = 0.0;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Ep`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.hasGa = !!((this.parameters >>> 6) & 0x01);
+        this.hasObm = !!((this.parameters >>> 7) & 0x01);
+        this.type = (this.parameters & 0x3F);
+        if (this.type === 0x3F)
+            this.type = 0;
+
+        if (this.type === 0 || this.type === 3) {
+            this.model = new J3DModelInstance(globals.resCtrl.getObjectRes(ResType.Model, `Ep`, this.hasObm ? 0x04 : 0x05));
+        }
+
+        this.CreateInit();
+
+        dKy_plight_set(globals.g_env_light, this.light);
+
+        // Create particle systems.
+
+        // TODO(jstpierre): Implement the real thing.
+        const pa = createEmitter(globals, 0x0001);
+        vec3.copy(pa.globalTranslation, this.posTop);
+        pa.globalTranslation[1] += -240 + 235 + 15;
+        if (this.type !== 2) {
+            const pb = createEmitter(globals, 0x4004);
+            vec3.copy(pb.globalTranslation, pa.globalTranslation);
+            pb.globalTranslation[1] += 20;
+        }
+        const pc = createEmitter(globals, 0x01EA);
+        vec3.copy(pc.globalTranslation, this.posTop);
+        pc.globalTranslation[1] += -240 + 235 + 8;
+        // TODO(jstpierre): ga
+
+        return cPhs__Status.Next;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.type === 0 || this.type === 3) {
+            settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+            setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        }
+    }
+
+    public execute(globals: dGlobals): void {
+        if (this.type === 0 || this.type === 3) {
+            if (this.hasGa)
+                this.ga_move();
+        }
+
+        this.ep_move();
+    }
+
+    public delete(globals: dGlobals): void {
+        dKy_plight_cut(globals.g_env_light, this.light);
+    }
+
+    private CreateInit(): void {
+        this.daEp_set_mtx();
+    }
+
+    private daEp_set_mtx(): void {
+        if (this.type === 0 || this.type === 3) {
+            MtxTrans(this.pos, false);
+            mDoMtx_YrotM(calc_mtx, this.rot[1]);
+            mDoMtx_XrotM(calc_mtx, this.rot[0]);
+            mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+            mat4.copy(this.model.modelMatrix, calc_mtx);
+            vec3.set(this.posTop, 0, 140, 0);
+            MtxPosition(this.posTop);
+        } else {
+            vec3.copy(this.posTop, this.pos);
+        }
+    }
+
+    private ga_move(): void {
+        // TODO(jstpierre): ga
+    }
+
+    private ep_move(): void {
+        // tons of fun timers and such
+        if (this.state === 0) {
+            // check switches
+            this.state = 3;
+            this.lightPowerTarget = this.scale[0];
+        } else if (this.state === 3 || this.state === 4) {
+            this.lightPower = cLib_addCalc2(this.lightPower, this.lightPowerTarget, 0.5, 0.2);
+            if (this.type !== 2) {
+                // check a bunch of stuff, collision, etc.
+                // setSimple 0x4004
+            }
+        }
+
+        vec3.copy(this.light.pos, this.posTop);
+        this.light.color.r = 600 / 0xFF;
+        this.light.color.g = 400 / 0xFF;
+        this.light.color.b = 120 / 0xFF;
+        this.light.power = this.lightPower * 150.0;
+        this.light.fluctuation = 250.0;
+
+        // other emitter stuff
+    }
+}
+
+interface constructor extends fpc_bs__Constructor {
+    PROCESS_NAME: fpc__ProcessName;
+}
+
 export function registerActors(globals: fGlobals): void {
-    fpcPf__Register(globals, fpc__ProcessName.d_a_grass, d_a_grass);
+    function R(constructor: constructor): void {
+        fpcPf__Register(globals, constructor.PROCESS_NAME, constructor);
+    }
+
+    R(d_a_grass);
+    R(d_a_ep);
 }

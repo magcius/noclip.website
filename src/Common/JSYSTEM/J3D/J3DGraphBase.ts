@@ -987,7 +987,6 @@ export class J3DModelInstance {
     public name: string = '';
     public visible: boolean = true;
     public isSkybox: boolean = false;
-    public passMask: number = 0x01;
 
     public modelMatrix = mat4.create();
     public baseScale = vec3.fromValues(1, 1, 1);
@@ -1282,7 +1281,7 @@ export class J3DModelInstance {
         this.calcDrawMatrixArray(this.shapeInstanceState.worldToViewMatrix);
     }
 
-    protected computeDepth(camera: Camera): number {
+    public computeDepth(camera: Camera): number {
         // Use the root joint to calculate depth.
         const rootJoint = this.modelData.bmd.jnt1.joints[0];
         bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
@@ -1389,6 +1388,7 @@ export class J3DModelInstance {
 export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
     public vaf1Animator: VAF1Animator | null = null;
+    public passMask: number = 0x01;
 
     public calcAnim(camera: Camera): void {
         super.calcAnim(camera);

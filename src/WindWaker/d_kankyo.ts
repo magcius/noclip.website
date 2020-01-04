@@ -1052,6 +1052,16 @@ export function dKy_addcol_fog_set(envLight: dScnKy_env_light_c, ratio: number, 
     // TODO(jstpierre): Fog colors
 }
 
+export function dKy_plight_set(envLight: dScnKy_env_light_c, plight: LIGHT_INFLUENCE): void {
+    envLight.plights.push(plight);
+}
+
+export function dKy_plight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INFLUENCE): void {
+    const idx = arrayRemove(envLight.plights, plight);
+    if (envLight.playerPlightIdx === idx)
+        envLight.playerPlightIdx = -1;
+}
+
 export function dKy_efplight_set(envLight: dScnKy_env_light_c, plight: LIGHT_INFLUENCE): void {
     envLight.eflights.push(plight);
 }
