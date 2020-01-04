@@ -14,7 +14,7 @@ import * as UI from '../ui';
 import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { BMD, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple, J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
@@ -40,7 +40,7 @@ import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } fr
 import { dScnKy_env_light_c, dKy_tevstr_c, settingTevStruct, LightType, setLightTevColorType, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
 import { dKyeff_c__execute, dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register } from './framework';
-import { d_a__RegisterConstructors } from './d_a';
+import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -100,8 +100,17 @@ function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
     return actorTable;
 }
 
+class RenderHacks {
+    public vertexColorsEnabled = true;
+    public texturesEnabled = true;
+
+    public renderHacksChanged = false;
+}
+
 export class dGlobals {
     public g_env_light = new dScnKy_env_light_c();
+
+    public renderHacks = new RenderHacks();
 
     // This is tucked away somewhere in dComInfoPlay
     public stageName: string;
@@ -219,7 +228,7 @@ export class ZWWExtraTextures {
         this.dynToonTex.prepareToRender(device);
     }
 
-    public fillExtraTextures(modelInstance: J3DModelInstanceSimple): void {
+    public fillExtraTextures(modelInstance: J3DModelInstance): void {
         const ZAtoon_map = modelInstance.getTextureMappingReference('ZAtoon');
         if (ZAtoon_map !== null)
             ZAtoon_map.copy(this.textureMapping[0]);
@@ -268,8 +277,6 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
 }
 
 export class WindWakerRoomRenderer {
-    private bg: (J3DModelInstanceSimple | null)[] = nArray(4, () => null);
-    private tevstr = nArray(4, () => new dKy_tevstr_c());
     public name: string;
     public visible: boolean = true;
     public objectsVisible = true;
@@ -282,43 +289,17 @@ export class WindWakerRoomRenderer {
         this.name = `Room ${roomNo}`;
 
         const resCtrl = renderer.globals.modelCache.resCtrl;
-        this.dzb = resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`);
+        this.dzb = assertExists(resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`));
 
         const resInfo = assertExists(resCtrl.findResInfo(`Room${roomNo}`, resCtrl.resStg));
         const roomRarc = resInfo.archive;
 
         this.extraTextures = renderer.extraTextures;
-
-        this.bg[0] = createModelInstance(device, cache, roomRarc, `model`);
-
-        // Ocean.
-        this.bg[1] = createModelInstance(device, cache, roomRarc, `model1`);
-
-        // Special effects / Skybox as seen in Hyrule.
-        this.bg[2] = createModelInstance(device, cache, roomRarc, `model2`);
-
-        // Windows / doors.
-        this.bg[3] = createModelInstance(device, cache, roomRarc, `model3`);
-
-        for (let i = 0; i < 4; i++)
-            dKy_tevstr_init(this.tevstr[i], this.roomNo);
     }
 
     public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
-
-        // daBg_Draw
-        for (let i = 0; i < 4; i++) {
-            const bg = this.bg[i];
-            if (bg !== null) {
-                const tevstr = this.tevstr[i];
-                settingTevStruct(globals, LightType.BG0 + i, null, tevstr);
-                setLightTevColorType(globals, bg, tevstr, viewerInput.camera);
-                bg.prepareToRender(device, renderInstManager, viewerInput);
-            }
-        }
-        settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[this.roomNo].tevStr);
 
         if (this.objectsVisible) {
             for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -326,12 +307,6 @@ export class WindWakerRoomRenderer {
                 this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
             }
         }
-    }
-
-    public setModelMatrix(modelMatrix: mat4): void {
-        for (let i = 0; i < 4; i++)
-            if (this.bg[i] !== null)
-                mat4.copy(this.bg[i]!.modelMatrix, modelMatrix);
     }
 
     public setVisible(v: boolean): void {
@@ -346,21 +321,6 @@ export class WindWakerRoomRenderer {
                 o.visible = v;
             }
         }
-    }
-    public setVertexColorsEnabled(v: boolean): void {
-        for (let i = 0; i < 4; i++)
-            if (this.bg[i] !== null)
-                this.bg[i]!.setVertexColorsEnabled(v);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setVertexColorsEnabled(v);
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        for (let i = 0; i < 4; i++)
-            if (this.bg[i] !== null)
-                this.bg[i]!.setTexturesEnabled(v);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
@@ -711,14 +671,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            this.globals.renderHacks.vertexColorsEnabled = enableVertexColorsCheckbox.checked;
+            this.globals.renderHacks.renderHacksChanged = true;
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
+            this.globals.renderHacks.texturesEnabled = enableTextures.checked;
+            this.globals.renderHacks.renderHacksChanged = true;
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -792,6 +752,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
+
+        this.globals.renderHacks.renderHacksChanged = false;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -1085,7 +1047,7 @@ class SceneDesc {
         const ZBtoonEX = sysRes.getResByID(ResType.Bti, 0x04);
 
         const stageRarc = modelCache.getStageData(`Stage`);
-        const dzs = resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`);
+        const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
         dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
 
@@ -1107,42 +1069,48 @@ class SceneDesc {
         }
         renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
-        const roomMultMtx = mat4.create();
         let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
-            const roomIdx = Math.abs(this.rooms[i]);
+            const roomNo = Math.abs(this.rooms[i]);
 
             const visible = this.rooms[i] >= 0;
-            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomIdx);
+            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomNo);
             roomRenderer.visible = visible;
             renderer.roomRenderers.push(roomRenderer);
 
-            // The MULT affects BG actors, but not actors.
-            mat4.identity(roomMultMtx);
-            if (mult !== undefined)
-                this.getRoomMult(roomMultMtx, dzs, mult, roomIdx);
+            // The MULT affects BG actors only, but not actors.
+            const mult = dComIfGp_getMapTrans(globals, roomNo);
 
             // Actors are stored in world-space normally.
             actorMultMtx = null;
 
-            if (isSea && !isFullSea) {
+            if (isSea && !isFullSea && mult !== null) {
                 // HACK(jstpierre): For non-full sea levels, we apply the inverse of the MULT, so that
                 // the room is located at 0, 0. This is for convenience and back-compat with existing
                 // savestates.
-                actorMultMtx = scratchMatrix;
+
+                MtxTrans(vec3.fromValues(mult.transX, 0, mult.transZ), false);
+                mDoMtx_YrotM(calc_mtx, mult.rotY);
+
+                const roomMultMtx = calc_mtx;
+
+                actorMultMtx = mat4.create();
                 mat4.invert(actorMultMtx, roomMultMtx);
 
                 // Hack up the DZB as well.
                 const dzb = roomRenderer.dzb;
                 vec3.transformMat4(dzb.pos, dzb.pos, roomMultMtx);
 
-                mat4.identity(roomMultMtx);
+                // Now reset MULT to 0.
+                mult.transX = 0;
+                mult.transZ = 0;
+                mult.rotY = 0;
             }
 
-            // Spawn the BG actors in their proper location.
-            roomRenderer.setModelMatrix(roomMultMtx);
+            // objectSetCheck
+            fopAcM_create(frameworkGlobals, fpc__ProcessName.d_a_bg, roomNo, null, -1, null, null, 0xFF, -1);
 
-            const dzr = resCtrl.getStageResByName(ResType.Dzs, `Room${roomIdx}`, `room.dzr`);
+            const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
         }
 
@@ -1153,27 +1121,6 @@ class SceneDesc {
         await modelCache.waitForLoad();
 
         return renderer;
-    }
-
-    private getRoomMult(modelMatrix: mat4, dzs: DZS, multHeader: DZSChunkHeader, roomIdx: number): void {
-        const view = dzs.buffer.createDataView();
-
-        let multIdx = multHeader.offs;
-        for (let i = 0; i < multHeader.count; i++) {
-            const translationX = view.getFloat32(multIdx + 0x00);
-            const translationY = view.getFloat32(multIdx + 0x04);
-            const rotY = view.getInt16(multIdx + 0x08) / 0x7FFF * Math.PI;
-            const roomNo = view.getUint8(multIdx + 0x0A);
-            const waveHeightAddition = view.getUint8(multIdx + 0x0B);
-            multIdx += 0x0C;
-
-            if (roomNo === roomIdx) {
-                mat4.rotateY(modelMatrix, modelMatrix, rotY);
-                modelMatrix[12] += translationX;
-                modelMatrix[14] += translationY;
-                break;
-            }
-        }
     }
 
     private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
@@ -1278,9 +1225,9 @@ class SceneDesc {
     private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, actorMultMtx: mat4 | null = null): void {
         this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
-            placedActor.rotationY = actor.rot[1] / 0x7FFF * Math.PI;
+            placedActor.rotationY = actor.rot![1] / 0x7FFF * Math.PI;
             if (actorMultMtx !== null)
-                vec3.transformMat4(actor.pos, actor.pos, actorMultMtx);
+                vec3.transformMat4(actor.pos!, actor.pos!, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer.globals, roomRenderer, processName, placedActor);
         });

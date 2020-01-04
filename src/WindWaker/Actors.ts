@@ -16,10 +16,10 @@ import { fopAcM_create, fpcLy_SetCurrentLayer } from './framework';
 
 export interface fopAcM_prm_class {
     parameters: number;
-    pos: vec3;
-    rot: vec3;
+    pos: vec3 | null;
+    rot: vec3 | null;
     enemyNo: number;
-    scale: vec3;
+    scale: vec3 | null;
     gbaName: number;
     parentPcId: number;
     subtype: number;
@@ -44,8 +44,6 @@ export interface ObjectRenderer {
     prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
     setExtraTextures(v: ZWWExtraTextures): void;
-    setVertexColorsEnabled(v: boolean): void;
-    setTexturesEnabled(v: boolean): void;
     visible: boolean;
     layer: number;
 }
@@ -91,16 +89,6 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
-    
-    public setVertexColorsEnabled(v: boolean): void {
-        this.modelInstance.setVertexColorsEnabled(v);
-        this.childObjects.forEach((child)=> child.setVertexColorsEnabled(v));
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        this.modelInstance.setTexturesEnabled(v);
-        this.childObjects.forEach((child)=> child.setTexturesEnabled(v));
-    }
 
     public setExtraTextures(extraTextures: ZWWExtraTextures): void {
         extraTextures.fillExtraTextures(this.modelInstance);
@@ -112,6 +100,11 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
+
+        if (globals.renderHacks.renderHacksChanged) {
+            this.modelInstance.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
+            this.modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
+        }
 
         if (this.parentJointMatrix !== null) {
             mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);

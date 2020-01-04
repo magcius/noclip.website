@@ -80,7 +80,7 @@ export class dRes_control_c {
         return null;
     }
 
-    public getStageResByName<T extends ResType>(resType: T, arcName: string, resName: string): ResAssetType<T> {
+    public getStageResByName<T extends ResType>(resType: T, arcName: string, resName: string): ResAssetType<T> | null {
         return this.getResByName(resType, arcName, resName, this.resStg);
     }
 
@@ -88,7 +88,7 @@ export class dRes_control_c {
         return this.getResByID(resType, arcName, resID, this.resObj);
     }
 
-    public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> {
+    public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> | null {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
         return resInfo.getResByName(resType, resName);
     }
@@ -165,20 +165,23 @@ export class dRes_info_c {
         throw "whoops";
     }
 
-    private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> {
+    private getResEntryByName<T extends ResType>(resType: T, resName: string): ResEntry<ResAssetType<T>> | null {
         const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++)
             if (resList[i].file.name === resName)
                 return resList[i];
-        throw "whoops";
+        return null;
     }
 
     public getResByID<T extends ResType>(resType: T, resID: number): ResAssetType<T> {
         return this.lazyLoadResource(resType, this.getResEntryByID(resType, resID));
     }
 
-    public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> {
-        return this.lazyLoadResource(resType, this.getResEntryByName(resType, resName));
+    public getResByName<T extends ResType>(resType: T, resName: string): ResAssetType<T> | null {
+        const entry = this.getResEntryByName(resType, resName);
+        if (entry === null)
+            return null;
+        return this.lazyLoadResource(resType, entry);
     }
 
     private autoLoadResource(device: GfxDevice, cache: GfxRenderCache, type: string, resEntry: ResEntry<any>): void {

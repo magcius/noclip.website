@@ -14,6 +14,7 @@ export const enum fpc__ProcessName {
     d_a_tbox  = 0x0126,
     d_a_grass = 0x01B8,
     d_thunder = 0x01B9,
+    d_a_bg    = 0x01BC,
 };
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
@@ -427,7 +428,7 @@ export class fopScn extends process_node_class {
 export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
     public rot = vec3.create();
-    public scale = vec3.create();
+    public scale = vec3.fromValues(1, 1, 1);
     public parentPcId: number;
     public subtype: number;
     public roomNo: number;
@@ -439,9 +440,12 @@ export class fopAc_ac_c extends leafdraw_class {
         if (!this.loadInit) {
             this.loadInit = true;
 
-            vec3.copy(this.pos, prm.pos);
-            vec3.copy(this.rot, prm.rot);
-            vec3.copy(this.scale, prm.scale);
+            if (prm.pos !== null)
+                vec3.copy(this.pos, prm.pos);
+            if (prm.rot !== null)
+                vec3.copy(this.rot, prm.rot);
+            if (prm.scale !== null)
+                vec3.copy(this.scale, prm.scale);
             this.subtype = prm.subtype;
             this.parentPcId = prm.parentPcId;
             this.parameters = prm.parameters;
@@ -465,7 +469,7 @@ export class fopAc_ac_c extends leafdraw_class {
     }
 }
 
-export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3, roomNo: number, rot: vec3, scale: vec3, subtype: number, parentPcId: number): boolean {
+export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, roomNo: number, rot: vec3 | null, scale: vec3 | null, subtype: number, parentPcId: number): boolean {
     // Create on current layer.
     const prm: fopAcM_prm_class = {
         parameters, pos, roomNo, rot, scale, subtype, parentPcId,

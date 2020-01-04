@@ -25,9 +25,9 @@ function animFrame(frame: number): AnimationController { const a = new Animation
 
 function computeActorModelMatrix(m: mat4, actor: PlacedActor): void {
     computeModelMatrixSRT(m,
-        actor.scale[0], actor.scale[1], actor.scale[2],
+        actor.scale![0], actor.scale![1], actor.scale![2],
         0, actor.rotationY, 0,
-        actor.pos[0], actor.pos[1], actor.pos[2]);
+        actor.pos![0], actor.pos![1], actor.pos![2]);
 }
 
 export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, actor: PlacedActor) {
@@ -1181,7 +1181,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'MtoriSU') fetchArchive(`MtoriSU`).then((rarc) => buildModel(rarc, `bdl/mtorisu.bdl`));
     // Darknut
     else if (actor.name === 'Tn') fetchArchive(`Tn`).then(async (rarc) => {
-        const equipmentType = (actor.rot[0] & 0x00E0) >>> 5;
+        const equipmentType = (actor.rot![0] & 0x00E0) >>> 5;
         const armorColor = (actor.parameters & 0x000000F0) >>> 4;
         
         const mainModel = buildModel(rarc, `bmdm/tn_main.bmd`);

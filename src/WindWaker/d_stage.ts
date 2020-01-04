@@ -80,6 +80,25 @@ export class stage_envr_info_class {
     }
 }
 
+export class dStage_Multi_c {
+    public transX: number;
+    public transZ: number;
+    public rotY: number;
+    public roomNo: number;
+    public waveMax: number;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+
+        this.transX = view.getFloat32(0x00);
+        this.transZ = view.getFloat32(0x04);
+        this.rotY = view.getUint16(0x08);
+        this.roomNo = view.getUint8(0x0A);
+        this.waveMax = view.getUint8(0x0B);
+        return 0x0C;
+    }
+}
+
 type dStage_dt_decode_handlerCB<T> = (dt: T, buffer: ArrayBufferSlice, count: number) => void;
 type dStage_dt_decode_handler<T> = { [k: string]: dStage_dt_decode_handlerCB<T> };
 
@@ -97,6 +116,7 @@ export class dStage_stageDt_c {
     public colo: stage_pselect_info_class[] = [];
     public virt: stage_vrbox_info_class[] = [];
     public envr: stage_envr_info_class[] = [];
+    public mult: dStage_Multi_c[] = [];
 }
 
 function colorFromRGB8(dst: Color, n: number): void {
@@ -139,12 +159,22 @@ function dStage_envrInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, cou
     }
 }
 
+function dStage_multInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
+    let offs = 0;
+    for (let i = 0; i < count; i++) {
+        const mult = new dStage_Multi_c();
+        offs += mult.parse(buffer.slice(offs));
+        dt.mult.push(mult);
+    }
+}
+
 export function dStage_dt_c_initStageLoader(dt: dStage_stageDt_c, dzs: DZS): void {
     dStage_dt_decode(dt, dzs, {
         'Pale': dStage_paletInfoInit,
         'Colo': dStage_pselectInfoInit,
         'Virt': dStage_virtInfoInit,
         'EnvR': dStage_envrInfoInit,
+        'MULT': dStage_multInfoInit,
     });
 }
 //#endregion

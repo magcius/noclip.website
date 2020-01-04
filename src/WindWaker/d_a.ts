@@ -3,13 +3,16 @@ import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, 
 import { dGlobals } from "./zww_scenes";
 import { vec3, mat4 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData, J3DModelInstanceSimple } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut } from "./d_kankyo";
-import { mDoExt_modelUpdateDL } from "./m_do_ext";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2 } from "./SComponent";
+import { dStage_Multi_c } from "./d_stage";
+import { nArray } from "../util";
+import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 // Framework'd actors
 
@@ -325,6 +328,145 @@ class d_a_ep extends fopAc_ac_c {
     }
 }
 
+export function dComIfGp_getMapTrans(globals: dGlobals, roomNo: number): dStage_Multi_c | null {
+    for (let i = 0; i < globals.dStage_dt.mult.length; i++)
+        if (globals.dStage_dt.mult[i].roomNo === roomNo)
+            return globals.dStage_dt.mult[i];
+    return null;
+}
+
+class daBg_btkAnm_c {
+    public anm = new mDoExt_btkAnm();
+    private isSC_01: boolean = false;
+
+    constructor(modelData: J3DModelData, anmData: TTK1) {
+        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+    }
+
+    public entry(modelInstance: J3DModelInstance): void {
+        this.anm.entry(modelInstance);
+        // this.isSC_01 = modelData.bmd.mat3.materialEntries[0].name.startsWith('SC_01');
+    }
+
+    public play(deltaTimeFrames: number): void {
+        if (this.isSC_01) {
+            // Sync to SE timer.
+            this.anm.play(deltaTimeFrames);
+        } else {
+            this.anm.play(deltaTimeFrames);
+        }
+    }
+}
+
+class daBg_brkAnm_c {
+    public anm = new mDoExt_brkAnm();
+
+    constructor(modelData: J3DModelData, anmData: TRK1) {
+        this.anm.init(modelData, anmData, true, LoopMode.REPEAT);
+    }
+
+    public entry(modelInstance: J3DModelInstance): void {
+        this.anm.entry(modelInstance);
+    }
+
+    public play(deltaTimeFrames: number): void {
+        this.anm.play(deltaTimeFrames);
+    }
+}
+
+class d_a_bg extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_bg;
+
+    private numBg = 4;
+    private bgModel: (J3DModelInstance | null)[] = nArray(this.numBg, () => null);
+    private bgBtkAnm: (daBg_btkAnm_c | null)[] = nArray(this.numBg, () => null);
+    private bgBrkAnm: (daBg_brkAnm_c | null)[] = nArray(this.numBg, () => null);
+    private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const roomNo = this.parameters;
+        const arcName = `Room` + roomNo;
+
+        const modelName  = ['model.bmd', 'model1.bmd', 'model2.bmd', 'model3.bmd'];
+        const modelName2 = ['model.bdl', 'model1.bdl', 'model2.bdl', 'model3.bdl'];
+        const btkName    = ['model.btk', 'model1.btk', 'model2.btk', 'model3.btk'];
+        const brkName    = ['model.brk', 'model1.brk', 'model2.brk', 'model3.brk'];
+
+        // createHeap
+        for (let i = 0; i < this.numBg; i++) {
+            let modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName[i]);
+            if (modelData === null)
+                modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
+            if (modelData === null)
+                continue;
+            this.bgModel[i] = new J3DModelInstance(modelData);
+
+            const btk = globals.resCtrl.getStageResByName(ResType.Btk, arcName, btkName[i]);
+            if (btk !== null)
+                this.bgBtkAnm[i] = new daBg_btkAnm_c(modelData, btk);
+
+            const brk = globals.resCtrl.getStageResByName(ResType.Brk, arcName, brkName[i]);
+            if (brk !== null)
+                this.bgBrkAnm[i] = new daBg_brkAnm_c(modelData, brk);
+
+            const tevStr = new dKy_tevstr_c();
+            this.bgTevStr[i] = tevStr;
+            dKy_tevstr_init(tevStr, roomNo, -1);
+
+            // Load BgW
+        }
+
+        // create
+        for (let i = 0; i < this.numBg; i++) {
+            if (this.bgBtkAnm[i] !== null)
+                this.bgBtkAnm[i]!.entry(this.bgModel[i]!);
+            if (this.bgBrkAnm[i] !== null)
+                this.bgBrkAnm[i]!.entry(this.bgModel[i]!);
+        }
+
+        const mult = dComIfGp_getMapTrans(globals, roomNo);
+        if (mult !== null) {
+            MtxTrans(vec3.set(scratchVec3a, mult.transX, 0, mult.transZ), false);
+            mDoMtx_YrotM(calc_mtx, mult.rotY);
+            for (let i = 0; i < this.numBg; i++)
+                if (this.bgModel[i] !== null)
+                    mat4.copy(this.bgModel[i]!.modelMatrix, calc_mtx);
+        }
+
+        dKy_tevstr_init(globals.roomStatus[roomNo].tevStr, roomNo, -1);
+
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals): void {
+        const deltaTimeFrames = globals.deltaTimeInFrames;
+
+        for (let i = 0; i < this.numBg; i++) {
+            if (this.bgBtkAnm[i] !== null)
+                this.bgBtkAnm[i]!.play(deltaTimeFrames);
+            if (this.bgBrkAnm[i] !== null)
+                this.bgBrkAnm[i]!.play(deltaTimeFrames);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // force far plane to 100000.0 ?
+
+        for (let i = 0; i < this.numBg; i++) {
+            if (this.bgModel[i] === null)
+                continue;
+
+            settingTevStruct(globals, LightType.BG0 + i, null, this.bgTevStr[i]!);
+            setLightTevColorType(globals, this.bgModel[i]!, this.bgTevStr[i]!, viewerInput.camera);
+            // this is actually mDoExt_modelEntryDL
+            mDoExt_modelUpdateDL(globals, this.bgModel[i]!, renderInstManager, viewerInput);
+        }
+
+        const roomNo = this.parameters;
+        settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -336,4 +478,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
 
     R(d_a_grass);
     R(d_a_ep);
+    R(d_a_bg);
 }

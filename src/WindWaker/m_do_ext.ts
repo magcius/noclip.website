@@ -79,6 +79,14 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     const device = globals.modelCache.device;
 
+    // NOTE(jstpierre): This is custom to noclip, normally the toon textures are set in setToonTex during res loading.
+    globals.renderer.extraTextures.fillExtraTextures(modelInstance);
+
+    if (globals.renderHacks.renderHacksChanged) {
+        modelInstance.setVertexColorsEnabled(globals.renderHacks.vertexColorsEnabled);
+        modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
+    }
+
     modelInstance.calcAnim(viewerInput.camera);
     modelInstance.calcView(viewerInput.camera);
 
