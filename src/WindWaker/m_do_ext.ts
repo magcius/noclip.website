@@ -4,7 +4,7 @@ import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1 } from "../Common/JSYST
 import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { dGlobals, WindWakerPass } from "./zww_scenes";
+import { dGlobals, dDlst_list_Set } from "./zww_scenes";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -76,8 +76,11 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
     }
 }
 
-export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, passSet: WindWakerPass = WindWakerPass.MainOpa): void {
+export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
     const device = globals.modelCache.device;
+
+    if (drawListSet === null)
+        drawListSet = globals.dlst.main;
 
     // NOTE(jstpierre): This is custom to noclip, normally the toon textures are set in setToonTex during res loading.
     globals.renderer.extraTextures.fillExtraTextures(modelInstance);
@@ -90,10 +93,8 @@ export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelI
     modelInstance.calcAnim(viewerInput.camera);
     modelInstance.calcView(viewerInput.camera);
 
-    const template = renderInstManager.pushTemplateRenderInst();
-    template.filterKey = passSet + 0;
+    renderInstManager.setCurrentRenderInstList(drawListSet[0]);
     modelInstance.drawOpa(device, renderInstManager, viewerInput.camera, viewerInput.viewport);
-    template.filterKey = passSet + 1;
+    renderInstManager.setCurrentRenderInstList(drawListSet[1]);
     modelInstance.drawXlu(device, renderInstManager, viewerInput.camera, viewerInput.viewport);
-    renderInstManager.popTemplateRenderInst();
 }

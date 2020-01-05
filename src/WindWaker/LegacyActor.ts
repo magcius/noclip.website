@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { WindWakerRenderer, WindWakerRoomRenderer, WindWakerPass, ZWWExtraTextures, dGlobals } from "./zww_scenes";
+import { WindWakerRenderer, WindWakerRoomRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
 import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -44,7 +44,6 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
         const model = modelCache.getModel(rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
-        modelInstance.passMask = WindWakerPass.MainOpa;
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actor.name;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -67,7 +66,6 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     function buildModelRes(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
         const modelInstance = new J3DModelInstanceSimple(modelData);
-        modelInstance.passMask = WindWakerPass.MainOpa;
         context.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         const objectRenderer = new BMDObjectRenderer(modelInstance);

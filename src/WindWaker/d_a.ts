@@ -1,6 +1,6 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
-import { dGlobals, WindWakerPass } from "./zww_scenes";
+import { dGlobals } from "./zww_scenes";
 import { vec3, mat4 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -570,7 +570,7 @@ class d_a_vrbox extends fopAc_ac_c {
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
         dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.sky);
     }
 }
 
@@ -685,23 +685,21 @@ class d_a_vrbox2 extends fopAc_ac_c {
         MtxTrans(globals.cameraPosition, false);
         calc_mtx[13] -= skyboxOffsY;
 
-/*
         if (this.usoUmi !== null) {
             mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
             dKy_setLight__OnModelInstance(envLight, this.usoUmi, viewerInput.camera);
-            mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+            mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, viewerInput, globals.dlst.sky);
         }
 
         if (this.kasumiMae !== null) {
             mat4.copy(this.kasumiMae.modelMatrix, calc_mtx);
             dKy_setLight__OnModelInstance(envLight, this.kasumiMae, viewerInput.camera);
-            mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+            mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, globals.dlst.sky);
         }
-*/
 
         mat4.copy(this.backCloud.modelMatrix, calc_mtx);
         dKy_setLight__OnModelInstance(envLight, this.backCloud, viewerInput.camera);
-        mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+        mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
     }
 }
 
