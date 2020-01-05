@@ -1,18 +1,21 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
-import { dGlobals } from "./zww_scenes";
+import { dGlobals, WindWakerPass } from "./zww_scenes";
 import { vec3, mat4 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
-import { J3DModelInstance, J3DModelData, J3DModelInstanceSimple } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2 } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
-import { nArray } from "../util";
+import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
+import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_power } from "./d_kankyo_wether";
+import { ColorKind } from "../gx/gx_render";
 
 // Framework'd actors
 
@@ -438,14 +441,12 @@ class d_a_bg extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    public execute(globals: dGlobals): void {
-        const deltaTimeFrames = globals.deltaTimeInFrames;
-
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
         for (let i = 0; i < this.numBg; i++) {
             if (this.bgBtkAnm[i] !== null)
-                this.bgBtkAnm[i]!.play(deltaTimeFrames);
+                this.bgBtkAnm[i]!.play(deltaTimeInFrames);
             if (this.bgBrkAnm[i] !== null)
-                this.bgBrkAnm[i]!.play(deltaTimeFrames);
+                this.bgBrkAnm[i]!.play(deltaTimeInFrames);
         }
     }
 
@@ -467,6 +468,243 @@ class d_a_bg extends fopAc_ac_c {
     }
 }
 
+class d_a_vrbox extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox;
+    private model: J3DModelInstance;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+
+        const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`));
+        this.model = new J3DModelInstance(res);
+
+        // vrboxFlags?
+        globals.scnPlay.vrboxLoaded = true;
+        envLight.vrboxInvisible = false;
+
+        return cPhs__Status.Next;
+    }
+
+    private dungeon_rain_proc(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        if (dKy_checkEventNightStop(globals)) {
+            const stage = globals.stageName;
+
+            let rainMode: number = -1;
+            const roomNo = globals.mStayNo;
+            if (stage === 'M_NewD2' && roomNo === 3)
+                rainMode = 1;
+            else if (stage === 'M_Dra09')
+                rainMode = 1;
+            else if (stage === 'kinMB')
+                rainMode = 1;
+            else if (stage === 'kindan') {
+                if (roomNo === 2 || roomNo === 13)
+                    rainMode = 1;
+                else if (roomNo === 4)
+                    rainMode = 2;
+                else
+                    rainMode = 0;
+            }
+
+            if (rainMode === 0) {
+                if (envLight.thunderMode !== ThunderMode.Off) {
+                    dKyw_rain_set(envLight, 0);
+                    envLight.thunderMode = ThunderMode.Off;
+                }
+            } else if (rainMode === 1) {
+                if (envLight.rainCountOrig !== 250) {
+                    dKy_change_colpat(envLight, 1);
+                    dKyw_rain_set(envLight, 250);
+                    envLight.thunderMode = ThunderMode.On;
+                }
+            } else if (rainMode === 2) {
+                if (envLight.thunderMode === ThunderMode.Off) {
+                    dKy_change_colpat(envLight, 1);
+                    envLight.thunderMode = ThunderMode.FarOnly;
+                }
+            }
+        }
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.dungeon_rain_proc(globals);
+    }
+
+    private daVrbox_color_set(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        let sum = 0;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
+        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        if (sum === 0) {
+            envLight.vrboxInvisible = true;
+        } else {
+            envLight.vrboxInvisible = false;
+
+            // Can't use overrides because it's per-material.
+            const m0 = this.model.modelMaterialData.materialData![0].material;
+            colorCopy(m0.colorConstants[0], envLight.vrKasumiMaeCol);
+            const m1 = this.model.modelMaterialData.materialData![1].material;
+            colorCopy(m1.colorConstants[0], envLight.vrSkyColor);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const envLight = globals.g_env_light;
+
+        this.daVrbox_color_set(globals);
+
+        if (envLight.vrboxInvisible)
+            return;
+
+        let skyboxOffsY = 0;
+        const fili = globals.roomStatus[globals.mStayNo].fili;
+        if (fili !== null)
+            skyboxOffsY = 0.09 * (globals.cameraPosition[1] - fili.skyboxY);
+
+        MtxTrans(globals.cameraPosition, false);
+        calc_mtx[13] -= skyboxOffsY;
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+
+        dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+    }
+}
+
+class d_a_vrbox2 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox2;
+    private backCloud: J3DModelInstance;
+    private kasumiMae: J3DModelInstance | null = null;
+    private kasumiMaeK0 = colorNewCopy(TransparentBlack);
+    private usoUmi: J3DModelInstance | null = null;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const backCloudRes = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_back_cloud.bdl`));
+        this.backCloud = new J3DModelInstance(backCloudRes);
+
+        const kasumiMaeRes = globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_kasumi_mae.bdl`);
+        if (kasumiMaeRes !== null)
+            this.kasumiMae = new J3DModelInstance(kasumiMaeRes);
+
+        const usoUmiRes = globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_uso_umi.bdl`);
+        if (usoUmiRes !== null)
+            this.usoUmi = new J3DModelInstance(usoUmiRes);
+
+        return cPhs__Status.Next;
+    }
+
+    private daVrbox2_color_set(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        let sum = 0;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
+        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        if (sum === 0)
+            return;
+
+        const windVec = dKyw_get_wind_vec(envLight);
+        const windPower = dKyw_get_wind_power(envLight);
+
+        let windX = windVec[0];
+        let windZ = windVec[2];
+
+        const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+        if (roomType === 2) {
+            // TODO(jstpierre): Overwrite with tact wind.
+        }
+
+        // Camera forward in XZ plane
+        vec3.copy(scratchVec3a, globals.cameraFwd);
+        scratchVec3a[1] = 0;
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        const scrollSpeed0 = deltaTimeInFrames * windPower * 0.0005 * ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
+
+        let mtx: mat4;
+        const backMat0 = this.backCloud.materialInstances[0].materialData.material;
+        mtx = backMat0.texMatrices[0]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
+
+        mtx = backMat0.texMatrices[1]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
+
+        const scrollSpeed1 = scrollSpeed0 * 0.8;
+
+        const backMat1 = this.backCloud.materialInstances[1].materialData.material;
+        mtx = backMat1.texMatrices[0]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed1) % 1.0;
+
+        mtx = backMat1.texMatrices[1]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed1) % 1.0;
+
+        const scrollSpeed2 = scrollSpeed0 * 0.8;
+
+        const backMat2 = this.backCloud.materialInstances[2].materialData.material;
+        mtx = backMat2.texMatrices[0]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed2) % 1.0;
+
+        mtx = backMat2.texMatrices[1]!.matrix;
+        mtx[12] = (mtx[12] + scrollSpeed0 + scrollSpeed2) % 1.0;
+
+        // Overwrite colors.
+        this.backCloud.setColorOverride(ColorKind.K0, envLight.vrKumoColor);
+
+        if (this.kasumiMae !== null) {
+            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeCol);
+            this.kasumiMaeK0.r = envLight.vrKumoColor.r;
+            this.kasumiMae.setColorOverride(ColorKind.K0, this.kasumiMaeK0);
+        }
+
+        if (this.usoUmi !== null)
+            this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiColor);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.daVrbox2_color_set(globals, deltaTimeInFrames);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const envLight = globals.g_env_light;
+
+        let sum = 0;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
+        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        if (sum === 0)
+            return;
+
+        let skyboxOffsY = 0;
+        const fili = globals.roomStatus[globals.mStayNo].fili;
+        if (fili !== null)
+            skyboxOffsY = 0.09 * (globals.cameraPosition[1] - fili.skyboxY);
+
+        MtxTrans(globals.cameraPosition, false);
+        calc_mtx[13] -= skyboxOffsY;
+
+/*
+        if (this.usoUmi !== null) {
+            mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
+            dKy_setLight__OnModelInstance(envLight, this.usoUmi, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+        }
+
+        if (this.kasumiMae !== null) {
+            mat4.copy(this.kasumiMae.modelMatrix, calc_mtx);
+            dKy_setLight__OnModelInstance(envLight, this.kasumiMae, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+        }
+*/
+
+        mat4.copy(this.backCloud.modelMatrix, calc_mtx);
+        dKy_setLight__OnModelInstance(envLight, this.backCloud, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, WindWakerPass.SkyboxOpa);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -479,4 +717,6 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_grass);
     R(d_a_ep);
     R(d_a_bg);
+    R(d_a_vrbox);
+    R(d_a_vrbox2);
 }

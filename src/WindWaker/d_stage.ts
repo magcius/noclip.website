@@ -2,7 +2,7 @@
 import { Color, White, colorNewCopy, colorFromRGBA8 } from "../Color";
 import { DZS } from "./d_resorce";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray } from "../util";
+import { nArray, assert } from "../util";
 import { dKy_tevstr_c } from "./d_kankyo";
 
 export class stage_palet_info_class__DifAmb {
@@ -80,6 +80,20 @@ export class stage_envr_info_class {
     }
 }
 
+export class stage_stag_info_class {
+    public nearPlane: number;
+    public farPlane: number;
+    public roomTypeAndSchBit: number;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+        this.nearPlane = view.getFloat32(0x00);
+        this.farPlane = view.getFloat32(0x04);
+        this.roomTypeAndSchBit = view.getUint32(0x0C);
+        return 0x1C;
+    }
+}
+
 export class dStage_Multi_c {
     public transX: number;
     public transZ: number;
@@ -99,6 +113,17 @@ export class dStage_Multi_c {
     }
 }
 
+export class dStage_FileList_dt_c {
+    public skyboxY: number;
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+
+        this.skyboxY = view.getFloat32(0x04);
+        return 0x08;
+    }
+}
+
 type dStage_dt_decode_handlerCB<T> = (dt: T, buffer: ArrayBufferSlice, count: number) => void;
 type dStage_dt_decode_handler<T> = { [k: string]: dStage_dt_decode_handlerCB<T> };
 
@@ -110,6 +135,8 @@ export function dStage_dt_decode<T>(dt: T, dzs: DZS, handlers: dStage_dt_decode_
     }
 }
 
+type dStage_dt_c = dStage_stageDt_c | dStage_roomDt_c;
+
 //#region DZS
 export class dStage_stageDt_c {
     public pale: stage_palet_info_class[] = [];
@@ -117,6 +144,7 @@ export class dStage_stageDt_c {
     public virt: stage_vrbox_info_class[] = [];
     public envr: stage_envr_info_class[] = [];
     public mult: dStage_Multi_c[] = [];
+    public stag: stage_stag_info_class;
 }
 
 function colorFromRGB8(dst: Color, n: number): void {
@@ -168,6 +196,12 @@ function dStage_multInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, cou
     }
 }
 
+function dStage_stagInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
+    assert(count === 1);
+    dt.stag = new stage_stag_info_class();
+    dt.stag.parse(buffer);
+}
+
 export function dStage_dt_c_initStageLoader(dt: dStage_stageDt_c, dzs: DZS): void {
     dStage_dt_decode(dt, dzs, {
         'Pale': dStage_paletInfoInit,
@@ -175,12 +209,32 @@ export function dStage_dt_c_initStageLoader(dt: dStage_stageDt_c, dzs: DZS): voi
         'Virt': dStage_virtInfoInit,
         'EnvR': dStage_envrInfoInit,
         'MULT': dStage_multInfoInit,
+        'STAG': dStage_stagInfoInit,
     });
 }
 //#endregion
 
 //#region DZR
-export class dStage_roomStatus_c {
+export class dStage_roomDt_c {
+    public fili: dStage_FileList_dt_c | null = null;
+}
+
+export class dStage_roomStatus_c extends dStage_roomDt_c {
     public tevStr = new dKy_tevstr_c();
+}
+
+function dStage_filiInfoInit(dt: dStage_roomDt_c, buffer: ArrayBufferSlice, count: number): void {
+    if (count !== 0) {
+        dt.fili = new dStage_FileList_dt_c();
+        dt.fili.parse(buffer);
+    } else {
+        dt.fili = null;
+    }
+}
+
+export function dStage_dt_c_roomLoader(dt: dStage_roomDt_c, dzs: DZS): void {
+    dStage_dt_decode(dt, dzs, {
+        'FILI': dStage_filiInfoInit,
+    });
 }
 //#endregion

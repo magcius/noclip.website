@@ -19,6 +19,12 @@ export function dKyw_rain_set(envLight: dScnKy_env_light_c, count: number): void
     envLight.rainCountOrig = count;
 }
 
+export const enum ThunderMode {
+    Off     = 0,
+    On      = 1,
+    FarOnly = 10,
+}
+
 export const enum ThunderState {
     Clear      = 0,
     FlashNear  = 1,
@@ -34,7 +40,7 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
     if (envLight.thunderState === ThunderState.Clear) {
         envLight.thunderFlashTimer = 0;
         if (cM_rndF(1.0) > 0.007) {
-            if ((envLight.thunderMode < 10) && cM_rndF(1.0) < 0.005) {
+            if ((envLight.thunderMode < ThunderMode.FarOnly) && cM_rndF(1.0) < 0.005) {
                 vec3.copy(envLight.thunderLightInfluence.pos, cameraPos);
                 colorFromRGBA(envLight.thunderLightInfluence.color, 0, 0, 0);
                 envLight.thunderLightInfluence.power = 90000.0;
@@ -57,7 +63,6 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
         if (cM_rndF(1.0) < 0.18) {
             // Spawn lighting bolt
             fopKyM_create(globals.frameworkGlobals, fpc__ProcessName.d_thunder, -1, null, null);
-            console.log('spawn lightning');
         }
     } else if (envLight.thunderState === ThunderState.FadeNear || envLight.thunderState === ThunderState.FadeFar) {
         envLight.thunderFlashTimer = cLib_addCalc(envLight.thunderFlashTimer, 0.0, 0.1, 0.05, 0.001);
@@ -66,7 +71,7 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
                 dKy_efplight_cut(envLight, envLight.thunderLightInfluence);
             }
             envLight.thunderState = ThunderState.Clear;
-            if (envLight.thunderMode === 0)
+            if (envLight.thunderMode === ThunderMode.Off)
                 envLight.thunderActive = false;
         }
     }
@@ -114,7 +119,7 @@ function wether_move_thunder(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     if (envLight.thunderActive) {
         dKyr_thunder_move(globals, envLight, globals.cameraPosition);
-    } else if (envLight.thunderMode !== 0) {
+    } else if (envLight.thunderMode !== ThunderMode.Off) {
         dKyr_thunder_init(envLight);
         envLight.thunderActive = true;
     }
@@ -123,22 +128,60 @@ function wether_move_thunder(globals: dGlobals): void {
 function wether_move_windline(globals: dGlobals): void {
 }
 
-function dKyw_wether_move(globals: dGlobals): void {
+export function dKyw_wether_move(globals: dGlobals): void {
     wether_move_thunder(globals);
     wether_move_windline(globals);
 }
 
-function dKyw_wether_move_draw(globals: dGlobals): void {
-    // TODO(jstpierre)
+function wether_move_sun(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight) {
+    }
 }
 
-export function dKyeff_c__execute(globals: dGlobals): void {
-    if (globals.stageName === 'Name') {
-        // menu_vrbox_set();
-    } else {
-        dKyw_wether_move(globals);
+function wether_move_rain(globals: dGlobals): void {
+}
+
+function wether_move_snow(globals: dGlobals): void {
+}
+
+function wether_move_star(globals: dGlobals): void {
+}
+
+function wether_move_poison(globals: dGlobals): void {
+}
+
+function wether_move_housi(globals: dGlobals): void {
+}
+
+function wether_move_moya(globals: dGlobals): void {
+}
+
+function wether_move_wave(globals: dGlobals): void {
+}
+
+export function dKyw_wether_move_draw(globals: dGlobals): void {
+    if (globals.stageName !== 'Name') {
+        wether_move_sun(globals);
+        wether_move_rain(globals);
+        wether_move_snow(globals);
     }
-    dKyw_wether_move_draw(globals);
+    wether_move_star(globals);
+    if (globals.stageName !== 'Name') {
+        wether_move_poison(globals);
+        wether_move_housi(globals);
+        wether_move_moya(globals);
+        wether_move_wave(globals);
+    }
+}
+
+export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
+    return envLight.windVec;
+}
+
+export function dKyw_get_wind_power(envLight: dScnKy_env_light_c): number {
+    return envLight.windPower;
 }
 
 export class d_thunder extends kankyo_class {
@@ -195,8 +238,8 @@ export class d_thunder extends kankyo_class {
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 
-    public execute(globals: dGlobals): void {
-        const hasStopped = this.brkAnm.play(globals.deltaTimeInFrames);
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const hasStopped = this.brkAnm.play(deltaTimeInFrames);
         if (hasStopped) {
             fopKyM_Delete(globals.frameworkGlobals, this);
         }

@@ -1,5 +1,5 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd } from "../Color";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorCopy } from "../Color";
 import { Light, lightSetFromWorldLight } from "../gx/gx_material";
 import { vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage";
@@ -10,8 +10,9 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
+import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 
 export const enum LightType {
     Actor = 0,
@@ -42,6 +43,9 @@ export class dScnKy_env_light_c {
 
     public sunPos = vec3.create();
     public moonPos = vec3.create();
+
+    // Sky
+    public vrboxInvisible: boolean = true;
 
     // Color palette
     public actCol = new stage_palet_info_class__DifAmb(White);
@@ -91,6 +95,10 @@ export class dScnKy_env_light_c {
     // Weather.
     public weatherPselIdx = 0;
 
+    // Wind
+    public windVec = vec3.fromValues(1.0, 0.0, 0.0);
+    public windPower = 1.0;
+
     // TODO(jstpierre): Move these weather states to their own structs?
 
     // Dice weather system
@@ -106,7 +114,7 @@ export class dScnKy_env_light_c {
     public rainCountOrig: number = 0;
 
     // Thunder.
-    public thunderMode: number = 0;
+    public thunderMode: ThunderMode = ThunderMode.Off;
     public thunderActive: boolean = false;
     public thunderState: ThunderState = ThunderState.Clear;
     public thunderFlashTimer: number = 0;
@@ -496,11 +504,21 @@ export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverri
     tevstr.envrOverride = envrOverride;
 }
 
+// This is effectively the global state that dKy_setLight sets up, but since we don't
+// have global state, we have to do this here.
+export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: Camera): void {
+    const light0 = modelInstance.getGXLightReference(0);
+    lightSetFromWorldLight(light0, envLight.lightStatus[0], camera);
+
+    const light1 = modelInstance.getGXLightReference(1);
+    lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
+}
+
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
     const envLight = globals.g_env_light;
 
     if (tevStr.lightMode !== LightMode.BG) {
-        modelInstance.setColorOverride(ColorKind.K1, tevStr.colorK1, false);
+        modelInstance.setColorOverride(ColorKind.K1, tevStr.colorK1);
     }
 
     const light0 = modelInstance.getGXLightReference(0);
@@ -511,8 +529,8 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
 
     // if (toon_proc_check() == 0)
 
-    modelInstance.setColorOverride(ColorKind.C0, tevStr.colorC0, false);
-    modelInstance.setColorOverride(ColorKind.K0, tevStr.colorK0, false);
+    modelInstance.setColorOverride(ColorKind.C0, tevStr.colorC0);
+    modelInstance.setColorOverride(ColorKind.K0, tevStr.colorK0);
 
     // TODO(jstpierre): Fog.
 }
@@ -548,7 +566,7 @@ function setSunpos(envLight: dScnKy_env_light_c, cameraPos: vec3): void {
     vec3.add(envLight.moonPos, envLight.moonPos, cameraPos);
 }
 
-export function drawKankyo(globals: dGlobals): void {
+function drawKankyo(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
     setSunpos(envLight, globals.cameraPosition);
@@ -664,20 +682,20 @@ function dKy_event_proc(globals: dGlobals): void {
                     envLight.weatherPselIdx = 1;
                     envLight.pselIdxCurrGather = 1;
                 }
-                envLight.thunderMode = 1;
+                envLight.thunderMode = ThunderMode.On;
             } else {
                 if (envLight.weatherPselIdx !== 0) {
                     envLight.weatherPselIdx = 0;
                     envLight.pselIdxCurrGather = 0;
                 }
-                if (envLight.thunderMode === 1)
-                    envLight.thunderMode = 0;
+                if (envLight.thunderMode === ThunderMode.On)
+                    envLight.thunderMode = ThunderMode.Off;
                 dice_rain_minus(envLight);
             }
         } else {
             // Main weather code.
             if (dKy_pship_existence_chk(globals)) {
-                envLight.thunderMode = 1;
+                envLight.thunderMode = ThunderMode.On;
                 dice_rain_minus(envLight);
                 if (envLight.weatherPselIdx !== 1) {
                     envLight.weatherPselIdx = 1;
@@ -719,8 +737,8 @@ function dKy_event_proc(globals: dGlobals): void {
 
                     if (envLight.diceWeatherMode === DiceWeatherMode.Sunny) {
                         pselIdx = 0;
-                        if (envLight.thunderMode === 1)
-                            envLight.thunderMode = 0;
+                        if (envLight.thunderMode === ThunderMode.On)
+                            envLight.thunderMode = ThunderMode.Off;
                         dice_rain_minus(envLight);
                     } else if (envLight.diceWeatherMode === DiceWeatherMode.Overcast) {
                         pselIdx = 1;
@@ -738,11 +756,11 @@ function dKy_event_proc(globals: dGlobals): void {
                             dKyw_rain_set(envLight, envLight.rainCount + 1);
                     } else if (envLight.diceWeatherMode === DiceWeatherMode.LightThunder) {
                         pselIdx = 1;
-                        envLight.thunderMode = 1;
+                        envLight.thunderMode = ThunderMode.On;
                         dice_rain_minus(envLight);
                     } else if (envLight.diceWeatherMode === DiceWeatherMode.HeavyThunder) {
                         pselIdx = 1;
-                        envLight.thunderMode = 1;
+                        envLight.thunderMode = ThunderMode.On;
                         if (envLight.rainCount < 250)
                             dKyw_rain_set(envLight, envLight.rainCount + 1);
                     } else {
@@ -841,14 +859,6 @@ function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInF
     setDaytime(globals, envLight, deltaTimeInFrames);
     // dKyw_wether_proc();
     CalcTevColor(envLight, globals.playerPosition);
-}
-
-export function dKy_Execute(globals: dGlobals, deltaTimeInFrames: number): void {
-    const envLight = globals.g_env_light;
-
-    dKy_event_proc(globals);
-    exeKankyo(globals, envLight, deltaTimeInFrames);
-    // dKyw_wind_set(globals);
 }
 
 export function dKy_setLight(globals: dGlobals): void {
@@ -991,6 +1001,9 @@ export function envcolor_init(globals: dGlobals): void {
     envLight.curTime = 180.0;
     envLight.timeAdv = 0.02;
 
+    colorCopy(envLight.lightStatus[0].Color, White);
+    colorCopy(envLight.lightStatus[1].Color, White);
+
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;
 }
 
@@ -1052,6 +1065,12 @@ export function dKy_addcol_fog_set(envLight: dScnKy_env_light_c, ratio: number, 
     // TODO(jstpierre): Fog colors
 }
 
+export function dKy_change_colpat(envLight: dScnKy_env_light_c, idx: number): void {
+    envLight.pselIdxCurrGather = idx;
+    if (envLight.pselIdxCurr !== idx)
+        envLight.blendPselGather = 0.0;
+}
+
 export function dKy_plight_set(envLight: dScnKy_env_light_c, plight: LIGHT_INFLUENCE): void {
     envLight.plights.push(plight);
 }
@@ -1070,4 +1089,98 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
     const idx = arrayRemove(envLight.eflights, plight);
     if (envLight.playerEflightIdx === idx)
         envLight.playerEflightIdx = -1;
+}
+
+class d_kankyo extends kankyo_class {
+    public static PROCESS_NAME = fpc__ProcessName.d_kankyo;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        envcolor_init(globals);
+        // dKy_setLight_init();
+        // dKy_wave_chan_init();
+        // dKy_event_init();
+        // dKy_Sound_init();
+        // dKyw_wind_set();
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        dKy_event_proc(globals);
+        exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
+        // dKyw_wind_set(globals);
+    }
+
+    public draw(globals: dGlobals): void {
+        drawKankyo(globals);
+    }
+}
+
+class d_kyeff extends kankyo_class {
+    public static PROCESS_NAME = fpc__ProcessName.d_kyeff;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const envLight = globals.g_env_light;
+
+        // dKyw_wether_init(globals);
+
+        const stage = globals.stageName;
+        if (stage === 'Name') {
+            vec3.set(envLight.windVec, 1, 0, 0);
+            envLight.windPower = 0.7;
+            // OSTicksToCalendarTime
+            const hour = new Date().getHours();
+            envLight.curTime = 15 * hour;
+        }
+
+        if (dKy_checkEventNightStop(globals)) {
+            const stag = globals.dStage_dt.stag;
+            const roomType = (stag.roomTypeAndSchBit >>> 16) & 0x07;
+            if (roomType === 0 || roomType === 7) {
+                dKyw_rain_set(envLight, 250);
+                envLight.thunderMode = ThunderMode.On;
+            } else if (roomType === 2) {
+                if (stage === 'Ocrogh' || stage === 'Omori' || stage === 'Orichh' || stage === 'Atorizk' ||
+                    stage === 'LinkRM' || stage === 'Ojhous2' || stage === 'Onobuta' || stage === 'Omasao' ||
+                    stage === 'Obombh' || stage === 'Opub') {
+                    dKyw_rain_set(envLight, 250);
+                    envLight.thunderMode = ThunderMode.FarOnly;
+                }
+            }
+        }
+
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (globals.stageName === 'Name') {
+            // menu_vrbox_set();
+        } else {
+            dKyw_wether_move(globals);
+        }
+        dKyw_wether_move_draw(globals);
+    }
+
+    public draw(globals: dGlobals): void {
+        drawKankyo(globals);
+    }
+}
+
+export function dKankyo_create(globals: dGlobals): void {
+    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kankyo, null);
+    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff, null);
+    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff2, null);
+    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_envse, null);
+}
+
+interface constructor extends fpc_bs__Constructor {
+    PROCESS_NAME: fpc__ProcessName;
+}
+
+export function dKy__RegisterConstructors(globals: fGlobals): void {
+    function R(constructor: constructor): void {
+        fpcPf__Register(globals, constructor.PROCESS_NAME, constructor);
+    }
+
+    R(d_kankyo);
+    R(d_kyeff);
 }

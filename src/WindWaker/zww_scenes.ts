@@ -13,15 +13,14 @@ import * as UI from '../ui';
 
 import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
-import { BMD, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelInstanceSimple, J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
-import { ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
@@ -36,9 +35,9 @@ import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
-import { dScnKy_env_light_c, envcolor_init, drawKankyo, dKy_tevstr_init, dKy_Execute, dKy_setLight } from './d_kankyo';
-import { dKyeff_c__execute, dKyw__RegisterConstructors } from './d_kankyo_wether';
-import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class } from './framework';
+import { dScnKy_env_light_c, envcolor_init, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
+import { dKyw__RegisterConstructors } from './d_kankyo_wether';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer } from './framework';
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
 
@@ -119,6 +118,9 @@ export class dGlobals {
 
     public scnPlay: d_s_play;
 
+    // "Current" room number.
+    public mStayNo: number = 0;
+
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
     public playerPosition = vec3.create();
     // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera.mPos
@@ -131,8 +133,6 @@ export class dGlobals {
 
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
-
-    public deltaTimeInFrames: number = 0.0;
 
     constructor(public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
@@ -243,39 +243,6 @@ export class ZWWExtraTextures {
     }
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.JKRArchive, name: string, isSkybox: boolean = false): J3DModelInstanceSimple | null {
-    let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
-    if (!bdlFile)
-        bdlFile = rarc.findFile(`bmd/${name}.bmd`);
-    if (!bdlFile)
-        return null;
-    const btkFile = rarc.findFile(`btk/${name}.btk`);
-    const brkFile = rarc.findFile(`brk/${name}.brk`);
-    const bckFile = rarc.findFile(`bck/${name}.bck`);
-    const bdl = BMD.parse(bdlFile.buffer);
-    const bmdModel = new J3DModelData(device, cache, bdl);
-    const modelInstance = new J3DModelInstanceSimple(bmdModel);
-    modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
-
-    if (btkFile !== null) {
-        const btk = BTK.parse(btkFile.buffer);
-        modelInstance.bindTTK1(btk);
-    }
-
-    if (brkFile !== null) {
-        const brk = BRK.parse(brkFile.buffer);
-        modelInstance.bindTRK1(brk);
-    }
-
-    if (bckFile !== null) {
-        const bck = BCK.parse(bckFile.buffer);
-        modelInstance.bindANK1(bck);
-    }
-
-    modelInstance.isSkybox = isSkybox;
-    return modelInstance;
-}
-
 // Legacy
 export class WindWakerRoomRenderer {
     public name: string;
@@ -286,7 +253,7 @@ export class WindWakerRoomRenderer {
 
     public extraTextures: ZWWExtraTextures;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, renderer: WindWakerRenderer, public roomNo: number) {
+    constructor(renderer: WindWakerRenderer, public roomNo: number) {
         this.name = `Room ${roomNo}`;
 
         const resCtrl = renderer.globals.modelCache.resCtrl;
@@ -387,7 +354,7 @@ class SeaPlane {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(6);
-        renderInst.filterKey = WindWakerPass.MAIN;
+        renderInst.filterKey = WindWakerPass.MainOpa;
 
         let offs = renderInst.allocateUniformBuffer(0, 32);
         const d = renderInst.mapUniformBufferF32(0);
@@ -506,9 +473,9 @@ class SimpleEffectSystem {
         // This seems to mark it as an indirect particle (???) for simple particles.
         // ref. d_paControl_c::readCommon / readRoomScene
         if (!!(resourceId & 0x4000)) {
-            emitter.drawGroupId = WindWakerPass.EFFECT_INDIRECT;
+            emitter.drawGroupId = WindWakerPass.EffectIndirect;
         } else {
-            emitter.drawGroupId = WindWakerPass.EFFECT_MAIN;
+            emitter.drawGroupId = WindWakerPass.EffectMain;
         }
 
         return emitter;
@@ -546,60 +513,12 @@ class SimpleEffectSystem {
 }
 
 export const enum WindWakerPass {
-    MAIN,
-    SKYBOX,
-    EFFECT_MAIN,
-    EFFECT_INDIRECT,
-}
-
-// TODO(jstpierre): d_a_vrbox / d_a_vrbox2
-class SkyEnvironment {
-    private vr_sky: J3DModelInstanceSimple | null;
-    private vr_uso_umi: J3DModelInstanceSimple | null;
-    private vr_kasumi_mae: J3DModelInstanceSimple | null;
-    private vr_back_cloud: J3DModelInstanceSimple | null;
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, stageRarc: RARC.JKRArchive) {
-        this.vr_sky = createModelInstance(device, cache, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createModelInstance(device, cache, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createModelInstance(device, cache, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createModelInstance(device, cache, stageRarc, `vr_back_cloud`, true);
-    }
-
-    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        const envLight = globals.g_env_light;
-
-        if (this.vr_sky !== null) {
-            this.vr_sky.setColorOverride(ColorKind.K0, envLight.vrSkyColor);
-            this.vr_sky.prepareToRender(device, renderInstManager, viewerInput);
-        }
-
-        if (this.vr_kasumi_mae !== null) {
-            this.vr_kasumi_mae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeCol);
-            this.vr_kasumi_mae.prepareToRender(device, renderInstManager, viewerInput);
-        }
-
-        if (this.vr_uso_umi !== null) {
-            this.vr_uso_umi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiColor);
-            this.vr_uso_umi.prepareToRender(device, renderInstManager, viewerInput);
-        }
-
-        if (this.vr_back_cloud !== null) {
-            this.vr_back_cloud.setColorOverride(ColorKind.K0, envLight.vrKumoColor);
-            this.vr_back_cloud.prepareToRender(device, renderInstManager, viewerInput);
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.vr_sky !== null)
-            this.vr_sky.destroy(device);
-        if (this.vr_kasumi_mae !== null)
-            this.vr_kasumi_mae.destroy(device);
-        if (this.vr_uso_umi !== null)
-            this.vr_uso_umi.destroy(device);
-        if (this.vr_back_cloud !== null)
-            this.vr_back_cloud.destroy(device);
-    }
+    MainOpa = 0,
+    MainXlu = 1,
+    SkyboxOpa = 2,
+    SkyboxXlu = 3,
+    EffectMain,
+    EffectIndirect,
 }
 
 export class WindWakerRenderer implements Viewer.SceneGfx {
@@ -609,7 +528,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private seaPlane: SeaPlane | null = null;
 
-    public skyEnvironment: SkyEnvironment | null = null;
     public roomRenderers: WindWakerRoomRenderer[] = [];
     public effectSystem: SimpleEffectSystem;
     public extraTextures: ZWWExtraTextures;
@@ -697,34 +615,23 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.time = viewerInput.time;
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
-        const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
-        this.globals.deltaTimeInFrames = deltaTimeInFrames;
-
         mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
         viewerInput.camera.getWorldForward(this.globals.cameraFwd);
         // Update the "player position" from the camera.
         vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
-
-        // Execute.
-        dKy_Execute(this.globals, deltaTimeInFrames);
-        dKyeff_c__execute(this.globals);
 
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
-        drawKankyo(this.globals);
-
         this.extraTextures.prepareToRender(device);
 
-        template.filterKey = WindWakerPass.MAIN;
+        template.filterKey = WindWakerPass.MainOpa;
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
         if (this.seaPlane)
             this.seaPlane.prepareToRender(this.globals, renderInstManager, viewerInput);
-        if (this.skyEnvironment !== null)
-            this.skyEnvironment.prepareToRender(this.globals, device, renderInstManager, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(this.globals, device, renderInstManager, viewerInput);
 
@@ -732,12 +639,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.effectSystem.calc(viewerInput);
             this.effectSystem.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
 
-            for (let drawType = WindWakerPass.EFFECT_MAIN; drawType <= WindWakerPass.EFFECT_INDIRECT; drawType++) {
+            for (let drawType = WindWakerPass.EffectMain; drawType <= WindWakerPass.EffectIndirect; drawType++) {
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = drawType;
 
                 let texPrjMtx: mat4 | null = null;
-                if (drawType === WindWakerPass.EFFECT_INDIRECT) {
+                if (drawType === WindWakerPass.EffectIndirect) {
                     texPrjMtx = scratchMatrix;
                     texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
                 }
@@ -754,6 +661,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.globals.renderHacks.renderHacksChanged = false;
     }
 
+    private executePassSet(device: GfxDevice, renderInstManager: GfxRenderInstManager, pass: GfxRenderPass, passSet: WindWakerPass): void {
+        executeOnPass(renderInstManager, device, pass, passSet + 0, false);
+        executeOnPass(renderInstManager, device, pass, passSet + 1, false);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
@@ -766,15 +678,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.SKYBOX);
-        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
+        this.executePassSet(device, renderInstManager, skyboxPassRenderer, WindWakerPass.SkyboxOpa);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.MAIN);
+        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.MainOpa);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
-        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EFFECT_MAIN);
+        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EffectMain);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
         mainPassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
@@ -782,7 +693,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // Now indirect stuff.
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EFFECT_INDIRECT);
+        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EffectIndirect);
         renderInstManager.drawOnPassRenderer(device, indirectPassRenderer);
 
         renderInstManager.resetRenderInsts();
@@ -796,8 +707,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderTarget.destroy(device);
         if (this.seaPlane)
             this.seaPlane.destroy(device);
-        if (this.skyEnvironment !== null)
-            this.skyEnvironment.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
@@ -928,6 +837,8 @@ class d_s_play extends fopScn {
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
 
+    public vrboxLoaded: boolean = false;
+
     public load(globals: dGlobals, userData: any): cPhs__Status {
         super.load(globals, userData);
 
@@ -1014,14 +925,15 @@ class SceneDesc {
         await modelCache.waitForLoad();
 
         const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`${pathBase}/f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
-        const frameworkGlobals = new fGlobals(f_pc_profiles);
+        const framework = new fGlobals(f_pc_profiles);
 
-        fpcPf__Register(frameworkGlobals, fpc__ProcessName.d_s_play, d_s_play);
-        d_a__RegisterConstructors(frameworkGlobals);
-        dKyw__RegisterConstructors(frameworkGlobals);
+        fpcPf__Register(framework, fpc__ProcessName.d_s_play, d_s_play);
+        dKy__RegisterConstructors(framework);
+        dKyw__RegisterConstructors(framework);
+        d_a__RegisterConstructors(framework);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-        const globals = new dGlobals(modelCache, symbolMap, frameworkGlobals);
+        const globals = new dGlobals(modelCache, symbolMap, framework);
         globals.stageName = this.stageDir;
 
         const renderer = new WindWakerRenderer(device, globals);
@@ -1032,11 +944,15 @@ class SceneDesc {
             fpcCt_Handler(globals.frameworkGlobals, globals);
         };
 
-        const ret = fpcSCtRq_Request(frameworkGlobals, null, fpc__ProcessName.d_s_play, null);
+        const ret = fpcSCtRq_Request(framework, null, fpc__ProcessName.d_s_play, null);
         assert(ret);
 
         fpcCt_Handler(globals.frameworkGlobals, globals);
         assert(globals.scnPlay !== undefined);
+
+        // Set the stage as the active layer.
+        // Normally, all of this would be done in d_scn_play.
+        fpcLy_SetCurrentLayer(globals.frameworkGlobals, globals.scnPlay.layer);
 
         const resCtrl = modelCache.resCtrl;
 
@@ -1044,21 +960,14 @@ class SceneDesc {
         const ZAtoon   = sysRes.getResByID(ResType.Bti, 0x03);
         const ZBtoonEX = sysRes.getResByID(ResType.Bti, 0x04);
 
-        const stageRarc = modelCache.getStageData(`Stage`);
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
         dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
 
-        envcolor_init(globals);
-
-        const mult = dzs.headers.get('MULT');
-
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;
 
-        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
-        renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
 
         const jpac: JPA.JPAC[] = [];
         for (let i = 0; i < particleArchives.length; i++) {
@@ -1067,12 +976,25 @@ class SceneDesc {
         }
         renderer.effectSystem = new SimpleEffectSystem(device, jpac);
 
+        // dStage_Create
+        dKankyo_create(globals);
+
+        // mRoomCtrl::init()
+        // dStage_dt_c_stageLoader()
+        // dMap_c::create()
+
+        const vrbox = resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`);
+        if (vrbox !== null) {
+            fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox, null);
+            fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox2, null);
+        }
+
         let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
             const roomNo = Math.abs(this.rooms[i]);
 
             const visible = this.rooms[i] >= 0;
-            const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer, roomNo);
+            const roomRenderer = new WindWakerRoomRenderer(renderer, roomNo);
             roomRenderer.visible = visible;
             renderer.roomRenderers.push(roomRenderer);
 
@@ -1106,7 +1028,7 @@ class SceneDesc {
             }
 
             // objectSetCheck
-            fopAcM_create(frameworkGlobals, fpc__ProcessName.d_a_bg, roomNo, null, -1, null, null, 0xFF, -1);
+            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, -1, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);

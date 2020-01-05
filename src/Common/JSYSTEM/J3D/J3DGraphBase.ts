@@ -211,7 +211,6 @@ export class ShapeInstance {
 
 export class MaterialInstanceState {
     public colorOverrides: Color[] = [];
-    public alphaOverrides: boolean[] = [];
     public lights = nArray(8, () => new GX_Material.Light());
     public textureMappings: TextureMapping[];
 }
@@ -424,10 +423,7 @@ export class MaterialInstance {
         if (this.colorCalc[i]) {
             this.colorCalc[i]!.calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
-            if (materialInstanceState.alphaOverrides[i])
-                colorCopy(dst, materialInstanceState.colorOverrides[i]);
-            else
-                colorCopy(dst, materialInstanceState.colorOverrides[i], fallbackColor.a);
+            colorCopy(dst, materialInstanceState.colorOverrides[i]);
         } else {
             colorCopy(dst, fallbackColor);
         }
@@ -1174,12 +1170,11 @@ export class J3DModelInstance {
      *
      * To unset a color override, pass {@constant undefined} as for {@param color}.
      */
-    public setColorOverride(colorKind: ColorKind, color: Color | undefined, useAlpha: boolean = false): void {
+    public setColorOverride(colorKind: ColorKind, color: Color | undefined): void {
         if (color !== undefined)
             this.materialInstanceState.colorOverrides[colorKind] = color;
         else
             delete this.materialInstanceState.colorOverrides[colorKind];
-        this.materialInstanceState.alphaOverrides[colorKind] = useAlpha;
     }
 
     /**

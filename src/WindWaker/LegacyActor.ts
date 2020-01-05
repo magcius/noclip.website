@@ -8,14 +8,14 @@ import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData } from '../C
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as DZB from './DZB';
-import { assertExists, hexzero, leftPad } from '../util';
+import { assertExists, hexzero, leftPad, assert } from '../util';
 import { ResType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
-import { fpc__ProcessName, fopAcM_prm_class, fpcSCtRq_Request } from './framework';
+import { fpc__ProcessName, fopAcM_prm_class, fpcSCtRq_Request, fpcLy_CurrentLayer } from './framework';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -44,7 +44,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
         const model = modelCache.getModel(rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
-        modelInstance.passMask = WindWakerPass.MAIN;
+        modelInstance.passMask = WindWakerPass.MainOpa;
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actor.name;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -67,7 +67,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     function buildModelRes(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
         const modelInstance = new J3DModelInstanceSimple(modelData);
-        modelInstance.passMask = WindWakerPass.MAIN;
+        modelInstance.passMask = WindWakerPass.MainOpa;
         context.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         const objectRenderer = new BMDObjectRenderer(modelInstance);
@@ -1796,7 +1796,8 @@ export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRe
     // New-style system.
 
     // This is supposed to be executing in the context of the stage, I believe.
-    if (fpcSCtRq_Request(globals.frameworkGlobals, globals.scnPlay.layer, objName.pcName, actor))
+    assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
+    if (fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor))
         return;
 
     // Legacy actor system.

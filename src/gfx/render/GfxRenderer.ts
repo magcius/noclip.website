@@ -523,7 +523,7 @@ export class GfxRenderInstManager {
         this.visibleRenderInsts.length = 0;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, sort: boolean = true, state: GfxRendererTransientState | null = null): void {
         if (this.visibleRenderInsts.length === 0)
             return;
 
@@ -531,9 +531,9 @@ export class GfxRenderInstManager {
             gfxRendererTransientStateReset(defaultTransientState);
             state = defaultTransientState;
         }
-    
-        // Sort the render insts.
-        this.visibleRenderInsts.sort(compareRenderInsts);
+
+        if (sort)
+            this.visibleRenderInsts.sort(compareRenderInsts);
 
         for (let i = 0; i < this.visibleRenderInsts.length; i++)
             this.visibleRenderInsts[i].drawOnPassWithState(device, this.gfxRenderCache, passRenderer, state);
@@ -552,9 +552,9 @@ export class GfxRenderInstManager {
 }
 
 // Convenience for porting.
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, state: GfxRendererTransientState | null = null): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, sort: boolean = true): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer, state);
+    renderInstManager.drawOnPassRenderer(device, passRenderer, sort);
 }
 
 export function hasAnyVisible(renderInstManager: GfxRenderInstManager, passMask: number): boolean {

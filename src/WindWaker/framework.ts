@@ -3,17 +3,22 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assertExists, nArray, arrayRemove } from "../util";
+import { assertExists, nArray, arrayRemove, assert } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
 
 export const enum fpc__ProcessName {
-    d_s_play  = 0x0007,
-
-    d_a_ep    = 0x00BA,
-    d_a_tbox  = 0x0126,
-    d_a_grass = 0x01B8,
-    d_thunder = 0x01B9,
-    d_a_bg    = 0x01BC,
+    d_s_play     = 0x0007,
+    d_kankyo     = 0x0015,
+    d_envse      = 0x0017,
+    d_a_ep       = 0x00BA,
+    d_a_tbox     = 0x0126,
+    d_a_grass    = 0x01B8,
+    d_thunder    = 0x01B9,
+    d_a_vrbox    = 0x01BA,
+    d_a_vrbox2   = 0x01BB,
+    d_a_bg       = 0x01BC,
+    d_kyeff      = 0x01E4,
+    d_kyeff2     = 0x01E5,
 };
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
@@ -239,24 +244,24 @@ function fpcLy_Layer(globals: fGlobals, layerID: number): layer_class {
     }
 }
 
-function fpcLy_CurrentLayer(globals: fGlobals): layer_class {
+export function fpcLy_CurrentLayer(globals: fGlobals): layer_class {
     return globals.lyCurr;
 }
 
 export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): void {
-    globals.lyCurr = assertExists(layer);
+    globals.lyCurr = layer;
 }
 
 //#endregion
 
 //#region fpcEx (framework process executor)
 
-function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData): void {
+function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData, deltaTimeInFrames: number): void {
     for (let i = 0; i < globals.liQueue.length; i++) {
         for (let j = 0; j < globals.liQueue[i].length; j++) {
             const pc = globals.liQueue[i][j];
             fpcLy_SetCurrentLayer(globals, pc.ly);
-            globals.liQueue[i][j].execute(globalUserData);
+            globals.liQueue[i][j].execute(globalUserData, deltaTimeInFrames);
         }
     }
 }
@@ -310,7 +315,7 @@ export class base_process_class {
         return cPhs__Status.Complete;
     }
 
-    public execute(globals: GlobalUserData): void {
+    public execute(globals: GlobalUserData, deltaTimeInFrames: number): void {
     }
 
     public delete(globals: GlobalUserData): void {
@@ -330,6 +335,7 @@ function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fp
 }
 
 export function fpcPf__Register(globals: fGlobals, pcName: fpc__ProcessName, constructor: fpc_bs__Constructor): void {
+    assert(globals.f_pc_constructors[pcName] === undefined);
     globals.f_pc_constructors[pcName] = constructor;
 }
 
@@ -339,6 +345,7 @@ export function fpcPf__Register(globals: fGlobals, pcName: fpc__ProcessName, con
 
 class process_node_class extends base_process_class {
     public layer: layer_class;
+    public visible: boolean = true;
 
     constructor(globals: fGlobals, profile: DataView) {
         super(globals, profile);
@@ -354,6 +361,7 @@ class process_node_class extends base_process_class {
 
 class leafdraw_class extends base_process_class {
     public drawPriority: number;
+    public visible: boolean = true;
 
     constructor(globals: fGlobals, profile: DataView) {
         super(globals, profile);
@@ -369,6 +377,8 @@ function fpcDw_Handler(globals: fGlobals, globalUserData: GlobalUserData, render
     for (let i = 0; i < globals.lyRoot.pcQueue.length; i++) {
         const pc = globals.lyRoot.pcQueue[i];
         if (pc instanceof leafdraw_class || pc instanceof process_node_class) {
+            if (!pc.visible)
+                continue;
             fpcLy_SetCurrentLayer(globals, pc.ly);
             pc.draw(globalUserData, renderInstManager, viewerInput);
         }
@@ -383,7 +393,9 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcDt_Handler(globals, globalUserData);
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
-    fpcEx_Handler(globals, globalUserData);
+
+    const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
+    fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
 
@@ -399,6 +411,8 @@ export function fopDw_Draw(globals: fGlobals, globalUserData: GlobalUserData, re
     for (let i = 0; i < globals.dwQueue.length; i++) {
         for (let j = 0; j < globals.dwQueue[i].length; j++) {
             const pc = globals.dwQueue[i][j];
+            if (!pc.visible)
+                continue;
             fpcLy_SetCurrentLayer(globals, pc.ly);
             globals.dwQueue[i][j].draw(globalUserData, renderInstManager, viewerInput);
         }
@@ -435,20 +449,22 @@ export class fopAc_ac_c extends leafdraw_class {
 
     private loadInit: boolean = false;
 
-    public load(globals: GlobalUserData, prm: fopAcM_prm_class): cPhs__Status {
+    public load(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
         if (!this.loadInit) {
             this.loadInit = true;
 
-            if (prm.pos !== null)
-                vec3.copy(this.pos, prm.pos);
-            if (prm.rot !== null)
-                vec3.copy(this.rot, prm.rot);
-            if (prm.scale !== null)
-                vec3.copy(this.scale, prm.scale);
-            this.subtype = prm.subtype;
-            this.parentPcId = prm.parentPcId;
-            this.parameters = prm.parameters;
-            this.roomNo = prm.roomNo;
+            if (prm !== null) {
+                if (prm.pos !== null)
+                    vec3.copy(this.pos, prm.pos);
+                if (prm.rot !== null)
+                    vec3.copy(this.rot, prm.rot);
+                if (prm.scale !== null)
+                    vec3.copy(this.scale, prm.scale);
+                this.subtype = prm.subtype;
+                this.parentPcId = prm.parentPcId;
+                this.parameters = prm.parameters;
+                this.roomNo = prm.roomNo;
+            }
 
             dKy_tevstr_init(this.tevStr, this.roomNo);
         }
@@ -503,15 +519,17 @@ export class kankyo_class extends leafdraw_class {
 
     private loadInit: boolean = false;
 
-    public load(globals: GlobalUserData, prm: fopKyM_prm_class): cPhs__Status {
+    public load(globals: GlobalUserData, prm: fopKyM_prm_class | null): cPhs__Status {
         if (!this.loadInit) {
             this.loadInit = true;
 
-            if (prm.pos !== null)
-                vec3.copy(this.pos, prm.pos);
-            if (prm.scale !== null)
-                vec3.copy(this.scale, prm.scale);
-            this.parameters = prm.parameters;
+            if (prm !== null) {
+                if (prm.pos !== null)
+                    vec3.copy(this.pos, prm.pos);
+                if (prm.scale !== null)
+                    vec3.copy(this.scale, prm.scale);
+                this.parameters = prm.parameters;
+            }
         }
 
         const status = this.subload(globals);
@@ -529,19 +547,18 @@ export class kankyo_class extends leafdraw_class {
     }
 }
 
-interface fopKyM_prm_class {
+export interface fopKyM_prm_class {
     parameters: number;
     pos: vec3 | null;
     scale: vec3 | null;
 }
 
-export function fopKyM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, scale: vec3 | null): boolean {
-    // Create on current layer.
-    const prm: fopKyM_prm_class = {
-        parameters, pos, scale,
-    };
-
+export function fopKyM_Create(globals: fGlobals, pcName: fpc__ProcessName, prm: fopKyM_prm_class | null): boolean {
     return fpcSCtRq_Request(globals, null, pcName, prm);
+}
+
+export function fopKyM_create(globals: fGlobals, pcName: fpc__ProcessName, parameters: number, pos: vec3 | null, scale: vec3 | null): boolean {
+    return fopKyM_Create(globals, pcName, { parameters, pos, scale });
 }
 
 export function fopKyM_Delete(globals: fGlobals, ky: kankyo_class): void {
