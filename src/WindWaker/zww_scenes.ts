@@ -148,7 +148,8 @@ export class dGlobals {
 
     // g_dComIfG_gameInfo.mPlay.mpPlayer.mPos3
     public playerPosition = vec3.create();
-    // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera.mPos
+    // g_dComIfG_gameInfo.mPlay.mCameraInfo[0].mpCamera
+    public camera: Camera;
     public cameraPosition = vec3.create();
     public cameraFwd = vec3.create();
 
@@ -643,6 +644,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         viewerInput.camera.getWorldForward(this.globals.cameraFwd);
         // Update the "player position" from the camera.
         vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
+        this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
@@ -741,6 +743,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
+        this.globals.frameworkGlobals.delete(this.globals);
     }
 }
 

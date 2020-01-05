@@ -43,7 +43,7 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): DZS {
 }
 
 export const enum ResType {
-    Model, Bmt, Bck, Bpk, Brk, Btp, Btk, Bti, Dzb, Dzs, Bva,
+    Model, Bmt, Bck, Bpk, Brk, Btp, Btk, Bti, Dzb, Dzs, Bva, Raw,
 }
 
 export type ResAssetType<T extends ResType> =
@@ -58,6 +58,7 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Dzb ? DZB.DZB :
     T extends ResType.Dzs ? DZS :
     T extends ResType.Bva ? VAF1 :
+    T extends ResType.Raw ? ArrayBufferSlice :
     never;
 
 type OptionalGfx<T extends ResType> = T extends ResType.Bti ? true : false;
@@ -149,6 +150,8 @@ export class dRes_info_c {
                 resEntry.res = BVA.parse(file.buffer) as ResAssetType<T>;
             } else if (resType === ResType.Dzs) {
                 resEntry.res = parseDZSHeaders(file.buffer) as ResAssetType<T>;
+            } else if (resType === ResType.Raw) {
+                resEntry.res = file.buffer as ResAssetType<T>;
             } else {
                 throw "whoops";
             }

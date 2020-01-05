@@ -6,7 +6,12 @@ function clampAbs(v: number, min: number, max: number): number {
 }
 
 export function cLib_addCalc(src: number, target: number, speed: number, maxVel: number, minVel: number): number {
-    return src + clampAbs(speed * (target - src), minVel, maxVel);
+    const delta = (target - src);
+    const vel = clampAbs(speed * delta, minVel, maxVel);
+    if (Math.abs(vel) > Math.abs(delta))
+        return target;
+    else
+        return src + vel;
 }
 
 export function cLib_addCalc2(src: number, target: number, speed: number, maxVel: number): number {

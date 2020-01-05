@@ -91,6 +91,7 @@ export class TDDraw extends TDDrawVtxSpec {
     // Global information
     private currentVertex: number;
     private currentIndex: number;
+    private startIndex: number;
     private indexData: Uint16Array;
     private vertexData: DataView;
 
@@ -142,6 +143,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
         this.currentVertex = -1;
         this.currentIndex = 0;
+        this.startIndex = 0;
     }
 
     public allocVertices(num: number): void {
@@ -172,7 +174,7 @@ export class TDDraw extends TDDrawVtxSpec {
         this.position3f32(v[0], v[1], v[2]);
     }
 
-    public texCoord2f32(attr: number, s: number, t: number): void {
+    public texCoord2f32(attr: GX.Attr, s: number, t: number): void {
         const offs = this.getOffs(this.currentVertex, attr);
         this.writeFloat32(offs + 0x00, s);
         this.writeFloat32(offs + 0x04, t);
@@ -200,9 +202,7 @@ export class TDDraw extends TDDrawVtxSpec {
         this.currentIndex += numIndices;
     }
 
-    public endDraw(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        const cache = renderInstManager.gfxRenderCache;
-
+    private flushDeviceObjects(device: GfxDevice, cache: GfxRenderCache): void {
         let recreateInputState = false;
 
         if (this.createInputLayoutInternal(device, cache)) {
@@ -237,19 +237,31 @@ export class TDDraw extends TDDrawVtxSpec {
                 buffer: this.indexBuffer!,
                 byteOffset: 0,
             };
-    
+
             this.inputState = device.createInputState(this.inputLayout!, buffers, indexBuffer);
         }
+    }
 
+    public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
+        this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
+        this.startIndex = this.currentIndex;
+        return renderInst;
+    }
+
+    public endAndUpload(device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+        this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
         hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
         device.submitPass(hostAccessPass);
+    }
 
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.drawIndexes(this.currentIndex);
-        return renderInst;
+    public endDraw(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
+        this.endAndUpload(device, renderInstManager);
+        return this.makeRenderInst(device, renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {

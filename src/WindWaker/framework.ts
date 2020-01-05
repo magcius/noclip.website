@@ -45,6 +45,13 @@ export class fGlobals {
 
     constructor(public f_pc_profiles: fpc_pc__ProfileList) {
     }
+
+    public delete(globalUserData: GlobalUserData): void {
+        for (let i = 0; i < this.liQueue.length; i++)
+            for (let j = 0; j < this.liQueue[i].length; j++)
+                fpcDt_Delete(this, this.liQueue[i][j]);
+        fpcDt_Handler(this, globalUserData);
+    }
 }
 
 //#region cPhs

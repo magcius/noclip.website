@@ -18,9 +18,10 @@ export class stage_palet_info_class__DifAmb {
 export class stage_palet_info_class {
     public actCol = new stage_palet_info_class__DifAmb(White);
     public bgCol = nArray(4, () => new stage_palet_info_class__DifAmb(White));
-    // fogColor
+    public fogCol = colorNewCopy(White);
     public virtIdx: number;
-    // fogStartZ / fogEndZ
+    public fogStartZ: number;
+    public fogEndZ: number;
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
@@ -34,9 +35,10 @@ export class stage_palet_info_class {
         colorFromRGB8(this.bgCol[2].K0, view.getUint32(0x15));
         colorFromRGB8(this.bgCol[3].C0, view.getUint32(0x18));
         colorFromRGB8(this.bgCol[3].K0, view.getUint32(0x1B));
-        // fogColor
+        colorFromRGB8(this.fogCol, view.getUint32(0x1E));
         this.virtIdx = view.getUint8(0x21);
-        // fogStartZ, fogEndZ
+        this.fogStartZ = view.getFloat32(0x24);
+        this.fogEndZ = view.getFloat32(0x28);
         return 0x2C;
     }
 }

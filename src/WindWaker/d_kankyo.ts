@@ -10,9 +10,12 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
+import { ViewerRenderInput } from "../viewer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 
 export const enum LightType {
     Actor = 0,
@@ -55,17 +58,20 @@ export class dScnKy_env_light_c {
     public vrKumoColor = colorNewCopy(White);
     public vrKumoCenterColor = colorNewCopy(White);
     public vrKasumiMaeCol = colorNewCopy(White);
+    public fogColor = colorNewCopy(White);
 
     public actAdd = new stage_palet_info_class__DifAmb(TransparentBlack);
     public bgAdd = nArray(4, () => new stage_palet_info_class__DifAmb(TransparentBlack));
     public vrSky0Add = colorNewCopy(TransparentBlack);
     public vrKasumiAdd = colorNewCopy(TransparentBlack);
+    public fogAdd = colorNewCopy(TransparentBlack);
 
     public allColRatio: number = 1.0;
     public actColRatio: number = 1.0;
     public bgColRatio: number = 1.0;
     public vrSoraColRatio: number = 1.0;
     public vrKumoColRatio: number = 1.0;
+    public fogColRatio: number = 1.0;
 
     public blendPsel: number = 1.0;
     public blendPselGather: number = -1.0;
@@ -119,6 +125,10 @@ export class dScnKy_env_light_c {
     public thunderState: ThunderState = ThunderState.Clear;
     public thunderFlashTimer: number = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
+
+    // Sun/Moon
+    // Also contains lenzflare
+    public sunPacket: dKankyo_sun_packet | null = null;
 }
 
 export class LIGHT_INFLUENCE {
@@ -314,6 +324,7 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
         kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.blendPsel, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
         kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.blendPsel, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
     }
+    kankyo_color_ratio_set__Color(envLight, envLight.fogColor, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.blendPsel, envLight.fogAdd, envLight.fogColRatio);
 
     const virt0A = envLight.virt[ret.palePrevA.virtIdx];
     const virt0B = envLight.virt[ret.palePrevB.virtIdx];
@@ -538,13 +549,13 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
 function SetBaseLight(envLight: dScnKy_env_light_c): void {
     // TODO(jstpierre): Stage lightVec.
 
-    if (envLight.curTime <= 97.5 || envLight.curTime >= 292.5) {
-        vec3.copy(envLight.baseLight.pos, envLight.moonPos);
-    } else {
+    if (dKyr__sun_arrival_check(envLight)) {
         vec3.copy(envLight.baseLight.pos, envLight.sunPos);
+    } else {
+        vec3.copy(envLight.baseLight.pos, envLight.moonPos);
     }
 
-    colorFromRGBA(envLight.baseLight.color, 0.0, 0.0, 0.0, 0.0);
+    colorFromRGBA(envLight.baseLight.color, 1.0, 1.0, 1.0, 1.0);
     envLight.baseLight.power = 0.0;
     envLight.baseLight.fluctuation = 0.0;
 }
@@ -1062,7 +1073,32 @@ export function dKy_vrbox_addcol_kasumi_set(envLight: dScnKy_env_light_c, ratio:
 }
 
 export function dKy_addcol_fog_set(envLight: dScnKy_env_light_c, ratio: number, r: number, g: number, b: number): void {
-    // TODO(jstpierre): Fog colors
+    colorSetRatio(envLight.fogAdd, ratio, r, g, b);
+}
+
+export function dKy_set_actcol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    envLight.actColRatio = ratio;
+}
+
+export function dKy_set_bgcol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    envLight.bgColRatio = ratio;
+}
+
+export function dKy_set_fogcol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    envLight.fogColRatio = ratio;
+}
+
+export function dKy_set_vrboxsoracol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    envLight.vrSoraColRatio = ratio;
+}
+
+export function dKy_set_vrboxkumocol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    envLight.vrKumoColRatio = ratio;
+}
+
+export function dKy_set_vrboxcol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
+    dKy_set_vrboxsoracol_ratio(envLight, ratio);
+    dKy_set_vrboxkumocol_ratio(envLight, ratio);
 }
 
 export function dKy_change_colpat(envLight: dScnKy_env_light_c, idx: number): void {
@@ -1089,6 +1125,10 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
     const idx = arrayRemove(envLight.eflights, plight);
     if (envLight.playerEflightIdx === idx)
         envLight.playerEflightIdx = -1;
+}
+
+export function dKy_get_dayofweek(envLight: dScnKy_env_light_c): number {
+    return envLight.calendarDay % 7;
 }
 
 class d_kankyo extends kankyo_class {
@@ -1160,8 +1200,16 @@ class d_kyeff extends kankyo_class {
         dKyw_wether_move_draw(globals);
     }
 
-    public draw(globals: dGlobals): void {
-        drawKankyo(globals);
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        dKyw_wether_draw(globals, renderInstManager, viewerInput);
+    }
+
+    public delete(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+        const device = globals.modelCache.device;
+
+        if (envLight.sunPacket !== null)
+            envLight.sunPacket.destroy(device);
     }
 }
 
