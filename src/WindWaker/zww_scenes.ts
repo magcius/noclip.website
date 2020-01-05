@@ -172,8 +172,12 @@ export class dGlobals {
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
     }
 
-    public dStage_searchName(name: string): dStage__ObjectNameTableEntry {
-        return assertExists(this.objectNameTable[name]);
+    public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
+        const objName = this.objectNameTable[name];
+        if (objName !== undefined)
+            return objName;
+        else
+            return null;
     }
 
     public objNameGetDbgName(objName: dStage__ObjectNameTableEntry): string {
@@ -794,10 +798,6 @@ export class ModelCache {
 
     public getFileData(path: string): ArrayBufferSlice {
         return assertExists(this.fileDataCache.get(path));
-    }
-
-    private getArchive(archivePath: string): RARC.JKRArchive {
-        return assertExists(this.archiveCache.get(archivePath));
     }
 
     private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {

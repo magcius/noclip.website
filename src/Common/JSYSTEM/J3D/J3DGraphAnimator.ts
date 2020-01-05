@@ -186,7 +186,9 @@ export class J3DTexMtxAnm {
 export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         if (materialInstance.texMtxCalc[entry.texGenIndex])
             (materialInstance.texMtxCalc[entry.texGenIndex] as J3DTexMtxAnm).set(frameCtrl, ttk1, entry);
         else
@@ -197,7 +199,9 @@ export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1,
 export function removeTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         materialInstance.texMtxCalc[entry.texGenIndex] = null;
     }
 }
@@ -219,7 +223,9 @@ export class J3DTexNoAnm {
 export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         if (materialInstance.texNoCalc[entry.texMapIndex])
             (materialInstance.texNoCalc[entry.texMapIndex] as J3DTexNoAnm).set(frameCtrl, entry);
         else
@@ -230,7 +236,9 @@ export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, 
 export function removeTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         materialInstance.texMtxCalc[entry.texMapIndex] = null;
     }
 }

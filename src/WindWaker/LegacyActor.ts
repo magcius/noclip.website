@@ -124,7 +124,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     const globals = renderer.globals;
 
-    const objName = globals.dStage_searchName(actor.name);
+    const objName = assertExists(globals.dStage_searchName(actor.name));
     const pcName = objName.pcName;
 
     // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
@@ -1787,9 +1787,15 @@ export class BMDObjectRenderer {
     }
 }
 
-export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRenderer, processName: string, actor: PlacedActor): Promise<void> {
+export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRenderer, processNameStr: string, actor: PlacedActor): Promise<void> {
     // Attempt to find an implementation of this Actor in our table
-    const objName = globals.dStage_searchName(processName);
+    const objName = globals.dStage_searchName(processNameStr);
+
+    if (objName === null) {
+        // Game specified a completely bogus actor. For funsies, what was it?
+        console.log(`Stage data references missing actor: ${processNameStr}`);
+        return;
+    }
 
     // New-style system.
 
@@ -1799,7 +1805,7 @@ export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRe
         return;
 
     // Legacy actor system.
-    actor.name = processName;
+    actor.name = processNameStr;
     const loaded = spawnLegacyActor(globals.renderer, roomRenderer, actor);
     if (loaded) {
         // Warn about legacy actors?
