@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assertExists, assert, nArray, hexzero, getTextDecoder } from '../util';
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
@@ -771,7 +771,9 @@ export class ModelCache {
         let fetchPath = path;
         if (cacheBust > 0)
             fetchPath = `${path}?cache_bust=${cacheBust}`;
-        const p = this.dataFetcher.fetchData(fetchPath);
+        const p = this.dataFetcher.fetchData(fetchPath, DataFetcherFlags.NONE, () => {
+            this.filePromiseCache.delete(path);
+        });
         this.filePromiseCache.set(path, p);
         return p;
     }
