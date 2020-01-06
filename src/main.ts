@@ -53,7 +53,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined, magicstr } from './util';
+import { hexdump, assertExists, assert, fallbackUndefined, magicstr, leftPad } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -173,6 +173,8 @@ class Main {
     private lastUpdatedURLTimeSeconds: number = -1;
 
     public sceneTimeScale = 1.0;
+
+    private hashpotatoes: HTMLTextAreaElement;
 
     constructor() {
         this.init();
@@ -343,7 +345,6 @@ class Main {
             this._takeScreenshot();
 
         this.ui.update();
-
         window.requestAnimationFrame(this._updateLoop);
     };
 

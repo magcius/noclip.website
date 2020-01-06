@@ -20,7 +20,7 @@ import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, executeOnPass, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey, GfxRenderInstCompareFunc, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
@@ -28,7 +28,7 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHel
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { range } from '../MathHelpers';
+import { range, getMatrixAxisZ } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
@@ -114,12 +114,13 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
     public main: dDlst_list_Set = [
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];
+    public wetherEffect = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards);
     public effect: GfxRenderInstList[] = [
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
-        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];
 
     public reset(): void {
@@ -127,6 +128,7 @@ export class dDlst_list_c {
         this.sky[1].reset();
         this.main[0].reset();
         this.main[1].reset();
+        this.wetherEffect.reset();
         for (let i = 0; i < this.effect.length; i++)
             this.effect[i].reset();
     }
@@ -645,7 +647,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
         mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-        viewerInput.camera.getWorldForward(this.globals.cameraFwd);
+        getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
+        vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
         // Update the "player position" from the camera.
         vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
         this.globals.camera = viewerInput.camera;
@@ -723,6 +726,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
+        this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
 
         mainPassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
         device.submitPass(mainPassRenderer);

@@ -418,3 +418,19 @@ export function quatFromEulerRadians(dst: quat, x: number, y: number, z: number)
     dst[2] = cx * cy * sz - sx * sy * cz;
     dst[3] = cx * cy * cz + sx * sy * sz;
 }
+
+export function getMatrixAxisX(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[0], m[1], m[2]);
+}
+
+export function getMatrixAxisY(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[4], m[5], m[6]);
+}
+
+export function getMatrixAxisZ(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[8], m[9], m[10]);
+}
+
+export function getMatrixTranslation(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[12], m[13], m[14]);
+}

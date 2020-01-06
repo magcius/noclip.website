@@ -15,7 +15,6 @@ import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 
 export const enum LightType {
     Actor = 0,
@@ -228,7 +227,7 @@ function dKy_light_influence_id(lights: LIGHT_INFLUENCE[], pos: vec3): number {
     let bestDistance = Infinity, bestIdx = -1;
     for (let i = 0; i < lights.length; i++) {
         const light = lights[i];
-        if (light.power <= 0.0)
+        if (light.power <= 0.01)
             continue;
         const dist = vec3.squaredDistance(light.pos, pos);
         if (dist < bestDistance) {
@@ -669,6 +668,8 @@ function dKy_event_proc(globals: dGlobals): void {
     if (globals.stageName !== 'sea')
         return;
 
+    return;
+
     if (dKy_checkEventNightStop(globals)) {
         // Special case: Cursed Great Sea.
 
@@ -899,10 +900,10 @@ export function dKy_setLight(globals: dGlobals): void {
         light0.Color.r = cLib_addCalc2(light0.Color.r, target, 0.4, 20.0);
     }
 
+    const light1 = envLight.lightStatus[1];
     if (envLight.playerEflightIdx >= 0) {
         const eflight = envLight.eflights[envLight.playerEflightIdx];
 
-        const light1 = envLight.lightStatus[1];
         vec3.copy(light1.Position, eflight.pos);
 
         if (eflight.fluctuation >= 1000.0) {
@@ -919,6 +920,8 @@ export function dKy_setLight(globals: dGlobals): void {
             const target = lerp(base, 255, cM_rndF(1.0)) / 255.0;
             light1.Color.r = cLib_addCalc2(light1.Color.r, target, 0.5, 20.0);
         }
+    } else {
+        light1.Color.r = 0.0;
     }
 
     // Light loading is done in setTev
@@ -1012,8 +1015,8 @@ export function envcolor_init(globals: dGlobals): void {
     envLight.curTime = 180.0;
     envLight.timeAdv = 0.02;
 
-    colorCopy(envLight.lightStatus[0].Color, White);
-    colorCopy(envLight.lightStatus[1].Color, White);
+    colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
+    colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;
 }
@@ -1148,10 +1151,12 @@ class d_kankyo extends kankyo_class {
         dKy_event_proc(globals);
         exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
         // dKyw_wind_set(globals);
+        drawKankyo(globals);
     }
 
     public draw(globals: dGlobals): void {
-        drawKankyo(globals);
+        // Moved to execute to fix a few ordering bugs... :/
+        // drawKankyo(globals);
     }
 }
 

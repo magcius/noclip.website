@@ -13,7 +13,7 @@ export class GXMaterialBuilder {
     private ropInfo: RopInfo;
     private usePnMtxIdx?: boolean;
 
-    constructor(private name: string) {
+    constructor(private name: string | null = null) {
         this.alphaTest = {} as AlphaTest;
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
@@ -22,10 +22,6 @@ export class GXMaterialBuilder {
         } as RopInfo;
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
-    }
-
-    public setName(name: string): void {
-        this.name = name;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {
@@ -225,9 +221,14 @@ export class GXMaterialBuilder {
         this.usePnMtxIdx = v;
     }
 
-    public finish(): GXMaterial {
+    public finish(name: string | null = null): GXMaterial {
+        if (name === null)
+            name = this.name;
+        if (name === null)
+            name = '';
+
         const material = {
-            name: this.name,
+            name: name,
             cullMode: this.cullMode,
             lightChannels: this.lightChannels,
             texGens: this.texGens,

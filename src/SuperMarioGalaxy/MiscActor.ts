@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2 } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -136,17 +136,15 @@ export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityV
 }
 
 export function getCamPos(v: vec3, camera: Camera): void {
-    const m = camera.worldMatrix;
-    vec3.set(v, m[12], m[13], m[14]);
+    getMatrixTranslation(v, camera.worldMatrix);
 }
 
 export function getCamYdir(v: vec3, camera: Camera): void {
-    camera.getWorldUp(v);
+    getMatrixAxisY(v, camera.worldMatrix);
 }
 
 export function getCamZdir(v: vec3, camera: Camera): void {
-    camera.getWorldForward(v);
-    // SMG uses different Z conventions than noclip.
+    getMatrixAxisZ(v, camera.worldMatrix);
     v[2] *= -1;
 }
 

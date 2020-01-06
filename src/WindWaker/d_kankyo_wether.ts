@@ -3,14 +3,14 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX } from "./SComponent";
 import { vec3, mat4, vec4 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8 } from "../Color";
+import { colorFromRGBA, colorFromRGBA8, Magenta } from "../Color";
 import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
 import { ResType } from "./d_resorce";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./d_a";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture";
@@ -21,6 +21,8 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { nArray } from "../util";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -153,93 +155,109 @@ function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width: number
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 
+function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, packetParams_ = packetParams): void {
+    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
+    const offs = materialHelper.allocateMaterialParams(renderInst);
+    materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams_);
+    renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+    mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
+    fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+}
+
 const scratchMatrix = mat4.create();
 export class dKankyo_sun_packet {
-    public moonTextures: BTIData[] = [];
-    public sunTexture: BTIData;
-    public snowTexture: BTIData;
+    // Shared
+    private snowTexture: BTIData;
+    private materialHelperSunMoon: GXMaterialHelperGfx;
+    private materialHelperLenzflare: GXMaterialHelperGfx;
+    private ddraw = new TDDraw();
+
+    // Sun/Moon
+    private moonTextures: BTIData[] = [];
+    private sunTexture: BTIData;
+    private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
     public visibility: number = 1.0;
     public sunPos = vec3.create();
+
+    // Lenzflare
+    private lensHalfTexture: BTIData;
+    private ringHalfTexture: BTIData;
+    private materialHelperSolid: GXMaterialHelperGfx;
+    public lenzflarePos = nArray(6, () => vec3.create());
+    public lenzflareAngleDeg: number;
     public distFalloff: number;
-    private moonPos = vec3.create();
-    private materialHelperSunMoon: GXMaterialHelperGfx;
-    private materialHelperLenzflare: GXMaterialHelperGfx;
-    private ddrawSunMoon = new TDDraw();
-    private ddrawLenzflare = new TDDraw();
+    public hideLenz: boolean = false;
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
 
-        // Moon textures
         this.moonTextures.push(resCtrl.getObjectRes(ResType.Bti, `Always`, 0x87));
         this.moonTextures.push(resCtrl.getObjectRes(ResType.Bti, `Always`, 0x88));
         this.moonTextures.push(resCtrl.getObjectRes(ResType.Bti, `Always`, 0x89));
         this.moonTextures.push(resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8A));
-        // Sun texture
         this.sunTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x86);
+        this.lensHalfTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x82);
+        this.ringHalfTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x85);
 
         const snowData = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x81);
         this.snowTexture = loadRawTexture(globals, snowData, 0x40, 0x40, GX.TexFormat.I8, GX.WrapMode.CLAMP, GX.WrapMode.CLAMP);
 
-        this.ddrawSunMoon.setVtxDesc(GX.Attr.POS, true);
-        this.ddrawSunMoon.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddrawSunMoon.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddrawSunMoon.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
-        {
-            const mb = new GXMaterialBuilder('dKankyo_sun_packet');
-            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-            mb.setUsePnMtxIdx(false);
-            this.materialHelperSunMoon = new GXMaterialHelperGfx(mb.finish());
-        }
+        const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelperSunMoon = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet'));
+
+        mb.setZMode(false, GX.CompareType.LEQUAL, false);
+        this.materialHelperLenzflare = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured'));
     }
 
-    private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size: number, scaleX: number): void {
+    private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size: number, scaleX: number, texCoordScale: number): void {
         ddraw.begin(GX.Command.DRAW_QUADS);
 
         vec3.set(scratchVec3, scaleX * -size,  size, 0.0);
-        vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+        vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 0, texCoordScale * 0);
 
         vec3.set(scratchVec3, scaleX *  size,  size, 0.0);
-        vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+        vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 1, texCoordScale * 0);
 
         vec3.set(scratchVec3, scaleX *  size, -size, 0.0);
-        vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+        vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+        ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 1, texCoordScale * 1);
 
         vec3.set(scratchVec3, scaleX * -size, -size, 0.0);
-        vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+        vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
-        ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+        ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 0, texCoordScale * 1);
 
         ddraw.end();
     }
 
-    public drawSunMoon(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public drawSunMoon(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = globals.modelCache.device;
-
-        /*
-        const ctx = getDebugOverlayCanvas2D();
-        drawWorldSpacePoint(ctx, viewerInput.camera, this.pos, Magenta, 100);
-        */
 
         const envLight = globals.g_env_light;
 
@@ -255,9 +273,7 @@ export class dKankyo_sun_packet {
         if (!drawSun && !drawMoon)
             return;
 
-        const camPitch = vecPitch(globals.cameraFwd)
-
-        this.ddrawSunMoon.beginDraw();
+        const camPitch = vecPitch(globals.cameraFwd);
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
 
@@ -287,11 +303,8 @@ export class dKankyo_sun_packet {
                 if (i === 1)
                     moonSize *= 1.7;
 
-                this.ddrawSunMoon.begin(GX.Command.DRAW_QUADS);
-                this.drawSquare(this.ddrawSunMoon, scratchMatrix, moonPos, moonSize, scaleX);
-                this.ddrawSunMoon.end();
-
-                const renderInst = this.ddrawSunMoon.makeRenderInst(device, renderInstManager);
+                this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0);
+                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
 
                 if (i === 0) {
                     this.moonTextures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -308,16 +321,7 @@ export class dKankyo_sun_packet {
                     materialParams.u_Color[ColorKind.C1].a *= this.moonAlpha;
                 }
 
-                this.materialHelperSunMoon.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-
-                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-                const offs = this.materialHelperSunMoon.allocateMaterialParams(renderInst);
-                this.materialHelperSunMoon.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-
-                renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-                mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-                fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+                submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
 
@@ -337,11 +341,8 @@ export class dKankyo_sun_packet {
                 if (i === 1)
                     sunSize *= 1.6;
 
-                this.ddrawSunMoon.begin(GX.Command.DRAW_QUADS);
-                this.drawSquare(this.ddrawSunMoon, scratchMatrix, sunPos, sunSize, 1.0);
-                this.ddrawSunMoon.end();
-
-                const renderInst = this.ddrawSunMoon.makeRenderInst(device, renderInstManager);
+                this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
+                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
 
                 if (i === 0) {
                     this.sunTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -353,23 +354,79 @@ export class dKankyo_sun_packet {
                 materialParams.u_Color[ColorKind.C0].a = this.sunAlpha;
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF9100FF);
 
-                this.materialHelperSunMoon.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-
-                renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-                const offs = this.materialHelperSunMoon.allocateMaterialParams(renderInst);
-                this.materialHelperSunMoon.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-
-                renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-                mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-                fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+                submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
-
-        this.ddrawSunMoon.endAndUpload(device, renderInstManager);
     }
 
-    public drawLenzflare(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+        if (this.visibility <= 0.1)
+            return;
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        if (this.hideLenz)
+            renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+        else
+            renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
+        const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
+        const vizSq = sqr(this.visibility);
+        const invDist = 1.0 - this.distFalloff;
+        for (let i = 7; i >= 0; i--) {
+            if (this.hideLenz && i !== 0)
+                continue;
+
+            let alpha = vizSq * alphaTable[i] / 0xFF;
+            if (i >= 2)
+                alpha *= this.distFalloff * 0.8;
+
+            let size: number;
+            if (i >= 2) {
+                size = invDist * 0.08 * this.visibility * scaleTable[i];
+            } else {
+                size = (
+                    ((0.04 + (0.075 * this.visibility)) * scaleTable[i]) +
+                    ((0.2 * this.visibility * scaleTable[i]) * sqr(invDist))
+                );
+            }
+
+            let basePos: vec3;
+            if (i >= 2)
+                basePos = this.lenzflarePos[i - 2];
+            else
+                basePos = this.sunPos;
+
+            const scaleX = 1.0;
+            const texCoordScale = i === 0 ? 1.0 : 2.0;
+            this.drawSquare(ddraw, scratchMatrix, basePos, size, scaleX, texCoordScale);
+            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+
+            if (i === 0) {
+                this.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            } else if (i === 1) {
+                this.ringHalfTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            } else if (i >= 2) {
+                this.lensHalfTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            }
+
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFF1FF);
+            materialParams.u_Color[ColorKind.C0].a *= alpha;
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF91491E);
+
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflare, renderInst, viewerInput);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        this.ddraw.beginDraw();
+        this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
+        this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
+        this.ddraw.endAndUpload(device, renderInstManager);
     }
 
     public destroy(device: GfxDevice): void {
@@ -396,8 +453,13 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec3.set(dst, v4[0], v4[1], v4[2]);
 }
 
-function shouldCull(p: vec3): boolean {
-    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < -1 || p[2] > 1;
+function shouldCull(p: vec3, offsX: number, offsY: number): boolean {
+    if (p[2] < -1 || p[2] > 1)
+        return true;
+
+    const x = p[0] + offsX;
+    const y = p[1] + offsY;
+    return x < -1 || x > 1 || y < -1 || y > 1;
 }
 
 function dKyr_sun_move(globals: dGlobals): void {
@@ -412,20 +474,37 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
-    let pulseDist = 0.0, staringAtSunAmount = 0.0;
+    let staringAtSunAmount = 0.0;
 
-    let visibilityTarget = 1.0;
+    let numPointsTested = 0, numPointsVisible = 0;
 
     if (dKyr__sun_arrival_check(envLight)) {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 1.0, 0.5, 0.1, 0.01);
-        // Do the peek-Z visibility check.
+        // The game does a peek-Z visibility check to determine whether it can see the point.
+        // That's going to be royally slow to do a readback on WebGL (I think), so just do
+        // a geometric test for now. Maybe it's worth it to build a PBO-based depth readback
+        // system though, lol.
 
         // Original game projects the vector into viewport space, and gets distance to 320, 240.
         project(scratchVec3, pkt.sunPos, globals.camera);
 
-        // Cull.
-        if (shouldCull(scratchVec3))
-            visibilityTarget = 0.0;
+        if (!shouldCull(scratchVec3, 0, 0))
+            numPointsVisible++;
+
+        // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
+        // This was meant to be used against a 640x480 FB space, so:
+        const scaleX = 1/640, scaleY = 1/480;
+
+        if (!shouldCull(scratchVec3, -10*scaleX, -20*scaleY))
+            numPointsVisible++;
+        if (!shouldCull(scratchVec3,  10*scaleX,  20*scaleY))
+            numPointsVisible++;
+        if (!shouldCull(scratchVec3, -20*scaleX,  10*scaleY))
+            numPointsVisible++;
+        if (!shouldCull(scratchVec3,  20*scaleX, -10*scaleY))
+            numPointsVisible++;
+
+        numPointsTested = 5;
 
         scratchVec3[2] = 0.0;
         const distance = vec3.length(scratchVec3) * 320.0;
@@ -438,7 +517,36 @@ function dKyr_sun_move(globals: dGlobals): void {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.5, 0.1, 0.01);
     }
 
-    pkt.visibility = cLib_addCalc(pkt.visibility, visibilityTarget, 0.2, 0.1, 0.001);
+    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
+        numPointsTested = 0;
+        numPointsVisible = 0;
+    }
+
+    if (roomType === 2) {
+        numPointsTested = 0;
+        numPointsVisible = 0;
+    }
+
+    if (envLight.curTime < 120.0 || envLight.curTime > 270.0) {
+        numPointsTested = 0;
+        numPointsVisible = 0;
+    }
+
+    if (numPointsTested === 0) {
+        if (numPointsVisible >= 3)
+            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
+        else
+            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.5, 0.2, 0.001);
+    } else {
+        if (numPointsVisible === 5)
+            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.5, 0.2, 0.01);
+        else if (numPointsVisible === 4)
+            pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
+        else
+            pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.1, 0.2, 0.001);
+    }
+
+    pkt.hideLenz = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
         const pulsePos = 1.0 - sqr(1.0 - clamp(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0, 0.0, 1.0));
@@ -458,7 +566,25 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
 }
 
+function dKy_set_eyevect_calc(globals: dGlobals, dst: vec3, scaleXZ: number, scaleY: number = scaleXZ): void {
+    dst[0] = globals.cameraPosition[0] + globals.cameraFwd[0] * scaleXZ;
+    dst[1] = (globals.cameraPosition[1] + globals.cameraFwd[1] * scaleY) - 200.0;
+    dst[2] = globals.cameraPosition[2] + globals.cameraFwd[2] * scaleXZ;
+}
+
 function dKyr_lenzflare_move(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+    const pkt = envLight.sunPacket!;
+
+    dKy_set_eyevect_calc(globals, scratchVec3, 7200);
+    dKyr_get_vectle_calc(scratchVec3, pkt.sunPos, scratchVec3);
+
+    const dist = vec3.distance(scratchVec3, globals.cameraFwd);
+    const intensity = 250.0 + (350.0 * dist);
+    for (let i = 0; i < 6; i++) {
+        const whichLenz = i + 2;
+        vec3.scaleAndAdd(pkt.lenzflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
+    }
 }
 
 function wether_move_thunder(globals: dGlobals): void {
@@ -535,8 +661,7 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
 
     if (globals.stageName !== 'Name') {
         if (envLight.sunPacket !== null) {
-            envLight.sunPacket.drawSunMoon(globals, renderInstManager, viewerInput);
-            envLight.sunPacket.drawLenzflare(globals, renderInstManager, viewerInput);
+            envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
         }
     }
 }
