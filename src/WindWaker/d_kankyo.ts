@@ -1173,9 +1173,14 @@ class d_kyeff extends kankyo_class {
             vec3.set(envLight.windVec, 1, 0, 0);
             envLight.windPower = 0.7;
             // OSTicksToCalendarTime
-            const hour = new Date().getHours();
-            envLight.curTime = 15 * hour;
+            const today = new Date();
+            envLight.curTime = 15 * today.getHours();
         }
+
+        // For funsies, we do the same in noclip :)
+        const today = new Date();
+        envLight.calendarDay = today.getDay();
+        envLight.curTime = 15 * today.getHours();
 
         if (dKy_checkEventNightStop(globals)) {
             const stag = globals.dStage_dt.stag;
