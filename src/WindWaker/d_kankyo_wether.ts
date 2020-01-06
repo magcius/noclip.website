@@ -234,28 +234,28 @@ export class dKankyo_sun_packet {
         this.materialHelperLenzflareSolid = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet solid'));
     }
 
-    private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size: number, scaleX: number, texCoordScale: number): void {
+    private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size1: number, scaleX: number, texCoordScale: number, size2: number = size1): void {
         ddraw.begin(GX.Command.DRAW_QUADS);
 
-        vec3.set(scratchVec3, scaleX * -size,  size, 0.0);
+        vec3.set(scratchVec3, scaleX * -size1,  size1, 0.0);
         vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
         ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 0, texCoordScale * 0);
 
-        vec3.set(scratchVec3, scaleX *  size,  size, 0.0);
+        vec3.set(scratchVec3, scaleX *  size1,  size1, 0.0);
         vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
         ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 1, texCoordScale * 0);
 
-        vec3.set(scratchVec3, scaleX *  size, -size, 0.0);
+        vec3.set(scratchVec3, scaleX *  size2, -size2, 0.0);
         vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
         ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * 1, texCoordScale * 1);
 
-        vec3.set(scratchVec3, scaleX * -size, -size, 0.0);
+        vec3.set(scratchVec3, scaleX * -size1, -size1, 0.0);
         vec3.transformMat4(scratchVec3, scratchVec3, mtx);
         vec3.add(scratchVec3, scratchVec3, basePos);
         ddraw.position3vec3(scratchVec3);
@@ -303,16 +303,14 @@ export class dKankyo_sun_packet {
             const textureIdx = dayOfWeek < 4 ? dayOfWeek : 7 - dayOfWeek;
 
             const moonPitch = vecPitch(moonPos);
-            computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
-            mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (-50 + (360.0 * ((moonPitch - camPitch) / -8.0))));
 
             for (let i = 1; i >= 0; i--) {
                 let moonSize = 700.0;
                 if (i === 1)
                     moonSize *= 1.7;
 
-                this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0);
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+                mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * (45 + (360.0 * ((moonPitch - camPitch) / -8.0))));
 
                 if (i === 0) {
                     this.moonTextures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
@@ -320,15 +318,28 @@ export class dKankyo_sun_packet {
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xF3FF94FF);
                     materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha;
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x000000FF);
+
+                    this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0);
                 } else {
+                    mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * 50 * scaleX);
+
                     this.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFCF4C);
                     materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha;
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xC56923FF);
                     materialParams.u_Color[ColorKind.C1].a *= this.moonAlpha;
+
+                    let moonShineSize = moonSize;
+                    if (dayOfWeek === 1 || dayOfWeek === 6)
+                        moonShineSize *= 0.83;
+                    else if (dayOfWeek !== 0)
+                        moonShineSize *= 0.6;
+
+                    this.drawSquare(ddraw, scratchMatrix, moonPos, moonSize, scaleX, 1.0, moonShineSize);
                 }
 
+                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
         }
@@ -348,10 +359,7 @@ export class dKankyo_sun_packet {
                 let sunSize = sunSizeBase;
                 if (i === 1)
                     sunSize *= 1.6;
-
-                this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-
+    
                 if (i === 0) {
                     this.sunTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
                 } else {
@@ -361,6 +369,9 @@ export class dKankyo_sun_packet {
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFF1FF);
                 materialParams.u_Color[ColorKind.C0].a = this.sunAlpha;
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0xFF9100FF);
+
+                this.drawSquare(ddraw, scratchMatrix, sunPos, sunSize, 1.0, 1.0);
+                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
 
                 submitScratchRenderInst(device, renderInstManager, this.materialHelperSunMoon, renderInst, viewerInput);
             }
