@@ -1010,7 +1010,12 @@ export function envcolor_init(globals: dGlobals): void {
 
     envLight.pselIdxPrev = envLight.weatherPselIdx;
     envLight.pselIdxCurr = envLight.weatherPselIdx;
-    envLight.curTime = 180.0;
+
+    // For funsies, set the time/date to something fun :)
+    const today = new Date();
+    envLight.calendarDay = today.getDay();
+    envLight.curTime = 15 * today.getHours();
+
     envLight.timeAdv = 0.02;
 
     colorFromRGBA(envLight.lightStatus[0].Color, 1.0, 0.0, 0.0, 0.0);
@@ -1174,11 +1179,6 @@ class d_kyeff extends kankyo_class {
             const today = new Date();
             envLight.curTime = 15 * today.getHours();
         }
-
-        // For funsies, we do the same in noclip :)
-        const today = new Date();
-        envLight.calendarDay = today.getDay();
-        envLight.curTime = 15 * today.getHours();
 
         if (dKy_checkEventNightStop(globals)) {
             const stag = globals.dStage_dt.stag;

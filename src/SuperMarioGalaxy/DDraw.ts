@@ -19,6 +19,8 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
         return GfxTopology.QUADS;
     else if (cmd === GX.Command.DRAW_TRIANGLE_STRIP)
         return GfxTopology.TRISTRIP;
+    else if (cmd === GX.Command.DRAW_TRIANGLES)
+        return GfxTopology.TRIANGLES;
     else
         throw "whoops";
 }
@@ -110,6 +112,7 @@ export class TDDraw extends TDDrawVtxSpec {
             const newBuffer = new Uint8Array(this.vertexData.byteLength * 2);
             newBuffer.set(new Uint8Array(this.vertexData.buffer));
             this.vertexData = new DataView(newBuffer.buffer);
+            this.recreateVertexBuffer = true;
         }
     }
 
@@ -118,6 +121,7 @@ export class TDDraw extends TDDrawVtxSpec {
             const newData = new Uint16Array(this.indexData.length * 2);
             newData.set(this.indexData);
             this.indexData = newData;
+            this.recreateIndexBuffer = true;
         }
     }
 

@@ -628,7 +628,7 @@ void main() {
         const gl = this.gl;
         // Check if row_major is broken by generating a dummy program and checking the uniform data...
         // TODO(jstpierre): Async? Some better way that doesn't block on startup?
-        const shaderVert = this._compileShader(`${this.glslVersion}
+        const shaderVert = this._compileShader(this.glslVersion + `
 precision mediump float;
 layout(row_major, std140) uniform ub_Test {
     mat4x2 u_Test;
@@ -636,7 +636,7 @@ layout(row_major, std140) uniform ub_Test {
 void main() {
     gl_Position = vec4(1);
 }`, gl.VERTEX_SHADER);
-        const shaderFrag = this._compileShader(`${this.glslVersion}
+        const shaderFrag = this._compileShader(this.glslVersion + `
 precision mediump float;
 out vec4 o_Color;
 void main() {

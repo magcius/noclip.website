@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX } from "./SComponent";
 import { vec3, mat4, vec4 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, Magenta } from "../Color";
+import { colorFromRGBA, colorFromRGBA8 } from "../Color";
 import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -22,7 +22,7 @@ import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_P
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray } from "../util";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { uShortTo2PI } from "./Grass";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -169,13 +169,12 @@ const scratchMatrix = mat4.create();
 export class dKankyo_sun_packet {
     // Shared
     private snowTexture: BTIData;
-    private materialHelperSunMoon: GXMaterialHelperGfx;
-    private materialHelperLenzflare: GXMaterialHelperGfx;
     private ddraw = new TDDraw();
 
     // Sun/Moon
     private moonTextures: BTIData[] = [];
     private sunTexture: BTIData;
+    private materialHelperSunMoon: GXMaterialHelperGfx;
     private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
@@ -185,9 +184,10 @@ export class dKankyo_sun_packet {
     // Lenzflare
     private lensHalfTexture: BTIData;
     private ringHalfTexture: BTIData;
-    private materialHelperSolid: GXMaterialHelperGfx;
+    private materialHelperLenzflare: GXMaterialHelperGfx;
+    private materialHelperLenzflareSolid: GXMaterialHelperGfx;
     public lenzflarePos = nArray(6, () => vec3.create());
-    public lenzflareAngleDeg: number;
+    public lenzflareAngle: number = 0.0;
     public distFalloff: number;
     public hideLenz: boolean = false;
 
@@ -224,6 +224,14 @@ export class dKankyo_sun_packet {
 
         mb.setZMode(false, GX.CompareType.LEQUAL, false);
         this.materialHelperLenzflare = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured'));
+
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.C0);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.materialHelperLenzflareSolid = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet solid'));
     }
 
     private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size: number, scaleX: number, texCoordScale: number): void {
@@ -371,10 +379,77 @@ export class dKankyo_sun_packet {
         else
             renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
 
+        const invDist = 1.0 - this.distFalloff;
+        const flareViz = (0.6 + (0.8 * this.visibility * sqr(invDist)));
+        const innerRad = 300 * flareViz;
+        const flareScale = 960 * flareViz * (3.0 + invDist);
+        const vizSq = sqr(this.visibility);
+        let angle0 = uShortTo2PI(0xf80a);
+        let angle1 = uShortTo2PI(0x416b);
+        for (let i = 0; i < 16; i++) {
+            ddraw.begin(GX.Command.DRAW_TRIANGLES);
+
+            let baseAngle: number;
+            if ((i & 1) !== 0) {
+                baseAngle = angle0;
+            } else {
+                baseAngle = angle1;
+            }
+
+            const arcSize = Math.abs(Math.sin(34.0 * baseAngle));
+            const arcAngleSize = uShortTo2PI(1600.0) * (0.5 + arcSize);
+            const arcAngle0 = baseAngle + arcAngleSize;
+            vec3.set(scratchVec3, innerRad * Math.sin(arcAngle0), innerRad * Math.cos(arcAngle0), 0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, this.sunPos);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            const whichScale = i & 3;
+            let outerRadScale = ((0.6 + (0.4 * arcSize)) * flareScale) * (1.5 * this.visibility);
+            if (whichScale !== 0)
+                outerRadScale *= 0.2;
+
+            let outerRadScale2: number;
+            if (whichScale === 0)
+                outerRadScale2 = 0.1;
+            else if (whichScale === 1)
+                outerRadScale2 = 1.1;
+            else if (whichScale === 2)
+                outerRadScale2 = 0.2;
+            else if (whichScale === 3)
+                outerRadScale2 = 0.4;
+            else
+                throw "whoops";
+
+            const outerRad = outerRadScale * (this.visibility * (sqr(this.visibility) + outerRadScale2));
+            vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, this.sunPos);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            angle0 += uShortTo2PI(0x1000);
+            angle1 += uShortTo2PI(0x1C71);
+
+            const arcAngle2 = baseAngle - arcAngleSize;
+            vec3.set(scratchVec3, innerRad * Math.sin(arcAngle2), innerRad * Math.cos(arcAngle2), 0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, this.sunPos);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            ddraw.end();
+        }
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 80/0xFF * vizSq * sqr(vizSq));
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
+
+        mat4.rotateZ(scratchMatrix, scratchMatrix, this.lenzflareAngle);
+
         const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
         const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
-        const vizSq = sqr(this.visibility);
-        const invDist = 1.0 - this.distFalloff;
         for (let i = 7; i >= 0; i--) {
             if (this.hideLenz && i !== 0)
                 continue;
@@ -585,6 +660,9 @@ function dKyr_lenzflare_move(globals: dGlobals): void {
         const whichLenz = i + 2;
         vec3.scaleAndAdd(pkt.lenzflarePos[i], pkt.sunPos, scratchVec3, -intensity * whichLenz);
     }
+
+    project(scratchVec3, pkt.sunPos, globals.camera);
+    pkt.lenzflareAngle = Math.atan2(scratchVec3[1], scratchVec3[0]) + Math.PI / 2;
 }
 
 function wether_move_thunder(globals: dGlobals): void {

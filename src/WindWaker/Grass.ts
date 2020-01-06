@@ -103,7 +103,7 @@ const materialParams = new MaterialParams();
 // The game uses unsigned shorts to index into cos/sin tables.
 // The max short value (2^16-1 = 65535) corresponds to 2PI
 const kUshortTo2PI = Math.PI * 2.0 / 65535.0;
-function uShortTo2PI(x: number) {
+export function uShortTo2PI(x: number) {
     return x * kUshortTo2PI;
 }
 
