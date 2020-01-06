@@ -668,8 +668,6 @@ function dKy_event_proc(globals: dGlobals): void {
     if (globals.stageName !== 'sea')
         return;
 
-    return;
-
     if (dKy_checkEventNightStop(globals)) {
         // Special case: Cursed Great Sea.
 
