@@ -25,7 +25,7 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
         throw "whoops";
 }
 
-export class TDDrawVtxSpec {
+class TDDrawVtxSpec {
     private vcd: GX_VtxDesc[] = [];
     private vat: GX_VtxAttrFmt[][] = [[]];
     protected loadedVertexLayout: LoadedVertexLayout | null = null;

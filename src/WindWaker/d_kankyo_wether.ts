@@ -499,6 +499,7 @@ export class dKankyo_sun_packet {
         const device = globals.modelCache.device;
 
         this.ddraw.beginDraw();
+        this.ddraw.allocVertices(2048);
         this.drawLenzflare(globals, this.ddraw, renderInstManager, viewerInput);
         this.drawSunMoon(globals, this.ddraw, renderInstManager, viewerInput);
         this.ddraw.endAndUpload(device, renderInstManager);
