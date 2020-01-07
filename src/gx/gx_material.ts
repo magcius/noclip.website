@@ -422,13 +422,24 @@ export class GX_Program {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
-        const cosAttn = `max(0.0, ApplyCubic(${lightName}.CosAtten.xyz, ${attn}))`;
-
-        switch (chan.attenuationFunction) {
-        case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `${cosAttn} / dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
-        case GX.AttenuationFunction.SPEC: return `${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn})`;
+        if (chan.attenuationFunction === GX.AttenuationFunction.NONE) {
+            return `
+    t_Attenuation = 1.0;`;
+        } else if (chan.attenuationFunction === GX.AttenuationFunction.SPOT) {
+            const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
+            const cosAttn = `max(0.0, ApplyAttenuation(${lightName}.CosAtten.xyz, ${attn}))`;
+            const distAttn = `dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
+            return `
+    t_Attenuation = ${cosAttn} / ${distAttn};`;
+        } else if (chan.attenuationFunction === GX.AttenuationFunction.SPEC) {
+            const attn = `(dot(t_Normal, t_LightDeltaDir) >= 0.0) ? max(0.0, dot(t_Normal, ${lightName}.Direction.xyz)) : 0.0`;
+            const cosAttn = `ApplyAttenuation(${lightName}.CosAtten.xyz, t_Attenuation)`;
+            const distAttn = `ApplyAttenuation(${lightName}.DistAtten.xyz, t_Attenuation)`;
+            return `
+    t_Attenuation = ${attn};
+    t_Attenuation = ${cosAttn} / ${distAttn};`;
+        } else {
+            throw "whoops";
         }
     }
 
@@ -467,7 +478,8 @@ export class GX_Program {
     t_LightDeltaDist2 = dot(t_LightDelta, t_LightDelta);
     t_LightDeltaDist = sqrt(t_LightDeltaDist2);
     t_LightDeltaDir = t_LightDelta / t_LightDeltaDist;
-    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;
+${this.generateLightAttnFn(chan, lightName)}
+    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * t_Attenuation * ${lightName}.Color;
 `;
             }
         } else {
@@ -1149,8 +1161,8 @@ Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
         return u_PosMtx[t_MtxIdx / 3u];
 }
 
-float ApplyCubic(vec3 t_Coeff, float t_Value) {
-    return max(dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value)), 0.0);
+float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
+    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
 }
 
 void main() {
@@ -1160,7 +1172,7 @@ void main() {
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
-    float t_LightDeltaDist2, t_LightDeltaDist;
+    float t_LightDeltaDist2, t_LightDeltaDist, t_Attenuation;
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens()}
