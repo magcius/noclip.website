@@ -23,7 +23,7 @@ export function cM_rndF(max: number): number {
 }
 
 export function cM_rndFX(max: number): number {
-    return 2.0 * (Math.random() * (max - 0.5));
+    return 2.0 * (max * (Math.random() - 0.5));
 }
 
 export function cM_atan2s(y: number, x: number): number {
