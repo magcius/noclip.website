@@ -103,12 +103,11 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number,
-            paramsX: number, paramsY: number, paramsZ: number, paramsW: number) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
-        this.frag = this.generateFrag(paramsX, paramsY, paramsZ, paramsW);
+        this.frag = this.generateFrag(combParams);
     }
 
     private generateAlphaTest(): string {
@@ -139,7 +138,7 @@ void main() {
         }
     }
 
-    private generateFrag(paramsX: number, paramsY: number, paramsZ: number, paramsW: number): string {
+    private generateFrag(combParams: vec4): string {
         const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
@@ -177,10 +176,10 @@ void main() {
             }
         }
 
-        const px = unpackParams(paramsX);
-        const py = unpackParams(paramsY);
-        const pz = unpackParams(paramsZ);
-        const pw = unpackParams(paramsW);
+        const px = unpackParams(combParams[0]);
+        const py = unpackParams(combParams[1]);
+        const pz = unpackParams(combParams[2]);
+        const pw = unpackParams(combParams[3]);
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -555,8 +554,7 @@ class DrawCallInstance {
     private createProgram(): void {
         const combParams = vec4.create();
         fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL,
-            combParams[0], combParams[1], combParams[2], combParams[3]);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -1351,7 +1349,7 @@ export class FlipbookRenderer {
         const comb = vec4.create();
         const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
         fillCombineParams(comb, 0, combine);
-        const program = new F3DEX_Program(otherModeH, otherModeL, comb[0], comb[1], comb[2], comb[3]);
+        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 

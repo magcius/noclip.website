@@ -1678,10 +1678,16 @@ class MaterialInstance {
                 }
             }
             this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
-            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode);
+            const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
+            const comb = vec4.create();
+            fillCombineParams(comb, 0, chosenCombine);
+            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode, comb);
         } else {
             this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);
-            this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode);
+            //const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
+            const comb = vec4.create(); // FIXME: No combine info is available here. What should the default be?
+            //fillCombineParams(comb, 0, chosenCombine);
+            this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode, comb);
         }
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');
@@ -1741,10 +1747,8 @@ class MaterialInstance {
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
             }
-            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
             const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-            const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            offs += fillCombineParams(comb, offs, chosenCombine);
 
             if (this.uvtx.primitive)
                 fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
