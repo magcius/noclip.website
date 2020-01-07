@@ -174,6 +174,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
             bloomParameters.blurStrength = bloomArea.objArg2 / 256;
             bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
             bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
+        } else if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
+            bloomParameters.blurStrength = 40/256;
+            bloomParameters.bokehStrength = 60/256;
+            bloomParameters.bokehCombineStrength = 110/256;
         } else {
             bloomParameters.blurStrength = 25/256;
             bloomParameters.bokehStrength = 25/256;
