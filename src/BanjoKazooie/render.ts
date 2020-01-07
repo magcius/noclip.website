@@ -44,7 +44,6 @@ layout(row_major, std140) uniform ub_DrawParams {
 };
 
 uniform ub_CombineParameters {
-    vec4 u_Params;
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 };
@@ -104,11 +103,11 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
-        this.frag = this.generateFrag();
+        this.frag = this.generateFrag(combParams);
     }
 
     private generateAlphaTest(): string {
@@ -139,7 +138,7 @@ void main() {
         }
     }
 
-    private generateFrag(): string {
+    private generateFrag(combParams: vec4): string {
         const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
@@ -150,6 +149,37 @@ void main() {
             texFiltStr = 'Bilerp';
         else
             throw "whoops";
+
+        const colorInputs: string[] = [
+            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
+            'v_Color.rgb', 'u_EnvColor.rgb', 't_One.rgb', 't_Zero.rgb'
+        ];
+
+        const multInputs: string[] = [
+            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
+            'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
+            't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
+            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
+        ];
+
+        const alphaInputs: string[] = [
+            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
+        ];
+
+        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
+            return {
+                x: (params >>> 12) & 0xf,
+                y: (params >>> 8) & 0xf,
+                z: (params >>> 4) & 0xf,
+                w: (params >>> 0) & 0xf
+            }
+        }
+
+        const px = unpackParams(combParams[0]);
+        const py = unpackParams(combParams[1]);
+        const pz = unpackParams(combParams[2]);
+        const pw = unpackParams(combParams[3]);
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -175,41 +205,20 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
-ivec4 UnpackParams(float val) {
-    int orig = int(val);
-    ivec4 params;
-    params.x = (orig >> 12) & 0xf;
-    params.y = (orig >> 8) & 0xf;
-    params.z = (orig >> 4) & 0xf;
-    params.w = (orig >> 0) & 0xf;
-
-    return params;
+vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
+    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
 }
 
-vec3 CombineColorCycle(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1, float t_Params) {
-    ivec4 p = UnpackParams(t_Params);
-    vec3 t_ColorInputs[8] = vec3[8](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_One.rgb, t_Zero.rgb
-    );
-    vec3 t_MultInputs[16] = vec3[16](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_Zero.rgb /* key */, t_CombColor.aaa,
-        t_Tex0.aaa, t_Tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
-        u_EnvColor.aaa, t_Zero.rgb /* LOD */, t_Zero.rgb /* prim LOD */, t_Zero.rgb
-    );
-
-    return (t_ColorInputs[p.x] - t_ColorInputs[p.y]) * t_MultInputs[p.z] + t_ColorInputs[p.w];
+float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
+    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
 }
 
-float CombineAlphaCycle(float combAlpha, float t_Tex0, float t_Tex1, float t_Params) {
-    ivec4 p = UnpackParams(t_Params);
-    float t_AlphaInputs[8] = float[8](
-        combAlpha, t_Tex0, t_Tex1, u_PrimColor.a,
-        v_Color.a, u_EnvColor.a, 1.0, 0.0
-    );
+vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
+    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+}
 
-    return (t_AlphaInputs[p.x] - t_AlphaInputs[p.y])* t_AlphaInputs[p.z] + t_AlphaInputs[p.w];
+float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
+    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
 }
 
 void main() {
@@ -222,14 +231,14 @@ void main() {
 #endif
 
     t_Color = vec4(
-        CombineColorCycle(t_Zero, t_Tex0, t_Tex1, u_Params.x),
-        CombineAlphaCycle(t_Zero.a, t_Tex0.a, t_Tex1.a, u_Params.y)
+        CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
+        CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
     );
 
 #ifdef TWO_CYCLE
     t_Color = vec4(
-        CombineColorCycle(t_Color, t_Tex0, t_Tex1, u_Params.z),
-        CombineAlphaCycle(t_Color.a, t_Tex0.a, t_Tex1.a, u_Params.w)
+        CombineColorCycle1(t_Color, t_Tex0, t_Tex1),
+        CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
     );
 #endif
 
@@ -543,7 +552,9 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
+        const combParams = vec4.create();
+        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -650,9 +661,8 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
@@ -1336,7 +1346,10 @@ export class FlipbookRenderer {
         let otherModeL = baseFlipbookOtherModeL;
         if (this.mode === FlipbookMode.AlphaTest)
             otherModeL |= 1; // alpha test against blend
-        const program = new F3DEX_Program(otherModeH, otherModeL);
+        const comb = vec4.create();
+        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
+        fillCombineParams(comb, 0, combine);
+        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
@@ -1454,10 +1467,9 @@ export class FlipbookRenderer {
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
-        offs += fillCombineParams(comb, offs, combine);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
     }
