@@ -1469,7 +1469,6 @@ export class FlipbookRenderer {
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
     }
