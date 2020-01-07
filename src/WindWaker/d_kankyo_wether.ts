@@ -1,9 +1,9 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek } from "./d_kankyo";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX } from "./SComponent";
 import { vec3, mat4, vec4 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8 } from "../Color";
+import { colorFromRGBA, colorFromRGBA8, Magenta, colorLerp, colorCopy } from "../Color";
 import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -21,8 +21,9 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -521,6 +522,201 @@ export class dKankyo_sun_packet {
     }
 }
 
+class VRKUMO_EFF {
+    public position = vec3.create();
+    public distFalloff: number;
+    public alpha: number;
+    public speed: number;
+    public height: number;
+
+    constructor() {
+        const angle = cM_rndF(MathConstants.TAU);
+        let dist = cM_rndF(18000.0);
+        if (dist > 15000.0)
+            dist = 14000.0 + cM_rndF(1000.0);
+        this.position[0] = dist * Math.sin(angle);
+        this.position[2] = dist * Math.cos(angle);
+        this.alpha = 0.0;
+        this.speed = 0.5 + cM_rndF(4.0);
+        this.height = 0.3 * cM_rndFX(0.3);
+    }
+}
+
+export class dKankyo_vrkumo_packet {
+    public enabled: boolean = false;
+    public count: number = 0;
+    public strength: number = 0;
+    public instances: VRKUMO_EFF[] = nArray(100, () => new VRKUMO_EFF());
+    public bounceAnimTimer: number = 0;
+    private ddraw = new TDDraw();
+    private textures: BTIData[] = [];
+    private materialHelper: GXMaterialHelperGfx;
+
+    constructor(globals: dGlobals) {
+        const tex01 = globals.resCtrl.getStageResByName(ResType.Bti, `Stage`, "cloudtx_01.bti");
+        if (tex01 === null)
+            return;
+
+        this.textures.push(tex01);
+        this.textures.push(assertExists(globals.resCtrl.getStageResByName(ResType.Bti, `Stage`, "cloudtx_02.bti")));
+        this.textures.push(assertExists(globals.resCtrl.getStageResByName(ResType.Bti, `Stage`, "cloudtx_03.bti")));
+
+        this.enabled = true;
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_vrkumo_packet'));
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        assert(this.textures.length > 0);
+
+        const envLight = globals.g_env_light;
+
+        const farPlane = globals.dStage_dt.stag.farPlane - 10000.0;
+        const ddraw = this.ddraw;
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+
+        ddraw.beginDraw();
+        ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
+
+        for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
+            for (let i = 0; i < 100; i++) {
+                const kumo = this.instances[i];
+
+                if (kumo.alpha <= 0.000001)
+                    continue;
+
+                const baseAngle = ((textureIdx + i) & 0x0F) * 1/16;
+                const theta_01 = kumo.distFalloff * (1.0 - Math.pow(baseAngle, 3)) * (0.45 + (this.strength * 0.55));
+
+                const bounceAnim = Math.sin(textureIdx + 0.0001 * this.bounceAnimTimer);
+                const sizeAnim = theta_01 + (0.06 * theta_01) * bounceAnim * kumo.distFalloff;
+                const height = sizeAnim + sizeAnim * kumo.height;
+                if (height < 0)
+                    debugger;
+                const m0 = 0.15 * sizeAnim;
+                const m1 = 0.65 * sizeAnim;
+
+                let out0 = 0, out1 = 0;
+                if (textureIdx !== 0) {
+                    const cloudRep = 0;
+                    if (cloudRep === 0) {
+                        if (textureIdx === 2) {
+                            out0 = m1;
+                            out1 = m0;
+                        }
+                    } else if (cloudRep === 1) {
+                        if (textureIdx === 1) {
+                            out0 = -m0;
+                            out1 = m0;
+                        } else if (textureIdx === 2) {
+                            out0 = -m1;
+                            out1 = m1;
+                        }
+                    } else if (cloudRep === 2) {
+                        if (textureIdx === 1) {
+                            out0 = m1;
+                            out1 = -m1;
+                        } else if (textureIdx === 2) {
+                            out0 = m0;
+                            out1 = -m1;
+                        }
+                    } else if (cloudRep === 3) {
+                        if (textureIdx === 1) {
+                            out0 = -m1;
+                        } else if (textureIdx === 2) {
+                            out0 = -m0;
+                            out1 = m0;
+                        }
+                    }
+                }
+
+                const rot = Math.atan2(kumo.position[0], kumo.position[2]) + out1;
+                const pitchBottom = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + out0;
+                const normalPitch = Math.pow(Math.min(pitchBottom / 1.9, 1.0), 3);
+                const offs0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
+                const offs1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
+
+                const pitchTop = Math.min(pitchBottom + 0.9 * height * (1.0 + -4.0 * normalPitch), 1.21);
+
+                let x = 0, y = 0, z = 0;
+
+                ddraw.begin(GX.Command.DRAW_QUADS);
+
+                // Generate a quad along a sphere around the player.
+                x = Math.cos(pitchTop) * Math.sin(rot + offs0);
+                y = Math.sin(pitchTop);
+                z = Math.cos(pitchTop) * Math.cos(rot + offs0);
+                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+                x = Math.cos(pitchTop) * Math.sin(rot - offs0);
+                y = Math.sin(pitchTop);
+                z = Math.cos(pitchTop) * Math.cos(rot - offs0);
+                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+                x = Math.cos(pitchBottom) * Math.sin(rot - offs1);
+                y = Math.sin(pitchBottom);
+                z = Math.cos(pitchBottom) * Math.cos(rot - offs1);
+                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+                x = Math.cos(pitchBottom) * Math.sin(rot + offs1);
+                y = Math.sin(pitchBottom);
+                z = Math.cos(pitchBottom) * Math.cos(rot + offs1);
+                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+
+                ddraw.end();
+
+                this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoColor, envLight.vrKumoCenterColor, kumo.distFalloff);
+                materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
+                colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
+
+                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+                submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+
+                // const ctx = getDebugOverlayCanvas2D();
+                // colorCopy(materialParams.u_Color[ColorKind.C0], Magenta, kumo.alpha);
+                // drawWorldSpacePoint(ctx, viewerInput.camera, kumo.position, materialParams.u_Color[ColorKind.C0], 300 * Math.abs(kumo.height));
+            }
+        }
+
+        ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 const scratchVec3 = vec3.create();
 const scratchVec4 = vec4.create();
 
@@ -744,16 +940,162 @@ export function dKyw_wether_move_draw(globals: dGlobals): void {
     }
 }
 
+function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    dKyw_get_wind_vecpow(scratchVec3, envLight);
+
+    const pkt = envLight.vrkumoPacket!;
+
+    let skyboxOffsY: number;
+    if (globals.stageName === "M_DragB") {
+        vec3.set(scratchVec3, -1.0, 0.0, 0.0);
+        skyboxOffsY = 300.0;
+    } else {
+        skyboxOffsY = 1000.0 + pkt.strength * -500.0;
+    }
+
+    {
+        const fili = globals.roomStatus[globals.mStayNo].fili;
+        let skyboxY = 0.0;
+        if (fili !== null)
+            skyboxY = fili.skyboxY;
+        if (globals.stageName === 'Siren' && globals.mStayNo === 17)
+            skyboxY = -14101.0;
+        skyboxOffsY -= 0.09 * (globals.cameraPosition[1] - skyboxY);
+    }
+
+    for (let i = 0; i < 100; i++) {
+        const kumo = pkt.instances[i];
+
+        {
+            const distance = Math.hypot(kumo.position[0], kumo.position[2]);
+            if (distance > 15000.0) {
+                if (distance <= 15100.0) {
+                    kumo.position[0] *= -1;
+                    kumo.position[2] *= -1;
+                } else {
+                    kumo.position[0] = cM_rndFX(14000.0);
+                    kumo.position[2] = cM_rndFX(14000.0);
+                }
+                kumo.alpha = 0.0;
+            }
+
+            const strengthVelocity = 4.0 + pkt.strength * 4.3;
+            if (kumo.alpha > 0) {
+                const velocity = strengthVelocity * kumo.distFalloff * kumo.speed * deltaTimeInFrames;
+                vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+            } else {
+                const velocity = strengthVelocity + (i / 1000.0) * strengthVelocity * deltaTimeInFrames;
+                vec3.scaleAndAdd(kumo.position, kumo.position, scratchVec3, velocity);
+            }
+        }
+
+        const distance = Math.hypot(kumo.position[0], kumo.position[2]);
+        const distNormalized = Math.min(distance / 15000.0, 1.0);
+
+        const strengthY = 3000.0 + pkt.strength * -1000.0;
+        const distCubic = 1.0 - Math.pow(distNormalized, 3);
+        kumo.position[1] = (500.0 * (i / 100.0)) + skyboxOffsY + (strengthY * distCubic);
+
+        kumo.distFalloff = 1.0 - Math.pow(distNormalized, 6);
+
+        let alphaBaseTarget: number;
+        let alphaMaxVel = 1.0;
+        if (globals.stageName === 'M_DragB') {
+            kumo.alpha = 1.0;
+            alphaBaseTarget = 1.0;
+        } else {
+            if (i < pkt.count) {
+                alphaMaxVel = 0.1;
+                if (kumo.distFalloff >= 0.05 && kumo.distFalloff < 0.2)
+                    alphaBaseTarget = (kumo.distFalloff - 0.05) / 0.15;
+                else if (kumo.distFalloff < 0.2)
+                    alphaBaseTarget = 0.0;
+                else
+                    alphaBaseTarget = 1.0 + pkt.strength * -0.55;
+            } else {
+                alphaBaseTarget = 0.0;
+                alphaMaxVel = 0.005;
+            }
+        }
+
+        let alphaTarget: number = 0.0;
+        if (distCubic > 0.98)
+            alphaTarget = 0.0;
+        else if (distCubic > 0.88)
+            alphaTarget = alphaBaseTarget * ((0.98 - distCubic) / 0.10);
+        else
+            alphaTarget = alphaBaseTarget;
+
+        kumo.alpha = cLib_addCalc(kumo.alpha, alphaTarget, 0.2 * deltaTimeInFrames, alphaMaxVel, 0.01);
+    }
+
+    pkt.bounceAnimTimer += 200.0 * deltaTimeInFrames;
+}
+
+function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.vrkumoPacket === null) {
+        envLight.vrkumoPacket = new dKankyo_vrkumo_packet(globals);
+
+        // envcolor_init has this
+        if (dKy_checkEventNightStop(globals))
+            envLight.vrkumoPacket.strength = 1.0;
+    }
+
+    const pkt = envLight.vrkumoPacket;
+
+    if (!pkt.enabled)
+        return;
+
+    if (globals.stageName === 'Name') {
+        pkt.count = 70;
+    } else if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible) {
+        pkt.count = 0;
+    } else {
+        if (((envLight.pselIdxCurr === 1 || envLight.pselIdxCurr === 2) && envLight.blendPsel > 0.0) || ((envLight.pselIdxPrev === 1 || envLight.pselIdxPrev === 2) && envLight.blendPsel < 1.0)) {
+            pkt.strength = cLib_addCalc(pkt.strength, 1.0, 0.1, 0.003, 0.0000007);
+        } else {
+            pkt.strength = cLib_addCalc(pkt.strength, 0.0, 0.08, 0.002, 0.00000007);
+        }
+
+        if (globals.stageName === 'sea' && globals.mStayNo === 9) {
+            vec3.set(scratchVec3, -180000.0, 750.0, -200000.0);
+            const sqrDist = vec3.squaredDistance(globals.cameraPosition, scratchVec3);
+            if (sqrDist < sqr(2500))
+                pkt.strength = 1.0;
+        }
+
+        pkt.count = 50 + (50 * pkt.strength);
+        if (globals.stageName === 'GTower')
+            pkt.count = 0;
+    }
+
+    vrkumo_move(globals, deltaTimeInFrames);
+}
+
+export function dKyw_wether_move_draw2(globals: dGlobals, deltaTimeInFrames: number): void {
+    wether_move_vrkumo(globals, deltaTimeInFrames);
+}
+
 export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     // Normally this just pushes packets which draw at the right time. We can just draw now.
 
     const envLight = globals.g_env_light;
 
     if (globals.stageName !== 'Name') {
-        if (envLight.sunPacket !== null) {
+        if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
-        }
     }
+}
+
+export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.vrkumoPacket !== null && envLight.vrkumoPacket.enabled)
+        envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
 }
 
 export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
@@ -762,6 +1104,10 @@ export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
 
 export function dKyw_get_wind_power(envLight: dScnKy_env_light_c): number {
     return envLight.windPower;
+}
+
+export function dKyw_get_wind_vecpow(dst: vec3, envLight: dScnKy_env_light_c): void {
+    vec3.scale(dst, envLight.windVec, envLight.windPower);
 }
 
 export class d_thunder extends kankyo_class {

@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2 } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -125,9 +125,9 @@ export class dScnKy_env_light_c {
     public thunderFlashTimer: number = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 
-    // Sun/Moon
-    // Also contains lenzflare
+    // Wether packets
     public sunPacket: dKankyo_sun_packet | null = null;
+    public vrkumoPacket: dKankyo_vrkumo_packet | null = null;
 }
 
 export class LIGHT_INFLUENCE {
@@ -1000,13 +1000,10 @@ export function envcolor_init(globals: dGlobals): void {
     const schejuleName = `l_time_attribute`;
     envLight.schejule = new dScnKy__Schedule(globals.findExtraSymbolData(`d_kankyo_data.o`, schejuleName));
 
-    if (dKy_checkEventNightStop(globals)) {
-        // Something vrkumo
+    if (dKy_checkEventNightStop(globals))
         envLight.weatherPselIdx = 1;
-    } else {
-        // Something vrkumo
+    else
         envLight.weatherPselIdx = 0;
-    }
 
     envLight.pselIdxPrev = envLight.weatherPselIdx;
     envLight.pselIdxCurr = envLight.weatherPselIdx;
@@ -1014,7 +1011,8 @@ export function envcolor_init(globals: dGlobals): void {
     // For funsies, set the time/date to something fun :)
     const today = new Date();
     envLight.calendarDay = today.getDay();
-    envLight.curTime = 15 * today.getHours();
+    // envLight.curTime = 15 * today.getHours();
+    envLight.curTime = 180;
 
     envLight.timeAdv = 0.02;
 
@@ -1221,6 +1219,31 @@ class d_kyeff extends kankyo_class {
     }
 }
 
+class d_kyeff2 extends kankyo_class {
+    public static PROCESS_NAME = fpc__ProcessName.d_kyeff2;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        // dKyw_wether_init2(globals);
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        dKyw_wether_move_draw2(globals, deltaTimeInFrames);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        dKyw_wether_draw2(globals, renderInstManager, viewerInput);
+    }
+
+    public delete(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+        const device = globals.modelCache.device;
+
+        if (envLight.vrkumoPacket !== null)
+            envLight.vrkumoPacket.destroy(device);
+    }
+}
+
 export function dKankyo_create(globals: dGlobals): void {
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kankyo, null);
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff, null);
@@ -1239,4 +1262,5 @@ export function dKy__RegisterConstructors(globals: fGlobals): void {
 
     R(d_kankyo);
     R(d_kyeff);
+    R(d_kyeff2);
 }

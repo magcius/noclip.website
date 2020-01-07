@@ -4,7 +4,7 @@
 
 import * as GX from '../gx/gx_enum';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { assert, assertExists } from '../util';
+import { assert, assertExists, align } from '../util';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { createInputLayout } from '../gx/gx_render';
@@ -109,16 +109,18 @@ export class TDDraw extends TDDrawVtxSpec {
 
     private ensureVertexBufferData(newByteSize: number): void {
         if (newByteSize > this.vertexData.byteLength) {
-            const newBuffer = new Uint8Array(this.vertexData.byteLength * 2);
-            newBuffer.set(new Uint8Array(this.vertexData.buffer));
-            this.vertexData = new DataView(newBuffer.buffer);
+            const newByteSizeAligned = align(newByteSize, this.vertexData.byteLength);
+            const newData = new Uint8Array(newByteSizeAligned);
+            newData.set(new Uint8Array(this.vertexData.buffer));
+            this.vertexData = new DataView(newData.buffer);
             this.recreateVertexBuffer = true;
         }
     }
 
     private ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
-            const newData = new Uint16Array(this.indexData.length * 2);
+            const newSizeAligned = align(newSize, this.indexData.byteLength);
+            const newData = new Uint16Array(newSizeAligned);
             newData.set(this.indexData);
             this.indexData = newData;
             this.recreateIndexBuffer = true;
@@ -156,14 +158,20 @@ export class TDDraw extends TDDrawVtxSpec {
         this.ensureVertexBufferData(vertexCount * stride);
     }
 
+    public allocPrimitives(type: GX.Command, num: number): void {
+        const vertexCount = this.currentVertex + 1 + num;
+        const topology = getGfxToplogyFromCommand(type);
+        const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
+        this.ensureVertexBufferData(vertexCount * stride);
+        this.ensureIndexBufferData(getTriangleIndexCountForTopologyIndexCount(topology, vertexCount));
+    }
+
     public begin(type: GX.Command): void {
         this.currentPrim = type;
         this.currentPrimVertex = -1;
     }
 
     public position3f32(x: number, y: number, z: number): void {
-        // TODO(jstpierre): Verify
-
         ++this.currentVertex;
         ++this.currentPrimVertex;
         this.allocVertices(0);
