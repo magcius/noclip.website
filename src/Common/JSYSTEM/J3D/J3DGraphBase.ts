@@ -210,7 +210,6 @@ export class ShapeInstance {
 }
 
 export class MaterialInstanceState {
-    public colorOverrides: Color[] = [];
     public lights = nArray(8, () => new GX_Material.Light());
     public textureMappings: TextureMapping[];
 }
@@ -352,6 +351,7 @@ export class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public visible: boolean = true;
     public sortKey: number = 0;
+    public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
 
     constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         this.setMaterialData(materialData, materialHacks);
@@ -368,6 +368,10 @@ export class MaterialInstance {
 
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks) {
         this.materialHelper.setMaterialHacks(materialHacks);
+    }
+
+    public setColorOverride(i: ColorKind, color: Color | null): void {
+        this.colorOverrides[i] = color;
     }
 
     public setColorWriteEnabled(v: boolean): void {
@@ -419,11 +423,11 @@ export class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: Color, clampTo8Bit: boolean): void {
+    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, clampTo8Bit: boolean): void {
         if (this.colorCalc[i]) {
             this.colorCalc[i]!.calcColor(dst);
-        } else if (materialInstanceState.colorOverrides[i] !== undefined) {
-            colorCopy(dst, materialInstanceState.colorOverrides[i]);
+        } else if (this.colorOverrides[i] !== null) {
+            colorCopy(dst, this.colorOverrides[i]!);
         } else {
             colorCopy(dst, fallbackColor);
         }
@@ -667,18 +671,18 @@ export class MaterialInstance {
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], true);
+        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], false);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -1170,11 +1174,9 @@ export class J3DModelInstance {
      *
      * To unset a color override, pass {@constant undefined} as for {@param color}.
      */
-    public setColorOverride(colorKind: ColorKind, color: Color | undefined): void {
-        if (color !== undefined)
-            this.materialInstanceState.colorOverrides[colorKind] = color;
-        else
-            delete this.materialInstanceState.colorOverrides[colorKind];
+    public setColorOverride(colorKind: ColorKind, color: Color | null): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setColorOverride(colorKind, color);
     }
 
     /**

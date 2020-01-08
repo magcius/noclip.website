@@ -14,7 +14,7 @@ import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
-import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_power } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
 
 // Framework'd actors
@@ -607,7 +607,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             return;
 
         const windVec = dKyw_get_wind_vec(envLight);
-        const windPower = dKyw_get_wind_power(envLight);
+        const windPower = dKyw_get_wind_pow(envLight);
 
         let windX = windVec[0];
         let windZ = windVec[2];

@@ -1,8 +1,8 @@
 
 import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
-import { cM_rndF, cLib_addCalc, cM_rndFX } from "./SComponent";
-import { vec3, mat4, vec4 } from "gl-matrix";
+import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
+import { vec3, mat4, vec4, vec2 } from "gl-matrix";
 import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy } from "../Color";
 import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
@@ -21,8 +21,9 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assertExists, assert } from "../util";
+import { nArray, assertExists, assert, hexzero } from "../util";
 import { uShortTo2PI } from "./Grass";
+import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -951,6 +952,28 @@ export class dKankyo_rain_packet {
     }
 }
 
+class WIND_EFF {
+    public emitter: JPABaseEmitter | null = null;
+    public state: number = 0;
+    public swerveAngleXZ: number = 0;
+    public swerveAngleY: number = 0;
+    public alpha: number = 0;
+    public loopDeLoopCounter: number = 0;
+    public swerveAnimCounter: number = 0;
+    public doLoopDeLoop: boolean = false;
+    public stateTimer: number = 0;
+    public basePos = vec3.create();
+    public animPos = vec3.create();
+}
+
+export class dKankyo__Windline {
+    // Modification for noclip: Increased the number of possible wind lines from 30 to 50.
+    public windEff: WIND_EFF[] = nArray(50, () => new WIND_EFF());
+    public count: number = 0;
+    public frameCounter: number = 0;
+    public hasCustomWindPower: boolean = false;
+}
+
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -1131,12 +1154,205 @@ function wether_move_thunder(globals: dGlobals): void {
     }
 }
 
-function wether_move_windline(globals: dGlobals): void {
+function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    const pkt = envLight.windline!;
+    const windVec = dKyw_get_wind_vec(envLight);
+    const windPow = dKyw_get_wind_pow(envLight);
+
+    const hasCustomWindPower = envLight.customWindPower > 0.0;
+
+    if (hasCustomWindPower !== pkt.hasCustomWindPower) {
+        pkt.hasCustomWindPower = hasCustomWindPower;
+
+        // Reset emitters.
+        for (let i = 0; i < pkt.windEff.length; i++) {
+            const eff = pkt.windEff[i];
+            if (eff.emitter !== null) {
+                eff.emitter.deleteAllParticle();
+                eff.emitter = null;
+                eff.state = 0;
+            }
+        }
+    }
+
+    let count: number;
+    let swerveAnimAmount: number;
+    let swerveMagnitudeScale: number;
+    let swerveSize: number;
+    let randomPosScale: number;
+    let offsetRandom: number;
+
+    if (hasCustomWindPower) {
+        count = 9;
+        swerveAnimAmount = uShortTo2PI(8.0);
+        swerveMagnitudeScale = 200.0;
+        swerveSize = 8.0;
+        randomPosScale = 160.0;
+        offsetRandom = 160.0;
+    } else {
+        count = pkt.count;
+        swerveAnimAmount = uShortTo2PI(800.0);
+        swerveMagnitudeScale = 250.0;
+        swerveSize = 80.0;
+        randomPosScale = 2000.0;
+        offsetRandom = 2500.0;
+    }
+
+    // Modification for noclip: Increase the number of windlines allowed.
+    count *= 4;
+
+    const oldCounter = (pkt.frameCounter) | 0;
+    pkt.frameCounter += deltaTimeInFrames;
+    const g_Counter = (pkt.frameCounter) | 0;
+    if (oldCounter === g_Counter)
+        return;
+
+    for (let i = 0; i < pkt.windEff.length; i++) {
+        const eff = pkt.windEff[i];
+
+        if (i >= count && eff.state === 0)
+            continue;
+
+        if (eff.state === 0) {
+            // Stagger the particles.
+            // TODO(jstpierre): Figure out why the original version doesn't work.
+            // const shouldSpawn = hasCustomWindPower || ((g_Counter >>> 4) & 0x07) !== (i & 3);
+            const shouldSpawn = hasCustomWindPower || ((((g_Counter / 8) | 0) % count) === i);
+            if (windPow >= 0.3 && shouldSpawn) {
+                if (hasCustomWindPower) {
+                    vec3.copy(eff.basePos, globals.playerPosition);
+                    eff.basePos[1] += 200.0;
+                } else {
+                    dKy_set_eyevect_calc2(globals, eff.basePos, 4000.0, 4000.0);
+                    eff.basePos[1] += 1000.0;
+                }
+
+                // Modification for noclip: Increase the ranges of spawning.
+                vec3.set(eff.animPos, cM_rndFX(randomPosScale * 5), cM_rndFX(randomPosScale * 3), cM_rndFX(randomPosScale * 5));
+                // Offset it a bit by the inverse of the wind vector, so it will travel along the wind.
+                vec3.scaleAndAdd(eff.animPos, eff.animPos, windVec, -(offsetRandom + (offsetRandom * cM_rndF(1.0))));
+
+                eff.swerveAnimCounter = cM_rndF(MathConstants.TAU);
+
+                if (!hasCustomWindPower) {
+                    // Ground check.
+                }
+
+                // TODO(jstpierre): dPa_control_c
+                const device = globals.modelCache.device, cache = globals.modelCache.cache;
+                eff.emitter = globals.renderer.effectSystem.createBaseEmitter(device, cache, 0x31);
+                vec3.add(eff.emitter.globalTranslation, eff.basePos, eff.animPos);
+
+                let effScale = hasCustomWindPower ? 0.14 : 1.0;
+                eff.emitter.globalColorPrm.a = 0.0;
+                // Modification for noclip: Increase the scale to reduce aliasing.
+                effScale *= 1.8;
+                vec3.set(eff.emitter.globalScale, effScale, effScale, effScale);
+                eff.emitter.setGlobalScale(eff.emitter.globalScale);
+
+                eff.state = 1;
+
+                eff.swerveAngleXZ = Math.atan2(windVec[0], windVec[2]);
+                eff.swerveAngleY = Math.atan2(windVec[1], Math.hypot(windVec[0], windVec[2]));
+
+                eff.loopDeLoopCounter = 0;
+                eff.doLoopDeLoop = cM_rndF(1.0) < 0.2;
+            }
+        } else if (eff.state === 1 || eff.state === 2) {
+            const emitter = eff.emitter!;
+
+            eff.swerveAnimCounter += swerveAnimAmount;
+
+            const swerveAnimMag = uShortTo2PI((swerveMagnitudeScale - ((0.2 * swerveMagnitudeScale) * (1.0 - windPow))));
+            const swerveAngleChange = deltaTimeInFrames * swerveAnimMag * Math.sin(eff.swerveAnimCounter);
+            eff.swerveAngleY += swerveAngleChange;
+            eff.swerveAngleXZ += (swerveAngleChange * ((i & 1) ? 1 : -1));
+
+            if (eff.stateTimer <= 0.5 || !eff.doLoopDeLoop) {
+                const angleXZTarget = Math.atan2(windVec[0], windVec[2]);
+                const angleYTarget = Math.atan2(windVec[1], Math.hypot(windVec[0], windVec[2]));
+                eff.swerveAngleXZ = cLib_addCalcAngleRad(eff.swerveAngleXZ, angleXZTarget, 10, uShortTo2PI(1000), uShortTo2PI(1));
+                eff.swerveAngleY = cLib_addCalcAngleRad(eff.swerveAngleY, angleYTarget, 10, uShortTo2PI(1000), uShortTo2PI(1));
+            } else {
+                // noclip modification: Make the loop a bit bigger.
+                const loopDeLoopAngle = uShortTo2PI(0x0E10) / 1.8;
+                eff.loopDeLoopCounter += loopDeLoopAngle;
+                eff.swerveAngleY += loopDeLoopAngle;
+
+                if (eff.loopDeLoopCounter > uShortTo2PI(0xEC77)) {
+                    eff.doLoopDeLoop = false;
+                }
+            }
+
+            const swerveT = clamp(eff.swerveAnimCounter / MathConstants.TAU, 0.0, 1.0);
+            const swervePosMag = (1.3 * swerveSize - (0.2 * swerveSize * (1.0 - windPow))) * swerveT;
+
+            // Swerve coordinates
+            vec3.set(scratchVec3,
+                Math.cos(eff.swerveAngleY) * Math.sin(eff.swerveAngleXZ),
+                Math.sin(eff.swerveAngleY),
+                Math.cos(eff.swerveAngleY) * Math.cos(eff.swerveAngleXZ),
+            );
+
+            vec3.scaleAndAdd(eff.animPos, eff.animPos, scratchVec3, swervePosMag * deltaTimeInFrames);
+            vec3.add(emitter.globalTranslation, eff.basePos, eff.animPos);
+
+            const dist = vec3.distance(emitter.globalTranslation, globals.cameraPosition);
+            const distFade = Math.min(dist / 200.0, 1.0);
+
+            const colorAvg = (envLight.bgCol[0].K0.r + envLight.bgCol[0].K0.g + envLight.bgCol[0].K0.b) / 3;
+            const alphaFade = Math.max(windPow * (distFade * colorAvg * colorAvg), 0.5);
+            emitter.globalColorPrm.a = alphaFade * eff.alpha;
+
+            const maxVel = 0.08 + (0.008 * (i / 30));
+            if (eff.state === 1) {
+                eff.stateTimer = cLib_addCalc(eff.stateTimer, 1.0, 0.3, 0.1 * maxVel, 0.01);
+
+                if (eff.stateTimer >= 1.0)
+                    eff.state = 2;
+
+                if (eff.stateTimer > 0.5)
+                    eff.alpha = cLib_addCalc(eff.alpha, 1.0, 0.5, 0.05, 0.001);
+            } else {
+                // Modification for noclip: Increase the max hangtime by a lot.
+                // const speed = 0.4;
+                const speed = 0.4;
+                eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
+                if (eff.stateTimer <= 0.0) {
+                    emitter.deleteAllParticle();
+                    emitter.maxFrame = -1;
+                    emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+                    eff.emitter = null;
+                    eff.state = 0;
+                }
+
+                if (eff.stateTimer < 0.5)
+                    eff.alpha = cLib_addCalc(eff.alpha, 0.0, 0.5, 0.05, 0.001);
+            }
+        }
+    }
 }
 
-export function dKyw_wether_move(globals: dGlobals): void {
+function wether_move_windline(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    const windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
+    if (windlineCount <= 0.0)
+        return;
+
+    if (envLight.windline === null)
+        envLight.windline = new dKankyo__Windline();
+
+    envLight.windline.count = windlineCount;
+
+    dKyr_windline_move(globals, deltaTimeInFrames);
+}
+
+export function dKyw_wether_move(globals: dGlobals, deltaTimeInFrames: number): void {
     wether_move_thunder(globals);
-    wether_move_windline(globals);
+    wether_move_windline(globals, deltaTimeInFrames);
 }
 
 function wether_move_sun(globals: dGlobals): void {
@@ -1417,7 +1633,7 @@ export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
     return envLight.windVec;
 }
 
-export function dKyw_get_wind_power(envLight: dScnKy_env_light_c): number {
+export function dKyw_get_wind_pow(envLight: dScnKy_env_light_c): number {
     return envLight.windPower;
 }
 

@@ -10,11 +10,12 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { KonstColorSel } from "../gx/gx_enum";
 
 export const enum LightType {
     Actor = 0,
@@ -103,6 +104,7 @@ export class dScnKy_env_light_c {
     // Wind
     public windVec = vec3.fromValues(1.0, 0.0, 0.0);
     public windPower = 1.0;
+    public customWindPower = 0.0;
 
     // TODO(jstpierre): Move these weather states to their own structs?
 
@@ -130,6 +132,7 @@ export class dScnKy_env_light_c {
     public sunPacket: dKankyo_sun_packet | null = null;
     public vrkumoPacket: dKankyo_vrkumo_packet | null = null;
     public rainPacket: dKankyo_rain_packet | null = null;
+    public windline: dKankyo__Windline | null = null;
 
     public eventNightStop: boolean = false;
 }
@@ -1209,7 +1212,7 @@ class d_kyeff extends kankyo_class {
         if (globals.stageName === 'Name') {
             // menu_vrbox_set();
         } else {
-            dKyw_wether_move(globals);
+            dKyw_wether_move(globals, deltaTimeInFrames);
         }
         dKyw_wether_move_draw(globals);
     }

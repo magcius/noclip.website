@@ -1,5 +1,5 @@
 
-import { clamp } from "../MathHelpers";
+import { clamp, MathConstants } from "../MathHelpers";
 
 function clampAbs(v: number, min: number, max: number): number {
     return Math.sign(v) * clamp(Math.abs(v), min, max);
@@ -16,6 +16,16 @@ export function cLib_addCalc(src: number, target: number, speed: number, maxVel:
 
 export function cLib_addCalc2(src: number, target: number, speed: number, maxVel: number): number {
     return src + clampAbs(speed * (target - src), 0.0, maxVel);
+}
+
+export function cLib_addCalcAngleRad(src: number, target: number, speed: number, maxVel: number, minVel: number): number {
+    const da = (target - src) % MathConstants.TAU;
+    const delta = (2*da) % MathConstants.TAU - da;
+    const vel = clampAbs(delta / speed, minVel, maxVel);
+    if (Math.abs(vel) > Math.abs(delta))
+        return target;
+    else
+        return src + vel;
 }
 
 export function cM_rndF(max: number): number {

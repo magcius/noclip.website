@@ -1374,7 +1374,9 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'Ylsic') fetchArchive(`Ylsic`).then((rarc) => buildModel(rarc, `bdl/ylsic.bdl`));
     else if (actor.name === 'Yllic') fetchArchive(`Yllic`).then((rarc) => buildModel(rarc, `bdl/yllic.bdl`));
     else if (actor.name === 'Ykzyg') fetchArchive(`Ykzyg`).then((rarc) => {
-        buildModel(rarc, `bdlm/qkzyg.bdl`).bindTTK1(parseBTK(rarc, `btk/qkzyg.btk`));
+        const m = buildModel(rarc, `bdlm/qkzyg.bdl`);
+        m.bindTTK1(parseBTK(rarc, `btk/qkzyg.btk`));
+        m.lightTevColorType = LightType.BG0;
         // TODO(jstpierre): ymnkz00
     });
     else if (actor.name === 'Ygush00' || actor.name === 'Ygush01' || actor.name === 'Ygush02') fetchArchive(`Ygush00`).then((rarc) => buildModel(rarc, `bdlm/ygush00.bdl`).bindTTK1(parseBTK(rarc, `btk/ygush00.btk`)));
