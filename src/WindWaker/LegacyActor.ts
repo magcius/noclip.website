@@ -894,7 +894,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         const jf = buildModel(rarc, `bdl/ajavf.bdl`);
         jf.modelInstance.getTextureMappingReference('dmTxa_jav_a')!.copy(txa);
     });
-    else if (actor.name === 'koisi1') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
+    else if (actor.name === 'koisi1') fetchArchive(`Always`).then((rarc) => buildModel(rarc, `bdl/obm_koisi1.bdl`));
     // Bigger trees
     else if (actor.name === 'lwood') fetchArchive(`Lwood`).then((rarc) => {
         const b = buildModel(rarc, `bdl/alwd.bdl`);
@@ -1045,7 +1045,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'FTree') fetchArchive(`Vmr`).then((rarc) => buildModel(rarc, `bdlm/vmrty.bdl`).bindANK1(parseBCK(rarc, `bck/vmrty.bck`)));
     // Animals
     else if (actor.name === 'DmKmm') fetchArchive(`Demo_Kmm`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
-    else if (actor.name === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
+    // else if (actor.name === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
     else if (actor.name === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`));
     else if (actor.name === 'Pig') fetchArchive(`Kb`).then((rarc) => buildModel(rarc, `bdlm/pg.bdl`));
     else if (actor.name === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
