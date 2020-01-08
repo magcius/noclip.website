@@ -37,7 +37,7 @@ abstract class mDoExt_baseAnm<T extends AnimationBase> {
 
     public play(deltaTimeFrames: number): boolean {
         this.frameCtrl.update(deltaTimeFrames);
-        const hasStopped = !!(this.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped) && this.frameCtrl.speedInFrames !== 0;
+        const hasStopped = !!(this.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped) && (this.frameCtrl.speedInFrames === 0);
         return hasStopped;
     }
 

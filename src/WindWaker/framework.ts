@@ -119,6 +119,7 @@ function fpcDt_Handler(globals: fGlobals, globalUserData: GlobalUserData): void 
         arrayRemove(globals.liQueue[pc.pi.listID], pc);
         pc.delete(globalUserData);
     }
+    globals.dtQueue.length = 0;
 }
 
 function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
@@ -313,7 +314,7 @@ export class base_process_class {
         this.pi.layerID = profile.getUint32(0x00);
         this.pi.listID = profile.getUint16(0x04);
         this.pi.listIndex = profile.getUint16(0x06);
-        this.processName = profile.getUint32(0x08);
+        this.processName = profile.getUint16(0x08);
         this.parameters = profile.getUint32(0x18);
     }
 

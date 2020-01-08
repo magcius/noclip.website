@@ -905,7 +905,7 @@ export function dKy_setLight(globals: dGlobals): void {
         vec3.copy(light1.Position, eflight.pos);
 
         if (eflight.fluctuation >= 1000.0) {
-            light1.Color.r = eflight.fluctuation - 1000.0;
+            light1.Color.g = eflight.fluctuation - 1000.0;
         } else {
             let influence: number;
             if (eflight.power > 0.0)
@@ -916,10 +916,10 @@ export function dKy_setLight(globals: dGlobals): void {
             influence = Math.min(20.0 * (1.0 - influence), 1.0);
             const base = 255 - (baseLight.fluctuation / 3.0) * influence;
             const target = lerp(base, 255, cM_rndF(1.0)) / 255.0;
-            light1.Color.r = cLib_addCalc2(light1.Color.r, target, 0.5, 20.0);
+            light1.Color.g = cLib_addCalc2(light1.Color.g, target, 0.5, 20.0);
         }
     } else {
-        light1.Color.r = 0.0;
+        light1.Color.g = 0.0;
     }
 
     // Light loading is done in setTev
@@ -1011,8 +1011,7 @@ export function envcolor_init(globals: dGlobals): void {
     // For funsies, set the time/date to something fun :)
     const today = new Date();
     envLight.calendarDay = today.getDay();
-    // envLight.curTime = 15 * today.getHours();
-    envLight.curTime = 180;
+    envLight.curTime = 15 * today.getHours();
 
     envLight.timeAdv = 0.02;
 
