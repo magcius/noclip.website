@@ -166,9 +166,12 @@ export class TDDraw extends TDDrawVtxSpec {
         this.ensureIndexBufferData(getTriangleIndexCountForTopologyIndexCount(topology, vertexCount));
     }
 
-    public begin(type: GX.Command): void {
+    public begin(type: GX.Command, num: number | null = null): void {
         this.currentPrim = type;
         this.currentPrimVertex = -1;
+
+        if (num !== null)
+            this.allocPrimitives(type, num);
     }
 
     public position3f32(x: number, y: number, z: number): void {

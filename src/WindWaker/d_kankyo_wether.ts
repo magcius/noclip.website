@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX } from "./SComponent";
 import { vec3, mat4, vec4 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, Magenta, colorLerp, colorCopy } from "../Color";
+import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy } from "../Color";
 import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -23,7 +23,6 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -166,10 +165,25 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
 }
 
+export class dKankyo__CommonTextures {
+    public snowTexture: BTIData;
+
+    constructor(globals: dGlobals) {
+        const resCtrl = globals.resCtrl;
+
+        const snowData = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x81);
+        this.snowTexture = loadRawTexture(globals, snowData, 0x40, 0x40, GX.TexFormat.I8, GX.WrapMode.CLAMP, GX.WrapMode.CLAMP);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.snowTexture.destroy(device);
+    }
+}
+
 const scratchMatrix = mat4.create();
+
 export class dKankyo_sun_packet {
     // Shared
-    private snowTexture: BTIData;
     private ddraw = new TDDraw();
 
     // Sun/Moon
@@ -202,9 +216,6 @@ export class dKankyo_sun_packet {
         this.sunTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x86);
         this.lensHalfTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x82);
         this.ringHalfTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x85);
-
-        const snowData = resCtrl.getObjectRes(ResType.Raw, `Always`, 0x81);
-        this.snowTexture = loadRawTexture(globals, snowData, 0x40, 0x40, GX.TexFormat.I8, GX.WrapMode.CLAMP, GX.WrapMode.CLAMP);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -265,7 +276,7 @@ export class dKankyo_sun_packet {
         ddraw.end();
     }
 
-    public drawSunMoon(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    private drawSunMoon(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = globals.modelCache.device;
 
         const envLight = globals.g_env_light;
@@ -324,7 +335,7 @@ export class dKankyo_sun_packet {
                 } else {
                     mat4.rotateZ(scratchMatrix, scratchMatrix, MathConstants.DEG_TO_RAD * 50 * scaleX);
 
-                    this.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                    envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
                     colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFCF4C);
                     materialParams.u_Color[ColorKind.C0].a *= this.moonAlpha;
@@ -364,7 +375,7 @@ export class dKankyo_sun_packet {
                 if (i === 0) {
                     this.sunTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
                 } else {
-                    this.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                    envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
                 }
 
                 colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFF1FF);
@@ -380,9 +391,11 @@ export class dKankyo_sun_packet {
     }
 
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
         if (this.visibility <= 0.1)
             return;
+
+        const device = globals.modelCache.device;
+        const envLight = globals.g_env_light;
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
@@ -492,7 +505,7 @@ export class dKankyo_sun_packet {
             const renderInst = ddraw.makeRenderInst(device, renderInstManager);
 
             if (i === 0) {
-                this.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+                envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
             } else if (i === 1) {
                 this.ringHalfTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
             } else if (i >= 2) {
@@ -518,7 +531,7 @@ export class dKankyo_sun_packet {
     }
 
     public destroy(device: GfxDevice): void {
-        this.snowTexture.destroy(device);
+        this.ddraw.destroy(device);
     }
 }
 
@@ -596,7 +609,11 @@ export class dKankyo_vrkumo_packet {
         ddraw.beginDraw();
         ddraw.allocPrimitives(GX.Command.DRAW_QUADS, 4*3*100);
 
+        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
+
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
+            this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
+
             for (let i = 0; i < 100; i++) {
                 const kumo = this.instances[i];
 
@@ -695,11 +712,8 @@ export class dKankyo_vrkumo_packet {
 
                 ddraw.end();
 
-                this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
-
                 colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoColor, envLight.vrKumoCenterColor, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
-                colorFromRGBA(materialParams.u_Color[ColorKind.C1], 0, 0, 0, 0);
 
                 const renderInst = ddraw.makeRenderInst(device, renderInstManager);
                 submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
@@ -714,10 +728,234 @@ export class dKankyo_vrkumo_packet {
     }
 
     public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class RAIN_EFF {
+    public initialized = false;
+    public alpha: number = 0.0;
+    public timer: number = 0;
+    public basePos = vec3.create();
+    public relPos = vec3.create();
+    public minY: number = 0.0;
+}
+
+export class dKankyo_rain_packet {
+    private ringTexture: BTIData;
+    private ddraw = new TDDraw();
+    private materialHelperRain: GXMaterialHelperGfx;
+    private materialHelperSibuki: GXMaterialHelperGfx;
+    private sibukiAlpha: number = 0.0;
+    private offsets = [
+        vec3.fromValues(150, 0, 0),
+        vec3.fromValues(0, 150, 150),
+        vec3.fromValues(150, 320, 150),
+        vec3.fromValues(45, 480, 45),
+    ];
+    public instances = nArray(250, () => new RAIN_EFF());
+    public rainCount: number = 0.0;
+
+    public camEyePos = vec3.create();
+    public centerDelta = vec3.create();
+    public centerDeltaMul = 0.0;
+
+    public sibukiHidden: boolean = false;
+
+    constructor(globals: dGlobals) {
+        const resCtrl = globals.resCtrl;
+
+        this.ringTexture = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x85);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelperRain = new GXMaterialHelperGfx(mb.finish('dKankyo_rain_packet'));
+
+        mb.setZMode(true, GX.CompareType.GEQUAL, false);
+        this.materialHelperSibuki = new GXMaterialHelperGfx(mb.finish('dKankyo_rain_packet sibuki'));
+    }
+
+    private drawRain(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        const envLight = globals.g_env_light;
+        const ddraw = this.ddraw;
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x8080800A);
+        envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        // To save on draw call count, all rain currently have the same alpha.
+        const alpha = this.instances[0].alpha * 14/0xFF;
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, alpha);
+
+        for (let i = 0; i < this.rainCount; i++) {
+            const rain = this.instances[i];
+
+            if (rain.alpha <= 0.001)
+                continue;
+
+            // const alpha = rain.alpha * 14/0xFF;
+            // colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, alpha);
+
+            const size = 2.5 + (i / 250.0);
+            vec3.set(scratchVec3c, -size, 0, 0);
+            vec3.transformMat4(scratchVec3c, scratchVec3c, scratchMatrix);
+            vec3.set(scratchVec3d, size, 0, 0);
+            vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
+
+            // basePos
+            vec3.add(scratchVec3, rain.basePos, rain.relPos);
+            const dist = vec3.distance(scratchVec3, globals.cameraPosition);
+            vec3.add(scratchVec3c, scratchVec3c, scratchVec3);
+            vec3.add(scratchVec3d, scratchVec3d, scratchVec3);
+
+            dKyw_get_wind_vecpow(scratchVec3, envLight);
+
+            const baseSpeed = 5.0 + 70.0 * Math.min(0.1 + dist / 1500.0);
+
+            const idx7 = i & 7;
+            vec3.set(scratchVec3,
+                baseSpeed * (scratchVec3[0] + 10.0 * this.centerDelta[0] * this.centerDeltaMul + (0.08 * idx7)),
+                baseSpeed * (-2.0 + scratchVec3[1] + this.centerDelta[1] * this.centerDeltaMul),
+                baseSpeed * (scratchVec3[2] + 10.0 * this.centerDelta[2] * this.centerDeltaMul + (0.08 * idx7)),
+            );
+
+            vec3.sub(scratchVec3a, scratchVec3d, scratchVec3);
+            vec3.sub(scratchVec3b, scratchVec3c, scratchVec3);
+
+            ddraw.begin(GX.Command.DRAW_QUADS, 4 * 5 * this.rainCount);
+
+            for (let j = 0; j < 4; j++) {
+                vec3.add(scratchVec3, scratchVec3a, this.offsets[j]);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+                vec3.add(scratchVec3, scratchVec3b, this.offsets[j]);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+                vec3.add(scratchVec3, scratchVec3c, this.offsets[j]);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+                vec3.add(scratchVec3, scratchVec3d, this.offsets[j]);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+            }
+
+            ddraw.end();
+        }
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelperRain, renderInst, viewerInput);
+    }
+
+    private drawSibuki(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        // Sibuki means "splash"
+        const envLight = globals.g_env_light;
+        const ddraw = this.ddraw;
+
+        const alphaTarget = this.sibukiHidden ? 0.0 : 200/255;
+        this.sibukiAlpha = cLib_addCalc(this.sibukiAlpha, alphaTarget, 0.2, 3.0, 0.001);
+
+        let additionalAlphaFade: number;
+        if (globals.cameraFwd[1] > 0.0 && globals.cameraFwd[1] < 0.5)
+            additionalAlphaFade = 1.0 - (globals.cameraFwd[1] / 0.5);
+        else if (globals.cameraFwd[1] > 0.0)
+            additionalAlphaFade = 0.0;
+        else
+            additionalAlphaFade = 1.0;
+
+        const finalAlpha = this.sibukiAlpha * additionalAlphaFade;
+        if (finalAlpha <= 0.001)
+            return;
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xB4C8C800);
+        materialParams.u_Color[ColorKind.C0].a = finalAlpha;
+        colorCopy(materialParams.u_Color[ColorKind.C1], materialParams.u_Color[ColorKind.C0]);
+        this.ringTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        const sibukiCount = envLight.rainCount >>> 1;
+
+        dKy_set_eyevect_calc(globals, scratchVec3, 7000.0, 4000.0);
+
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * sibukiCount);
+
+        // TODO(jstpierre): From FoVY?
+        const fovYAdj = 0.0;
+        for (let i = 0; i < sibukiCount; i++) {
+            const size = 20.0 + (fovYAdj * cM_rndF(25.0));
+
+            const baseX = scratchVec3[0] + cM_rndFX(3600.0);
+            const baseY = scratchVec3[1] + cM_rndFX(1500.0);
+            const baseZ = scratchVec3[2] + cM_rndFX(3600.0);
+
+            vec3.set(scratchVec3a, baseX - size, baseY, baseZ - size);
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            vec3.set(scratchVec3a, baseX + size, baseY, baseZ - size);
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 0);
+
+            vec3.set(scratchVec3a, baseX + size, baseY, baseZ + size);
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 2, 2);
+
+            vec3.set(scratchVec3a, baseX - size, baseY, baseZ + size);
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 2);
+        }
+
+        ddraw.end();
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelperSibuki, renderInst, viewerInput);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        if (globals.g_env_light.rainCount === 0)
+            return;
+
+        this.ddraw.beginDraw();
+        this.drawRain(globals, renderInstManager, viewerInput);
+        this.drawSibuki(globals, renderInstManager, viewerInput);
+        this.ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }
 
 const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 const scratchVec4 = vec4.create();
 
 function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
@@ -855,6 +1093,16 @@ function dKy_set_eyevect_calc(globals: dGlobals, dst: vec3, scaleXZ: number, sca
     dst[2] = globals.cameraPosition[2] + globals.cameraFwd[2] * scaleXZ;
 }
 
+function dKy_set_eyevect_calc2(globals: dGlobals, dst: vec3, scaleXZ: number, scaleY: number = scaleXZ): void {
+    vec3.copy(dst, globals.cameraFwd);
+    if (scaleY === 0.0)
+        dst[1] = 0.0;
+    vec3.normalize(dst, dst);
+    dst[0] = globals.cameraPosition[0] + dst[0] * scaleXZ;
+    dst[1] = globals.cameraPosition[1] + dst[1] * scaleXZ;
+    dst[2] = globals.cameraPosition[2] + dst[2] * scaleXZ;
+}
+
 function dKyr_lenzflare_move(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
@@ -905,6 +1153,68 @@ function wether_move_sun(globals: dGlobals): void {
 }
 
 function wether_move_rain(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.rainCount === 0)
+        return;
+
+    if (envLight.rainPacket === null)
+        envLight.rainPacket = new dKankyo_rain_packet(globals);
+
+    const pkt = envLight.rainPacket;
+
+    dKyw_get_wind_vecpow(scratchVec3a, envLight);
+    if (envLight.rainCount > pkt.rainCount)
+        pkt.rainCount = envLight.rainCount;
+
+    if (pkt.rainCount === 0)
+        return;
+
+    dKy_set_eyevect_calc2(globals, scratchVec3, 700.0, 600.0);
+
+    for (let i = 0; i < pkt.rainCount; i++) {
+        const rain = pkt.instances[i];
+
+        if (rain.initialized) {
+            rain.relPos[0] += 20.0 * scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07);
+            rain.relPos[1] += 20.0 * (-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul));
+            rain.relPos[2] += 20.0 * scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03);
+
+            vec3.set(scratchVec3c, rain.basePos[0] + rain.relPos[0], scratchVec3[1], rain.basePos[2] + rain.relPos[2]);
+            const distXZ = vec3.distance(scratchVec3c, scratchVec3);
+            if (rain.timer === 0) {
+                if (distXZ > 800) {
+                    rain.timer = 10;
+                    vec3.copy(rain.basePos, scratchVec3);
+                    if (false && distXZ < 850) {
+                        // todo
+                    } else {
+                        vec3.set(rain.relPos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
+                    }
+                    rain.minY = -800 + globals.cameraPosition[1];
+                }
+
+                const posY = rain.basePos[1] + rain.relPos[1];
+                if (posY < 20.0 + rain.minY) {
+                    vec3.copy(rain.basePos, scratchVec3);
+                    vec3.set(rain.relPos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
+                    rain.minY = -800 + globals.cameraPosition[1];
+                    rain.timer = 10;
+                }
+            } else {
+                rain.timer--;
+            }
+        } else {
+            vec3.copy(rain.basePos, scratchVec3);
+            vec3.set(rain.relPos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
+            rain.alpha = 1.0;
+            rain.timer = 0;
+            rain.minY = -800 + globals.cameraPosition[1];
+            rain.initialized = true;
+        }
+
+        rain.alpha = 1.0;
+    }
 }
 
 function wether_move_snow(globals: dGlobals): void {
@@ -1088,6 +1398,11 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     if (globals.stageName !== 'Name') {
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
+    }
+
+    if (globals.stageName !== 'Name') {
+        if (envLight.rainPacket !== null)
+            envLight.rainPacket.draw(globals, renderInstManager, viewerInput);
     }
 }
 

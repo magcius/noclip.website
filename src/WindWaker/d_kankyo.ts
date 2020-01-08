@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2 } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -126,8 +126,12 @@ export class dScnKy_env_light_c {
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 
     // Wether packets
+    public wetherCommonTextures: dKankyo__CommonTextures;
     public sunPacket: dKankyo_sun_packet | null = null;
     public vrkumoPacket: dKankyo_vrkumo_packet | null = null;
+    public rainPacket: dKankyo_rain_packet | null = null;
+
+    public eventNightStop: boolean = false;
 }
 
 export class LIGHT_INFLUENCE {
@@ -585,7 +589,7 @@ function drawKankyo(globals: dGlobals): void {
 }
 
 export function dKy_checkEventNightStop(globals: dGlobals): boolean {
-    return false;
+    return globals.g_env_light.eventNightStop;
 }
 
 export function dKy_pship_existence_chk(globals: dGlobals): boolean {
@@ -1019,6 +1023,9 @@ export function envcolor_init(globals: dGlobals): void {
     colorFromRGBA(envLight.lightStatus[1].Color, 0.0, 0.0, 0.0, 0.0);
 
     envLight.diceWeatherChangeTime = (envLight.curTime + 15.0) % 360.0;
+
+    if ((today.getDay() === 5 && today.getDate() === 13) || (today.getMonth() === 9 && today.getDate() === 31))
+        envLight.eventNightStop = true;
 }
 
 function colorSetRatio(color: Color, ratio: number, r: number, g: number, b: number): void {
@@ -1168,6 +1175,8 @@ class d_kyeff extends kankyo_class {
 
         // dKyw_wether_init(globals);
 
+        envLight.wetherCommonTextures = new dKankyo__CommonTextures(globals);
+
         const stage = globals.stageName;
         if (stage === 'Name') {
             vec3.set(envLight.windVec, 1, 0, 0);
@@ -1213,8 +1222,12 @@ class d_kyeff extends kankyo_class {
         const envLight = globals.g_env_light;
         const device = globals.modelCache.device;
 
+        envLight.wetherCommonTextures.destroy(device);
+
         if (envLight.sunPacket !== null)
             envLight.sunPacket.destroy(device);
+        if (envLight.rainPacket !== null)
+            envLight.rainPacket.destroy(device);
     }
 }
 
