@@ -1,9 +1,10 @@
-import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode } from './render';
-import { vec3, mat4 } from 'gl-matrix';
+import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects } from './render';
+import { vec3, mat4, vec2 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
-import { MathConstants } from '../MathHelpers';
+import { MathConstants, lerp, angleDist } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { Emitter, Sparkler, SparkleColor, ParticleType, ConfigurableEmitter, brentildaWandConfig } from './particles';
+import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB } from './particles';
+import { ViewerRenderInput } from '../viewer';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(geometryData: GeometryData, public index: number) {
@@ -20,9 +21,9 @@ const enum BoltState {
 
 const scratchVec = vec3.create();
 export class ClankerBolt extends GeometryRenderer {
+    private static peak = vec3.fromValues(2640, 5695, -10);
     public clankerVector: vec3;
     private boltState = BoltState.InClanker;
-    private static peak = vec3.fromValues(2640, 5695, -10);
 
     protected movement(): void {
         let timer = this.animationController.getTimeInSeconds();
@@ -47,7 +48,7 @@ export class ClankerBolt extends GeometryRenderer {
         if (this.boltState !== newState) {
             this.boltState = newState;
             timer = 0;
-            this.animationController.setPhaseToCurrent();
+            this.animationController.resetPhase();
         }
 
         switch (this.boltState) {
@@ -76,8 +77,8 @@ class ShinyObject extends GeometryRenderer {
         }
     }
 
-    protected movement(deltaSeconds: number) {
-        mat4.rotateY(this.modelMatrix, this.modelMatrix, deltaSeconds * this.turnRate * MathConstants.DEG_TO_RAD)
+    protected movement(viewerInput: ViewerRenderInput) {
+        mat4.rotateY(this.modelMatrix, this.modelMatrix, viewerInput.deltaTime / 1000 * this.turnRate * MathConstants.DEG_TO_RAD);
     }
 }
 
@@ -87,6 +88,242 @@ class Brentilda extends GeometryRenderer {
         const wandEmitter = new ConfigurableEmitter(brentildaWandConfig);
         wandEmitter.movementController = new ModelPin(this.modelPointArray, 31);
         emitters.push(wandEmitter);
+    }
+}
+
+class MovingJumpPad extends GeometryRenderer {
+    private center = vec3.create();
+    private emitters: ConfigurableEmitter[] = [];
+    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+        super(geometryData);
+        this.emitters.push(
+            new JumpPadEmitter(nearJumpPadConfig),
+            new JumpPadEmitter(farJumpPadConfig),
+        );
+        emitters.push(...this.emitters);
+    }
+
+    protected movement(viewerInput: ViewerRenderInput) {
+        if (this.center[0] === 0 && this.center[2] === 0) {
+            // store the center, can't do in constructor because we don't know the position until later...
+            mat4.getTranslation(this.center, this.modelMatrix);
+        }
+        const angle = 75 * MathConstants.DEG_TO_RAD * this.animationController.getTimeInSeconds();
+        this.modelMatrix[12] = this.center[0] + 590 * Math.cos(angle);
+        this.modelMatrix[14] = this.center[2] - 590 * Math.sin(angle);
+
+        const trailingAngle = angle - 10 * MathConstants.DEG_TO_RAD;
+        this.emitters[0].modelMatrix[12] = this.center[0] + 590 * Math.cos(trailingAngle);
+        this.emitters[0].modelMatrix[14] = this.center[2] - 590 * Math.sin(trailingAngle);
+        mat4.copy(this.emitters[1].modelMatrix, this.emitters[0].modelMatrix);
+    }
+}
+
+function randomRange(a: number, b = -a): number {
+    return lerp(a, b, Math.random());
+}
+
+const chunkVelMin = vec3.fromValues(-220, 210, -220);
+// horizontal max is 280 in game, not sure why
+const chunkVelMax = vec3.fromValues(220, 460, 220);
+
+const chunkScratch = vec3.create();
+export class SnowballChunk extends GeometryRenderer {
+    public movementController: Projectile = new Projectile(800);
+    public visible = false;
+
+    public init(start: vec3) {
+        this.visible = true;
+        this.animationController.resetPhase();
+        for (let i = 0; i < 3; i++)
+            start[i] += randomRange(20);
+        fromBB(chunkScratch, chunkVelMin, chunkVelMax);
+        this.movementController.setFromVel(start, chunkScratch);
+        vec2.set(this.movementController.angularVel,
+            randomRange(300 * MathConstants.DEG_TO_RAD),
+            randomRange(300 * MathConstants.DEG_TO_RAD),
+        );
+        this.movementController.scale = randomRange(.65, 1.1);
+        this.setEnvironmentAlpha(1);
+    }
+
+    protected movement(viewerInput: ViewerRenderInput) {
+        super.movement(viewerInput);
+        const flightTime = this.animationController.getTimeInSeconds();
+        if (flightTime > .8)
+            this.visible = false;
+        else if (flightTime > .4)
+            this.setEnvironmentAlpha(2 - flightTime / .4);
+    }
+}
+
+const snowballScratch = vec3.create();
+export class Snowball extends GeometryRenderer {
+    private static chunkPool: SnowballChunk[] = [];
+
+    private target = vec3.create();
+    private ready = false;
+
+    public movementController: Projectile = new Projectile(1800);
+
+    private sparkleEmitter = new StreamEmitter(30, ParticleType.SnowSparkle);
+
+    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+        super(geometryData);
+        this.die();
+        emitters.push(this.sparkleEmitter);
+        this.sparkleEmitter.movementController = new ModelPin(this.modelPointArray, 5);
+    }
+
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): SpawnedObjects {
+        if (Snowball.chunkPool.length >= 16)
+            return [];
+        const out: SpawnedObjects = [];
+        for (let i = 0; i < 8; i++) {
+            const newChunk = spawner(snowballChunkID)[0] as SnowballChunk;
+            out.push(newChunk);
+            Snowball.chunkPool.push(newChunk);
+        }
+        return out;
+    }
+
+    private static computeTarget(dst: vec3, cameraToWorld: mat4): void {
+        // aim slightly in front of and below camera
+        vec3.set(dst, 0, -30, -60);
+        vec3.transformMat4(dst, dst, cameraToWorld);
+    }
+
+    public init(start: vec3, camera: mat4): void {
+        this.visible = true;
+        this.ready = false;
+        this.sparkleEmitter.active = true;
+        mat4.fromTranslation(this.modelMatrix, start);
+        Snowball.computeTarget(this.target, camera);
+        this.animationController.resetPhase();
+    }
+
+    protected movement(viewerInput: ViewerRenderInput) {
+        const flightTime = this.animationController.getTimeInSeconds();
+        if (flightTime < 1 / 30)
+            return;
+        if (!this.ready) {
+            this.ready = true;
+            // project position using constant velocity
+            Snowball.computeTarget(snowballScratch, viewerInput.camera.worldMatrix);
+            vec3.sub(this.target, snowballScratch, this.target);
+            vec3.scaleAndAdd(this.target, snowballScratch, this.target, Math.random() > .5 ? 21 : 43);
+
+            mat4.getTranslation(snowballScratch, this.modelMatrix);
+
+            this.movementController.setFromTarget(snowballScratch, this.target, 32 / 30);
+            vec2.set(this.movementController.angularVel, 300 * MathConstants.DEG_TO_RAD, 300 * MathConstants.DEG_TO_RAD);
+        }
+        super.movement(viewerInput);
+
+        if (flightTime < 1 / 5)
+            return;
+        if (flightTime > 6 || this.modelMatrix[13] < -1000) {
+            this.die();
+            return;
+        }
+        mat4.getTranslation(snowballScratch, this.modelMatrix);
+        vec3.transformMat4(snowballScratch, snowballScratch, viewerInput.camera.viewMatrix);
+        if (vec3.len(snowballScratch) < 100) {
+            Snowball.computeTarget(snowballScratch, viewerInput.camera.worldMatrix);
+            let j = 0;
+            for (let i = 0; i < 8; i++) {
+                while (j < Snowball.chunkPool.length && Snowball.chunkPool[j].visible) {
+                    j++;
+                }
+                if (j >= Snowball.chunkPool.length)
+                    break; // out of free particles
+                Snowball.chunkPool[j].init(snowballScratch);
+            }
+
+            this.die();
+        }
+    }
+
+    private die(): void {
+        this.visible = false;
+        this.sparkleEmitter.active = false;
+    }
+}
+
+function turnTowards(mat: mat4, delta: number, cap: number): void {
+    if (delta > cap)
+        delta = cap;
+    else if (delta < -cap)
+        delta = -cap;
+    mat4.rotateY(mat, mat, delta);
+}
+
+const enum SirSlushState {
+    Idle,
+    Throwing,
+    // there is also a third, unanimated state for when the player is far away
+    // we just use the idle animation for that case
+}
+
+const sirSlushScratch = nArray(2, () => vec3.create());
+export class SirSlush extends GeometryRenderer {
+    public snowball: Snowball;
+    private throwTimer = 0;
+
+    constructor(geometryData: GeometryData) {
+        super(geometryData);
+        this.currAnimation = SirSlushState.Idle;
+        this.animationMode = AnimationMode.Loop;
+    }
+
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): SpawnedObjects {
+        const out = spawner(0x125);
+        this.snowball = out[0] as Snowball;
+        return out;
+    }
+
+    protected movement(viewerInput: ViewerRenderInput) {
+        mat4.getTranslation(sirSlushScratch[0], this.modelMatrix);
+        mat4.getTranslation(sirSlushScratch[1], viewerInput.camera.worldMatrix);
+        vec3.sub(sirSlushScratch[0], sirSlushScratch[1], sirSlushScratch[0]);
+        const toCamera = sirSlushScratch[0];
+        const cameraDist = vec3.len(toCamera);
+
+        const yawToCamera = Math.atan2(toCamera[0], toCamera[2]);
+        const facingYaw = Math.atan2(this.modelMatrix[8], this.modelMatrix[10]);
+        let angleDelta = angleDist(facingYaw, yawToCamera);
+        const turnCap = 6 * MathConstants.DEG_TO_RAD;
+
+        // in game height range is 500, roughly the hat height
+        const inThrowRange = cameraDist > 500 && cameraDist < 2750 && toCamera[1] < 1500;
+
+        switch (this.currAnimation) {
+            case SirSlushState.Idle:
+                this.selectorState.values[1] = 0; // turn off snowball
+                if (this.throwTimer > 0)
+                    this.throwTimer -= viewerInput.deltaTime / 1000;
+                else if (inThrowRange && Math.abs(angleDelta) < 1.5 * turnCap && !this.snowball.visible)
+                    this.changeAnimation(SirSlushState.Throwing, AnimationMode.Once);
+                if (cameraDist < 3150)
+                    turnTowards(this.modelMatrix, angleDelta, turnCap);
+                break;
+            case SirSlushState.Throwing:
+                if (this.getAnimationPhase() > .98 || !inThrowRange) {
+                    this.changeAnimation(SirSlushState.Idle, AnimationMode.Loop);
+                    this.throwTimer = .4;
+                    return;
+                }
+                if (this.getAnimationPhase() < .45)
+                    turnTowards(this.modelMatrix, angleDelta, turnCap);
+                if (this.animationPhaseTrigger(.45))
+                    this.selectorState.values[1] = 1;
+                if (this.animationPhaseTrigger(.58)) {
+                    this.selectorState.values[1] = 0;
+                    vec3.copy(sirSlushScratch[0], assertExists(this.modelPointArray[5]));
+                    this.snowball.init(sirSlushScratch[0], viewerInput.camera.worldMatrix);
+                }
+                break;
+        }
     }
 }
 
@@ -253,14 +490,14 @@ function isPoint(data: RailData): data is vec3 {
     return !("kind" in data);
 }
 
-export function buildRails(nodes: (RailNode | undefined)[]): Rail[] {
+export function buildRails(nodes: Array<RailNode | undefined>): Rail[] {
     const allRails: Rail[] = [];
     const childNodes = new Set<number>();
     const usedNodes = new Set<number>();
 
     // preprocess
     for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i]
+        const node = nodes[i];
         if (node === undefined)
             continue;
         if (node.next > nodes.length)
@@ -315,7 +552,7 @@ export function buildRails(nodes: (RailNode | undefined)[]): Rail[] {
                 continue;
             }
             if (!isKeyframe(startNode.data)) {
-                console.warn(`lerp from non keyframe`)
+                console.warn(`lerp from non keyframe`);
                 continue;
             }
 
@@ -473,7 +710,7 @@ function calcRailPos(dst: vec3, pts: vec3[], t: number): void {
 const railEulerScratch = nArray(2, () => vec3.create());
 function calcRailEuler(dst: vec3, rail: Rail, param: number): void {
     calcRailPos(railEulerScratch[0], rail.points, param);
-    let testParam = (param + .0001 >= 1) ? param - .0001 : param;
+    const testParam = (param + .0001 >= 1) ? param - .0001 : param;
     rideRail(railEulerScratch[1], rail, testParam, 5);
 
     const delta = railEulerScratch[0];
@@ -516,7 +753,7 @@ export class RailRider extends GeometryRenderer {
     }
 
     protected applyKeyframe(keyframe: RailKeyframe): void {
-        this.facePlayer = keyframe.facePlayer
+        this.facePlayer = keyframe.facePlayer;
         if (keyframe.pitchUpdate === AngleUpdate.Lerp)
             this.railPitch = false;
         else if (keyframe.pitchUpdate === AngleUpdate.Rail)
@@ -538,7 +775,8 @@ export class RailRider extends GeometryRenderer {
             this.speed = keyframe.distToEnd / keyframe.timeToEnd;
     }
 
-    protected movement(deltaSeconds: number): void {
+    protected movement(viewerInput: ViewerRenderInput): void {
+        const deltaSeconds = viewerInput.deltaTime / 1000;
         if (this.rail === null)
             return;
         if (this.waitTimer > 0) {
@@ -574,7 +812,7 @@ export class RailRider extends GeometryRenderer {
             }
         }
         if (this.facePlayer) {
-            console.warn("face player for object") // only camera?
+            console.warn("face player for object"); // only camera?
         } else {
             calcRailEuler(riderScratch, this.rail, this.moveTimer);
             if (this.railYaw)
@@ -600,8 +838,8 @@ class Gloop extends RailRider {
         emitters.push(this.bubbler);
     }
 
-    protected movement(deltaSeconds: number): void {
-        super.movement(deltaSeconds);
+    protected movement(viewerInput: ViewerRenderInput): void {
+        super.movement(viewerInput);
         let anim = GloopState.Swim;
         let mode = AnimationMode.Loop;
         if (this.waitTimer > 0) {
@@ -609,7 +847,7 @@ class Gloop extends RailRider {
             mode = AnimationMode.Once;
         }
         if (anim === GloopState.Bubble && this.animationPhaseTrigger(0.6))
-            this.bubbler.shouldEmit = true;
+            this.bubbler.emitCount = 1;
         if (anim !== this.currAnimation)
             this.changeAnimation(anim, mode);
     }
@@ -622,6 +860,118 @@ class MagicCarpet extends RailRider {
     }
 }
 
+const lavaRockScratch = nArray(2, () => vec3.create());
+export class LavaRock extends GeometryRenderer {
+    public static g = 1000;
+
+    public movementController: Projectile = new Projectile(LavaRock.g);
+
+    private flightTime = 0;
+    private explode = false;
+
+    private flameEmitter = new ConfigurableEmitter(lavaRockLaunchFlameConfig);
+    private bigTrail = new ConfigurableEmitter(lavaRockBigTrailConfig);
+    private smallTrail = new ConfigurableEmitter(lavaRockSmallTrailConfig);
+    private smokeEmitter = new ConfigurableEmitter(lavaRockSmokeConfig);
+    private explosionEmitter = new MultiEmitter(lavaRockExplosionConfig, [fireballIndex, lavaSmokeIndex]);
+    private lavaSparkleEmitter = new MultiEmitter(lavaRockShardsConfig, [SparkleColor.Orange, SparkleColor.Red]);
+    private sparkleEmitter = new MultiEmitter(lavaRockShardsConfig, [SparkleColor.DarkBlue, SparkleColor.Green]);
+
+    public parent: LavaRockEmitter;
+
+    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+        super(geometryData);
+        this.visible = false;
+
+        emitters.push(
+            this.flameEmitter,
+            this.bigTrail,
+            this.smallTrail,
+            this.smokeEmitter,
+            this.explosionEmitter,
+            this.lavaSparkleEmitter,
+            this.sparkleEmitter,
+        );
+        this.flameEmitter.active = false;
+        this.smokeEmitter.active = false;
+        this.explosionEmitter.active = false;
+        this.lavaSparkleEmitter.active = false;
+        this.sparkleEmitter.active = false;
+        this.bigTrail.active = false;
+        this.smallTrail.active = false;
+
+        this.sparkleEmitter.special = true;
+    }
+
+    public reset(emitter: LavaRockEmitter, end: mat4, big: boolean) {
+        this.parent = emitter;
+        this.animationController.resetPhase();
+
+        mat4.getTranslation(lavaRockScratch[0], emitter.modelMatrix);
+        mat4.getTranslation(lavaRockScratch[1], end);
+
+        const initialRise = lerp(1400, big ? 1200 : 1800, Math.random());
+        this.flightTime = Math.sqrt(2 * initialRise / LavaRock.g) + Math.sqrt(2 * (initialRise + lavaRockScratch[0][1] - lavaRockScratch[1][1]) / LavaRock.g);
+
+        this.movementController.setFromTarget(lavaRockScratch[0], lavaRockScratch[1], this.flightTime);
+
+        vec2.set(this.movementController.angularVel,
+            randomRange(1, 2) * 240 * MathConstants.DEG_TO_RAD,
+            -randomRange(1, 2) * 240 * MathConstants.DEG_TO_RAD,
+        );
+        this.movementController.scale = randomRange(big ? .8 : .2, big ? 1 : .6);
+
+        this.explode = !big && (Math.random() > .5);
+        // activate appropriate flame trail
+        if (big)
+            this.bigTrail.active = true;
+        else
+            this.smallTrail.active = true;
+
+        // TODO: sparkle trail? if I can understand the condition
+
+        this.flameEmitter.emitCount = 3;
+        this.flameEmitter.modelMatrix[12] = emitter.modelMatrix[12];
+        this.flameEmitter.modelMatrix[13] = emitter.modelMatrix[13] + 100;
+        this.flameEmitter.modelMatrix[14] = emitter.modelMatrix[14];
+    }
+
+    protected movement(viewerInput: ViewerRenderInput) {
+        super.movement(viewerInput);
+        // move these along, but respect their existing emit logic
+        emitAt(this.bigTrail, this.modelMatrix, 0);
+        emitAt(this.smallTrail, this.modelMatrix, 0);
+
+        if (this.movementController.reachedPeak && this.explode) {
+            emitAt(this.explosionEmitter, this.modelMatrix, 2);
+            emitAt(this.sparkleEmitter, this.modelMatrix, 4);
+            emitAt(this.smokeEmitter, this.modelMatrix, 4);
+            this.die();
+        }
+        if (this.animationController.getTimeInSeconds() > this.flightTime) {
+            // fell back into lava
+            emitAt(this.lavaSparkleEmitter, this.modelMatrix, 4);
+            emitAt(this.smokeEmitter, this.modelMatrix, 4);
+            this.flameEmitter.emitCount = 3;
+            this.flameEmitter.modelMatrix[12] = this.modelMatrix[12];
+            this.flameEmitter.modelMatrix[13] = this.modelMatrix[13] + 100;
+            this.flameEmitter.modelMatrix[14] = this.modelMatrix[14];
+            this.die();
+        }
+    }
+
+    private die() {
+        this.parent.ready = true;
+
+        this.bigTrail.active = false;
+        this.smallTrail.active = false;
+        this.visible = false;
+    }
+}
+
+export const clankerID = 0x10001;
+const snowballChunkID = 0x10002;
+
 // TODO: avoid having to thread the emitter list all the way through
 export function createRenderer(emitters: Emitter[], objectID: number, geometryData: GeometryData): GeometryRenderer | FlipbookRenderer {
     switch (objectID) {
@@ -630,28 +980,36 @@ export function createRenderer(emitters: Emitter[], objectID: number, geometryDa
         case 0x045: return new ClankerTooth(geometryData, 9); // right
 
         case 0x046: return new ShinyObject(geometryData, emitters, .015, 230); // jiggy
-        case 0x047: return new ShinyObject(geometryData, emitters, .03, 200); // empty honeycomb
+        case 0x047:  // empty honeycomb
+        case 0x050:  // honeycomb
+            return new ShinyObject(geometryData, emitters, .03, Math.random() > .5 ? 200 : -200);
         case 0x1d8: return new ShinyObject(geometryData, emitters, 1 / 60, 0, SparkleColor.DarkBlue);
         case 0x1d9: return new ShinyObject(geometryData, emitters, 1 / 60, 0, SparkleColor.Red);
         case 0x1da: return new ShinyObject(geometryData, emitters, 1 / 60);
 
         case 0x0e6: return new Gloop(geometryData, emitters);
-        case 0x0f1: return new RailRider(geometryData); //swamp leaf
+        case 0x0f1: return new RailRider(geometryData); // swamp leaf
         case 0x123: return new MagicCarpet(geometryData);
 
+        case 0x124: return new SirSlush(geometryData);
+        case 0x125: return new Snowball(geometryData, emitters);
+        case 0x249: return new MovingJumpPad(geometryData, emitters);
         case 0x348: return new Brentilda(geometryData, emitters);
+        case 0x3bb: return new LavaRock(geometryData, emitters);
+
+        case snowballChunkID: return new SnowballChunk(geometryData);
     }
     return new GeometryRenderer(geometryData);
 }
 
 const movementScratch = vec3.create();
 class Bobber implements MovementController {
+    protected amplitudes = nArray(3, () => 0);
     private speed = 80 + 20 * Math.random();
     private basePos = vec3.create();
     private baseYaw = 0;
     private baseRoll = 0;
     private baseScale = 1;
-    protected amplitudes = nArray(3, () => 0);
 
     constructor(obj: GeometryRenderer) {
         mat4.getTranslation(this.basePos, obj.modelMatrix);
@@ -707,5 +1065,51 @@ export class ModelPin implements MovementController {
 
     public movement(dst: mat4, _: number): void {
         mat4.fromTranslation(dst, this.modelVector);
+    }
+}
+
+export class Projectile implements MovementController {
+    public start = vec3.create();
+    public startVel = vec3.create();
+    public angularVel = vec2.create();
+    public startTime = -1;
+    public scale = 1;
+
+    public reachedPeak = false;
+
+    constructor(private g = 1000) { }
+
+    public setFromVel(start: vec3, startVel: vec3): void {
+        this.startTime = -1;
+
+        vec3.copy(this.start, start);
+        vec3.copy(this.startVel, startVel);
+    }
+
+    public setFromTarget(start: vec3, target: vec3, flightTime: number): void {
+        this.startTime = -1;
+
+        vec3.copy(this.start, start);
+        vec3.sub(this.startVel, target, start);
+        vec3.scale(this.startVel, this.startVel, 1 / flightTime);
+        this.startVel[1] += this.g * flightTime / 2;
+    }
+
+    public movement(dst: mat4, time: number): void {
+        if (this.startTime < 0)
+            this.startTime = time;
+        const currTime = time - this.startTime;
+        vec3.copy(movementScratch, this.start);
+        vec3.scaleAndAdd(movementScratch, movementScratch, this.startVel, currTime);
+        movementScratch[1] -= this.g * currTime * currTime / 2;
+        mat4.fromTranslation(dst, movementScratch);
+        mat4.rotateY(dst, dst, this.angularVel[0] * currTime);
+        mat4.rotateX(dst, dst, this.angularVel[1] * currTime);
+        if (this.scale !== 1) {
+            vec3.set(movementScratch, this.scale, this.scale, this.scale);
+            mat4.scale(dst, dst, movementScratch);
+        }
+
+        this.reachedPeak = currTime * this.g >= this.startVel[1];
     }
 }

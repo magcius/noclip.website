@@ -173,6 +173,9 @@ function parseObjectLoadEntry(map: RAMMapper, startAddress: number, flags: numbe
     const fileIndex = view.getUint16(offs + 0x04);
     const animationStartIndex = view.getUint16(offs + 0x06);
     const animationTableAddress = view.getUint32(offs + 0x08);
+    const updateFunction = view.getUint32(offs + 0x0C);
+    const movementFunction = view.getUint32(offs + 0x10);
+    const renderFunction = view.getUint32(offs + 0x14);
     const scale = view.getFloat32(offs + 0x1C);
 
     const animationTable: AnimationEntry[] = [];
@@ -221,7 +224,7 @@ class RAMMapper {
 
     public lookup(address: number): DataView {
         for (let i = 0; i < this.regions.length; i++) {
-            const delta = address - this.regions[i].start
+            const delta = address - this.regions[i].start;
             if (delta >= 0 && delta < this.regions[i].data.byteLength) {
                 return this.regions[i].data.createDataView(delta);
             }
@@ -258,7 +261,18 @@ function extractObjectLoad(fs: FS) {
         OtherID: 0,
         SpawnID: 0x10001, // fake ID
         GeoFileID: 0x88e,
-        AnimationTable: [{FileID: 0xc3, Duration: 1}],
+        AnimationTable: [{ FileID: 0xc3, Duration: 1 }],
+        AnimationStartIndex: 0,
+        Flags: 0,
+        Scale: 1,
+    });
+
+    // snowball chunk
+    setupTable.push({
+        OtherID: 0,
+        SpawnID: 0x10002, // fake ID
+        GeoFileID: 0x37a,
+        AnimationTable: [],
         AnimationStartIndex: 0,
         Flags: 0,
         Scale: 1,
@@ -274,18 +288,18 @@ function extractObjectLoad(fs: FS) {
     }
 
     // endpoints are pretty arbitrary
-    for (let i = 0x2d1; i <= 0x36e; i++ ) {
+    for (let i = 0x2d1; i <= 0x36e; i++) {
         extractFileAndAppend(fileTable, fs, i);
     }
 
     const flipbookIDs = [
-        0x41a, 580, 0x5b7, 0x5b8, 0x5b9, 0x5c2, 0x5d7, 0x5d8, 0x648, 0x68c, 0x693,
-        0x6b1, 0x6b2, 0x6b3, 0x6b7,
+        0x41a, 0x42a, 0x4a0, 0x580, 0x5b7, 0x5b8, 0x5b9, 0x5c2, 0x5d7, 0x5d8, 0x648, 0x68c, 0x693,
+        0x6b1, 0x6b2, 0x6b3, 0x6b7, 0x6c1,
         0x6d1, 0x6d2, 0x6d3, 0x6d4, 0x6d5, 0x6d6, 0x6d7, 0x6d8];
     for (let id of flipbookIDs)
         extractFileAndAppend(fileTable, fs, id);
 
-    // particles
+    // particle flipbooks
     for (let id = 0x700; id <= 0x71b; id++)
         extractFileAndAppend(fileTable, fs, id);
 

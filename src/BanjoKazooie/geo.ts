@@ -279,7 +279,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
 
         if (window.debug) {
             const end = view.getUint32(geoIdx + 0x04);
-            console.log(hexzero(geoIdx, 0x04), hexzero(cmd, 0x08), hexzero(end, 0x08));
+            console.log(hexzero(geoIdx, 0x04), hexzero(cmd, 2), hexzero(end, 0x08));
         }
 
         if (cmd === 0x00) {

@@ -15,7 +15,6 @@ import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags } from './geo';
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import AnimationController from '../AnimationController';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 
@@ -534,6 +533,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
+    public envAlpha = 1;
     public visible = true;
 
     constructor(geometryData: RenderData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall, private textureAnimator: TextureAnimator | null = null) {
@@ -665,7 +665,7 @@ class DrawCallInstance {
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
+        offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
     }
 }
 
@@ -723,8 +723,12 @@ export class BoneAnimator {
     constructor(private animFile: AnimationFile, public duration: number) {
     }
 
-    public frames(): number {
-        return this.animFile.endFrame - this.animFile.startFrame;
+    public getPhase(frame: number, mode: AnimationMode): number {
+        return getAnimFrame(this.animFile, frame, mode)/(this.animFile.endFrame - this.animFile.startFrame);
+    }
+
+    public fps(): number {
+        return (this.animFile.endFrame - this.animFile.startFrame)/this.duration;
     }
 
     public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
@@ -801,6 +805,55 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     return frame + anim.startFrame;
 }
 
+// an animation controller that makes it easier to change fps
+// and preserve control over the new phase
+class AdjustableAnimationController {
+    private time = 0;
+    private initialized = false;
+    private phaseFrames = 0;
+
+    constructor(private fps = 30) {}
+
+    public setTimeFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
+        this.time = viewerInput.time/1000;
+        if (!this.initialized) {
+            this.initialized = true;
+            // treat phaseFrames as the intended start frame
+            this.phaseFrames -= this.time * this.fps;
+        }
+    }
+
+    // set a new fps for a controller that might not have been updated recently
+    // used for pooled renderers like particles
+    public init(newFPS: number, newPhase = 0) {
+        this.initialized = false;
+        this.fps = newFPS;
+        this.phaseFrames = newPhase;
+    }
+
+    public adjust(newFPS: number, newPhase = 0) {
+        // assume time is current, so just adjust the values now
+        this.fps = newFPS;
+        this.phaseFrames = newPhase - this.time * this.fps;
+    }
+
+    public getTimeInFrames(): number {
+        return this.time*this.fps + this.phaseFrames;
+    }
+
+    public getTimeInSeconds(): number {
+        if (this.fps === 0)
+            return 0; // not sure what this should mean
+        else
+            return this.time + this.phaseFrames/this.fps;
+    }
+
+    public resetPhase(): void {
+        this.initialized = false;
+        this.phaseFrames = 0;
+    }
+}
+
 export class GeometryData {
     public renderData: RenderData;
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
@@ -865,6 +918,13 @@ class GeoNodeRenderer {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].setAlphaVisualizerEnabled(v);
     }
+
+    public setEnvironmentAlpha(a: number): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].envAlpha = a
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setEnvironmentAlpha(a);
+    }
 }
 
 const enum ObjectFlags {
@@ -903,11 +963,11 @@ export interface MovementController {
 }
 
 class TextureAnimator {
-    public animationController: AnimationController;
+    public animationController: AdjustableAnimationController;
     public textureMap: Map<number, GfxTexture[]>;
 
     constructor(private setup: TextureAnimationSetup, gfxTextures: GfxTexture[]) {
-        this.animationController = new AnimationController(setup.speed);
+        this.animationController = new AdjustableAnimationController(setup.speed);
         this.textureMap = new Map<number, GfxTexture[]>();
         for (let i = 0; i < setup.indexLists.length; i++) {
             const key = setup.indexLists[i][0];
@@ -936,13 +996,15 @@ export const enum AnimationMode {
     Loop,
 }
 
+export type SpawnedObjects = (GeometryRenderer | FlipbookRenderer)[];
+
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
 const vec3up = vec3.fromValues(0, 1, 0);
 const vec3Zero = vec3.create();
 export class GeometryRenderer {
-    private visible = true;
+    public visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase: number;
@@ -957,7 +1019,7 @@ export class GeometryRenderer {
     private animFrames = 0;
 
     public boneAnimators: BoneAnimator[] = [];
-    public animationController = new AnimationController(30);
+    public animationController = new AdjustableAnimationController(30);
     public movementController: MovementController | null = null;
     public textureAnimator: TextureAnimator | null = null;
 
@@ -1058,7 +1120,43 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
-    protected movement(deltaSeconds: number): void {
+    public setEnvironmentAlpha(a: number): void {
+        this.rootNodeRenderer.setEnvironmentAlpha(a);
+    }
+
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): SpawnedObjects {
+        if (selector > 0) {
+            const maxValue =
+                id === 0x203 ? 12 : // note doors
+                id === 0x25e ? 6 :  // mystery eggs
+                id === 0x2e3 ? 9 :  // level signs
+                id === 0x2e4 ? 9 :  // exit pads
+                0;
+            for (let stateIndex = 0; stateIndex <= maxValue; stateIndex++)
+                this.selectorState.values[stateIndex] = (stateIndex === selector) ? 1 : 0;
+        }
+        if (id === 7) { // mumbo
+            this.selectorState.values[4] = 1;
+            this.selectorState.values[5] = 0;
+            this.selectorState.values[6] = 1;
+            this.selectorState.values[7] = 0;
+            this.selectorState.values[8] = 0;
+            this.selectorState.values[9] = 0;
+        }
+        // tiptip choir turtles, might actually be from setup params
+        const turtleID = id - 0x27a;
+        if (turtleID >= 1 && turtleID <= 6)
+            this.selectorState.values[4] = turtleID;
+
+        if (id === 0x3c) { // fix clanker key position
+            this.modelMatrix[12] = 5700;
+            this.modelMatrix[13] = -2620;
+            this.modelMatrix[14] = -20;
+        }
+        return [];
+    }
+
+    protected movement(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, this.animationController.getTimeInSeconds());
     }
@@ -1081,17 +1179,20 @@ export class GeometryRenderer {
         const animator = this.boneAnimators[newIndex];
         if (animator === undefined)
             throw `bad animation index ${newIndex}`;
-        this.animationController.adjustTimeToNewFPS(animator.frames()/animator.duration);
-        this.animationController.setPhaseToCurrent();
-        this.animFrames = 0;
+        this.animationController.adjust(animator.fps());
     }
 
     public animationPhaseTrigger(phase: number): boolean {
-        const total = this.boneAnimators[this.currAnimation].frames();
-        const currFrame = this.animationController.getTimeInFrames()/total;
-        const oldFrame = this.animFrames/total;
+        const currAnimator = this.boneAnimators[this.currAnimation];
+        const currFrame = currAnimator.getPhase(this.animationController.getTimeInFrames(), this.animationMode);
+        const oldFrame = currAnimator.getPhase(this.animFrames, this.animationMode);
         // assume forward for now
         return (oldFrame <= phase && phase < currFrame) || (currFrame < oldFrame && (phase < currFrame || oldFrame <= phase));
+    }
+
+    public getAnimationPhase(): number {
+        const currAnimator = this.boneAnimators[this.currAnimation];
+        return currAnimator.getPhase(this.animationController.getTimeInFrames(), this.animationMode);
     }
 
     private calcBonesRelativeToMatrix(array: mat4[], base: mat4): void {
@@ -1168,7 +1269,7 @@ export class GeometryRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         if (this.textureAnimator !== null)
             this.textureAnimator.animationController.setTimeFromViewerInput(viewerInput);
-        this.movement(viewerInput.deltaTime / 1000);
+        this.movement(viewerInput);
         this.calcAnim();
         this.calcBoneToWorld();
         this.calcModelPoints();
@@ -1291,7 +1392,7 @@ export class FlipbookRenderer {
 
     public visible = true;
     public modelMatrix = mat4.create();
-    public animationController: AnimationController;
+    public animationController = new AdjustableAnimationController(30);
     public sortKeyBase: number;
     public rotationAngle = 0;
     public screenOffset = vec2.create();
@@ -1314,8 +1415,7 @@ export class FlipbookRenderer {
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
 
-        this.animationController = new AnimationController(flipbookData.flipbook.frameRate);
-        this.animationController.phaseFrames = (phase / 0x20) * flipbookData.flipbook.frameSequence.length;
+        this.animationController.init(flipbookData.flipbook.frameRate, (phase / 0x20) * flipbookData.flipbook.frameSequence.length);
         this.animationParams = {
             initialMirror,
             mirrored: !!(phase & 1),
@@ -1335,8 +1435,7 @@ export class FlipbookRenderer {
         this.mode = modeOverride !== undefined ? modeOverride : data.mode;
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
-        this.animationController.fps = data.flipbook.frameRate;
-        this.animationController.phaseFrames = 0;
+        this.animationController.init(data.flipbook.frameRate);
         this.animationParams.initialMirror = mirror;
         this.animationParams.mirrored = mirror;
     }
