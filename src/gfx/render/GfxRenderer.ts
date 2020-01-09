@@ -621,7 +621,7 @@ export class GfxRenderInstManager {
         for (let i = 0; i < this.instPool.pool.length; i++) {
             if ((this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST &&
                  this.instPool.pool[i].filterKey === filterKey))
-                list.renderInsts.push(this.instPool.pool[i]);
+                list.insertToEnd(this.instPool.pool[i]);
         }
     }
 
