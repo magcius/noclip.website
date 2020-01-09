@@ -899,8 +899,6 @@ export class LavaRock extends GeometryRenderer {
         this.sparkleEmitter.active = false;
         this.bigTrail.active = false;
         this.smallTrail.active = false;
-
-        this.sparkleEmitter.special = true;
     }
 
     public reset(emitter: LavaRockEmitter, end: mat4, big: boolean) {
