@@ -683,14 +683,11 @@ export class JumpPadEmitter extends ConfigurableEmitter {
 // but otherwise the same config
 // note that this modifies the underlying config
 export class MultiEmitter extends ConfigurableEmitter {
-    public special = false;
     constructor(config: EmitterConfig, private sprites: number[]) {
         super(config);
     }
 
     public emit(manager: EmitterManager): boolean {
-        if (this.special)
-            window.debug = true;
         for (let i = 0; i < this.sprites.length; i++) {
             this.config.spriteIndex = this.sprites[i];
             if (!super.emit(manager))

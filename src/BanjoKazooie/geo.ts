@@ -201,8 +201,23 @@ const renderModeBuffers: ArrayBufferSlice[] = [
     ),
 ];
 
-export interface StateSelector {
+export interface SelectorNode {
+    kind: "select";
     stateIndex: number;
+}
+
+export interface SortNode {
+    kind: "sort";
+    point: vec3;
+    normal: vec3;
+}
+
+export function isSelector(node: SelectorNode | SortNode | null): node is SelectorNode {
+    return node !== null && node.kind === "select";
+}
+
+export function isSorter(node: SelectorNode | SortNode | null): node is SortNode {
+    return node !== null && node.kind === "sort";
 }
 
 export interface GeoNode {
@@ -211,7 +226,7 @@ export interface GeoNode {
     rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
-    selector: StateSelector | null;
+    nodeData: SelectorNode | SortNode | null;
 }
 
 interface GeoContext {
@@ -222,6 +237,7 @@ interface GeoContext {
     modelPoints: ModelPoint[];
 
     nodeStack: GeoNode[];
+    buildSortNodes: boolean;
 }
 
 function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
@@ -231,14 +247,14 @@ function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoN
     rspState.gDPSetOtherModeH(
         F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
         F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
-    )
+    );
     const geoNode: GeoNode = {
         boneIndex,
         parentIndex,
         children: [],
-        rspState,
         rspOutput: null,
-        selector: null,
+        rspState,
+        nodeData: null,
     };
 
     if (context.nodeStack.length > 0)
@@ -293,10 +309,39 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
 
             const child0Offs = view.getUint16(geoIdx + 0x22);
             const child1Offs = view.getUint32(geoIdx + 0x24);
-            if (child0Offs !== 0)
+
+            if (context.buildSortNodes && child0Offs !== 0 && child1Offs !== 0) {
+                // only bother building a sort node if there are two children to sort
+                const curr = peekGeoNode(context);
+                const sortNode = pushGeoNode(context, curr.boneIndex, curr.parentIndex);
+                const point = vec3.fromValues(
+                    view.getFloat32(geoIdx + 0x08),
+                    view.getFloat32(geoIdx + 0x0C),
+                    view.getFloat32(geoIdx + 0x10),
+                );
+                const normal = vec3.fromValues(
+                    view.getFloat32(geoIdx + 0x14),
+                    view.getFloat32(geoIdx + 0x18),
+                    view.getFloat32(geoIdx + 0x1C),
+                );
+                vec3.sub(normal, normal, point);
+
+                sortNode.nodeData = { kind: "sort", point, normal };
+                pushGeoNode(context, curr.boneIndex, curr.parentIndex);
                 runGeoLayout(context, geoIdx + child0Offs);
-            if (child1Offs !== 0)
+                popGeoNode(context);
+
+                pushGeoNode(context, curr.boneIndex, curr.parentIndex);
                 runGeoLayout(context, geoIdx + child1Offs);
+                popGeoNode(context);
+
+                popGeoNode(context);
+            } else {
+                if (child0Offs !== 0)
+                    runGeoLayout(context, geoIdx + child0Offs);
+                if (child1Offs !== 0)
+                    runGeoLayout(context, geoIdx + child1Offs);
+            }
         } else if (cmd === 0x02) {
             // Bone.
             const boneIndex = view.getInt8(geoIdx + 0x09);
@@ -336,7 +381,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             // LOD selection
             const minDist = view.getFloat32(geoIdx + 0x0c);
             if (minDist === 0) // only use high LOD parts
-                runGeoLayout(context, geoIdx + view.getUint32(geoIdx +  0x1C));
+                runGeoLayout(context, geoIdx + view.getUint32(geoIdx + 0x1C));
         } else if (cmd === 0x0A) {
             const vectorIndex = view.getInt16(geoIdx + 0x08);
             const boneID = view.getInt16(geoIdx + 0x0a);
@@ -344,7 +389,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             const y = view.getFloat32(geoIdx + 0x10);
             const z = view.getFloat32(geoIdx + 0x14);
 
-            context.modelPoints[vectorIndex] = {boneID, offset: vec3.fromValues(x,y,z)};
+            context.modelPoints[vectorIndex] = { boneID, offset: vec3.fromValues(x, y, z) };
         } else if (cmd === 0x0C) {
             // select child geo list(s), e.g. eye blink state
             const childCount = view.getUint16(geoIdx + 0x08);
@@ -360,7 +405,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
                 const childOffs = geoIdx + view.getUint32(childArrOffs + (i * 0x04));
 
                 const childNode = pushGeoNode(context, currNode.boneIndex, currNode.parentIndex);
-                childNode.selector = { stateIndex };
+                childNode.nodeData = { kind: "select", stateIndex };
                 runGeoLayout(context, childOffs);
                 popGeoNode(context);
             }
@@ -462,7 +507,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
             tableOffs += 0x02 * boneVertexCount;
         }
-        vertexBoneTable = {vertexBoneEntries};
+        vertexBoneTable = { vertexBoneEntries };
     }
 
     const vertexDataOffs = view.getUint32(0x10);
@@ -476,7 +521,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
     const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * 0x10);
     const textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
 
-    const renderModeIndex = zMode + (opaque? 0 : 3);
+    const renderModeIndex = zMode + (opaque ? 0 : 3);
 
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x01] = vertexData;
@@ -497,6 +542,7 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         modelPoints,
 
         nodeStack: [],
+        buildSortNodes: zMode === RenderZMode.XLU,
     };
 
     const rootNode = pushGeoNode(geoContext, 0);

@@ -9,10 +9,10 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags } from './geo';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
@@ -623,7 +623,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, depthKey = 0): void {
         if (!this.visible)
             return;
 
@@ -637,6 +637,8 @@ class DrawCallInstance {
                 this.textureAnimator.fillTextureMapping(this.textureMappings[i], this.drawCall.textureIndices[i]);
             }
         }
+        if (depthKey > 0)
+            renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, depthKey)
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
@@ -860,7 +862,7 @@ export class GeometryData {
         this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null);
     }
 }
-
+const geoNodeScratch = vec3.create();
 class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
     public children: GeoNodeRenderer[] = [];
@@ -868,20 +870,38 @@ class GeoNodeRenderer {
     constructor(private node: GeoNode) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, childIndex: number = 0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, sortState: XLUSortState, childIndex: number = 0): void {
         const node = this.node;
 
         // terminate early if this node wasn't selected and we have a selector
-        if (node.selector !== null) {
-            if (!shouldDrawNode(selectorState, node.selector.stateIndex, childIndex))
+        if (isSelector(node.nodeData)) {
+            if (!shouldDrawNode(selectorState, node.nodeData.stateIndex, childIndex))
                 return;
         }
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, sortState.key);
 
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, i);
+        if (isSorter(node.nodeData)) {
+            mat4.getTranslation(geoNodeScratch, viewerInput.camera.worldMatrix);
+            vec3.sub(geoNodeScratch, geoNodeScratch, node.nodeData.point);
+            // if the camera is on the back side of the plane, swap order
+            const secondIndex = vec3.dot(geoNodeScratch, node.nodeData.normal) < 0 ? 0 : 1;
+            const oldKey = sortState.key;
+            const oldMask = sortState.mask;
+            for (let i = 0; i < this.children.length; i++) {
+                sortState.mask = oldMask >> 1;
+                sortState.key = oldKey;
+                if (i === secondIndex)
+                    sortState.key |= oldMask;
+                this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, sortState, i);
+            }
+            sortState.mask = oldMask;
+            sortState.key = oldKey;
+        } else {
+            for (let i = 0; i < this.children.length; i++)
+                this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, sortState, i);
+        }
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -997,6 +1017,16 @@ export const enum AnimationMode {
 }
 
 export type SpawnedObjects = (GeometryRenderer | FlipbookRenderer)[];
+
+interface XLUSortState {
+    key: number,
+    mask: number,
+}
+
+const xluSortScratch: XLUSortState = {
+    key: 0,
+    mask: 0x800, // max depth is 11, so this should be enough
+}
 
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
@@ -1337,7 +1367,10 @@ export class GeometryRenderer {
             device.submitPass(hostAccessPass);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
+        // reset sort state
+        xluSortScratch.key = 0;
+        xluSortScratch.mask = 0x800;
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState, xluSortScratch);
 
         renderInstManager.popTemplateRenderInst();
     }
