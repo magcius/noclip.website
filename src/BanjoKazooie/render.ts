@@ -947,21 +947,22 @@ class GeoNodeRenderer {
     }
 }
 
-export const enum ObjectFlags {
+const enum ObjectFlags {
     FinalLayer  = 0x00400000,
     Translucent = 0x00020000,
-    LateOpaque  = 0x00000400,
+    EarlyOpaque  = 0x00000400,
 
     Blink       = 0x00000100,
 }
 
+// multiple flags can be set, so order is important
 export function layerFromFlags(flags: number): GfxRendererLayer {
     if (flags & ObjectFlags.FinalLayer)
         return GfxRendererLayer.TRANSLUCENT + 2; // unused in our current data
     if (flags & ObjectFlags.Translucent)
         return GfxRendererLayer.TRANSLUCENT + 1; // render after translucent level geometry
-    if (flags & ObjectFlags.LateOpaque)
-        return GfxRendererLayer.OPAQUE + 1; // lighthouse railing, etc
+    if (flags & ObjectFlags.EarlyOpaque)
+        return GfxRendererLayer.OPAQUE - 1;
     return GfxRendererLayer.OPAQUE;
 }
 
@@ -1049,7 +1050,7 @@ const lookatScratch = vec3.create();
 const vec3up = vec3.fromValues(0, 1, 0);
 const vec3Zero = vec3.create();
 export class GeometryRenderer {
-    public visible = true;
+    private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase: number;
@@ -1169,7 +1170,7 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setEnvironmentAlpha(a);
     }
 
-    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): SpawnedObjects {
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): void {
         if (selector > 0) {
             const maxValue =
                 id === 0x203 ? 12 : // note doors
@@ -1198,7 +1199,6 @@ export class GeometryRenderer {
             this.modelMatrix[13] = -2620;
             this.modelMatrix[14] = -20;
         }
-        return [];
     }
 
     protected movement(viewerInput: Viewer.ViewerRenderInput): void {

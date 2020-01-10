@@ -2,11 +2,11 @@ import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { FlipbookRenderer, MovementController, FlipbookData } from "./render";
+import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects } from "./render";
 import { nArray, hexzero } from "../util";
 import { MathConstants, lerp } from "../MathHelpers";
 import { FlipbookMode } from "./flipbook";
-import { LavaRock } from "./actors";
+import { LavaRock, SnowballChunk } from "./actors";
 
 export const enum ParticleType {
     Sparkle,
@@ -30,7 +30,7 @@ export const fireballIndex = 0x1d; // file 0x4a0
 export const lavaSmokeIndex = 0x1e; // file 0x6c1
 
 const particleScratch = vec3.create();
-export class Particle {
+class Particle {
     public timer = -1;
     public lifetime = 0; // initial timer value
     public parent: Emitter | null = null;
@@ -160,9 +160,6 @@ export class Particle {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (this.timer < 0)
-            return;
-
         this.update(viewerInput.deltaTime / 1000);
         this.flipbook.prepareToRender(device, renderInstManager, viewerInput);
     }
@@ -183,14 +180,13 @@ export class Particle {
     }
 }
 
-export class Emitter {
+class BaseEmitter<T extends BaseParticle> {
     public emitCount = 0;
     public modelMatrix = mat4.create();
     public movementController: MovementController | null = null;
 
-    constructor(private type: ParticleType, private sparkleColor = SparkleColor.Yellow) { }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    public update(manager: BaseEmitterManager<T>, time: number, deltaSeconds: number): void {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, time);
         while (this.emitCount >= 1) {
@@ -199,13 +195,25 @@ export class Emitter {
         }
     }
 
-    public emit(manager: EmitterManager): boolean {
+    public emit(manager: BaseEmitterManager<T>): boolean {
         const newParticle = manager.getParticle();
         if (newParticle === null)
             return false;
-        newParticle.parent = this;
-        newParticle.init(manager, this.type, this.modelMatrix, this.sparkleColor);
+        this.init(manager, newParticle);
         return true;
+    }
+
+    public init(manager: BaseEmitterManager<T>, particle: T): void {}
+}
+
+export class Emitter extends BaseEmitter<Particle>{
+    constructor(private type: ParticleType, private sparkleColor = SparkleColor.Yellow) {
+        super()
+    }
+
+    public init(manager: EmitterManager, particle: Particle): void {
+        particle.parent = this;
+        particle.init(manager, this.type, this.modelMatrix, this.sparkleColor);
     }
 }
 
@@ -697,50 +705,34 @@ export class MultiEmitter extends ConfigurableEmitter {
     }
 }
 
-export class LavaRockEmitter extends Emitter {
-    public static rockPool: LavaRock[] = [];
-    public static registry: LavaRockEmitter[] = [];
-
+export class LavaRockEmitter extends BaseEmitter<LavaRock> {
     public neighbors: mat4[] = [];
     public ready = true;
 
-    constructor(pos: vec3) {
-        super(ParticleType.Sparkle); // doesn't actually matter
-
+    constructor(pos: vec3, prevEmitters: BaseEmitter<LavaRock>[]) {
+        super();
         // find other emitters in range, add to each other's neighbor list
-        for (let i = 0; i < LavaRockEmitter.registry.length; i++) {
-            const other = LavaRockEmitter.registry[i];
+        for (let i = 0; i < prevEmitters.length; i++) {
+            const other = prevEmitters[i];
             mat4.getTranslation(emitterScratch, other.modelMatrix);
             const distance = vec3.dist(pos, emitterScratch);
             if (distance > 400 && distance < 1200) {
                 this.neighbors.push(other.modelMatrix);
-                other.neighbors.push(this.modelMatrix);
+                (other as LavaRockEmitter).neighbors.push(this.modelMatrix);
             }
         }
-        LavaRockEmitter.registry.push(this);
-
         mat4.fromTranslation(this.modelMatrix, pos);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+    public update(manager: BaseEmitterManager<LavaRock>, time: number, deltaSeconds: number): void {
         const shouldEmit = Math.random() > Math.exp(-.1 * deltaSeconds * 30);
         if (shouldEmit && this.ready)
             this.emitCount = 1;
         super.update(manager, time, deltaSeconds);
     }
 
-    public emit(manager: EmitterManager): boolean {
-        let myRock: LavaRock | null = null;
-        for (let i = 0; i < LavaRockEmitter.rockPool.length; i++) {
-            if (LavaRockEmitter.rockPool[i].visible)
-                continue;
-            myRock = LavaRockEmitter.rockPool[i];
-            break;
-        }
-        if (myRock === null)
-            return false;
+    public init(manager: BaseEmitterManager<LavaRock>, rock: LavaRock): void {
         this.ready = false;
-        myRock.visible = true;
         let target = this.modelMatrix;
         const bigRock = Math.random() > .5;
         // big rocks go straight up to roughly platform level and fall,
@@ -749,35 +741,122 @@ export class LavaRockEmitter extends Emitter {
             const index = Math.floor(Math.random() * this.neighbors.length);
             target = this.neighbors[index];
         }
-        myRock.reset(this, target, bigRock);
-        return true;
+        rock.reset(this, target, bigRock);
     }
 }
 
-export class EmitterManager {
-    public emitters: Emitter[] = [];
-    public particlePool: Particle[] = [];
+export class SnowballChunkEmitter extends BaseEmitter<SnowballChunk> {
+    public init(manager: BaseEmitterManager<SnowballChunk>, chunk: SnowballChunk): void {
+        chunk.init(this.modelMatrix);
+    }
+}
 
-    constructor(public maxParticles: number, private flipbooks: FlipbookData[]) {
-        this.particlePool = nArray(maxParticles, () => new Particle(flipbooks[SparkleColor.Yellow]));
+interface BaseParticle{
+    timer: number;
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void;
+}
+
+class BaseEmitterManager<T extends BaseParticle> {
+    public emitters: BaseEmitter<T>[] = [];
+    public particlePool: T[] = [];
+
+    constructor(public maxParticles: number, factory: () => T) {
+        this.particlePool = nArray(maxParticles, factory);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         for (let i = 0; i < this.emitters.length; i++)
             this.emitters[i].update(this, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
         for (let i = 0; i < this.maxParticles; i++)
-            this.particlePool[i].prepareToRender(device, renderInstManager, viewerInput);
+            if (this.particlePool[i].timer >= 0)
+                this.particlePool[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
-    public getParticle(): Particle | null {
+    public getParticle(): T | null {
         for (let i = 0; i < this.maxParticles; i++) {
             if (this.particlePool[i].timer < 0)
                 return this.particlePool[i];
         }
         return null;
     }
+}
+
+class EmitterManager extends BaseEmitterManager<Particle> {
+    constructor(maxParticles: number, private flipbooks: FlipbookData[]) {
+        super(maxParticles, () => new Particle(flipbooks[SparkleColor.Yellow]))
+    }
 
     public getFlipbook(index: number): FlipbookData {
         return this.flipbooks[index];
+    }
+}
+
+interface Spawner {
+    spawnObject(device: GfxDevice, emitters: SceneEmitterHolder, id: number, pos: vec3): SpawnedObjects;
+    ensureGeoData(device: GfxDevice, id: number): FlipbookData | GeometryData | null;
+    ensureFlipbookData(device: GfxDevice, id: number): FlipbookData | null;
+}
+
+export class SceneEmitterHolder {
+    public flipbookManager: EmitterManager;
+    public lavaRockManager: BaseEmitterManager<LavaRock>;
+    public snowballChunkManager: BaseEmitterManager<SnowballChunk>;
+    constructor(device: GfxDevice, spawner: Spawner) {
+        // all flipbook particle files
+        const particleData: FlipbookData[] = [];
+        // TODO: figure out what's wrong with 0x06 and 0x07
+        for (let i of [0x03, 0x04, 0x05])
+            particleData[i] = spawner.ensureFlipbookData(device, i + 0x700)!;
+        for (let i = 0x08; i <= 0x1b; i++)
+            particleData[i] = spawner.ensureFlipbookData(device, i + 0x700)!;
+        particleData[snowballSplashIndex] = spawner.ensureFlipbookData(device, 0x42a)!;
+        particleData[fireballIndex] = spawner.ensureFlipbookData(device, 0x4a0)!;
+        particleData[lavaSmokeIndex] = spawner.ensureFlipbookData(device, 0x6c1)!;
+        this.flipbookManager = new EmitterManager(300, particleData);
+
+        this.lavaRockManager = new BaseEmitterManager<LavaRock>(2, () => spawner.spawnObject(device, this, 0x3bb, emitterScratch)[0] as LavaRock);
+
+        const snowballChunkData = spawner.ensureGeoData(device, 0x37a) as GeometryData;
+        this.snowballChunkManager = new BaseEmitterManager<SnowballChunk>(16, () => new SnowballChunk(snowballChunkData));
+
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        this.lavaRockManager.prepareToRender(device, renderInstManager, viewerInput);
+        this.snowballChunkManager.prepareToRender(device, renderInstManager, viewerInput);
+        this.flipbookManager.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.flipbookManager.particlePool.length; i++)
+            this.flipbookManager.particlePool[i].flipbook.setVertexColorsEnabled(v);
+        for (let i = 0; i < this.lavaRockManager.particlePool.length; i++)
+            this.lavaRockManager.particlePool[i].setVertexColorsEnabled(v);
+        for (let i = 0; i < this.snowballChunkManager.particlePool.length; i++)
+            this.snowballChunkManager.particlePool[i].setVertexColorsEnabled(v);
+    }
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.flipbookManager.particlePool.length; i++)
+            this.flipbookManager.particlePool[i].flipbook.setTexturesEnabled(v);
+        for (let i = 0; i < this.lavaRockManager.particlePool.length; i++)
+            this.lavaRockManager.particlePool[i].setTexturesEnabled(v);
+        for (let i = 0; i < this.snowballChunkManager.particlePool.length; i++)
+            this.snowballChunkManager.particlePool[i].setTexturesEnabled(v);
+    }
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.flipbookManager.particlePool.length; i++)
+            this.flipbookManager.particlePool[i].flipbook.setMonochromeVertexColorsEnabled(v);
+        for (let i = 0; i < this.lavaRockManager.particlePool.length; i++)
+            this.lavaRockManager.particlePool[i].setMonochromeVertexColorsEnabled(v);
+        for (let i = 0; i < this.snowballChunkManager.particlePool.length; i++)
+            this.snowballChunkManager.particlePool[i].setMonochromeVertexColorsEnabled(v);
+    }
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        for (let i = 0; i < this.flipbookManager.particlePool.length; i++)
+            this.flipbookManager.particlePool[i].flipbook.setAlphaVisualizerEnabled(v);
+        for (let i = 0; i < this.lavaRockManager.particlePool.length; i++)
+            this.lavaRockManager.particlePool[i].setAlphaVisualizerEnabled(v);
+        for (let i = 0; i < this.snowballChunkManager.particlePool.length; i++)
+            this.snowballChunkManager.particlePool[i].setAlphaVisualizerEnabled(v);
     }
 }

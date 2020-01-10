@@ -267,17 +267,6 @@ function extractObjectLoad(fs: FS) {
         Scale: 1,
     });
 
-    // snowball chunk
-    setupTable.push({
-        OtherID: 0,
-        SpawnID: 0x10002, // fake ID
-        GeoFileID: 0x37a,
-        AnimationTable: [],
-        AnimationStartIndex: 0,
-        Flags: 0,
-        Scale: 1,
-    });
-
     const fileTable: CRG1File[] = [];
     for (let i = 0; i < setupTable.length; i++) {
         const setup = setupTable[i];

@@ -3,9 +3,10 @@ import { vec3, mat4, vec2 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
 import { MathConstants, lerp, angleDist } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB } from './particles';
+import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter } from './particles';
 import { ViewerRenderInput } from '../viewer';
-import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(geometryData: GeometryData, public index: number) {
@@ -69,12 +70,12 @@ export class ClankerBolt extends GeometryRenderer {
 }
 
 class ShinyObject extends GeometryRenderer {
-    constructor(geometryData: GeometryData, emitters: Emitter[], sparkleRate: number, private turnRate: number = 0, sparkleColor = SparkleColor.Yellow) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder, sparkleRate: number, private turnRate: number = 0, sparkleColor = SparkleColor.Yellow) {
         super(geometryData);
         for (let i = 0; i < 4; i++) {
             const sparkler = new Sparkler(sparkleRate, sparkleColor);
             sparkler.movementController = new ModelPin(this.modelPointArray, i + 5);
-            emitters.push(sparkler);
+            emitters.flipbookManager.emitters.push(sparkler);
         }
     }
 
@@ -84,24 +85,24 @@ class ShinyObject extends GeometryRenderer {
 }
 
 class Brentilda extends GeometryRenderer {
-    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
         super(geometryData);
         const wandEmitter = new ConfigurableEmitter(brentildaWandConfig);
         wandEmitter.movementController = new ModelPin(this.modelPointArray, 31);
-        emitters.push(wandEmitter);
+        emitters.flipbookManager.emitters.push(wandEmitter);
     }
 }
 
 class MovingJumpPad extends GeometryRenderer {
     private center = vec3.create();
     private emitters: ConfigurableEmitter[] = [];
-    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
         super(geometryData);
         this.emitters.push(
             new JumpPadEmitter(nearJumpPadConfig),
             new JumpPadEmitter(farJumpPadConfig),
         );
-        emitters.push(...this.emitters);
+        emitters.flipbookManager.emitters.push(...this.emitters);
     }
 
     protected movement(viewerInput: ViewerRenderInput) {
@@ -128,20 +129,20 @@ const chunkVelMin = vec3.fromValues(-220, 210, -220);
 // horizontal max is 280 in game, not sure why
 const chunkVelMax = vec3.fromValues(220, 460, 220);
 
-const chunkScratch = vec3.create();
+const chunkScratch = nArray(2, () => vec3.create());
 export class SnowballChunk extends GeometryRenderer {
     public movementController: Projectile = new Projectile(800);
-    public visible = false;
+    public timer = -1;
+    public sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
 
-    public init(start: vec3) {
-        this.visible = true;
-        this.animationController.resetPhase();
+    public init(start: mat4) {
+        this.timer = .8;
         // put in translucent object layer since these fade out
-        this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+        mat4.getTranslation(chunkScratch[0], start);
         for (let i = 0; i < 3; i++)
-            start[i] += randomRange(20);
-        fromBB(chunkScratch, chunkVelMin, chunkVelMax);
-        this.movementController.setFromVel(start, chunkScratch);
+            chunkScratch[0][i] += randomRange(20);
+        fromBB(chunkScratch[1], chunkVelMin, chunkVelMax);
+        this.movementController.setFromVel(chunkScratch[0], chunkScratch[1]);
         vec2.set(this.movementController.angularVel,
             randomRange(300 * MathConstants.DEG_TO_RAD),
             randomRange(300 * MathConstants.DEG_TO_RAD),
@@ -152,42 +153,34 @@ export class SnowballChunk extends GeometryRenderer {
 
     protected movement(viewerInput: ViewerRenderInput) {
         super.movement(viewerInput);
-        const flightTime = this.animationController.getTimeInSeconds();
-        if (flightTime > .8)
-            this.visible = false;
-        else if (flightTime > .4)
-            this.setEnvironmentAlpha(2 - flightTime / .4);
+        if (this.timer < .4)
+            this.setEnvironmentAlpha(this.timer / .4);
+        this.timer -= viewerInput.deltaTime / 1000;
     }
+}
+
+const enum SnowballState {
+    Dead,
+    Aiming,
+    Flying,
 }
 
 const snowballScratch = vec3.create();
 export class Snowball extends GeometryRenderer {
-    private static chunkPool: SnowballChunk[] = [];
-
     private target = vec3.create();
-    private ready = false;
+    public state = SnowballState.Dead;
 
     public movementController: Projectile = new Projectile(1800);
 
     private sparkleEmitter = new StreamEmitter(30, ParticleType.SnowSparkle);
+    private chunkEmitter = new SnowballChunkEmitter();
 
-    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
         super(geometryData);
         this.die();
-        emitters.push(this.sparkleEmitter);
+        emitters.flipbookManager.emitters.push(this.sparkleEmitter);
         this.sparkleEmitter.movementController = new ModelPin(this.modelPointArray, 5);
-    }
-
-    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): SpawnedObjects {
-        if (Snowball.chunkPool.length >= 16)
-            return [];
-        const out: SpawnedObjects = [];
-        for (let i = 0; i < 8; i++) {
-            const newChunk = spawner(snowballChunkID)[0] as SnowballChunk;
-            out.push(newChunk);
-            Snowball.chunkPool.push(newChunk);
-        }
-        return out;
+        emitters.snowballChunkManager.emitters.push(this.chunkEmitter);
     }
 
     private static computeTarget(dst: vec3, cameraToWorld: mat4): void {
@@ -197,9 +190,8 @@ export class Snowball extends GeometryRenderer {
     }
 
     public init(start: vec3, camera: mat4): void {
-        this.visible = true;
-        this.ready = false;
         this.sparkleEmitter.active = true;
+        this.state = SnowballState.Aiming;
         mat4.fromTranslation(this.modelMatrix, start);
         Snowball.computeTarget(this.target, camera);
         this.animationController.resetPhase();
@@ -209,8 +201,8 @@ export class Snowball extends GeometryRenderer {
         const flightTime = this.animationController.getTimeInSeconds();
         if (flightTime < 1 / 30)
             return;
-        if (!this.ready) {
-            this.ready = true;
+        if (this.state === SnowballState.Aiming) {
+            this.state = SnowballState.Flying;
             // project position using constant velocity
             Snowball.computeTarget(snowballScratch, viewerInput.camera.worldMatrix);
             vec3.sub(this.target, snowballScratch, this.target);
@@ -233,22 +225,14 @@ export class Snowball extends GeometryRenderer {
         vec3.transformMat4(snowballScratch, snowballScratch, viewerInput.camera.viewMatrix);
         if (vec3.len(snowballScratch) < 100) {
             Snowball.computeTarget(snowballScratch, viewerInput.camera.worldMatrix);
-            let j = 0;
-            for (let i = 0; i < 8; i++) {
-                while (j < Snowball.chunkPool.length && Snowball.chunkPool[j].visible) {
-                    j++;
-                }
-                if (j >= Snowball.chunkPool.length)
-                    break; // out of free particles
-                Snowball.chunkPool[j].init(snowballScratch);
-            }
-
+            mat4.fromTranslation(this.chunkEmitter.modelMatrix, snowballScratch);
+            this.chunkEmitter.emitCount = 8;
             this.die();
         }
     }
 
     private die(): void {
-        this.visible = false;
+        this.state = SnowballState.Dead;
         this.sparkleEmitter.active = false;
     }
 }
@@ -279,10 +263,8 @@ export class SirSlush extends GeometryRenderer {
         this.animationMode = AnimationMode.Loop;
     }
 
-    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): SpawnedObjects {
-        const out = spawner(0x125);
-        this.snowball = out[0] as Snowball;
-        return out;
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector = 0): void {
+        this.snowball = spawner(0x125)[0] as Snowball;
     }
 
     protected movement(viewerInput: ViewerRenderInput) {
@@ -295,7 +277,7 @@ export class SirSlush extends GeometryRenderer {
         const yawToCamera = Math.atan2(toCamera[0], toCamera[2]);
         const facingYaw = Math.atan2(this.modelMatrix[8], this.modelMatrix[10]);
         let angleDelta = angleDist(facingYaw, yawToCamera);
-        const turnCap = 6 * MathConstants.DEG_TO_RAD;
+        const turnCap = Math.PI * viewerInput.deltaTime / 1000;
 
         // in game height range is 500, roughly the hat height
         const inThrowRange = cameraDist > 500 && cameraDist < 2750 && toCamera[1] < 1500;
@@ -305,7 +287,7 @@ export class SirSlush extends GeometryRenderer {
                 this.selectorState.values[1] = 0; // turn off snowball
                 if (this.throwTimer > 0)
                     this.throwTimer -= viewerInput.deltaTime / 1000;
-                else if (inThrowRange && Math.abs(angleDelta) < 1.5 * turnCap && !this.snowball.visible)
+                else if (inThrowRange && Math.abs(angleDelta) < 9 * MathConstants.DEG_TO_RAD && this.snowball.state === SnowballState.Dead)
                     this.changeAnimation(SirSlushState.Throwing, AnimationMode.Once);
                 if (cameraDist < 3150)
                     turnTowards(this.modelMatrix, angleDelta, turnCap);
@@ -327,6 +309,12 @@ export class SirSlush extends GeometryRenderer {
                 }
                 break;
         }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.snowball.state !== SnowballState.Dead)
+            this.snowball.prepareToRender(device, renderInstManager, viewerInput);
     }
 }
 
@@ -835,10 +823,10 @@ const enum GloopState {
 class Gloop extends RailRider {
     private bubbler = new Emitter(ParticleType.AirBubble);
 
-    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
         super(geometryData);
         this.bubbler.movementController = new ModelPin(this.modelPointArray, 5);
-        emitters.push(this.bubbler);
+        emitters.flipbookManager.emitters.push(this.bubbler);
     }
 
     protected movement(viewerInput: ViewerRenderInput): void {
@@ -869,7 +857,7 @@ export class LavaRock extends GeometryRenderer {
 
     public movementController: Projectile = new Projectile(LavaRock.g);
 
-    private flightTime = 0;
+    public timer = -1;
     private explode = false;
 
     private flameEmitter = new ConfigurableEmitter(lavaRockLaunchFlameConfig);
@@ -882,11 +870,10 @@ export class LavaRock extends GeometryRenderer {
 
     public parent: LavaRockEmitter;
 
-    constructor(geometryData: GeometryData, emitters: Emitter[]) {
+    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
         super(geometryData);
-        this.visible = false;
 
-        emitters.push(
+        emitters.flipbookManager.emitters.push(
             this.flameEmitter,
             this.bigTrail,
             this.smallTrail,
@@ -912,9 +899,9 @@ export class LavaRock extends GeometryRenderer {
         mat4.getTranslation(lavaRockScratch[1], end);
 
         const initialRise = lerp(1400, big ? 1200 : 1800, Math.random());
-        this.flightTime = Math.sqrt(2 * initialRise / LavaRock.g) + Math.sqrt(2 * (initialRise + lavaRockScratch[0][1] - lavaRockScratch[1][1]) / LavaRock.g);
+        this.timer = Math.sqrt(2 * initialRise / LavaRock.g) + Math.sqrt(2 * (initialRise + lavaRockScratch[0][1] - lavaRockScratch[1][1]) / LavaRock.g);
 
-        this.movementController.setFromTarget(lavaRockScratch[0], lavaRockScratch[1], this.flightTime);
+        this.movementController.setFromTarget(lavaRockScratch[0], lavaRockScratch[1], this.timer);
 
         vec2.set(this.movementController.angularVel,
             randomRange(1, 2) * 240 * MathConstants.DEG_TO_RAD,
@@ -948,8 +935,10 @@ export class LavaRock extends GeometryRenderer {
             emitAt(this.sparkleEmitter, this.modelMatrix, 4);
             emitAt(this.smokeEmitter, this.modelMatrix, 4);
             this.die();
+            return;
         }
-        if (this.animationController.getTimeInSeconds() > this.flightTime) {
+        this.timer -= viewerInput.deltaTime/1000;
+        if (this.timer < 0) {
             // fell back into lava
             emitAt(this.lavaSparkleEmitter, this.modelMatrix, 4);
             emitAt(this.smokeEmitter, this.modelMatrix, 4);
@@ -962,19 +951,17 @@ export class LavaRock extends GeometryRenderer {
     }
 
     private die() {
+        this.timer = -1;
         this.parent.ready = true;
-
         this.bigTrail.active = false;
         this.smallTrail.active = false;
-        this.visible = false;
     }
 }
 
 export const clankerID = 0x10001;
-const snowballChunkID = 0x10002;
 
 // TODO: avoid having to thread the emitter list all the way through
-export function createRenderer(emitters: Emitter[], objectID: number, geometryData: GeometryData): GeometryRenderer | FlipbookRenderer {
+export function createRenderer(emitters: SceneEmitterHolder, objectID: number, geometryData: GeometryData): GeometryRenderer | FlipbookRenderer {
     switch (objectID) {
         case 0x043: return new ClankerBolt(geometryData);
         case 0x044: return new ClankerTooth(geometryData, 7); // left
@@ -997,8 +984,6 @@ export function createRenderer(emitters: Emitter[], objectID: number, geometryDa
         case 0x249: return new MovingJumpPad(geometryData, emitters);
         case 0x348: return new Brentilda(geometryData, emitters);
         case 0x3bb: return new LavaRock(geometryData, emitters);
-
-        case snowballChunkID: return new SnowballChunk(geometryData);
     }
     return new GeometryRenderer(geometryData);
 }
