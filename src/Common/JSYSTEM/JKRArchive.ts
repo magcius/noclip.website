@@ -1,12 +1,31 @@
 
 // Nintendo RARC file format.
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, readString } from '../util';
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { assert, readString } from '../../util';
+import * as Yay0 from '../Compression/Yay0';
+import * as Yaz0 from '../Compression/Yaz0';
+
+export const enum JKRFileAttr {
+    Normal          = 0x01,
+    Directory       = 0x02,
+    Compressed      = 0x04,
+    // These flags decide MRAM/ARAM placement.
+    CompressionType = 0x80,
+}
+
+export const enum JKRCompressionType {
+    None = 0x00,
+    Yay0 = 0x01, // SZP
+    Yaz0 = 0x02, // SZS
+    ASR  = 0x03, // ASR (Seen only in the Wii Home menu)
+}
 
 export interface RARCFile {
     id: number;
     name: string;
+    flags: JKRFileAttr;
+    compressionType: JKRCompressionType;
     buffer: ArrayBufferSlice;
 }
 
@@ -27,7 +46,7 @@ export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSl
     return file ? file.buffer : null;
 }
 
-export class RARC {
+export class JKRArchive {
     // All the files in a flat list.
     public files: RARCFile[];
     // Root directory.
@@ -74,7 +93,7 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export function parse(buffer: ArrayBufferSlice): RARC {
+export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): JKRArchive {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'RARC');
@@ -106,7 +125,7 @@ export function parse(buffer: ArrayBufferSlice): RARC {
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
             const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04);
-            const flags = (flagsAndNameOffs >>> 24) & 0xFF;
+            let flags = (flagsAndNameOffs >>> 24) & 0xFF;
             const nameOffs = flagsAndNameOffs & 0x00FFFFFF;
             const name = readString(buffer, strTableOffs + nameOffs, -1, true);
 
@@ -117,14 +136,35 @@ export function parse(buffer: ArrayBufferSlice): RARC {
             if (name === '.' || name === '..')
                 continue;
 
-            const isDirectory = !!(flags & 0x02);
+            const isDirectory = !!(flags & JKRFileAttr.Directory);
             if (isDirectory) {
                 const subdirEntryIndex = entryDataOffs;
                 subdirIndexes.push(subdirEntryIndex);
             } else {
                 const offs = dataOffs + entryDataOffs;
-                const fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                const file: RARCFile = { id, name, buffer: fileBuffer };
+                const rawFileBuffer = buffer.slice(offs, offs + entryDataSize);
+
+                let compressionType: JKRCompressionType = JKRCompressionType.None;
+                let fileBuffer: ArrayBufferSlice;
+                if (!!(flags & JKRFileAttr.Compressed))
+                    compressionType = (flags & JKRFileAttr.CompressionType) ? JKRCompressionType.Yaz0 : JKRCompressionType.Yay0;
+
+                // Only decompress if we're expecting it.
+                if (compressionType !== JKRCompressionType.None && yaz0Decompressor !== null) {
+                    if (compressionType === JKRCompressionType.Yaz0) {
+                        fileBuffer = Yaz0.decompressSync(yaz0Decompressor, rawFileBuffer);
+                        compressionType = JKRCompressionType.None;
+                    } else if (compressionType === JKRCompressionType.Yay0) {
+                        fileBuffer = Yay0.decompress(rawFileBuffer);
+                        compressionType = JKRCompressionType.None;
+                    } else {
+                        throw "whoops";
+                    }
+                } else {
+                    fileBuffer = rawFileBuffer;
+                }
+
+                const file: RARCFile = { id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
             }
@@ -150,7 +190,7 @@ export function parse(buffer: ArrayBufferSlice): RARC {
     const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
-    const rarc = new RARC();
+    const rarc = new JKRArchive();
     rarc.files = allFiles;
     rarc.root = root;
     return rarc;

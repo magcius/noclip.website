@@ -9,13 +9,12 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags } from './geo';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import AnimationController from '../AnimationController';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 
@@ -44,7 +43,6 @@ layout(row_major, std140) uniform ub_DrawParams {
 };
 
 uniform ub_CombineParameters {
-    vec4 u_Params;
     vec4 u_PrimColor;
     vec4 u_EnvColor;
 };
@@ -104,11 +102,11 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
-        this.frag = this.generateFrag();
+        this.frag = this.generateFrag(combParams);
     }
 
     private generateAlphaTest(): string {
@@ -139,7 +137,7 @@ void main() {
         }
     }
 
-    private generateFrag(): string {
+    private generateFrag(combParams: vec4): string {
         const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
@@ -150,6 +148,37 @@ void main() {
             texFiltStr = 'Bilerp';
         else
             throw "whoops";
+
+        const colorInputs: string[] = [
+            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
+            'v_Color.rgb', 'u_EnvColor.rgb', 't_One.rgb', 't_Zero.rgb'
+        ];
+
+        const multInputs: string[] = [
+            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
+            'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
+            't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
+            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
+        ];
+
+        const alphaInputs: string[] = [
+            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
+        ];
+
+        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
+            return {
+                x: (params >>> 12) & 0xf,
+                y: (params >>> 8) & 0xf,
+                z: (params >>> 4) & 0xf,
+                w: (params >>> 0) & 0xf
+            }
+        }
+
+        const px = unpackParams(combParams[0]);
+        const py = unpackParams(combParams[1]);
+        const pz = unpackParams(combParams[2]);
+        const pw = unpackParams(combParams[3]);
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -175,41 +204,20 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
-ivec4 UnpackParams(float val) {
-    int orig = int(val);
-    ivec4 params;
-    params.x = (orig >> 12) & 0xf;
-    params.y = (orig >> 8) & 0xf;
-    params.z = (orig >> 4) & 0xf;
-    params.w = (orig >> 0) & 0xf;
-
-    return params;
+vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
+    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
 }
 
-vec3 CombineColorCycle(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1, float t_Params) {
-    ivec4 p = UnpackParams(t_Params);
-    vec3 t_ColorInputs[8] = vec3[8](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_One.rgb, t_Zero.rgb
-    );
-    vec3 t_MultInputs[16] = vec3[16](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_Zero.rgb /* key */, t_CombColor.aaa,
-        t_Tex0.aaa, t_Tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
-        u_EnvColor.aaa, t_Zero.rgb /* LOD */, t_Zero.rgb /* prim LOD */, t_Zero.rgb
-    );
-
-    return (t_ColorInputs[p.x] - t_ColorInputs[p.y]) * t_MultInputs[p.z] + t_ColorInputs[p.w];
+float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
+    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
 }
 
-float CombineAlphaCycle(float combAlpha, float t_Tex0, float t_Tex1, float t_Params) {
-    ivec4 p = UnpackParams(t_Params);
-    float t_AlphaInputs[8] = float[8](
-        combAlpha, t_Tex0, t_Tex1, u_PrimColor.a,
-        v_Color.a, u_EnvColor.a, 1.0, 0.0
-    );
+vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
+    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+}
 
-    return (t_AlphaInputs[p.x] - t_AlphaInputs[p.y])* t_AlphaInputs[p.z] + t_AlphaInputs[p.w];
+float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
+    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
 }
 
 void main() {
@@ -222,14 +230,14 @@ void main() {
 #endif
 
     t_Color = vec4(
-        CombineColorCycle(t_Zero, t_Tex0, t_Tex1, u_Params.x),
-        CombineAlphaCycle(t_Zero.a, t_Tex0.a, t_Tex1.a, u_Params.y)
+        CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
+        CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
     );
 
 #ifdef TWO_CYCLE
     t_Color = vec4(
-        CombineColorCycle(t_Color, t_Tex0, t_Tex1, u_Params.z),
-        CombineAlphaCycle(t_Color.a, t_Tex0.a, t_Tex1.a, u_Params.w)
+        CombineColorCycle1(t_Color, t_Tex0, t_Tex1),
+        CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
     );
 #endif
 
@@ -525,6 +533,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
+    public envAlpha = 1;
     public visible = true;
 
     constructor(geometryData: RenderData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall, private textureAnimator: TextureAnimator | null = null) {
@@ -543,7 +552,9 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
+        const combParams = vec4.create();
+        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -612,7 +623,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, depthKey = 0): void {
         if (!this.visible)
             return;
 
@@ -626,6 +637,8 @@ class DrawCallInstance {
                 this.textureAnimator.fillTextureMapping(this.textureMappings[i], this.drawCall.textureIndices[i]);
             }
         }
+        if (depthKey > 0)
+            renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, depthKey)
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
@@ -650,12 +663,11 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
+        offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
     }
 }
 
@@ -713,8 +725,12 @@ export class BoneAnimator {
     constructor(private animFile: AnimationFile, public duration: number) {
     }
 
-    public frames(): number {
-        return this.animFile.endFrame - this.animFile.startFrame;
+    public getPhase(frame: number, mode: AnimationMode): number {
+        return getAnimFrame(this.animFile, frame, mode)/(this.animFile.endFrame - this.animFile.startFrame);
+    }
+
+    public fps(): number {
+        return (this.animFile.endFrame - this.animFile.startFrame)/this.duration;
     }
 
     public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
@@ -791,13 +807,62 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     return frame + anim.startFrame;
 }
 
+// an animation controller that makes it easier to change fps
+// and preserve control over the new phase
+class AdjustableAnimationController {
+    private time = 0;
+    private initialized = false;
+    private phaseFrames = 0;
+
+    constructor(private fps = 30) {}
+
+    public setTimeFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
+        this.time = viewerInput.time/1000;
+        if (!this.initialized) {
+            this.initialized = true;
+            // treat phaseFrames as the intended start frame
+            this.phaseFrames -= this.time * this.fps;
+        }
+    }
+
+    // set a new fps for a controller that might not have been updated recently
+    // used for pooled renderers like particles
+    public init(newFPS: number, newPhase = 0) {
+        this.initialized = false;
+        this.fps = newFPS;
+        this.phaseFrames = newPhase;
+    }
+
+    public adjust(newFPS: number, newPhase = 0) {
+        // assume time is current, so just adjust the values now
+        this.fps = newFPS;
+        this.phaseFrames = newPhase - this.time * this.fps;
+    }
+
+    public getTimeInFrames(): number {
+        return this.time*this.fps + this.phaseFrames;
+    }
+
+    public getTimeInSeconds(): number {
+        if (this.fps === 0)
+            return 0; // not sure what this should mean
+        else
+            return this.time + this.phaseFrames/this.fps;
+    }
+
+    public resetPhase(): void {
+        this.initialized = false;
+        this.phaseFrames = 0;
+    }
+}
+
 export class GeometryData {
     public renderData: RenderData;
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null);
     }
 }
-
+const geoNodeScratch = vec3.create();
 class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
     public children: GeoNodeRenderer[] = [];
@@ -805,20 +870,38 @@ class GeoNodeRenderer {
     constructor(private node: GeoNode) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, childIndex: number = 0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, sortState: XLUSortState, childIndex: number = 0): void {
         const node = this.node;
 
         // terminate early if this node wasn't selected and we have a selector
-        if (node.selector !== null) {
-            if (!shouldDrawNode(selectorState, node.selector.stateIndex, childIndex))
+        if (isSelector(node.nodeData)) {
+            if (!shouldDrawNode(selectorState, node.nodeData.stateIndex, childIndex))
                 return;
         }
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, sortState.key);
 
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, i);
+        if (isSorter(node.nodeData)) {
+            mat4.getTranslation(geoNodeScratch, viewerInput.camera.worldMatrix);
+            vec3.sub(geoNodeScratch, geoNodeScratch, node.nodeData.point);
+            // if the camera is on the back side of the plane, swap order
+            const secondIndex = vec3.dot(geoNodeScratch, node.nodeData.normal) < 0 ? 0 : 1;
+            const oldKey = sortState.key;
+            const oldMask = sortState.mask;
+            for (let i = 0; i < this.children.length; i++) {
+                sortState.mask = oldMask >> 1;
+                sortState.key = oldKey;
+                if (i === secondIndex)
+                    sortState.key |= oldMask;
+                this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, sortState, i);
+            }
+            sortState.mask = oldMask;
+            sortState.key = oldKey;
+        } else {
+            for (let i = 0; i < this.children.length; i++)
+                this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, sortState, i);
+        }
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -855,10 +938,31 @@ class GeoNodeRenderer {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].setAlphaVisualizerEnabled(v);
     }
+
+    public setEnvironmentAlpha(a: number): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].envAlpha = a
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setEnvironmentAlpha(a);
+    }
 }
 
-const enum ObjectFlags {
-    Blink = 0x100,
+export const enum ObjectFlags {
+    FinalLayer  = 0x00400000,
+    Translucent = 0x00020000,
+    LateOpaque  = 0x00000400,
+
+    Blink       = 0x00000100,
+}
+
+export function layerFromFlags(flags: number): GfxRendererLayer {
+    if (flags & ObjectFlags.FinalLayer)
+        return GfxRendererLayer.TRANSLUCENT + 2; // unused in our current data
+    if (flags & ObjectFlags.Translucent)
+        return GfxRendererLayer.TRANSLUCENT + 1; // render after translucent level geometry
+    if (flags & ObjectFlags.LateOpaque)
+        return GfxRendererLayer.OPAQUE + 1; // lighthouse railing, etc
+    return GfxRendererLayer.OPAQUE;
 }
 
 const enum BlinkState {
@@ -893,11 +997,11 @@ export interface MovementController {
 }
 
 class TextureAnimator {
-    public animationController: AnimationController;
+    public animationController: AdjustableAnimationController;
     public textureMap: Map<number, GfxTexture[]>;
 
     constructor(private setup: TextureAnimationSetup, gfxTextures: GfxTexture[]) {
-        this.animationController = new AnimationController(setup.speed);
+        this.animationController = new AdjustableAnimationController(setup.speed);
         this.textureMap = new Map<number, GfxTexture[]>();
         for (let i = 0; i < setup.indexLists.length; i++) {
             const key = setup.indexLists[i][0];
@@ -926,13 +1030,26 @@ export const enum AnimationMode {
     Loop,
 }
 
+export type SpawnedObjects = (GeometryRenderer | FlipbookRenderer)[];
+
+interface XLUSortState {
+    key: number,
+    mask: number,
+}
+
+const xluSortScratch: XLUSortState = {
+    key: 0,
+    mask: 0x800, // max depth is 11, so this should be enough
+}
+
+const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
 const vec3up = vec3.fromValues(0, 1, 0);
 const vec3Zero = vec3.create();
 export class GeometryRenderer {
-    private visible = true;
+    public visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase: number;
@@ -947,7 +1064,7 @@ export class GeometryRenderer {
     private animFrames = 0;
 
     public boneAnimators: BoneAnimator[] = [];
-    public animationController = new AnimationController(30);
+    public animationController = new AdjustableAnimationController(30);
     public movementController: MovementController | null = null;
     public textureAnimator: TextureAnimator | null = null;
 
@@ -1048,7 +1165,43 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
-    protected movement(deltaSeconds: number): void {
+    public setEnvironmentAlpha(a: number): void {
+        this.rootNodeRenderer.setEnvironmentAlpha(a);
+    }
+
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): SpawnedObjects {
+        if (selector > 0) {
+            const maxValue =
+                id === 0x203 ? 12 : // note doors
+                id === 0x25e ? 6 :  // mystery eggs
+                id === 0x2e3 ? 9 :  // level signs
+                id === 0x2e4 ? 9 :  // exit pads
+                0;
+            for (let stateIndex = 0; stateIndex <= maxValue; stateIndex++)
+                this.selectorState.values[stateIndex] = (stateIndex === selector) ? 1 : 0;
+        }
+        if (id === 7) { // mumbo
+            this.selectorState.values[4] = 1;
+            this.selectorState.values[5] = 0;
+            this.selectorState.values[6] = 1;
+            this.selectorState.values[7] = 0;
+            this.selectorState.values[8] = 0;
+            this.selectorState.values[9] = 0;
+        }
+        // tiptip choir turtles, might actually be from setup params
+        const turtleID = id - 0x27a;
+        if (turtleID >= 1 && turtleID <= 6)
+            this.selectorState.values[4] = turtleID;
+
+        if (id === 0x3c) { // fix clanker key position
+            this.modelMatrix[12] = 5700;
+            this.modelMatrix[13] = -2620;
+            this.modelMatrix[14] = -20;
+        }
+        return [];
+    }
+
+    protected movement(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, this.animationController.getTimeInSeconds());
     }
@@ -1071,17 +1224,20 @@ export class GeometryRenderer {
         const animator = this.boneAnimators[newIndex];
         if (animator === undefined)
             throw `bad animation index ${newIndex}`;
-        this.animationController.adjustTimeToNewFPS(animator.frames()/animator.duration);
-        this.animationController.setPhaseToCurrent();
-        this.animFrames = 0;
+        this.animationController.adjust(animator.fps());
     }
 
     public animationPhaseTrigger(phase: number): boolean {
-        const total = this.boneAnimators[this.currAnimation].frames();
-        const currFrame = this.animationController.getTimeInFrames()/total;
-        const oldFrame = this.animFrames/total;
+        const currAnimator = this.boneAnimators[this.currAnimation];
+        const currFrame = currAnimator.getPhase(this.animationController.getTimeInFrames(), this.animationMode);
+        const oldFrame = currAnimator.getPhase(this.animFrames, this.animationMode);
         // assume forward for now
         return (oldFrame <= phase && phase < currFrame) || (currFrame < oldFrame && (phase < currFrame || oldFrame <= phase));
+    }
+
+    public getAnimationPhase(): number {
+        const currAnimator = this.boneAnimators[this.currAnimation];
+        return currAnimator.getPhase(this.animationController.getTimeInFrames(), this.animationMode);
     }
 
     private calcBonesRelativeToMatrix(array: mat4[], base: mat4): void {
@@ -1158,7 +1314,7 @@ export class GeometryRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         if (this.textureAnimator !== null)
             this.textureAnimator.animationController.setTimeFromViewerInput(viewerInput);
-        this.movement(viewerInput.deltaTime / 1000);
+        this.movement(viewerInput);
         this.calcAnim();
         this.calcBoneToWorld();
         this.calcModelPoints();
@@ -1172,7 +1328,11 @@ export class GeometryRenderer {
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
-        template.sortKey = this.sortKeyBase;
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.modelMatrix);
+        vec3.sub(depthScratch, depthScratch, lookatScratch);
+        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(depthScratch));
 
         const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
@@ -1226,7 +1386,10 @@ export class GeometryRenderer {
             device.submitPass(hostAccessPass);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
+        // reset sort state
+        xluSortScratch.key = 0;
+        xluSortScratch.mask = 0x800;
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState, xluSortScratch);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -1281,7 +1444,7 @@ export class FlipbookRenderer {
 
     public visible = true;
     public modelMatrix = mat4.create();
-    public animationController: AnimationController;
+    public animationController = new AdjustableAnimationController(30);
     public sortKeyBase: number;
     public rotationAngle = 0;
     public screenOffset = vec2.create();
@@ -1304,8 +1467,7 @@ export class FlipbookRenderer {
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
 
-        this.animationController = new AnimationController(flipbookData.flipbook.frameRate);
-        this.animationController.phaseFrames = (phase / 0x20) * flipbookData.flipbook.frameSequence.length;
+        this.animationController.init(flipbookData.flipbook.frameRate, (phase / 0x20) * flipbookData.flipbook.frameSequence.length);
         this.animationParams = {
             initialMirror,
             mirrored: !!(phase & 1),
@@ -1325,8 +1487,7 @@ export class FlipbookRenderer {
         this.mode = modeOverride !== undefined ? modeOverride : data.mode;
         this.megaStateFlags.depthWrite = this.mode === FlipbookMode.AlphaTest;
         this.createProgram();
-        this.animationController.fps = data.flipbook.frameRate;
-        this.animationController.phaseFrames = 0;
+        this.animationController.init(data.flipbook.frameRate);
         this.animationParams.initialMirror = mirror;
         this.animationParams.mirrored = mirror;
     }
@@ -1336,7 +1497,10 @@ export class FlipbookRenderer {
         let otherModeL = baseFlipbookOtherModeL;
         if (this.mode === FlipbookMode.AlphaTest)
             otherModeL |= 1; // alpha test against blend
-        const program = new F3DEX_Program(otherModeH, otherModeL);
+        const comb = vec4.create();
+        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
+        fillCombineParams(comb, 0, combine);
+        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
@@ -1454,10 +1618,8 @@ export class FlipbookRenderer {
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
-        offs += fillCombineParams(comb, offs, combine);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
     }

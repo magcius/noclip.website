@@ -3,6 +3,107 @@ import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightCh
 import * as GX from "./gx_enum";
 import { autoOptimizeMaterial } from "./gx_render";
 
+function copyColorChannelControl(colorChannel: ColorChannelControl): ColorChannelControl {
+    return {
+        lightingEnabled: colorChannel.lightingEnabled,
+        matColorSource: colorChannel.matColorSource,
+        ambColorSource: colorChannel.ambColorSource,
+        litMask: colorChannel.litMask,
+        diffuseFunction: colorChannel.diffuseFunction,
+        attenuationFunction: colorChannel.attenuationFunction,
+    };
+}
+
+function copyLightChannelControl(lightChannel: LightChannelControl): LightChannelControl {
+    return {
+        alphaChannel: copyColorChannelControl(lightChannel.alphaChannel),
+        colorChannel: copyColorChannelControl(lightChannel.colorChannel),
+    };
+}
+
+function copyTexGen(texGen: TexGen): TexGen {
+    return {
+        type: texGen.type,
+        source: texGen.source,
+        matrix: texGen.matrix,
+        normalize: texGen.normalize,
+        postMatrix: texGen.postMatrix,
+    };
+}
+
+function copyTevStage(tevStage: TevStage): TevStage {
+    return {
+        colorInA: tevStage.colorInA,
+        colorInB: tevStage.colorInB,
+        colorInC: tevStage.colorInC,
+        colorInD: tevStage.colorInD,
+        colorOp: tevStage.colorOp,
+        colorBias: tevStage.colorBias,
+        colorScale: tevStage.colorScale,
+        colorClamp: tevStage.colorClamp,
+        colorRegId: tevStage.colorRegId,
+        alphaInA: tevStage.alphaInA,
+        alphaInB: tevStage.alphaInB,
+        alphaInC: tevStage.alphaInC,
+        alphaInD: tevStage.alphaInD,
+        alphaOp: tevStage.alphaOp,
+        alphaBias: tevStage.alphaBias,
+        alphaScale: tevStage.alphaScale,
+        alphaClamp: tevStage.alphaClamp,
+        alphaRegId: tevStage.alphaRegId,
+        texCoordId: tevStage.texCoordId,
+        texMap: tevStage.texMap,
+        channelId: tevStage.channelId,
+        konstColorSel: tevStage.konstColorSel,
+        konstAlphaSel: tevStage.konstAlphaSel,
+        indTexStage: tevStage.indTexStage,
+        indTexFormat: tevStage.indTexFormat,
+        indTexBiasSel: tevStage.indTexBiasSel,
+        indTexMatrix: tevStage.indTexMatrix,
+        indTexWrapS: tevStage.indTexWrapS,
+        indTexWrapT: tevStage.indTexWrapT,
+        indTexAddPrev: tevStage.indTexAddPrev,
+        indTexUseOrigLOD: tevStage.indTexUseOrigLOD,
+    };
+}
+
+function copyIndTexStage(indStage: IndTexStage): IndTexStage {
+    return {
+        texture: indStage.texture,
+        texCoordId: indStage.texCoordId,
+        scaleS: indStage.scaleS,
+        scaleT: indStage.scaleT,
+    };
+}
+
+function copyBlendMode(blendMode: BlendMode): BlendMode {
+    return {
+        type: blendMode.type,
+        srcFactor: blendMode.srcFactor,
+        dstFactor: blendMode.dstFactor,
+        logicOp: blendMode.logicOp,
+    }
+}
+
+function copyRopInfo(ropInfo: RopInfo): RopInfo {
+    return {
+        blendMode: copyBlendMode(ropInfo.blendMode),
+        depthTest: ropInfo.depthTest,
+        depthFunc: ropInfo.depthFunc,
+        depthWrite: ropInfo.depthWrite,
+    }
+}
+
+function copyAlphaTest(alphaTest: AlphaTest): AlphaTest {
+    return {
+        compareA: alphaTest.compareA,
+        referenceA: alphaTest.referenceA,
+        op: alphaTest.op,
+        compareB: alphaTest.compareB,
+        referenceB: alphaTest.referenceB,
+    }
+}
+
 export class GXMaterialBuilder {
     private cullMode: GX.CullMode = GX.CullMode.NONE;
     private lightChannels: LightChannelControl[] = [];
@@ -13,7 +114,7 @@ export class GXMaterialBuilder {
     private ropInfo: RopInfo;
     private usePnMtxIdx?: boolean;
 
-    constructor(private name: string) {
+    constructor(private name: string | null = null) {
         this.alphaTest = {} as AlphaTest;
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
@@ -22,10 +123,6 @@ export class GXMaterialBuilder {
         } as RopInfo;
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
-    }
-
-    public setName(name: string): void {
-        this.name = name;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {
@@ -225,16 +322,21 @@ export class GXMaterialBuilder {
         this.usePnMtxIdx = v;
     }
 
-    public finish(): GXMaterial {
+    public finish(name: string | null = null): GXMaterial {
+        if (name === null)
+            name = this.name;
+        if (name === null)
+            name = '';
+
         const material = {
-            name: this.name,
+            name: name,
             cullMode: this.cullMode,
-            lightChannels: this.lightChannels,
-            texGens: this.texGens,
-            tevStages: this.tevStages,
-            indTexStages: this.indTexStages,
-            alphaTest: this.alphaTest,
-            ropInfo: this.ropInfo,
+            lightChannels: this.lightChannels.map(copyLightChannelControl),
+            texGens: this.texGens.map(copyTexGen),
+            tevStages: this.tevStages.map(copyTevStage),
+            indTexStages: this.indTexStages.map(copyIndTexStage),
+            alphaTest: copyAlphaTest(this.alphaTest),
+            ropInfo: copyRopInfo(this.ropInfo),
             usePnMtxIdx: this.usePnMtxIdx,
         };
         autoOptimizeMaterial(material);

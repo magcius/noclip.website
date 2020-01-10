@@ -106,7 +106,7 @@ class ActorLightInfo {
         colorFromRGBA(light2.Color, 0, 0, 0, this.Alpha2);
 
         if (setAmbient)
-            modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient, true);
+            modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient);
     }
 }
 

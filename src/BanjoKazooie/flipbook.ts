@@ -145,7 +145,7 @@ export function parse(buffer: ArrayBufferSlice): Flipbook {
                 const palette = new Uint8Array(256 * 4);
                 parseTLUT(palette, view, paletteStart, ImageSize.G_IM_SIZ_8b, TextureLUT.G_TT_RGBA16);
             } else if (flags & Flags.I8) {
-                bytesPerPixel = 2;
+                bytesPerPixel = 1;
                 decodeTex_I8(panelPixels, view, imageStart, panelWidth, panelHeight);
             } else {
                 throw `bad frame format ${flags.toString(16)}`;

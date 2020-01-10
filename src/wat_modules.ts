@@ -9,7 +9,7 @@ export function yaz0_asInstance(imports?: any): Promise<yaz0_asExports> {
     return WebAssembly.compile(Uint8Array.from(window.atob(yaz0_asCode), function(c) { return c.charCodeAt(0); })).then((module: WebAssembly.Module) => {
         return WebAssembly.instantiate(module, imports);
     }).then((instance: WebAssembly.Instance) => {
-        return (<yaz0_asExports> instance.exports);
+        return (instance.exports as unknown) as yaz0_asExports;
     });
 }
 
@@ -22,6 +22,6 @@ export function gx_texture_asInstance(imports?: any): Promise<gx_texture_asExpor
     return WebAssembly.compile(Uint8Array.from(window.atob(gx_texture_asCode), function(c) { return c.charCodeAt(0); })).then((module: WebAssembly.Module) => {
         return WebAssembly.instantiate(module, imports);
     }).then((instance: WebAssembly.Instance) => {
-        return (<gx_texture_asExports> instance.exports);
+        return (instance.exports as unknown) as gx_texture_asExports;
     });
 }

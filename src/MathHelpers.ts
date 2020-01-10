@@ -288,6 +288,11 @@ export function lerpAngle(v0: number, v1: number, t: number, maxAngle: number = 
     return v0 + dist * t;
 }
 
+export function angleDist(v0: number, v1: number, maxAngle: number = MathConstants.TAU): number {
+    const da = (v1 - v0) % maxAngle;
+    return (2*da) % maxAngle - da;
+}
+
 // Similar to mat4.frustum, except it can handle infinite far planes.
 export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
     const rl = 1 / (right - left);
@@ -417,4 +422,20 @@ export function quatFromEulerRadians(dst: quat, x: number, y: number, z: number)
     dst[1] = cx * sy * cz + sx * cy * sz;
     dst[2] = cx * cy * sz - sx * sy * cz;
     dst[3] = cx * cy * cz + sx * sy * sz;
+}
+
+export function getMatrixAxisX(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[0], m[1], m[2]);
+}
+
+export function getMatrixAxisY(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[4], m[5], m[6]);
+}
+
+export function getMatrixAxisZ(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[8], m[9], m[10]);
+}
+
+export function getMatrixTranslation(dst: vec3, m: mat4): void {
+    vec3.set(dst, m[12], m[13], m[14]);
 }

@@ -6,7 +6,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import * as RARC from './rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -20,7 +20,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: J3DModelInstanceSimple[] = [];
-    public rarc: RARC.RARC[] = [];
+    public rarc: RARC.JKRArchive[] = [];
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);

@@ -1,16 +1,19 @@
-import { mat4, vec4, vec3, vec2 } from "gl-matrix";
+import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { FlipbookRenderer, MovementController, FlipbookData } from "./render";
-import { nArray } from "../util";
+import { nArray, hexzero } from "../util";
 import { MathConstants, lerp } from "../MathHelpers";
 import { FlipbookMode } from "./flipbook";
+import { LavaRock } from "./actors";
 
 export const enum ParticleType {
     Sparkle,
-    AirBubble, // actually an object in the game
+    SnowSparkle,
+
     Configurable, // from a separate particle system
+    AirBubble, // actually an object in the game
 }
 
 const enum MotionType {
@@ -21,7 +24,10 @@ const enum MotionType {
     BounceOnCollision,
 }
 
-const sparkleOffset = 0x10;
+// particle graphics mostly start at 0x700, number indices from there
+export const snowballSplashIndex = 0x1c; // file 0x42a
+export const fireballIndex = 0x1d; // file 0x4a0
+export const lavaSmokeIndex = 0x1e; // file 0x6c1
 
 const particleScratch = vec3.create();
 export class Particle {
@@ -33,7 +39,6 @@ export class Particle {
     public velocity = vec3.create();
     public targetVelocity = vec3.create();
     public accel = vec3.create();
-    public maxAccel = 0;
     public sinceUpdate = 0;
 
     public type: ParticleType;
@@ -74,13 +79,28 @@ export class Particle {
                 this.motionType = MotionType.Static;
                 this.rotationSpeed = 7 * MathConstants.DEG_TO_RAD * 30;
                 vec4.set(this.flipbook.primColor, 1, 1, 1, 180 / 255);
-                this.flipbook.changeData(manager.getFlipbook(sparkleOffset + flipbookIndex), FlipbookMode.Translucent);
+                this.flipbook.changeData(manager.getFlipbook(flipbookIndex), FlipbookMode.Translucent);
+                break;
+            case ParticleType.SnowSparkle:
+                this.timer = 20 / 30;
+                this.motionType = MotionType.ConstantVelocity;
+                this.velocity[1] = -200;
+                this.modelMatrix[12] += Math.random() * 60 - 30;
+                this.modelMatrix[13] += Math.random() * 60 - 30;
+                this.modelMatrix[14] += Math.random() * 60 - 30;
+
+                let index = SparkleColor.Purple;
+                if (Math.random() < .25)
+                    index = SparkleColor.DarkBlue;
+                else if (Math.random() < .5)
+                    index = SparkleColor.LightBlue;
+                this.flipbook.changeData(manager.getFlipbook(index), FlipbookMode.Translucent);
                 break;
             case ParticleType.AirBubble:
                 this.timer = 10;
                 this.motionType = MotionType.ConstantVelocity;
                 this.endScale = 200;
-                vec3.set(this.targetVelocity, 0, 80, 0)
+                vec3.set(this.targetVelocity, 0, 80, 0);
                 vec4.set(this.flipbook.primColor, 180 / 255, 240 / 255, 160 / 255, 160 / 255);
                 this.flipbook.changeData(manager.getFlipbook(4), FlipbookMode.Opaque, true);
                 this.sinceUpdate = 1;
@@ -93,31 +113,15 @@ export class Particle {
         }
     }
 
-    private motion(deltaSeconds: number): void {
-        if (this.motionType === MotionType.Static)
-            return;
-
-        mat4.getTranslation(particleScratch, this.modelMatrix)
-        if (this.motionType !== MotionType.ConstantVelocity) {
-            vec3.scaleAndAdd(this.velocity, this.velocity, this.accel, deltaSeconds);
-            if (this.maxAccel > 0)
-                this.velocity[1] = Math.max(this.velocity[1], this.maxAccel * deltaSeconds);
-        }
-
-        vec3.scaleAndAdd(particleScratch, particleScratch, this.velocity, deltaSeconds);
-        this.modelMatrix[12] = particleScratch[0];
-        this.modelMatrix[13] = particleScratch[1];
-        this.modelMatrix[14] = particleScratch[2];
-    }
-
     public update(deltaSeconds: number): boolean {
         switch (this.type) {
             case ParticleType.Sparkle:
+            case ParticleType.SnowSparkle:
                 this.scaleX = Particle.sparkleDimensions[(this.timer * 30) >>> 0];
                 this.scaleY = this.scaleX;
                 break;
             case ParticleType.AirBubble:
-                const commonStep = deltaSeconds * 230
+                const commonStep = deltaSeconds * 230;
                 this.scaleX = Math.min(this.endScale, this.scaleX + commonStep);
                 this.scaleY = this.scaleX;
                 vec2.set(this.flipbook.screenOffset, -this.scaleX / 2, this.scaleY / 2);
@@ -160,25 +164,39 @@ export class Particle {
             return;
 
         this.update(viewerInput.deltaTime / 1000);
-        if (this.flipbook !== null)
-            this.flipbook.prepareToRender(device, renderInstManager, viewerInput)
+        this.flipbook.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    private motion(deltaSeconds: number): void {
+        if (this.motionType === MotionType.Static)
+            return;
+
+        mat4.getTranslation(particleScratch, this.modelMatrix);
+        if (this.motionType !== MotionType.ConstantVelocity) {
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.accel, deltaSeconds);
+        }
+
+        vec3.scaleAndAdd(particleScratch, particleScratch, this.velocity, deltaSeconds);
+        this.modelMatrix[12] = particleScratch[0];
+        this.modelMatrix[13] = particleScratch[1];
+        this.modelMatrix[14] = particleScratch[2];
     }
 }
 
 export class Emitter {
-    public shouldEmit = false;
+    public emitCount = 0;
     public modelMatrix = mat4.create();
-    public movementController: MovementController | null = null
+    public movementController: MovementController | null = null;
 
     constructor(private type: ParticleType, private sparkleColor = SparkleColor.Yellow) { }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
         if (this.movementController !== null)
             this.movementController.movement(this.modelMatrix, time);
-        if (!this.shouldEmit)
-            return false;
-        this.shouldEmit = false;
-        return this.emit(manager);
+        while (this.emitCount >= 1) {
+            this.emit(manager);
+            this.emitCount--;
+        }
     }
 
     public emit(manager: EmitterManager): boolean {
@@ -201,19 +219,26 @@ export function emitAlongLine(manager: EmitterManager, emitter: Emitter, start: 
     }
 }
 
+export function emitAt(emitter: Emitter, m: mat4, count: number): void {
+    emitter.modelMatrix[12] = m[12];
+    emitter.modelMatrix[13] = m[13];
+    emitter.modelMatrix[14] = m[14];
+    emitter.emitCount = count;
+}
+
 export const enum SparkleColor {
-    Purple = 0,
-    DarkBlue = 1,
-    Green = 2,
-    Yellow = 3,
-    Orange = 4,
-    Red = 5,
-    LightBlue = 6,
-    LightYellow = 7,
-    Blue = 8, // very similar to LightBlue
-    LightGreen = 9,
-    Pink = 10,
-    YellowOrange = 11,
+    Purple = 0x10,
+    DarkBlue = 0x11,
+    Green = 0x12,
+    Yellow = 0x13,
+    Orange = 0x14,
+    Red = 0x15,
+    LightBlue = 0x16,
+    LightYellow = 0x17,
+    Blue = 0x18, // very similar to LightBlue
+    LightGreen = 0x19,
+    Pink = 0x1a,
+    YellowOrange = 0x1b,
 }
 
 export class Sparkler extends Emitter {
@@ -221,10 +246,24 @@ export class Sparkler extends Emitter {
         super(ParticleType.Sparkle, sparkleColor);
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
         // Poisson process in this time interval, assuming base rate is for a 30 fps frame
-        this.shouldEmit = Math.random() > Math.exp(-this.sparkleRate * deltaSeconds * 30);
-        return super.update(manager, time, deltaSeconds);
+        this.emitCount = Math.random() > Math.exp(-this.sparkleRate * deltaSeconds * 30) ? 1 : 0;
+        super.update(manager, time, deltaSeconds);
+    }
+}
+
+export class StreamEmitter extends Emitter {
+    public active = false;
+
+    constructor(private emitRate: number, type: ParticleType) {
+        super(type);
+    }
+
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+        if (this.active)
+            this.emitCount += this.emitRate * deltaSeconds;
+        super.update(manager, time, deltaSeconds);
     }
 }
 
@@ -233,12 +272,11 @@ class EmitterConfig {
     public spriteIndex = 0;
     public delayRange = vec2.fromValues(0, 5);
     // not really in the game, this is to handle some emitters
-    // which are created just to spawn a single particle
-    // but otherwise use the same logic
+    // which are created with some probability each frame
+    // and spawn a single particle, but otherwise use the same logic
     public frameChance = 0;
 
     public primColor = vec4.fromValues(1, 1, 1, 1);
-    public offset = vec3.create();
     public pulseRange = vec2.fromValues(0, 1);
     // bounding boxes
     public accelMin = vec3.create();
@@ -260,7 +298,6 @@ class EmitterConfig {
             Object.assign(this, init);
     }
 
-
     public initParticle(dst: vec3, manager: EmitterManager, p: Particle): void {
         fromBB(p.accel, this.accelMin, this.accelMax);
         fromBB(p.velocity, this.velMin, this.velMax);
@@ -277,9 +314,10 @@ class EmitterConfig {
         const mode = vec4.exactEquals(this.primColor, allOnes) ? FlipbookMode.Opaque : FlipbookMode.EmittedParticle;
         p.flipbook.changeData(manager.getFlipbook(this.spriteIndex), mode);
         vec4.copy(p.flipbook.primColor, this.primColor);
-        p.flipbook.animationController.adjustTimeToNewFPS(fromRange(this.fpsRange));
-        p.flipbook.animationController.setPhaseToCurrent();
-        p.flipbook.animationController.phaseFrames += fromRange(this.phaseRange);
+        for (let i = 0; i < 3; i++)
+            p.flipbook.envColor[i] = Math.max(0, this.primColor[i] - 8 / 255);
+        p.flipbook.envColor[3] = this.primColor[3];
+        p.flipbook.animationController.init(fromRange(this.fpsRange), fromRange(this.phaseRange));
     }
 
     public updateParticle(p: Particle): void {
@@ -296,9 +334,11 @@ class EmitterConfig {
             newAlpha *= 1 - (t - this.pulseRange[1]) / (1 - this.pulseRange[1]);
         p.flipbook.primColor[3] = newAlpha;
 
-        for (let i = 0; i < 3; i++)
-            p.flipbook.envColor[i] = Math.max(0, this.primColor[i] - 8 / 255);
-        p.flipbook.envColor[3] = this.primColor[3];
+        // there is also logic for applying drag, but only after a particle
+        // collides with the ground or leaves a set height range
+        // for now assume the default behavior and kill particle
+        if (Math.abs(p.modelMatrix[13]) > 100000)
+            p.timer = -1;
     }
 }
 
@@ -389,11 +429,177 @@ export const brentildaWandConfig = new EmitterConfig({
     rotationRange: vec2.fromValues(200, 240),
 });
 
+const baseJumpPadConfig: Partial<EmitterConfig> = {
+    spriteIndex: 0x10,
+    delayRange: vec2.fromValues(1 / 30, 1 / 30), // every frame
+
+    primColor: vec4.fromValues(0, 1, 0, 1),
+    pulseRange: vec2.fromValues(0, 0), // linear decay
+
+    velMin: vec3.fromValues(0, 70, 0),
+    velMax: vec3.fromValues(0, 140, 0),
+
+    lifetimeRange: vec2.fromValues(.9, .9),
+    startScaleRange: vec2.fromValues(.31, .37),
+    endScaleRange: vec2.fromValues(.17, .22),
+};
+
+export const farJumpPadConfig = new EmitterConfig({
+    ...baseJumpPadConfig,
+
+    offsetMin: vec3.fromValues(-75, 0, -75),
+    offsetMax: vec3.fromValues(75, 6, 75),
+});
+
+export const nearJumpPadConfig = new EmitterConfig({
+    ...baseJumpPadConfig,
+
+    offsetMin: vec3.fromValues(-25, 0, -25),
+    offsetMax: vec3.fromValues(25, 6, 25),
+});
+
+export const lavaRockLaunchFlameConfig = new EmitterConfig({
+    spriteIndex: fireballIndex,
+
+    pulseRange: vec2.fromValues(.1, .3),
+
+    accelMin: vec3.fromValues(0, -500, 0),
+    accelMax: vec3.fromValues(0, -500, 0),
+    velMin: vec3.fromValues(-50, 200, -50),
+    velMax: vec3.fromValues(50, 400, 50),
+    offsetMin: vec3.fromValues(-40, -40, -40),
+    offsetMax: vec3.fromValues(40, 40, 40),
+
+    lifetimeRange: vec2.fromValues(1, 1.5),
+    startScaleRange: vec2.fromValues(2, 2),
+    endScaleRange: vec2.fromValues(4, 4),
+
+    phaseRange: vec2.fromValues(0, 6),
+    fpsRange: vec2.fromValues(5, 8),
+});
+
+const baseLavaRockTrailConfig: Partial<EmitterConfig> = {
+    spriteIndex: fireballIndex,
+    delayRange: vec2.fromValues(1 / 30, 1 / 30),
+
+    pulseRange: vec2.fromValues(.1, .2),
+
+    lifetimeRange: vec2.fromValues(.5, .5),
+    phaseRange: vec2.fromValues(2, 8),
+    fpsRange: vec2.fromValues(8, 8),
+};
+
+export const lavaRockBigTrailConfig = new EmitterConfig({
+    ...baseLavaRockTrailConfig,
+    startScaleRange: vec2.fromValues(4, 4),
+    endScaleRange: vec2.fromValues(1.6, 1.6),
+});
+
+export const lavaRockSmallTrailConfig = new EmitterConfig({
+    ...baseLavaRockTrailConfig,
+    startScaleRange: vec2.fromValues(2, 2),
+    endScaleRange: vec2.fromValues(.8, .8),
+});
+
+// sets drag to 0.3
+export const lavaRockShardsConfig = new EmitterConfig({
+    pulseRange: vec2.fromValues(.4, .6),
+
+    accelMin: vec3.fromValues(0, -1000, 0),
+    accelMax: vec3.fromValues(0, -1000, 0),
+    velMin: vec3.fromValues(-400, 400, -400),
+    velMax: vec3.fromValues(400, 800, 400),
+    offsetMin: vec3.fromValues(-20, -20, -20),
+    offsetMax: vec3.fromValues(20, 20, 20),
+
+    lifetimeRange: vec2.fromValues(3, 3.5),
+    startScaleRange: vec2.fromValues(.3, .5),
+
+    rotationRange: vec2.fromValues(600, 900),
+});
+
+export const lavaRockExplosionConfig = new EmitterConfig({
+    pulseRange: vec2.fromValues(.6, .7),
+
+    offsetMin: vec3.fromValues(-80, 0, -80),
+    offsetMax: vec3.fromValues(80, 0, 80),
+
+    lifetimeRange: vec2.fromValues(1, 1),
+    startScaleRange: vec2.fromValues(3, 3),
+    endScaleRange: vec2.fromValues(4, 4),
+
+    phaseRange: vec2.fromValues(0, 2),
+    fpsRange: vec2.fromValues(4, 6),
+});
+
+export const lavaRockSmokeConfig = new EmitterConfig({
+    spriteIndex: 0xe,
+
+    primColor: vec4.fromValues(186 / 255, 186 / 255, 186 / 255, 235 / 255),
+    pulseRange: vec2.fromValues(.05, .1),
+
+    velMin: vec3.fromValues(-70, -70, -70),
+    velMax: vec3.fromValues(70, 70, 70),
+    offsetMin: vec3.fromValues(-55, -55, -55),
+    offsetMax: vec3.fromValues(55, 55, 55),
+
+    lifetimeRange: vec2.fromValues(3, 3),
+    startScaleRange: vec2.fromValues(.1, .2),
+    endScaleRange: vec2.fromValues(3.6, 4.6),
+
+    phaseRange: vec2.fromValues(0, 7),
+});
+
+// these snap to the water and are drawn horizontally instead of billboarded
+export const snowballRippleConfig = new EmitterConfig({
+    spriteIndex: 0xc,
+
+    // just to disable the special case behavior
+    primColor: vec4.fromValues(1, 1, 254 / 255, 1),
+    pulseRange: vec2.fromValues(0, .5),
+
+    lifetimeRange: vec2.fromValues(1, 1.2),
+    startScaleRange: vec2.fromValues(.1, .1),
+    endScaleRange: vec2.fromValues(1, 1.4),
+});
+
+// has some more complicated logic to set position
+export const snowballSplashConfig = new EmitterConfig({
+    spriteIndex: snowballSplashIndex,
+
+    primColor: vec4.fromValues(1, 1, 254 / 255, 1),
+    pulseRange: vec2.fromValues(0, .78), // presumably a typo for .7 or .8
+
+    lifetimeRange: vec2.fromValues(.7, .7),
+    startScaleRange: vec2.fromValues(.8, .8),
+    endScaleRange: vec2.fromValues(.8, .8),
+
+    fpsRange: vec2.fromValues(180 / 7, 180 / 7),
+});
+
+export const snowballBubbleConfig = new EmitterConfig({
+    spriteIndex: 0xb,
+
+    primColor: vec4.fromValues(1, 1, 1, 180 / 255),
+    pulseRange: vec2.fromValues(0, .8),
+
+    accelMin: vec3.fromValues(0, -1300, 0),
+    accelMax: vec3.fromValues(0, -1300, 0),
+    velMin: vec3.fromValues(-180, 400, -180),
+    velMax: vec3.fromValues(180, 700, 180),
+    offsetMin: vec3.fromValues(-20, 0, -20),
+    offsetMax: vec3.fromValues(20, 20, 20),
+
+    lifetimeRange: vec2.fromValues(2, 2),
+    startScaleRange: vec2.fromValues(.02, .04),
+    endScaleRange: vec2.fromValues(.01, .01),
+});
+
 function fromRange(range: vec2): number {
     return range[0] + Math.random() * (range[1] - range[0]);
 }
 
-function fromBB(dst: vec3, min: vec3, max: vec3): void {
+export function fromBB(dst: vec3, min: vec3, max: vec3): void {
     for (let i = 0; i < 3; i++) {
         dst[i] = min[i] + Math.random() * (max[i] - min[i]);
     }
@@ -402,6 +608,7 @@ function fromBB(dst: vec3, min: vec3, max: vec3): void {
 const configScratch = vec3.create();
 export class ConfigurableEmitter extends Emitter {
     public delayTimer = 0;
+    public active = true;
 
     constructor(public config: EmitterConfig) {
         super(ParticleType.Configurable, config.spriteIndex);
@@ -415,15 +622,17 @@ export class ConfigurableEmitter extends Emitter {
         p.modelMatrix[14] += configScratch[2];
     }
 
-    public update(manager: EmitterManager, time: number, deltaSeconds: number): boolean {
-        if (this.config.frameChance > 0) {
-            this.shouldEmit = Math.random() > Math.exp(-this.config.frameChance * deltaSeconds * 30);
-        } else if (this.delayTimer <= 0) {
-            this.shouldEmit = true;
-            this.delayTimer = fromRange(this.config.delayRange);
-        } else
-            this.delayTimer -= deltaSeconds;
-        return super.update(manager, time, deltaSeconds);
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+        if (this.active) {
+            if (this.config.frameChance > 0) {
+                this.emitCount = Math.random() > Math.exp(-this.config.frameChance * deltaSeconds * 30) ? 1 : 0;
+            } else if (this.delayTimer <= 0) {
+                this.emitCount = 1;
+                this.delayTimer = fromRange(this.config.delayRange);
+            } else
+                this.delayTimer -= deltaSeconds;
+        }
+        super.update(manager, time, deltaSeconds);
     }
 }
 
@@ -458,12 +667,99 @@ export class ScaledEmitter extends ConfigurableEmitter {
     }
 }
 
+export class JumpPadEmitter extends ConfigurableEmitter {
+    private yellow = false; // alternate yellow and green, game has two emitters
+    public initParticle(manager: EmitterManager, p: Particle): void {
+        super.initParticle(manager, p);
+        if (this.yellow) {
+            p.flipbook.primColor[0] = 1;
+            p.flipbook.envColor[0] = 1 - 8 / 255;
+        }
+        this.yellow = !this.yellow;
+    }
+}
+
+// emit two particles with different sprites,
+// but otherwise the same config
+// note that this modifies the underlying config
+export class MultiEmitter extends ConfigurableEmitter {
+    constructor(config: EmitterConfig, private sprites: number[]) {
+        super(config);
+    }
+
+    public emit(manager: EmitterManager): boolean {
+        for (let i = 0; i < this.sprites.length; i++) {
+            this.config.spriteIndex = this.sprites[i];
+            if (!super.emit(manager))
+                return false;
+        }
+        return true;
+    }
+}
+
+export class LavaRockEmitter extends Emitter {
+    public static rockPool: LavaRock[] = [];
+    public static registry: LavaRockEmitter[] = [];
+
+    public neighbors: mat4[] = [];
+    public ready = true;
+
+    constructor(pos: vec3) {
+        super(ParticleType.Sparkle); // doesn't actually matter
+
+        // find other emitters in range, add to each other's neighbor list
+        for (let i = 0; i < LavaRockEmitter.registry.length; i++) {
+            const other = LavaRockEmitter.registry[i];
+            mat4.getTranslation(emitterScratch, other.modelMatrix);
+            const distance = vec3.dist(pos, emitterScratch);
+            if (distance > 400 && distance < 1200) {
+                this.neighbors.push(other.modelMatrix);
+                other.neighbors.push(this.modelMatrix);
+            }
+        }
+        LavaRockEmitter.registry.push(this);
+
+        mat4.fromTranslation(this.modelMatrix, pos);
+    }
+
+    public update(manager: EmitterManager, time: number, deltaSeconds: number): void {
+        const shouldEmit = Math.random() > Math.exp(-.1 * deltaSeconds * 30);
+        if (shouldEmit && this.ready)
+            this.emitCount = 1;
+        super.update(manager, time, deltaSeconds);
+    }
+
+    public emit(manager: EmitterManager): boolean {
+        let myRock: LavaRock | null = null;
+        for (let i = 0; i < LavaRockEmitter.rockPool.length; i++) {
+            if (LavaRockEmitter.rockPool[i].visible)
+                continue;
+            myRock = LavaRockEmitter.rockPool[i];
+            break;
+        }
+        if (myRock === null)
+            return false;
+        this.ready = false;
+        myRock.visible = true;
+        let target = this.modelMatrix;
+        const bigRock = Math.random() > .5;
+        // big rocks go straight up to roughly platform level and fall,
+        // but small rocks arc to a random neighboring emitter
+        if (!bigRock && this.neighbors.length > 0) {
+            const index = Math.floor(Math.random() * this.neighbors.length);
+            target = this.neighbors[index];
+        }
+        myRock.reset(this, target, bigRock);
+        return true;
+    }
+}
+
 export class EmitterManager {
     public emitters: Emitter[] = [];
     public particlePool: Particle[] = [];
 
     constructor(public maxParticles: number, private flipbooks: FlipbookData[]) {
-        this.particlePool = nArray(maxParticles, () => new Particle(flipbooks[sparkleOffset]));
+        this.particlePool = nArray(maxParticles, () => new Particle(flipbooks[SparkleColor.Yellow]));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {

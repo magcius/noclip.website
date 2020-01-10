@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 
@@ -86,19 +86,6 @@ export class Camera {
 
     private updateClipFromWorld(): void {
         mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
-    }
-
-    // For documentation more than anything.
-    public getWorldRight(out: vec3): void {
-        vec3.set(out, this.worldMatrix[0], this.worldMatrix[4], this.worldMatrix[8]);
-    }
-
-    public getWorldUp(out: vec3): void {
-        vec3.set(out, this.worldMatrix[1], this.worldMatrix[5], this.worldMatrix[9]);
-    }
-
-    public getWorldForward(out: vec3): void {
-        vec3.set(out, this.worldMatrix[2], this.worldMatrix[6], this.worldMatrix[10]);
     }
 }
 
@@ -290,7 +277,7 @@ const vec3Up = vec3.fromValues(0, 1, 0);
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
-    public useWorldUp: boolean = true;
+    public useViewUp: boolean = true;
     public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
@@ -301,7 +288,7 @@ export class FPSCameraController implements CameraController {
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
-    private keyAngleChangeVelSlow = 0.04;
+    private keyAngleChangeVelSlow = 0.02;
 
     private mouseLookSpeed = 500;
     private mouseLookDragFast = 0;
@@ -377,17 +364,18 @@ export class FPSCameraController implements CameraController {
 
         keyMovement[1] += inputManager.getTouchDeltaY() * keyMoveVelocity;
 
-        const worldUp = scratchVec3b;
-        // Instead of getting the camera up, instead use world up. Feels more natural.
-        if (this.useWorldUp)
-            camera.getWorldUp(worldUp);
-        else
-            vec3.set(worldUp, 0, 1, 0);
+        const viewUp = scratchVec3b;
+        // Instead of getting the camera up, instead use view up. Feels more natural.
+        if (this.useViewUp) {
+            getMatrixAxisY(viewUp, camera.viewMatrix);
+        } else {
+            vec3.set(viewUp, 0, 1, 0);
+        }
 
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {
             const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
-            vec3.scaleAndAdd(finalMovement, finalMovement, worldUp, keyMovement[1]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
             vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
@@ -419,7 +407,7 @@ export class FPSCameraController implements CameraController {
             mouseMovement[2] += keyAngleChangeVel;
 
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], worldUp);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], viewUp);
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], [0, 0, 1]);
             updated = true;

@@ -8,7 +8,7 @@ import ArrayBufferSlice from './ArrayBufferSlice';
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes';
 import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
-import * as Scenes_Zelda_TheWindWaker from './j3d/WindWaker/zww_scenes';
+import * as Scenes_Zelda_TheWindWaker from './WindWaker/zww_scenes';
 import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes';
 import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1';
@@ -53,7 +53,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined } from './util';
+import { hexdump, assertExists, assert, fallbackUndefined, magicstr, leftPad } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -173,6 +173,8 @@ class Main {
     private lastUpdatedURLTimeSeconds: number = -1;
 
     public sceneTimeScale = 1.0;
+
+    private hashpotatoes: HTMLTextAreaElement;
 
     constructor() {
         this.init();
@@ -326,6 +328,9 @@ class Main {
     }
 
     private _updateLoop = (time: number) => {
+        if (this.paused)
+            return;
+
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
@@ -340,7 +345,6 @@ class Main {
             this._takeScreenshot();
 
         this.ui.update();
-
         window.requestAnimationFrame(this._updateLoop);
     };
 
@@ -747,6 +751,7 @@ window.main = new Main();
 declare global {
     interface Window {
         hexdump: any;
+        magicstr: any;
         downloadBuffer: any;
         debug: any;
         debugObj: any;
@@ -754,6 +759,7 @@ declare global {
     }
 }
 window.hexdump = hexdump;
+window.magicstr = magicstr;
 window.downloadBuffer = (name: any, buffer: any) => {
     if (buffer instanceof ArrayBufferSlice)
         downloadBufferSlice(name, buffer);

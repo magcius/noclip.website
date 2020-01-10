@@ -1,8 +1,8 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
-import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../../../gx/gx_render';
@@ -13,7 +13,7 @@ import { TextureMapping } from '../../../TextureHolder';
 import AnimationController from '../../../AnimationController';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput, Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
@@ -171,11 +171,11 @@ export class ShapeInstance {
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
         for (let p = 0; p < shape.mtxGroups.length; p++) {
-            const packet = shape.mtxGroups[p];
+            const mtxGroup = shape.mtxGroups[p];
 
             let instVisible = false;
-            for (let i = 0; i < packet.useMtxTable.length; i++) {
-                const matrixIndex = packet.useMtxTable[i];
+            for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
+                const matrixIndex = mtxGroup.useMtxTable[i];
 
                 // Leave existing matrix.
                 if (matrixIndex === 0xFFFF)
@@ -210,8 +210,6 @@ export class ShapeInstance {
 }
 
 export class MaterialInstanceState {
-    public colorOverrides: Color[] = [];
-    public alphaOverrides: boolean[] = [];
     public lights = nArray(8, () => new GX_Material.Light());
     public textureMappings: TextureMapping[];
 }
@@ -333,6 +331,15 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
+function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
+    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
+    if (en)
+        colorWriteMask |= bits;
+    else
+        colorWriteMask &= ~bits;
+    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
+}
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 export class MaterialInstance {
@@ -344,6 +351,7 @@ export class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public visible: boolean = true;
     public sortKey: number = 0;
+    public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
 
     constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         this.setMaterialData(materialData, materialHacks);
@@ -362,8 +370,12 @@ export class MaterialInstance {
         this.materialHelper.setMaterialHacks(materialHacks);
     }
 
-    public setColorWriteEnabled(colorWrite: boolean): void {
-        setAttachmentStateSimple(this.materialHelper.megaStateFlags, { colorWrite });
+    public setColorOverride(i: ColorKind, color: Color | null): void {
+        this.colorOverrides[i] = color;
+    }
+
+    public setColorWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -411,14 +423,11 @@ export class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: Color, clampTo8Bit: boolean): void {
+    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, clampTo8Bit: boolean): void {
         if (this.colorCalc[i]) {
             this.colorCalc[i]!.calcColor(dst);
-        } else if (materialInstanceState.colorOverrides[i] !== undefined) {
-            if (materialInstanceState.alphaOverrides[i])
-                colorCopy(dst, materialInstanceState.colorOverrides[i]);
-            else
-                colorCopy(dst, materialInstanceState.colorOverrides[i], fallbackColor.a);
+        } else if (this.colorOverrides[i] !== null) {
+            colorCopy(dst, this.colorOverrides[i]!);
         } else {
             colorCopy(dst, fallbackColor);
         }
@@ -662,18 +671,18 @@ export class MaterialInstance {
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], true);
+        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], false);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -732,6 +741,8 @@ export class MaterialInstance {
 // TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
 // based on hashing texture data?
 export class TEX1Data {
+    private realized: boolean = true;
+
     private gfxSamplers: GfxSampler[] = [];
     private gfxTextures: (GfxTexture | null)[] = [];
     public viewerTextures: (Texture | null)[] = [];
@@ -774,22 +785,25 @@ export class TEX1Data {
     }
 
     public destroy(device: GfxDevice): void {
+        if (!this.realized)
+            return;
+
         for (let i = 0; i < this.gfxTextures.length; i++)
             if (this.gfxTextures[i] !== null)
                 device.destroyTexture(this.gfxTextures[i]!);
+
+        this.realized = false;
     }
 }
 
 interface MaterialRes {
     mat3: MAT3 | null;
-    tex1: TEX1;
+    tex1: TEX1 | null;
 }
 
 export class BMDModelMaterialData {
-    private realized: boolean = true;
-
     public materialData: MaterialData[] | null = null;
-    public tex1Data: TEX1Data;
+    public tex1Data: TEX1Data | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, materialRes: MaterialRes) {
         const mat3 = materialRes.mat3, tex1 = materialRes.tex1;
@@ -799,11 +813,12 @@ export class BMDModelMaterialData {
                 this.materialData.push(new MaterialData(mat3.materialEntries[i]));
         }
 
-        this.tex1Data = new TEX1Data(device, cache, tex1);
+        if (tex1 !== null)
+            this.tex1Data = new TEX1Data(device, cache, tex1);
     }
 
     public createDefaultTextureMappings(): TextureMapping[] {
-        const tex1Data = this.tex1Data;
+        const tex1Data = assertExists(this.tex1Data);
         const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
         for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
             tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
@@ -811,16 +826,13 @@ export class BMDModelMaterialData {
     }
 
     public destroy(device: GfxDevice): void {
-        if (!this.realized)
-            return;
-
-        this.tex1Data.destroy(device);
-        this.realized = false;
+        if (this.tex1Data !== null)
+            this.tex1Data.destroy(device);
     }
 }
 
 export class J3DModelData {
-    private realized: boolean = false;
+    public realized: boolean = false;
 
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -914,7 +926,7 @@ export class J3DModelData {
         this.bufferCoalescer.destroy(device);
         for (let i = 0; i < this.shapeData.length; i++)
             this.shapeData[i].destroy(device);
-        this.modelMaterialData.destroy(device);
+        this.modelMaterialData.tex1Data!.destroy(device);
         this.realized = false;
     }
 }
@@ -975,7 +987,6 @@ export class J3DModelInstance {
     public name: string = '';
     public visible: boolean = true;
     public isSkybox: boolean = false;
-    public passMask: number = 0x01;
 
     public modelMatrix = mat4.create();
     public baseScale = vec3.fromValues(1, 1, 1);
@@ -987,14 +998,18 @@ export class J3DModelInstance {
     public shapeInstanceState = new ShapeInstanceState();
 
     public modelMaterialData: BMDModelMaterialData;
+    public tex1Data: TEX1Data;
 
     private jointVisibility: boolean[];
 
     constructor(public modelData: J3DModelData, materialHacks?: GX_Material.GXMaterialHacks) {
+        assert(this.modelData.realized);
+
         this.modelMaterialData = this.modelData.modelMaterialData;
         this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
         });
+        this.tex1Data = this.modelMaterialData.tex1Data!;
 
         this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
@@ -1021,6 +1036,7 @@ export class J3DModelInstance {
 
     public destroy(device: GfxDevice): void {
         this.modelData.destroy(device);
+        this.tex1Data.destroy(device);
     }
 
     public setVisible(v: boolean): void {
@@ -1038,7 +1054,8 @@ export class J3DModelInstance {
         }
 
         // Set up our new texture mappings.
-        this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
+        if (modelMaterialData.tex1Data !== null)
+            this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
     }
 
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
@@ -1100,7 +1117,7 @@ export class J3DModelInstance {
      */
     public getTextureMappingReference(samplerName: string): TextureMapping | null {
         // Find the correct slot for the texture name.
-        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
+        const samplers = this.tex1Data.tex1.samplers;
         for (let i = 0; i < samplers.length; i++)
             if (samplers[i].name === samplerName)
                 return this.materialInstanceState.textureMappings[i];
@@ -1113,11 +1130,11 @@ export class J3DModelInstance {
      */
     public fillDefaultTextureMapping(m: TextureMapping, samplerName: string): void {
         // Find the correct slot for the texture name.
-        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
+        const samplers = this.tex1Data.tex1.samplers;
         const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
         if (samplerIndex < 0)
             throw new Error(`Cannot find texture by name ${samplerName}`);
-        this.modelMaterialData.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
+        this.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
     }
 
     /**
@@ -1157,12 +1174,9 @@ export class J3DModelInstance {
      *
      * To unset a color override, pass {@constant undefined} as for {@param color}.
      */
-    public setColorOverride(colorKind: ColorKind, color: Color | undefined, useAlpha: boolean = false): void {
-        if (color !== undefined)
-            this.materialInstanceState.colorOverrides[colorKind] = color;
-        else
-            delete this.materialInstanceState.colorOverrides[colorKind];
-        this.materialInstanceState.alphaOverrides[colorKind] = useAlpha;
+    public setColorOverride(colorKind: ColorKind, color: Color | null): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setColorOverride(colorKind, color);
     }
 
     /**
@@ -1264,7 +1278,7 @@ export class J3DModelInstance {
         this.calcDrawMatrixArray(this.shapeInstanceState.worldToViewMatrix);
     }
 
-    protected computeDepth(camera: Camera): number {
+    public computeDepth(camera: Camera): number {
         // Use the root joint to calculate depth.
         const rootJoint = this.modelData.bmd.jnt1.joints[0];
         bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
@@ -1371,6 +1385,7 @@ export class J3DModelInstance {
 export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
     public vaf1Animator: VAF1Animator | null = null;
+    public passMask: number = 0x01;
 
     public calcAnim(camera: Camera): void {
         super.calcAnim(camera);

@@ -154,6 +154,7 @@ interface GfxRendererTransientState {
 }
 
 export class GfxRenderInst {
+    // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
     public sortKey: number = 0;
     public filterKey: number = 0;
 
@@ -432,10 +433,6 @@ export class GfxRenderInstPool {
     }
 }
 
-function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
-    return a.sortKey - b.sortKey;
-}
-
 function gfxRendererTransientStateReset(state: GfxRendererTransientState): void {
     state.currentRenderPipelineDescriptor = null;
     state.currentRenderPipelineReady = false;
@@ -456,14 +453,99 @@ export function gfxRendererTransientStateNew(): GfxRendererTransientState {
 
 const defaultTransientState = gfxRendererTransientStateNew();
 
+export const gfxRenderInstCompareNone = null;
+
+export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst): number {
+    return a.sortKey - b.sortKey;
+}
+
+function bisectLeft<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
+    let lo = 0, hi = L.length;
+    while (lo < hi) {
+        const mid = lo + ((hi - lo) >>> 1);
+        const cmp = compare(L[mid], e);
+        if (cmp < 0)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+export const enum GfxRenderInstExecutionOrder {
+    Forwards,
+    Backwards,
+}
+
+export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => number;
+
+export class GfxRenderInstList {
+    public renderInsts: GfxRenderInst[] = [];
+    private needsSort = false;
+
+    constructor(
+        public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
+        public executionOrder = GfxRenderInstExecutionOrder.Forwards,
+    ) {
+    }
+
+    private flushSort(): void {
+        if (this.needsSort && this.compareFunction !== null)
+            this.renderInsts.sort(this.compareFunction);
+        this.needsSort = false;
+    }
+
+    public insertSorted(renderInst: GfxRenderInst): void {
+        this.flushSort();
+        if (this.compareFunction !== null) {
+            const idx = bisectLeft(this.renderInsts, renderInst, this.compareFunction);
+            this.renderInsts.splice(idx, 0, renderInst);
+        } else {
+            this.renderInsts.push(renderInst);
+        }
+    }
+
+    public insertToEnd(renderInst: GfxRenderInst): void {
+        this.renderInsts.push(renderInst);
+        if (this.compareFunction !== null)
+            this.needsSort = true;
+    }
+
+    public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
+        if (this.renderInsts.length === 0)
+            return;
+
+        this.flushSort();
+
+        // TODO(jstpierre): Remove this?
+        if (state === null) {
+            gfxRendererTransientStateReset(defaultTransientState);
+            state = defaultTransientState;
+        }
+
+        if (this.executionOrder === GfxRenderInstExecutionOrder.Forwards) {
+            for (let i = 0; i < this.renderInsts.length; i++)
+                this.renderInsts[i].drawOnPassWithState(device, cache, passRenderer, state);
+        } else {
+            for (let i = this.renderInsts.length - 1; i >= 0; i--)
+                this.renderInsts[i].drawOnPassWithState(device, cache, passRenderer, state);
+        }
+    }
+
+    public reset(): void {
+        this.renderInsts.length = 0;
+    }
+}
+
 export class GfxRenderInstManager {
     // TODO(jstpierre): Share these caches between scenes.
     public gfxRenderCache = new GfxRenderCache();
     public instPool = new GfxRenderInstPool();
     public templatePool = new GfxRenderInstPool();
-    public visibleRenderInsts: GfxRenderInst[] = [];
+    private simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
+    private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
-    public pushRenderInst(): GfxRenderInst {
+    public newRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
         const renderInstIndex = this.instPool.allocRenderInstIndex();
         const renderInst = this.instPool.pool[renderInstIndex];
@@ -471,10 +553,25 @@ export class GfxRenderInstManager {
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         else
             renderInst.reset();
-        // draw render insts are visible by default.
         renderInst._flags = GfxRenderInstFlags.DRAW_RENDER_INST;
-        this.visibleRenderInsts.push(renderInst);
         return renderInst;
+    }
+
+    public submitRenderInst(renderInst: GfxRenderInst): void {
+        this.currentRenderInstList.insertSorted(renderInst);
+    }
+
+    public pushRenderInst(): GfxRenderInst {
+        const renderInst = this.newRenderInst();
+        // Submitted to the current list by default. We can't insert
+        // sorted because there's no guarantee the sortKey is correct
+        // at this point.
+        this.currentRenderInstList.insertToEnd(renderInst);
+        return renderInst;
+    }
+
+    public setCurrentRenderInstList(list: GfxRenderInstList): void {
+        this.currentRenderInstList = list;
     }
 
     public returnRenderInst(renderInst: GfxRenderInst): void {
@@ -504,57 +601,55 @@ export class GfxRenderInstManager {
         return this.templatePool.pool[templateIndex];
     }
 
-    public hasAnyVisible(): boolean {
-        return this.visibleRenderInsts.length > 0;
-    }
-
-    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderInstManager.
-    public setVisibleByFilterKeyExact(filterKey: number): void {
-        this.visibleRenderInsts.length = 0;
-
-        for (let i = 0; i < this.instPool.pool.length; i++) {
-            if ((this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST &&
-                 this.instPool.pool[i].filterKey === filterKey))
-                this.visibleRenderInsts.push(this.instPool.pool[i]);
-        }
-    }
-
-    public setVisibleNone(): void {
-        this.visibleRenderInsts.length = 0;
-    }
-
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
-        if (this.visibleRenderInsts.length === 0)
-            return;
-
-        if (state === null) {
-            gfxRendererTransientStateReset(defaultTransientState);
-            state = defaultTransientState;
-        }
-    
-        // Sort the render insts.
-        this.visibleRenderInsts.sort(compareRenderInsts);
-
-        for (let i = 0; i < this.visibleRenderInsts.length; i++)
-            this.visibleRenderInsts[i].drawOnPassWithState(device, this.gfxRenderCache, passRenderer, state);
-    }
-
     public resetRenderInsts(): void {
         // Retire the existing render insts.
         this.instPool.reset();
-        this.visibleRenderInsts.length = 0;
+        if (this.simpleRenderInstList !== null)
+            this.simpleRenderInstList.reset();
     }
 
     public destroy(device: GfxDevice): void {
         this.instPool.destroy();
         this.gfxRenderCache.destroy(device);
     }
+
+    // Legacy pass management API.
+    public setVisibleByFilterKeyExact(filterKey: number): void {
+        const list = assertExists(this.simpleRenderInstList);
+        list.renderInsts.length = 0;
+
+        for (let i = 0; i < this.instPool.pool.length; i++) {
+            if ((this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST &&
+                 this.instPool.pool[i].filterKey === filterKey))
+                list.insertToEnd(this.instPool.pool[i]);
+        }
+    }
+
+    public hasAnyVisible(): boolean {
+        const list = assertExists(this.simpleRenderInstList);
+        return list.renderInsts.length > 0;
+    }
+
+    public setVisibleNone(): void {
+        const list = assertExists(this.simpleRenderInstList);
+        list.renderInsts.length = 0;
+    }
+
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
+        const list = assertExists(this.simpleRenderInstList);
+        list.drawOnPassRenderer(device, this.gfxRenderCache, passRenderer, state);
+    }
+
+    public disableSimpleMode(): void {
+        // This is a one-way street!
+        this.simpleRenderInstList = null;
+    }
 }
 
 // Convenience for porting.
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, state: GfxRendererTransientState | null = null): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, sort: boolean = true): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer, state);
+    renderInstManager.drawOnPassRenderer(device, passRenderer);
 }
 
 export function hasAnyVisible(renderInstManager: GfxRenderInstManager, passMask: number): boolean {

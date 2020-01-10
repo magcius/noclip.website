@@ -2,13 +2,13 @@
 precision mediump float; precision lowp sampler2D;
 
 struct Light {
-    vec4 position;
-    vec4 rotation;
-    vec4 color;
     float type;
     float radius;
     float angle;
     float pad;
+    vec4 position;
+    vec4 direction;
+    vec4 color;
 };
 
 #define LIGHT_TYPE_AMBIENT     1.0 // rpLIGHTAMBIENT
@@ -23,11 +23,18 @@ layout(row_major, std140) uniform ub_SceneParams {
     Mat4x3 u_ViewMatrix;
     vec4 u_FogColor;
     vec4 u_FogParams;
-    Light u_Lights[LIGHT_COUNT];
+    Light u_ObjectLights[LIGHT_COUNT];
+    Light u_PlayerLights[LIGHT_COUNT];
 };
 
 #define u_FogStart (u_FogParams.x)
 #define u_FogStop (u_FogParams.y)
+
+#ifdef PLAYER
+#define u_Lights u_PlayerLights
+#else
+#define u_Lights u_ObjectLights
+#endif
 
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_ModelMatrix;
@@ -52,28 +59,28 @@ void main() {
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
 
-    //vec4 t_Normal = Mul(transpose(inverse(_Mat4x4(u_ModelMatrix))), vec4(a_Normal, 1.0));
-    //vec4 t_Normal = vec4(a_Normal, 1.0);
+    vec3 t_Normal = normalize(Mul(_Mat4x4(u_ModelMatrix), vec4(a_Normal, 0.0)).xyz);
 
-#ifdef ENT
-#ifndef SKY
-    /*
-    v_LightColor = vec3(0.0);
+#ifdef USE_LIGHTING
+    if (USE_LIGHTING == 1) {
+        v_LightColor = vec3(0.0);
 
-    for (int i = 0; i < LIGHT_COUNT; i++) {
-        Light light = u_Lights[i];
-        vec3 colorFactor = (light.color.rgb * light.color.a);
+        for (int i = 0; i < LIGHT_COUNT; i++) {
+            Light light = u_Lights[i];
+            if (light.type == 0.0) break;
 
-        if (light.type == LIGHT_TYPE_AMBIENT) {
-            v_LightColor += colorFactor;
-        } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
-            vec3 lightDir = normalize(-light.rotation.xyz);
-            float diffuse = max(dot(a_Normal, lightDir), 0.0);
-            v_LightColor += diffuse * colorFactor;
+            vec3 lightColor = light.color.rgb; // alpha is ignored
+
+            if (light.type == LIGHT_TYPE_AMBIENT) {
+                v_LightColor += lightColor;
+            } else if (light.type == LIGHT_TYPE_DIRECTIONAL) {
+                vec3 lightDir = normalize(light.direction.xyz);
+                float diffuse = max(dot(t_Normal, lightDir), 0.0);
+                v_LightColor += diffuse * lightColor;
+                v_LightColor = min(v_LightColor, vec3(1.0));
+            }
         }
     }
-    */
-#endif
 #endif
 
     gl_Position = v_Position;
@@ -82,29 +89,47 @@ void main() {
 
 #ifdef FRAG
 void main() {
+    float t_Distance = abs(v_Position.z);
+    if (u_FogColor.a > 0.0 && t_Distance > u_FogStop) discard;
+
     vec4 t_Color = v_Color;
 
+#ifdef PLAYER
+    t_Color.rgb = vec3(1.0, 1.0, 1.0);
+#endif
+
 #ifdef USE_TEXTURE
-    t_Color *= texture(u_Texture, v_TexCoord);
+    if (USE_TEXTURE == 1)
+        t_Color *= texture(u_Texture, v_TexCoord);
 #endif
 
     t_Color *= u_ModelColor;
 
+#ifdef ALPHA_REF
+    if (t_Color.a <= ALPHA_REF) discard;
+#endif
+
+#ifdef USE_LIGHTING
+    if (USE_LIGHTING == 1 && u_Lights[0].type != 0.0)
+        t_Color *= vec4(v_LightColor, 1.0);
+#endif
+
+#ifdef USE_FOG
+    if (USE_FOG == 1) {
+        if (u_FogColor.w > 0.0) {
+            float t_FogFactor = 1.0 - (u_FogStop - t_Distance)/(u_FogStop - u_FogStart);
+            t_FogFactor = clamp(t_FogFactor, 0.0, 1.0);
+
+            vec4 t_FogColor = u_FogColor;
+            t_FogColor.a = t_Color.a;
+
+            t_Color = mix(t_Color, t_FogColor, t_FogFactor);
+        }
+    }
+#endif
+
 #ifdef SKY
     gl_FragDepth = float(SKY_DEPTH);
-#else
-#ifdef ENT
-    //t_Color *= vec4(v_LightColor, 1.0);
-#endif
-    if (u_FogColor.w > 0.0) {
-        float t_FogFactor = 1.0 - (u_FogStop - abs(v_Position.z))/(u_FogStop - u_FogStart);
-        t_FogFactor = clamp(t_FogFactor, 0.0, 1.0);
-
-        vec4 t_FogColor = u_FogColor;
-        t_FogColor.w = t_Color.w;
-
-        t_Color = mix(t_Color, t_FogColor, t_FogFactor);
-    }
 #endif
 
     gl_FragColor = t_Color;

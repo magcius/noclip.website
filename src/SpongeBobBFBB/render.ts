@@ -2,38 +2,41 @@
 // @ts-ignore
 import program_glsl from './program.glsl';
 import * as rw from 'librw';
+import * as UI from "../ui";
 import * as Viewer from '../viewer';
 import * as Assets from './assets';
-import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { MeshFragData, TextureArray, Texture, rwTexture } from '../GrandTheftAuto3/render';
+import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import { MeshFragData, Texture, rwTexture } from '../GrandTheftAuto3/render';
 import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNew, Color, colorCopy, TransparentBlack } from '../Color';
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { DeviceProgram } from '../Program';
-import { GfxRenderInstManager, GfxRenderInst, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
-import { GraphObjBase } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from '../Camera';
-import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
+import { FPSCameraController, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { mat4FromYPR, RWAtomicStruct, RWChunk, parseRWAtomic, createRWStreamFromChunk, RWAtomicFlags, quatFromYPR } from './util';
-import { EventID } from './events';
+import { RWAtomicStruct, RWChunk, parseRWAtomic, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
+import { EventID } from './enums';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
+import { MathConstants } from '../MathHelpers';
 
-const DRAW_DISTANCE = 1000.0;
+const MAX_DRAW_DISTANCE = 1000.0;
 
 interface BFBBProgramDef {
-    ENT?: string;
+    PLAYER?: string;
     SKY?: string;
     SKY_DEPTH?: string;
     USE_TEXTURE?: string;
+    USE_LIGHTING?: string;
+    USE_FOG?: string;
+    ALPHA_REF?: string;
 }
 
 class BFBBProgram extends DeviceProgram {
@@ -49,48 +52,165 @@ class BFBBProgram extends DeviceProgram {
 
     constructor(def: BFBBProgramDef = {}) {
         super();
-        if (def.ENT)
-            this.defines.set('ENT', def.ENT);
+        if (def.PLAYER)
+            this.defines.set('PLAYER', def.PLAYER);
         if (def.SKY)
             this.defines.set('SKY', def.SKY);
         if (def.SKY_DEPTH)
             this.defines.set('SKY_DEPTH', def.SKY_DEPTH);
         if (def.USE_TEXTURE)
             this.defines.set('USE_TEXTURE', def.USE_TEXTURE);
+        if (def.USE_LIGHTING)
+            this.defines.set('USE_LIGHTING', def.USE_LIGHTING);
+        if (def.USE_FOG)
+            this.defines.set('USE_FOG', def.USE_FOG);
+        if (def.ALPHA_REF)
+            this.defines.set('ALPHA_REF', def.ALPHA_REF);
     }
+}
+
+export class TextureData {
+    private gfxTexture: GfxTexture | null = null;
+    private gfxSampler: GfxSampler | null = null;
+
+    public textureMapping = nArray(1, () => new TextureMapping());
+
+    private isSetup = false;
+
+    constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
+
+    public setup(device: GfxDevice) {
+        if (this.isSetup) return;
+
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
+        device.submitPass(hostAccessPass);
+
+        this.gfxSampler = device.createSampler({
+            magFilter: this.filter,
+            minFilter: this.filter,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 1000,
+            wrapS: this.wrapS,
+            wrapT: this.wrapT,
+        });
+
+        const mapping = this.textureMapping[0];
+        mapping.width = this.texture.width;
+        mapping.height = this.texture.height;
+        mapping.flipY = false;
+        mapping.gfxTexture = this.gfxTexture;
+        mapping.gfxSampler = this.gfxSampler;
+
+        this.isSetup = true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.gfxTexture !== null)
+            device.destroyTexture(this.gfxTexture);
+        if (this.gfxSampler !== null)
+            device.destroySampler(this.gfxSampler);
+        
+        this.isSetup = false;
+    }
+}
+
+function convertFilterMode(filter: number): GfxTexFilterMode {
+    return GfxTexFilterMode.BILINEAR;
+}
+
+function convertWrapMode(addressing: number): GfxWrapMode {
+    switch (addressing) {
+        case rw.Texture.Addressing.MIRROR:
+            return GfxWrapMode.MIRROR;
+        case rw.Texture.Addressing.WRAP:
+            return GfxWrapMode.REPEAT;
+        case rw.Texture.Addressing.CLAMP:
+        case rw.Texture.Addressing.BORDER:
+        default:
+            return GfxWrapMode.CLAMP;
+    }
+}
+
+export class TextureCache extends DataCacheIDName<TextureData> {
+    public addTexDictionary(texdic: rw.TexDictionary, name: string, id: number, lock: boolean = false) {
+        // Only add the first texture (Each texture in BFBB is a separate texdic)
+        const rwtx = rw.Texture.fromDict(texdic.textures.begin);
+        const filter = convertFilterMode(rwtx.filter);
+        const wrapS = convertWrapMode(rwtx.addressU);
+        const wrapT = convertWrapMode(rwtx.addressV);
+        const texture = rwTexture(rwtx, name, false);
+        const textureData = new TextureData(texture, name, filter, wrapS, wrapT);
+
+        this.add(textureData, name, id, lock);
+    }
+}
+
+// Convert a RW texture name to BFBB's expected format for texture names
+export function textureNameRW3(name: string) {
+    return name + '.RW3';
+}
+
+function textureHasTransparentPixels(texture: Texture) {
+    assert(texture.pixelFormat === GfxFormat.U8_RGBA_NORM ||
+        texture.pixelFormat === GfxFormat.U8_RGB_NORM);
+    
+    if (texture.pixelFormat === GfxFormat.U8_RGB_NORM)
+        return false;
+
+    const level = texture.levels[0];
+    for (let i = 0; i < level.length; i += 4) {
+        if (level[i+3] < 255)
+            return true;
+    }
+    
+    return false;
 }
 
 class RWMeshFragData implements MeshFragData {
     public indices: Uint16Array;
-    public texName?: string;
-    public transparent: boolean;
+    public textureData?: TextureData;
+    public transparentColors: boolean;
+    public transparentTexture: boolean;
 
     private baseColor = colorNewCopy(White);
     private indexMap: number[];
 
-    constructor(mesh: rw.Mesh, tristrip: boolean, txdName: string, private positions: Float32Array,
-        private normals: Float32Array | null, private texCoords: Float32Array | null, private colors: Uint8Array | null) {
-
-        this.transparent = false;
+    constructor(mesh: rw.Mesh, tristrip: boolean, private positions: Float32Array, private normals: Float32Array | null,
+        private texCoords: Float32Array | null, private colors: Uint8Array | null, textures?: TextureData[]) {
 
         const { texture, color } = mesh.material;
 
-        if (color && color[3] < 0xFF) {
-            this.transparent = true;
-        } else if (this.colors) {
-            for (let i = 0; i < this.colors.length; i += 4) {
-                if (this.colors[i+3] < 0xFF) {
-                    this.transparent = true;
+        if (texture && textures) {
+            for (const textureData of textures) {
+                if (textureData.name === textureNameRW3(texture.name)) {
+                    this.textureData = textureData;
                     break;
                 }
             }
         }
 
-        if (texture)
-            // this.texName = txdName + '/' + texture.name.toLowerCase();
-            this.texName = txdName;
         if (color)
             this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
+
+        this.transparentColors = false;
+        this.transparentTexture = false;
+
+        if (this.textureData && (textureHasTransparentPixels(this.textureData.texture) || this.textureData.name.startsWith('shadow')) /* meh */)
+            this.transparentTexture = true;
+        
+        if (color && color[3] < 0xFF)
+            this.transparentColors = true;
+        else if (this.colors) {
+            for (let i = 0; i < this.colors.length; i += 4) {
+                if (this.colors[i+3] < 0xFF) {
+                    this.transparentColors = true;
+                    break;
+                }
+            }
+        }
 
         this.indexMap = Array.from(new Set(mesh.indices)).sort();
 
@@ -103,7 +223,7 @@ class RWMeshFragData implements MeshFragData {
         return this.indexMap.length;
     }
 
-    public distanceToCamera(modelMatrix: mat4, cameraPosition: vec3): number {
+    public distanceToCamera(cameraPosition: vec3, modelMatrix: mat4): number {
         let minDist = Infinity;
         const m = modelMatrix;
         for (let i = 0; i < this.positions.length; i += 3) {
@@ -172,154 +292,80 @@ export interface ModelData {
     pipeInfo?: Assets.PipeInfo;
 }
 
-export class ModelCache {
-    public models = new Map<string, ModelData>();
+export class ModelCache extends DataCacheIDName<ModelData> {
+    private currentModelBeingAdded: ModelData | undefined;
 
-    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, name: string) {
+    private addAtomic(atomic: rw.Atomic, atomicStruct: RWAtomicStruct, textures?: TextureData[], lock: boolean = false) {
         const geom = atomic.geometry;
         const positions = geom.morphTarget(0).vertices!.slice();
         const normals = (geom.morphTarget(0).normals) ? geom.morphTarget(0).normals!.slice() : null;
         const texCoords = (geom.numTexCoordSets) ? geom.texCoords(0)!.slice() : null;
         const colors = (geom.colors) ? geom.colors.slice() : null;
-        const h = geom.meshHeader;
+        const meshHeader = geom.meshHeader;
 
-        if (!this.models.get(name))
-            this.models.set(name, { meshes: [] });
-
-        const model = this.models.get(name)!;
         const frags: RWMeshFragData[] = [];
 
-        for (let i = 0; i < h.numMeshes; i++) {
-            const mesh = h.mesh(i);
-            const texture = mesh.material.texture;
-            const txdName = texture ? `${texture.name}.RW3` : '';
-            const frag = new RWMeshFragData(h.mesh(i), h.tristrip, txdName, positions, normals, texCoords, colors);
-            frags.push(frag);
-        }
+        for (let i = 0; i < meshHeader.numMeshes; i++)
+            frags.push(new RWMeshFragData(meshHeader.mesh(i), meshHeader.tristrip, positions, normals, texCoords, colors, textures));
 
-        model.meshes.push({ frags, atomicStruct });
+        this.currentModelBeingAdded!.meshes.push({ frags, atomicStruct });
     }
 
-    public addClump(chunk: RWChunk, name: string) {
-        const stream = createRWStreamFromChunk(chunk);
-        const clump = rw.Clump.streamRead(stream);
+    public addClump(chunk: RWChunk, clump: rw.Clump, name: string, id: number, textures?: TextureData[], lock: boolean = false) {
+        for (let i = 0, lnk = clump.atomics.begin; i < chunk.children.length && !lnk.is(clump.atomics.end); lnk = lnk.next) {
+            const atomic = rw.Atomic.fromClump(lnk);
 
-        const atomics: rw.Atomic[] = [];
-        const atomicStructs: RWAtomicStruct[] = [];
+            let atomicChunk: RWChunk;
+            do { atomicChunk = chunk.children[i++]; } while (atomicChunk.header.type !== rw.PluginID.ID_ATOMIC);
+            const structChunk = atomicChunk.children[0];
+            assert(structChunk.header.type === rw.PluginID.ID_STRUCT);
 
-        for (let lnk = clump.atomics.begin; !lnk.is(clump.atomics.end); lnk = lnk.next) {
-            atomics.push(rw.Atomic.fromClump(lnk));
-        }
+            const atomicStruct = parseRWAtomic(structChunk);
 
-        for (const child of chunk.children) {
-            if (child.header.type === rw.PluginID.ID_ATOMIC) {
-                const structChunk = child.children[0];
-                assert(structChunk.header.type === rw.PluginID.ID_STRUCT);
-                const atomicStruct = parseRWAtomic(structChunk);
-                atomicStructs.push(atomicStruct);
+            this.currentModelBeingAdded = this.getByID(id);
+            if (!this.currentModelBeingAdded) {
+                this.currentModelBeingAdded = { meshes: [] };
+                this.add(this.currentModelBeingAdded, name, id, lock);
             }
-        }
 
-        assert(atomics.length === atomicStructs.length);
+            this.addAtomic(atomic, atomicStruct, textures, lock);
 
-        for (let i = 0; i < atomics.length; i++)
-            this.addAtomic(atomics[i], atomicStructs[i], name);
-        
-        stream.delete();
-        clump.delete();
-
-        for (const atomic of atomics)
+            this.currentModelBeingAdded = undefined;
             atomic.delete();
-    }
-}
-
-export class TextureData {
-    private gfxTexture: GfxTexture | null = null;
-    private gfxSampler: GfxSampler | null = null;
-
-    public textureMapping = nArray(1, () => new TextureMapping());
-
-    constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
-
-    public setup(device: GfxDevice, cache: GfxRenderCache) {
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
-        device.submitPass(hostAccessPass);
-
-        this.gfxSampler = cache.createSampler(device, {
-            magFilter: this.filter,
-            minFilter: this.filter,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0,
-            maxLOD: 1000,
-            wrapS: this.wrapS,
-            wrapT: this.wrapT,
-        });
-
-        const mapping = this.textureMapping[0];
-        mapping.width = this.texture.width;
-        mapping.height = this.texture.height;
-        mapping.flipY = false;
-        mapping.gfxTexture = this.gfxTexture;
-        mapping.gfxSampler = this.gfxSampler;
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.gfxTexture !== null)
-            device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
-    }
-}
-
-function convertFilterMode(filter: number): GfxTexFilterMode {
-    return GfxTexFilterMode.BILINEAR;
-}
-
-function convertWrapMode(addressing: number): GfxWrapMode {
-    switch (addressing) {
-        case rw.Texture.Addressing.MIRROR:
-            return GfxWrapMode.MIRROR;
-        case rw.Texture.Addressing.WRAP:
-            return GfxWrapMode.REPEAT;
-        case rw.Texture.Addressing.CLAMP:
-        case rw.Texture.Addressing.BORDER:
-        default:
-            return GfxWrapMode.CLAMP;
-    }
-}
-
-export class TextureCache {
-    public textureData = new Map<string, TextureData[]>();
-
-    public addTexDictionary(texdic: rw.TexDictionary, name: string) {
-        if (!this.textureData.get(name))
-            this.textureData.set(name, []);
-
-        const textures = this.textureData.get(name)!;
-
-        for (let lnk = texdic.textures.begin; !lnk.is(texdic.textures.end); lnk = lnk.next) {
-            const rwtx = rw.Texture.fromDict(lnk);
-            const filter = convertFilterMode(rwtx.filter);
-            const wrapS = convertWrapMode(rwtx.addressU);
-            const wrapT = convertWrapMode(rwtx.addressV);
-
-            const texture = rwTexture(rw.Texture.fromDict(lnk), name, false);
-            textures.push(new TextureData(texture, name, filter, wrapS, wrapT));
         }
+        
+        clump.delete();
     }
+}
+
+export interface JSP {
+    id: number;
+    model: ModelData;
 }
 
 export interface Ent {
     asset: Assets.EntAsset;
-    model?: ModelData;
-    textures?: TextureData[];
+    models: ModelData[];
 }
 
 export interface Button {
     ent: Ent;
     asset: Assets.ButtonAsset;
+}
+
+export interface DestructObj {
+    ent: Ent;
+    asset: Assets.DestructObjAsset;
+}
+
+export interface NPC {
+    ent: Ent;
+    asset: Assets.NPCAsset;
+}
+
+export interface Pickup {
+    ent: Ent;
+    asset: Assets.PickupAsset;
 }
 
 export interface Platform {
@@ -348,25 +394,94 @@ const enum BFBBPass {
     SKYDOME,
 }
 
-function convertPipeCullMode(cull: Assets.PipeCullMode): GfxCullMode {
-    switch (cull) {
-        case Assets.PipeCullMode.Back:
-            return GfxCullMode.BACK;
-        case Assets.PipeCullMode.Unknown3:
-            return GfxCullMode.FRONT;
-        case Assets.PipeCullMode.None:
-        default:
-            return GfxCullMode.NONE;
-    }
+const LIGHTKIT_LIGHT_COUNT = 8;
+const LIGHTKIT_LIGHT_SIZE = 4*4;
+const LIGHTKIT_SIZE = LIGHTKIT_LIGHT_COUNT * LIGHTKIT_LIGHT_SIZE;
+
+function fillConstant(d: Float32Array, offs: number, val: number, count: number): number {
+    d.fill(val, offs, offs + count);
+    return count;
 }
 
-function convertPipeZWriteMode(zwrite: Assets.PipeZWriteMode): boolean {
-    switch (zwrite) {
-        case Assets.PipeZWriteMode.Disable:
-        default:
-            return false;
-        case Assets.PipeZWriteMode.Enable:
-            return true;
+function fillLightKit(d: Float32Array, offs: number, l: Assets.LightKit): number {
+    for (let i = 0; i < LIGHTKIT_LIGHT_COUNT; i++) {
+        if (l.lightCount > i) {
+            const light = l.lightListArray[i];
+            offs += fillVec4(d, offs, light.type, light.radius, light.angle);
+            offs += fillVec4(d, offs, light.matrix[12], light.matrix[13], light.matrix[14]);
+            offs += fillVec4(d, offs, light.matrix[8], light.matrix[9], light.matrix[10]);
+            offs += fillColor(d, offs, light.color);
+        } else {
+            offs += fillConstant(d, offs, 0, LIGHTKIT_LIGHT_SIZE);
+        }
+    }
+    return LIGHTKIT_SIZE;
+}
+
+interface RenderHacks {
+    lighting: boolean;
+    fog: boolean;
+    skydome: boolean;
+    player: boolean;
+    invisibleEntities: boolean;
+    invisibleAtomics: boolean;
+}
+
+interface RenderState {
+    device: GfxDevice;
+    instManager: GfxRenderInstManager;
+    viewerInput: Viewer.ViewerRenderInput;
+    deltaTime: number;
+    cameraPosition: vec3;
+    drawDistance: number;
+    hacks: RenderHacks;
+}
+
+export class BaseRenderer {
+    public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    public bboxModel = new AABB();
+    public modelMatrix = mat4.create();
+    public transparent = false;
+    public isCulled = false;
+    public drawDistance = -1;
+
+    public renderers: BaseRenderer[] = [];
+
+    constructor(public parent?: BaseRenderer) {}
+
+    public addRenderer(renderer: BaseRenderer) {
+        this.bbox.union(this.bbox, renderer.bbox);
+        this.renderers.push(renderer);
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        if (this.parent)
+            mat4.copy(this.modelMatrix, this.parent.modelMatrix);
+        
+        this.bboxModel.transform(this.bbox, this.modelMatrix);
+
+        this.isCulled = false;
+
+        if (this.parent && this.parent.isCulled) {
+            this.isCulled = true;
+            return;
+        }
+
+        if (!renderState.viewerInput.camera.frustum.contains(this.bboxModel)) {
+            this.isCulled = true;
+            return;
+        }
+
+        const drawDistance = this.drawDistance != -1 ? this.drawDistance : renderState.drawDistance;
+
+        if (Math.sqrt(squaredDistanceFromPointToAABB(renderState.cameraPosition, this.bboxModel)) >= drawDistance)
+            this.isCulled = true;
+    }
+
+    public destroy(device: GfxDevice) {
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
+        this.renderers.length = 0;
     }
 }
 
@@ -399,13 +514,7 @@ function convertPipeBlendFunction(blend: Assets.PipeBlendFunction): GfxBlendFact
     }
 }
 
-interface SceneRenderer extends GraphObjBase {
-    modelMatrix: mat4;
-    transparent: boolean;
-    distanceToCamera(cameraPosition: vec3): number;
-}
-
-class MeshRenderer implements SceneRenderer {
+export class FragRenderer extends BaseRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
@@ -418,13 +527,14 @@ class MeshRenderer implements SceneRenderer {
 
     private indices: number;
 
-    public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
-    private bboxModel = new AABB();
+    private dualCull: boolean;
+    private dualZWrite: boolean;
 
-    public modelMatrix = mat4.create();
+    constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, 
+        public frag: RWMeshFragData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, public frag: RWMeshFragData, public transparent: boolean,
-            private textureData?: TextureData, private pipeInfo?: Assets.PipeInfo) {
+        super(parent);
+
         this.indices = frag.indices.length;
         assert(this.indices > 0);
 
@@ -478,35 +588,71 @@ class MeshRenderer implements SceneRenderer {
 
         this.megaStateFlags = {
             cullMode: GfxCullMode.NONE,
-            depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
+            depthWrite: !frag.transparentTexture,
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL)
         };
         let blendMode = GfxBlendMode.ADD;
         let blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
         let blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
 
-        if (pipeInfo) {
-            this.megaStateFlags.cullMode = convertPipeCullMode(Assets.extractPipeCullMode(pipeInfo.PipeFlags));
-            this.megaStateFlags.depthWrite = convertPipeZWriteMode(Assets.extractPipeZWriteMode(pipeInfo.PipeFlags));
-            const dstFactor = convertPipeBlendFunction(Assets.extractPipeDstBlend(pipeInfo.PipeFlags));
-            const srcFactor = convertPipeBlendFunction(Assets.extractPipeSrcBlend(pipeInfo.PipeFlags));
+        let useFog = !defines.SKY;
+        let useLighting = !defines.SKY;
+        let alphaRef = 0;
+
+        this.dualCull = false;
+
+        if (this.pipeInfo && (this.pipeInfo.SubObjectBits & subObject!)) {
+            switch (this.pipeInfo.PipeFlags.cullMode) {
+                case Assets.PipeCullMode.None:
+                    this.megaStateFlags.cullMode = GfxCullMode.NONE;
+                    break;
+                case Assets.PipeCullMode.Back:
+                    this.megaStateFlags.cullMode = GfxCullMode.BACK;
+                    break;
+                case Assets.PipeCullMode.Dual:
+                    this.dualCull = true;
+                    this.megaStateFlags.cullMode = GfxCullMode.FRONT;
+                    break;
+            }
+            
+            this.megaStateFlags.depthWrite = this.pipeInfo.PipeFlags.zWriteMode != Assets.PipeZWriteMode.Disabled;
+            const dstFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.dstBlend);
+            const srcFactor = convertPipeBlendFunction(this.pipeInfo.PipeFlags.srcBlend);
             if (dstFactor != -1) blendDstFactor = dstFactor;
             if (srcFactor != -1) blendSrcFactor = srcFactor;
+
+            if (this.pipeInfo.PipeFlags.noFog)
+                useFog = false;
+            
+            if (this.pipeInfo.PipeFlags.noLighting)
+                useLighting = false;
+            
+            if (this.pipeInfo.PipeFlags.alphaCompare)
+                alphaRef = this.pipeInfo.PipeFlags.alphaCompare / 255;
         }
+
+        if (useFog && !defines.USE_FOG)
+            defines.USE_FOG = '1';
+        if (useLighting && !defines.USE_LIGHTING)
+            defines.USE_LIGHTING = '1';
+        if (alphaRef && !defines.ALPHA_REF)
+            defines.ALPHA_REF = alphaRef.toString();
 
         setAttachmentStateSimple(this.megaStateFlags, { blendMode, blendDstFactor, blendSrcFactor });
-        
-        if (textureData) {
-            textureData.setup(device, cache);
-            defines.USE_TEXTURE = '1';
-        }
 
-        let renderLayer = GfxRendererLayer.OPAQUE;
+        this.transparent = frag.transparentColors || frag.transparentTexture;
+        let renderLayer: number;
 
-        if (this.transparent)
+        if (this.transparent) {
             renderLayer = GfxRendererLayer.TRANSLUCENT;
-        else if (defines.SKY)
+            if (!this.megaStateFlags.depthWrite)
+                renderLayer++;
+        }
+        else if (defines.SKY) {
             renderLayer = GfxRendererLayer.BACKGROUND;
+        } else {
+            renderLayer = GfxRendererLayer.OPAQUE;
+        }
 
         this.program = new BFBBProgram(defines);
         this.gfxProgram = device.createProgram(this.program);
@@ -515,35 +661,46 @@ class MeshRenderer implements SceneRenderer {
         this.filterKey = defines.SKY ? BFBBPass.SKYDOME : BFBBPass.MAIN;
     }
 
-    public distanceToCamera(cameraPosition: vec3) {
-        return this.frag.distanceToCamera(this.modelMatrix, cameraPosition);
-    }
-
-    private scratchVec3 = vec3.create();
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        this.bboxModel.transform(this.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(this.bboxModel)) return;
-
-        const camPosition = this.scratchVec3;
-        mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DRAW_DISTANCE) return;
-
+    public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
+
+        const oldCullMode = this.megaStateFlags.cullMode;
+        const oldDepthWrite = this.megaStateFlags.depthWrite;
+
+        if (this.dualCull)
+            this.megaStateFlags.cullMode = secondPass ? GfxCullMode.BACK : GfxCullMode.FRONT;
+        else if (this.dualZWrite)
+            this.megaStateFlags.depthWrite = secondPass;
+        
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        if (this.textureData !== undefined)
-            renderInst.setSamplerBindingsFromTextureMappings(this.textureData.textureMapping);
+        this.megaStateFlags.cullMode = oldCullMode;
+        this.megaStateFlags.depthWrite = oldDepthWrite;
+
+        if (this.frag.textureData !== undefined)
+            renderInst.setSamplerBindingsFromTextureMappings(this.frag.textureData.textureMapping);
         
-        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
-        renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+        renderInst.sortKey = setSortKeyDepth(this.sortKey, viewSpaceDepth);
         renderInst.filterKey = this.filterKey;
     }
 
-    public destroy(device: GfxDevice): void {
+    public prepareToRender(renderState: RenderState) {
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        //const depth = this.frag.distanceToCamera(renderState.cameraPosition, this.modelMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(renderState.viewerInput.camera, this.bboxModel);
+        this.prepareRenderInst(renderState.instManager, depth, false);
+
+        if (this.dualCull || this.dualZWrite)
+            this.prepareRenderInst(renderState.instManager, depth, true);
+    }
+
+    public destroy(device: GfxDevice) {
+        super.destroy(device);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
@@ -552,77 +709,65 @@ class MeshRenderer implements SceneRenderer {
     }
 }
 
+export class MeshRenderer extends BaseRenderer {
+    public visible: boolean = true;
+    private isAtomicVisible: boolean = true;
+
+    constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef,
+        public mesh: MeshData, private pipeInfo?: Assets.PipeInfo, subObject?: number) {
+
+        super(parent);
+
+        for (const frag of mesh.frags) {
+            const fragDefines = Object.assign({}, defines);
+
+            if (frag.textureData) {
+                frag.textureData.setup(device);
+                fragDefines.USE_TEXTURE = '1';
+            }
+            
+            this.addRenderer(new FragRenderer(this, device, cache, fragDefines, frag, pipeInfo, subObject));
+        }
+
+        this.isAtomicVisible = (this.mesh.atomicStruct.flags & RWAtomicFlags.Render) !== 0;
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        if (!this.visible || (!this.isAtomicVisible && !renderState.hacks.invisibleAtomics)) return;
+
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        for (let i = 0; i < this.renderers.length; i++) 
+            this.renderers[i].prepareToRender(renderState);
+    }
+}
+
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 },
 ];
 
-export class ModelRenderer implements SceneRenderer {
-    public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
-    private bboxModel = new AABB();
+export class ModelRenderer extends BaseRenderer {
+    constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache,
+        defines: BFBBProgramDef, public model: ModelData, public color: Color = White) {
 
-    public renderers: MeshRenderer[] = [];
-    public modelMatrix = mat4.create();
+        super(parent);
 
-    public transparent: boolean;
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, defines: BFBBProgramDef, model: ModelData, textures?: TextureData[], public color: Color = White) {
-        this.transparent = color.a < 1.0;
-
-        let pipeTransparent = false;
-        if (model.pipeInfo) {
-            if (Assets.extractPipeDstBlend(model.pipeInfo.PipeFlags) === Assets.PipeBlendFunction.One)
-                pipeTransparent = true;
-        }
+        let subObject = 1 << (model.meshes.length - 1);
 
         for (let i = 0; i < model.meshes.length; i++) {
-            const mesh = model.meshes[i];
-            const subObject = 1 << i;
-
-            if (mesh.atomicStruct.flags & RWAtomicFlags.Render) {
-                for (const frag of mesh.frags) {
-                    let meshTransparent = frag.transparent || pipeTransparent;
-
-                    let textureData: TextureData | undefined;
-                    if (frag.texName && textures) {
-                        textureData = textures.find((tex) => tex.name === frag.texName);
-
-                        if (textureData && textureData.texture.transparent)
-                            meshTransparent = true;
-                    }
-
-                    if (meshTransparent)
-                        this.transparent = true;
-                    
-                    let pipeInfo = model.pipeInfo;
-                    if (pipeInfo && !(pipeInfo.SubObjectBits & subObject))
-                        pipeInfo = undefined;
-                    
-                    const renderer = new MeshRenderer(device, cache, defines, frag, meshTransparent, textureData, pipeInfo);
-                    this.bbox.union(this.bbox, renderer.bbox);
-                    this.renderers.push(renderer);
-                }
-            }
+            this.addRenderer(new MeshRenderer(this, device, cache, defines, model.meshes[i], model.pipeInfo, subObject));
+            subObject >>>= 1;
         }
     }
 
-    public distanceToCamera(cameraPosition: vec3) {
-        let distance = Infinity;
-        for (const renderer of this.renderers)
-            distance = Math.min(renderer.distanceToCamera(cameraPosition), distance);
-        return distance;
-    }
+    public prepareToRender(renderState: RenderState) {
+        if (this.color.a === 0) return;
 
-    private scratchVec3 = vec3.create();
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        this.bboxModel.transform(this.bbox, this.modelMatrix);
-        if (!viewerInput.camera.frustum.contains(this.bboxModel)) return;
-
-        const camPosition = this.scratchVec3;
-        mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-        if (Math.sqrt(squaredDistanceFromPointToAABB(camPosition, this.bboxModel)) >= DRAW_DISTANCE) return;
-
-        const template = renderInstManager.pushTemplateRenderInst();
+        const template = renderState.instManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(BFBBProgram.ub_ModelParams, 12 + 4);
@@ -630,32 +775,41 @@ export class ModelRenderer implements SceneRenderer {
         offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
         offs += fillColor(mapped, offs, this.color);
 
-        for (const renderer of this.renderers) {
-            mat4.copy(renderer.modelMatrix, this.modelMatrix);
-            renderer.prepareToRender(device, renderInstManager, viewerInput);
-        }
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].prepareToRender(renderState);
         
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (const renderer of this.renderers)
-            renderer.destroy(device);
+        renderState.instManager.popTemplateRenderInst();
     }
 }
 
-export class EntRenderer implements SceneRenderer {
-    public modelRenderer?: ModelRenderer;
+export class JSPRenderer extends BaseRenderer {
+    public modelRenderer: ModelRenderer;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly jsp: JSP) {
+        super();
+
+        this.modelRenderer = new ModelRenderer(this, device, cache, { USE_LIGHTING: '0' }, jsp.model);
+        this.addRenderer(this.modelRenderer);
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        this.modelRenderer.prepareToRender(renderState);
+    }
+}
+
+export class EntRenderer extends BaseRenderer {
     public visible: boolean;
     public color: Color;
 
     public isSkydome = false;
     public skydomeLockY = false;
 
-    public modelMatrix = mat4.create();
-    public transparent = false;
+    constructor(parent: BaseRenderer | undefined, device: GfxDevice, cache: GfxRenderCache, public readonly ent: Ent, defines: BFBBProgramDef = {}) {
+        super(parent);
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly ent: Ent) {
         this.visible = (ent.asset.flags & Assets.EntFlags.Visible) != 0;
         this.color = {
             r: ent.asset.redMult,
@@ -664,114 +818,191 @@ export class EntRenderer implements SceneRenderer {
             a: ent.asset.seeThru
         };
 
-        if (ent.model) {
-            const defines: BFBBProgramDef = { ENT: '1' };
-
-            for (const link of ent.asset.links) {
-                if (link.srcEvent === EventID.SceneBegin && link.dstEvent === EventID.SetSkyDome) {
-                    this.isSkydome = true;
-                    defines.SKY = '1';
-                    defines.SKY_DEPTH = `${link.param[0] / 8.0}`;
-                    this.skydomeLockY = (link.param[1] === 1);
-                    break;
-                }
+        for (let i = 0; i < ent.asset.linkCount; i++) {
+            const link = ent.asset.links[i];
+            if (link.srcEvent === EventID.SceneBegin && link.dstEvent === EventID.SetSkyDome) {
+                this.isSkydome = true;
+                defines.SKY = '1';
+                defines.SKY_DEPTH = `${link.param[0] / 8.0}`;
+                this.skydomeLockY = (link.param[1] === 1);
+                break;
             }
-
-            this.modelRenderer = new ModelRenderer(device, cache, defines, ent.model, ent.textures, this.color);
-            this.transparent = this.modelRenderer.transparent;
-
-            const q = quat.create();
-            quatFromYPR(q, ent.asset.ang);
-
-            mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
         }
+
+        for (let i = 0; i < ent.models.length; i++)
+            this.addRenderer(new ModelRenderer(this, device, cache, defines, ent.models[i], this.color));
+
+        const q = quat.create();
+        quatFromYPR(q, ent.asset.ang);
+
+        mat4.fromRotationTranslationScale(this.modelMatrix, q, ent.asset.pos, ent.asset.scale);
     }
 
-    public distanceToCamera(cameraPosition: vec3) {
-        return this.modelRenderer ? this.modelRenderer.distanceToCamera(cameraPosition) : Infinity;
-    }
-
-    public update(viewerInput: Viewer.ViewerRenderInput) {
+    public update(renderState: RenderState) {
         if (this.isSkydome) {
-            this.modelMatrix[12] = viewerInput.camera.worldMatrix[12];
-            this.modelMatrix[14] = viewerInput.camera.worldMatrix[14];
+            this.modelMatrix[12] = renderState.cameraPosition[0];
+            this.modelMatrix[14] = renderState.cameraPosition[2];
 
             if (this.skydomeLockY)
-                this.modelMatrix[13] = viewerInput.camera.worldMatrix[13];
+                this.modelMatrix[13] = renderState.cameraPosition[1];
         }
-
-        if (this.modelRenderer)
-            mat4.copy(this.modelRenderer.modelMatrix, this.modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        this.update(viewerInput);
+    public prepareToRender(renderState: RenderState) {
+        this.update(renderState);
 
-        if (!this.visible) return;
-        if (!this.modelRenderer) return;
+        if (this.color.a === 0) return;
 
-        this.modelRenderer.prepareToRender(device, renderInstManager, viewerInput);
+        super.prepareToRender(renderState);
+        if (this.isCulled || (!this.visible && !renderState.hacks.invisibleEntities)) return;
+
+        for (let i = 0; i < this.renderers.length; i++) {
+            const modelRenderer = this.renderers[i] as ModelRenderer;
+            modelRenderer.color = this.color;
+            modelRenderer.prepareToRender(renderState);
+        }
     }
 
     public destroy(device: GfxDevice) {
-        if (this.modelRenderer)
-            this.modelRenderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
+    }
+}
+
+export class PickupRenderer extends BaseRenderer {
+    public entRenderer: EntRenderer;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly pickup: Pickup, defines: BFBBProgramDef = {}) {
+        super();
+
+        defines.USE_LIGHTING = '0';
+        this.drawDistance = 144;
+
+        this.entRenderer = new EntRenderer(this, device, cache, pickup.ent, defines);
+        this.addRenderer(this.entRenderer);
+
+        mat4.copy(this.modelMatrix, this.entRenderer.modelMatrix);
+    }
+
+    private static pickupOrientation = mat4.create();
+
+    public static sceneUpdate(renderState: RenderState) {
+        const rotateSpeed = MathConstants.DEG_TO_RAD * 180 * renderState.deltaTime;
+        mat4.rotateY(PickupRenderer.pickupOrientation, PickupRenderer.pickupOrientation, rotateSpeed);
+    }
+
+    public update(renderState: RenderState) {
+        const x = this.modelMatrix[12];
+        const y = this.modelMatrix[13];
+        const z = this.modelMatrix[14];
+        mat4.copy(this.modelMatrix, PickupRenderer.pickupOrientation);
+        this.modelMatrix[12] = x;
+        this.modelMatrix[13] = y;
+        this.modelMatrix[14] = z;
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        this.update(renderState);
+
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        this.entRenderer.prepareToRender(renderState);
+    }
+}
+
+const enum SBModelIndices {
+    Body = 4,
+    ArmL = 3,
+    ArmR = 2,
+    Ass = 0,
+    Underwear = 1,
+    Wand = 5,
+    Tongue = 6,
+    BubbleHelmet = 7,
+    BubbleShoeL = 8,
+    BubbleShoeR = 9,
+    ShadowBody = 10,
+    ShadowArmL = 11,
+    ShadowArmR = 12,
+    ShadowWand = 13,
+    Count = 14
+}
+
+export class PlayerRenderer extends BaseRenderer {
+    public entRenderer: EntRenderer;
+
+    private meshRenderers: MeshRenderer[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public readonly player: Player, defines: BFBBProgramDef = {}) {
+        super();
+
+        defines.PLAYER = '1';
+
+        this.entRenderer = new EntRenderer(this, device, cache, player.ent, defines);
+        this.addRenderer(this.entRenderer);
+        
+        this.entRenderer.renderers.forEach((r) => {
+            const modelRenderer = r as ModelRenderer;
+            modelRenderer.renderers.forEach((r) => {
+                this.meshRenderers.push(r as MeshRenderer);
+            })
+        });
+
+        this.entRenderer.color.a = 1.0;
+
+        if (this.meshRenderers.length === SBModelIndices.Count) {
+            this.meshRenderers[SBModelIndices.Body].visible = true;
+            this.meshRenderers[SBModelIndices.ArmL].visible = true;
+            this.meshRenderers[SBModelIndices.ArmR].visible = true;
+            this.meshRenderers[SBModelIndices.Ass].visible = false;
+            this.meshRenderers[SBModelIndices.Underwear].visible = false;
+            this.meshRenderers[SBModelIndices.Wand].visible = false;
+            this.meshRenderers[SBModelIndices.Tongue].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleHelmet].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleShoeL].visible = false;
+            this.meshRenderers[SBModelIndices.BubbleShoeR].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowBody].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowArmL].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowArmR].visible = false;
+            this.meshRenderers[SBModelIndices.ShadowWand].visible = false;
+        }
+
+        mat4.copy(this.modelMatrix, this.entRenderer.modelMatrix);
+    }
+
+    public prepareToRender(renderState: RenderState) {
+        if (!renderState.hacks.player) return;
+        super.prepareToRender(renderState);
+        if (this.isCulled) return;
+
+        this.entRenderer.prepareToRender(renderState);
     }
 }
 
 export class BFBBRenderer implements Viewer.SceneGfx {
-    private opaqueRenderers: SceneRenderer[] = [];
-    private transparentRenderers: SceneRenderer[] = [];
+    public renderers: BaseRenderer[] = [];
 
-    private fog?: Fog;
-    private lightKit?: Assets.LightKit;
-
-    private lightPositionCache: vec3[] = [];
-    private lightRotationCache: vec3[] = [];
+    public fog?: Assets.FogAsset;
+    public objectLightKit?: Assets.LightKit;
+    public playerLightKit?: Assets.LightKit;
 
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
     private clearColor: Color;
 
+    public renderHacks: RenderHacks = {
+        lighting: true,
+        fog: true,
+        skydome: true,
+        player: true,
+        invisibleEntities: false,
+        invisibleAtomics: false,
+    };
+
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public addRenderer(renderer: SceneRenderer) {
-        if (renderer.transparent)
-            this.transparentRenderers.push(renderer);
-        else
-            this.opaqueRenderers.push(renderer);
-    }
-
-    public setFog(fog: Fog) {
-        this.fog = fog;
-    }
-
-    public getFog() {
-        return this.fog;
-    }
-
-    public setLightKit(lightKit: Assets.LightKit) {
-        this.lightKit = lightKit;
-
-        this.lightPositionCache.length = 0;
-        this.lightRotationCache.length = 0;
-
-        const position = vec3.create();
-        const rotation = vec3.create();
-
-        for (const light of lightKit.lightListArray) {
-            mat4.getTranslation(position, light.matrix);
-            computeEulerAngleRotationFromSRTMatrix(rotation, light.matrix);
-            this.lightPositionCache.push(vec3.clone(position));
-            this.lightRotationCache.push(vec3.clone(rotation));
-        }
-    }
-
-    public getLightKit() {
-        return this.lightKit;
     }
 
     public createCameraController() {
@@ -780,65 +1011,57 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         return controller;
     }
 
-    private scratchVec3_0 = vec3.create();
-    private scratchVec3_1 = vec3.create();
-    private scratchVec3_2 = vec3.create();
+    public update(renderState: RenderState) {
+        PickupRenderer.sceneUpdate(renderState);
+    }
+
+    private scratchVec3 = vec3.create();
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const fogEnabled = this.renderHacks.fog && this.fog;
+        this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
+        const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
+        const fogStart = fogEnabled ? this.fog!.fogStart : 0;
+        const fogStop = fogEnabled ? this.fog!.fogStop : 0;
+
         viewerInput.camera.setClipPlanes(1);
+        mat4.getTranslation(this.scratchVec3, viewerInput.camera.worldMatrix);
+
+        const renderState: RenderState = {
+            device: device,
+            instManager: this.renderHelper.renderInstManager,
+            viewerInput: viewerInput,
+            deltaTime: viewerInput.deltaTime / 1000,
+            cameraPosition: this.scratchVec3,
+            hacks: this.renderHacks,
+            drawDistance: fogStop ? Math.min(fogStop, MAX_DRAW_DISTANCE) : MAX_DRAW_DISTANCE,
+        }
+
+        this.update(renderState);
+
         this.renderHelper.pushTemplateRenderInst();
         const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        this.clearColor = this.fog ? this.fog.bkgndColor : TransparentBlack;
-        const fogColor = this.fog ? this.fog.fogColor : TransparentBlack;
-        const fogStart = this.fog ? this.fog.asset.fogStart : 0;
-        const fogStop = this.fog ? this.fog.asset.fogStop : 0;
-
-        const lightCount = 8;
-        const lightSize = (3*4 + 4);
-
-        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + lightCount*lightSize);
+        let offs = template.allocateUniformBuffer(BFBBProgram.ub_SceneParams, 16 + 12 + 2*4 + LIGHTKIT_SIZE*2);
         const mapped = template.mapUniformBufferF32(BFBBProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         offs += fillColor(mapped, offs, fogColor);
         offs += fillVec4(mapped, offs, fogStart, fogStop);
 
-        for (let i = 0; i < lightCount; i++) {
-            if (this.lightKit && this.lightKit.lightCount > i) {
-                const light = this.lightKit.lightListArray[i];
-                offs += fillVec3v(mapped, offs, this.lightPositionCache[i]);
-                offs += fillVec3v(mapped, offs, this.lightRotationCache[i]);
-                offs += fillColor(mapped, offs, light.color);
-                mapped[offs++] = light.type;
-                mapped[offs++] = light.radius;
-                mapped[offs++] = light.angle;
-                mapped[offs++] = 0;
-            } else {
-                for (let j = 0; j < lightSize; j++)
-                    mapped[offs++] = 0;
-            }
-        }
-
-        const camPosition = this.scratchVec3_0;
-        mat4.getTranslation(camPosition, viewerInput.camera.worldMatrix);
-
-        for (const renderer of this.opaqueRenderers)
-            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        if (this.renderHacks.lighting && this.objectLightKit)
+            offs += fillLightKit(mapped, offs, this.objectLightKit);
+        else
+            offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
         
-        const posA = this.scratchVec3_1;
-        const posB = this.scratchVec3_2;
-        
-        // transparency sorting... not perfect yet
-        this.transparentRenderers.sort((a, b) => {
-            mat4.getTranslation(posA, a.modelMatrix);
-            mat4.getTranslation(posB, b.modelMatrix);
-            return vec3.squaredDistance(posB, camPosition) - vec3.squaredDistance(posA, camPosition);
-        });
+        if (this.renderHacks.player && this.renderHacks.lighting && this.playerLightKit)
+            offs += fillLightKit(mapped, offs, this.playerLightKit);
+        else
+            offs += fillConstant(mapped, offs, 0, LIGHTKIT_SIZE);
 
-        for (const renderer of this.transparentRenderers)
-            renderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].prepareToRender(renderState);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -854,15 +1077,18 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const clearPassDescriptor = makeClearRenderPassDescriptor(true, this.clearColor);
+        const clearColorPassDescriptor = makeClearRenderPassDescriptor(true, this.clearColor);
 
-        const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(BFBBPass.SKYDOME);
-        renderInstManager.drawOnPassRenderer(device, skydomePassRenderer);
-        skydomePassRenderer.endPass(null);
-        device.submitPass(skydomePassRenderer);
+        if (this.renderHacks.skydome) {
+            const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearColorPassDescriptor);
+            renderInstManager.setVisibleByFilterKeyExact(BFBBPass.SKYDOME);
+            renderInstManager.drawOnPassRenderer(device, skydomePassRenderer);
+            skydomePassRenderer.endPass(null);
+            device.submitPass(skydomePassRenderer);
+        }
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        const clearPassDescriptor = this.renderHacks.skydome ? depthClearRenderPassDescriptor : clearColorPassDescriptor;
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(BFBBPass.MAIN);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
@@ -871,12 +1097,44 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         return mainPassRenderer;
     }
 
+    public createPanels(): UI.Panel[] {
+        const panel = new UI.Panel();
+        panel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        panel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+
+        const lightingCheckbox = new UI.Checkbox('Lighting', this.renderHacks.lighting);
+        lightingCheckbox.onchanged = () => { this.renderHacks.lighting = lightingCheckbox.checked; };
+        panel.contents.appendChild(lightingCheckbox.elem);
+
+        const fogCheckbox = new UI.Checkbox('Fog', this.renderHacks.fog);
+        fogCheckbox.onchanged = () => { this.renderHacks.fog = fogCheckbox.checked; }
+        panel.contents.appendChild(fogCheckbox.elem);
+
+        const skydomeCheckbox = new UI.Checkbox('Skydome', this.renderHacks.skydome);
+        skydomeCheckbox.onchanged = () => { this.renderHacks.skydome = skydomeCheckbox.checked; };
+        panel.contents.appendChild(skydomeCheckbox.elem);
+
+        const playerCheckbox = new UI.Checkbox('Player', this.renderHacks.player);
+        playerCheckbox.onchanged = () => { this.renderHacks.player = playerCheckbox.checked; };
+        panel.contents.appendChild(playerCheckbox.elem);
+
+        const invisibleEntitiesCheckbox = new UI.Checkbox('Invisible Entities', this.renderHacks.invisibleEntities);
+        invisibleEntitiesCheckbox.onchanged = () => { this.renderHacks.invisibleEntities = invisibleEntitiesCheckbox.checked; };
+        panel.contents.appendChild(invisibleEntitiesCheckbox.elem);
+
+        const invisibleAtomicsCheckbox = new UI.Checkbox('Invisible Atomics', this.renderHacks.invisibleAtomics);
+        invisibleAtomicsCheckbox.onchanged = () => { this.renderHacks.invisibleAtomics = invisibleAtomicsCheckbox.checked; };
+        panel.contents.appendChild(invisibleAtomicsCheckbox.elem);
+
+        panel.setVisible(true);
+        return [panel];
+    }
+
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        for (const renderer of this.opaqueRenderers)
-            renderer.destroy(device);
-        for (const renderer of this.transparentRenderers)
-            renderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
+        this.renderers.length = 0;
     }
 }

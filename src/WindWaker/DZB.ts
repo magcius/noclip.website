@@ -3,10 +3,10 @@
 
 // Collision data for objects and rooms.
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, hexdump } from "../../util";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert } from "../util";
 import { vec3 } from "gl-matrix";
-import { Endianness } from "../../endian";
+import { Endianness } from "../endian";
 
 const enum OctreeNodeType {
     BRANCH = 0x00,
@@ -27,6 +27,7 @@ interface OctreeLeafNode {
 type OctreeNode = OctreeBranchNode | OctreeLeafNode;
 
 export interface DZB {
+    pos: vec3;
     octreeRoot: OctreeNode;
     vertexData: Float32Array;
     faceData: Uint16Array;
@@ -92,8 +93,9 @@ export function parse(buffer: ArrayBufferSlice): DZB {
     const vertexData = buffer.createTypedArray(Float32Array, vertexOffs, vertexCount * 3, Endianness.BIG_ENDIAN);
     const faceData = buffer.createTypedArray(Uint16Array, faceOffs, faceCount * 5, Endianness.BIG_ENDIAN);
     const octreeRoot = parseOctreeNode(0);
+    const pos = vec3.create();
 
-    return { octreeRoot, vertexData, faceData, faceCount };
+    return { pos, octreeRoot, vertexData, faceData, faceCount };
 }
 
 const scratchVec3 = vec3.create();
@@ -117,6 +119,7 @@ function intersectTriangle(bary: vec3, dir: vec3, t0: vec3, t1: vec3, t2: vec3):
     return true;
 }
 
+const porig = vec3.create();
 const pdir = vec3.create();
 const pt0 = vec3.create();
 const pt1 = vec3.create();
@@ -124,6 +127,7 @@ const pt2 = vec3.create();
 const bary = vec3.create();
 export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec3, outNormal?: vec3): boolean {
     vec3.copy(pdir, direction);
+    vec3.add(porig, origin, dzb.pos);
 
     let ci0 = 0, ci1 = 0, ci2 = 0;
 
@@ -137,11 +141,11 @@ export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec
         if (i0 === i1 || i1 === i2 || i0 === i2) continue;
 
         vec3.set(pt0, dzb.vertexData[i0*3+0], dzb.vertexData[i0*3+1], dzb.vertexData[i0*3+2]);
-        vec3.sub(pt0, pt0, origin);
+        vec3.sub(pt0, pt0, porig);
         vec3.set(pt1, dzb.vertexData[i1*3+0], dzb.vertexData[i1*3+1], dzb.vertexData[i1*3+2]);
-        vec3.sub(pt1, pt1, origin);
+        vec3.sub(pt1, pt1, porig);
         vec3.set(pt2, dzb.vertexData[i2*3+0], dzb.vertexData[i2*3+1], dzb.vertexData[i2*3+2]);
-        vec3.sub(pt2, pt2, origin);
+        vec3.sub(pt2, pt2, porig);
 
         if (!intersectTriangle(bary, pdir, pt0, pt1, pt2))
             continue;

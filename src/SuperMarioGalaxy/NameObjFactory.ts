@@ -1,5 +1,5 @@
 
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
@@ -728,7 +728,7 @@ const genericPlanetMapEntry: NameObjFactoryTableEntry = _("PlanetMap", PlanetMap
 export class PlanetMapCreator {
     public planetMapDataTable: JMapInfoIter;
 
-    constructor(arc: RARC.RARC) {
+    constructor(arc: RARC.JKRArchive) {
         this.planetMapDataTable = createCsvParser(arc.findFileData('PlanetMapDataTable.bcsv')!);
     }
 

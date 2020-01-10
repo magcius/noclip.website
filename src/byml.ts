@@ -246,15 +246,15 @@ class GrowableBuffer {
     public bufferSize: number = 0;
 
     constructor(initialSize: number = 0x10000, public growAmount: number = 0x1000) {
-        this.maybeGrow(initialSize);
+        this.maybeGrow(0, initialSize);
     }
 
-    public maybeGrow(newSize: number): void {
-        if (newSize > this.userSize)
-            this.userSize = newSize;
+    public maybeGrow(newUserSize: number, newBufferSize: number = newUserSize): void {
+        if (newUserSize > this.userSize)
+            this.userSize = newUserSize;
 
-        if (newSize > this.bufferSize) {
-            this.bufferSize = align(newSize, this.growAmount);
+        if (newBufferSize > this.bufferSize) {
+            this.bufferSize = align(newBufferSize, this.growAmount);
             const newBuffer = new ArrayBuffer(this.bufferSize);
             // memcpy
             new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));

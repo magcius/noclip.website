@@ -6,7 +6,7 @@ import { SceneContext } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { BMD, BCK, BRK, BTK, BTP } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";

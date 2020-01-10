@@ -58,8 +58,8 @@ export class JSystemFileReaderHelper {
     public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice | null {
         const chunkStart = this.offs;
         const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
-        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
         if (chunkId === maybeChunkId) {
+            const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
             this.offs += chunkSize;
             return this.buffer.subarray(chunkStart, chunkSize);
         } else {
@@ -1189,11 +1189,8 @@ function assocHierarchy(bmd: BMD): void {
 }
 
 export class BMD {
-    public static parse(buffer: ArrayBufferSlice): BMD {
+    public static parseReader(j3d: JSystemFileReaderHelper): BMD {
         const bmd = new BMD();
-
-        const j3d = new JSystemFileReaderHelper(buffer);
-        assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
 
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
         bmd.vtx1 = readVTX1Chunk(j3d.nextChunk('VTX1'));
@@ -1208,6 +1205,12 @@ export class BMD {
         assocHierarchy(bmd);
 
         return bmd;
+    }
+
+    public static parse(buffer: ArrayBufferSlice): BMD {
+        const j3d = new JSystemFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
+        return this.parseReader(j3d);
     }
 
     public inf1: INF1;
@@ -1230,17 +1233,15 @@ export class BMT {
         assert(j3d.magic === 'J3D2bmt3');
 
         const mat3Chunk = j3d.maybeNextChunk('MAT3');
-        if (mat3Chunk !== null)
-            bmt.mat3 = readMAT3Chunk(mat3Chunk);
-        else
-            bmt.mat3 = null;
-        bmt.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+        bmt.mat3 = mat3Chunk !== null ? readMAT3Chunk(mat3Chunk) : null;
+        const tex1Chunk = j3d.maybeNextChunk('TEX1');
+        bmt.tex1 = tex1Chunk !== null ? readTEX1Chunk(tex1Chunk) : null;
 
         return bmt;
     }
 
     public mat3: MAT3 | null;
-    public tex1: TEX1;
+    public tex1: TEX1 | null;
 }
 //#endregion
 //#region Animation Core

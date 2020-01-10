@@ -17,7 +17,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
@@ -174,6 +174,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
             bloomParameters.blurStrength = bloomArea.objArg2 / 256;
             bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
             bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
+        } else if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
+            bloomParameters.blurStrength = 40/256;
+            bloomParameters.bokehStrength = 60/256;
+            bloomParameters.bokehCombineStrength = 110/256;
         } else {
             bloomParameters.blurStrength = 25/256;
             bloomParameters.bokehStrength = 25/256;
@@ -615,7 +619,7 @@ export class ResourceHolder {
     public bvaTable = new Map<string, VAF1>();
     public banmtTable = new Map<string, BckCtrl>();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.RARC) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.JKRArchive) {
         this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
@@ -671,8 +675,8 @@ export class ResourceHolder {
 }
 
 export class ModelCache {
-    public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
-    public archiveCache = new Map<string, RARC.RARC | null>();
+    public archivePromiseCache = new Map<string, Promise<RARC.JKRArchive | null>>();
+    public archiveCache = new Map<string, RARC.JKRArchive | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
     public cache = new GfxRenderCache();
 
@@ -684,7 +688,7 @@ export class ModelCache {
         return Promise.all(v) as Promise<any>;
     }
 
-    private async requestArchiveDataInternal(archivePath: string, abortedCallback: AbortedCallback): Promise<RARC.RARC | null> {
+    private async requestArchiveDataInternal(archivePath: string, abortedCallback: AbortedCallback): Promise<RARC.JKRArchive | null> {
         const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404, abortedCallback);
 
         if (buffer.byteLength === 0) {
@@ -698,7 +702,7 @@ export class ModelCache {
         return rarc;
     }
 
-    public async requestArchiveData(archivePath: string): Promise<RARC.RARC | null> {
+    public async requestArchiveData(archivePath: string): Promise<RARC.JKRArchive | null> {
         if (this.archivePromiseCache.has(archivePath))
             return this.archivePromiseCache.get(archivePath)!;
 
@@ -713,7 +717,7 @@ export class ModelCache {
         return this.archiveCache.has(archivePath) && this.archiveCache.get(archivePath) !== null;
     }
 
-    public getArchive(archivePath: string): RARC.RARC | null {
+    public getArchive(archivePath: string): RARC.JKRArchive | null {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
@@ -735,7 +739,7 @@ export class ModelCache {
         return resourceHolder;
     }
 
-    public getObjectData(objectName: string): RARC.RARC {
+    public getObjectData(objectName: string): RARC.JKRArchive {
         return assertExists(this.getArchive(`ObjectData/${objectName}.arc`));
     }
 
@@ -750,7 +754,7 @@ class ScenarioData {
     public zoneNames: string[];
     public scenarioDataIter: JMapInfoIter;
 
-    constructor(private scenarioArc: RARC.RARC) {
+    constructor(private scenarioArc: RARC.JKRArchive) {
         const zoneListIter = createCsvParser(scenarioArc.findFileData('ZoneList.bcsv')!);
         this.zoneNames = zoneListIter.mapRecords((iter) => {
             return assertExists(iter.getValueString(`ZoneName`));
@@ -1029,7 +1033,7 @@ function copyInfoIter(infoIter: JMapInfoIter): JMapInfoIter {
 type LayerObjInfoCallback = (infoIter: JMapInfoIter, layerId: LayerId) => void;
 
 class StageDataHolder {
-    private zoneArchive: RARC.RARC;
+    private zoneArchive: RARC.JKRArchive;
     public localStageDataHolders: StageDataHolder[] = [];
     public placementMtx = mat4.create();
 
@@ -1221,7 +1225,7 @@ class MessageDataHolder {
     private mesg: BMG;
     private messageIds: string[];
 
-    constructor(messageArc: RARC.RARC) {
+    constructor(messageArc: RARC.JKRArchive) {
         const messageIds = createCsvParser(messageArc.findFileData(`MessageId.tbl`)!);
         this.messageIds = messageIds.mapRecords((iter) => {
             return assertExists(iter.getValueString('MessageId'));
@@ -1246,7 +1250,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
     public abstract getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter;
-    public abstract getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.RARC;
+    public abstract getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.JKRArchive;
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 

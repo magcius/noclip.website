@@ -1,5 +1,5 @@
 
-import * as RARC from '../j3d/rarc';
+import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
@@ -22,7 +22,7 @@ export class ParticleResourceHolder {
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
     public autoEffectList: JMapInfoIter;
 
-    constructor(effectArc: RARC.RARC) {
+    constructor(effectArc: RARC.JKRArchive) {
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`)!);
         this.effectNames = effectNames.mapRecords((iter) => {
             return assertExists(iter.getValueString('name'));
@@ -768,7 +768,7 @@ export class EffectSystem {
     public emitterManager: JPA.JPAEmitterManager;
     public drawInfo = new JPA.JPADrawInfo();
 
-    constructor(device: GfxDevice, effectArc: RARC.RARC) {
+    constructor(device: GfxDevice, effectArc: RARC.JKRArchive) {
         this.particleResourceHolder = new ParticleResourceHolder(effectArc);
 
         // These numbers are from GameScene::initEffect.

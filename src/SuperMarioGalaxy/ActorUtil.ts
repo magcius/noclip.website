@@ -8,7 +8,7 @@ import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { DrawType, DrawBufferType, CalcAnimType, MovementType, NameObj } from "./NameObj";
 import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
-import { RARC } from "../j3d/rarc";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
@@ -152,7 +152,7 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     return false;
 }
 
-export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC, filename: string): BTIData {
+export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: JKRArchive, filename: string): BTIData {
     const device = sceneObjHolder.modelCache.device;
     const cache = sceneObjHolder.modelCache.cache;
 

@@ -1,6 +1,6 @@
 
 import { DataStream } from './util';
-import { vec3, mat4, quat } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 import { Color } from '../Color';
 
 export interface LinkAsset {
@@ -57,9 +57,50 @@ export function readBaseAsset(stream: DataStream): BaseAsset {
     return { id, baseType, linkCount, baseFlags, links };
 }
 
+export interface EnvAsset extends BaseAsset {
+    bspAssetID: number; // JSP info ID
+    startCameraAssetID: number;
+    climateFlags: number;
+    climateStrengthMin: number;
+    climateStrengthMax: number;
+    bspLightKit: number; // not used
+    objectLightKit: number;
+    padF1: number;
+    bspCollisionAssetID: number;
+    bspFXAssetID: number;
+    bspCameraAssetID: number;
+    bspMapperID: number;
+    bspMapperCollisionID: number;
+    bspMapperFXID: number;
+    loldHeight: number;
+}
+
+export function readEnvAsset(stream: DataStream): EnvAsset {
+    const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
+    const bspAssetID = stream.readUInt32();
+    const startCameraAssetID = stream.readUInt32();
+    const climateFlags = stream.readUInt32();
+    const climateStrengthMin = stream.readFloat();
+    const climateStrengthMax = stream.readFloat();
+    const bspLightKit = stream.readUInt32();
+    const objectLightKit = stream.readUInt32();
+    const padF1 = stream.readFloat();
+    const bspCollisionAssetID = stream.readUInt32()
+    const bspFXAssetID = stream.readUInt32();
+    const bspCameraAssetID = stream.readUInt32();
+    const bspMapperID = stream.readUInt32()
+    const bspMapperCollisionID = stream.readUInt32();
+    const bspMapperFXID = stream.readUInt32();
+    const loldHeight = stream.readFloat();
+    const env: EnvAsset = { id, baseType, linkCount, baseFlags, links, bspAssetID, startCameraAssetID, climateFlags, climateStrengthMin, climateStrengthMax,
+        bspLightKit, objectLightKit, padF1, bspCollisionAssetID, bspFXAssetID, bspCameraAssetID, bspMapperID, bspMapperCollisionID, bspMapperFXID, loldHeight };
+    readLinks(stream, env);
+    return env;
+}
+
 export interface FogAsset extends BaseAsset {
-    bkgndColor: number[];
-    fogColor: number[];
+    bkgndColor: Color;
+    fogColor: Color;
     fogDensity: number;
     fogStart: number;
     fogStop: number;
@@ -70,16 +111,8 @@ export interface FogAsset extends BaseAsset {
 
 export function readFogAsset(stream: DataStream): FogAsset {
     const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
-    const bkgndColor: number[] = [];
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    bkgndColor.push(stream.readUInt8());
-    const fogColor: number[] = [];
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
-    fogColor.push(stream.readUInt8());
+    const bkgndColor = stream.readColor8();
+    const fogColor = stream.readColor8();
     const fogDensity = stream.readFloat();
     const fogStart = stream.readFloat();
     const fogStop = stream.readFloat();
@@ -119,17 +152,15 @@ export interface EntAsset extends BaseAsset {
     animListID: number;
 }
 
-const EntAssetSize = 0x54;
-
-export function readEntAsset(stream: DataStream, extraSize: number): EntAsset {
+export function readEntAsset(stream: DataStream, beta: boolean): EntAsset {
     const { id, baseType, linkCount, baseFlags, links } = readBaseAsset(stream);
     const flags = stream.readUInt8();
     const subtype = stream.readUInt8();
     const pflags = stream.readUInt8();
     const moreFlags = stream.readUInt8();
     let pad = 0;
-    if (preLinkSize(linkCount, stream.length) - extraSize === EntAssetSize) {
-        // Beta ent assets don't have this pad field, so their pre-link size is always 0x50.
+    if (!beta) {
+        // Beta ent assets don't have this pad field
         pad = stream.readUInt8();
         stream.align(4);
     }
@@ -204,8 +235,6 @@ export interface MotionAsset {
     flags: number;
     data: MotionData | undefined;
 }
-
-const MotionAssetSize = 0x30;
 
 export enum MotionType {
     ExtendRetract,
@@ -309,8 +338,8 @@ export interface ButtonAsset {
     motion: MotionAsset;
 }
 
-export function readButtonAsset(stream: DataStream): ButtonAsset {
-    const ent = readEntAsset(stream, 0x18 + MotionAssetSize);
+export function readButtonAsset(stream: DataStream, beta: boolean): ButtonAsset {
+    const ent = readEntAsset(stream, beta);
     const modelPressedInfoID = stream.readUInt32();
     const actMethod = stream.readUInt32();
     const initButtonState = stream.readInt32();
@@ -320,6 +349,89 @@ export function readButtonAsset(stream: DataStream): ButtonAsset {
     const motion = readMotionAsset(stream);
     readLinks(stream, ent);
     return { ent, modelPressedInfoID, actMethod, initButtonState, isReset, resetDelay, buttonActFlags, motion };
+}
+
+export interface DestructObjAsset {
+    ent: EntAsset;
+    animSpeed: number;
+    initAnimState: number;
+    health: number;
+    spawnItemID: number;
+    dflags: number;
+    collType: number;
+    fxType: number;
+    pad: number[];
+    blast_radius: number;
+    blast_strength: number;
+    shrapnelID_destroy: number;
+    shrapnelID_hit: number;
+    sfx_destroy: number;
+    sfx_hit: number;
+    hitModel: number;
+    destroyModel: number;
+}
+
+export function readDestructObjAsset(stream: DataStream, beta: boolean): DestructObjAsset {
+    const ent = readEntAsset(stream, beta);
+    const animSpeed = stream.readFloat();
+    const initAnimState = stream.readUInt32();
+    const health = stream.readUInt32();
+    const spawnItemID = stream.readUInt32();
+    const dflags = stream.readUInt32();
+    const collType = stream.readUInt8();
+    const fxType = stream.readUInt8();
+    const pad: number[] = [0,0];
+    pad[0] = stream.readUInt8();
+    pad[1] = stream.readUInt8();
+    const blast_radius = stream.readFloat();
+    const blast_strength = stream.readFloat();
+    const shrapnelID_destroy = stream.readUInt32();
+    const shrapnelID_hit = stream.readUInt32();
+    const sfx_destroy = stream.readUInt32();
+    const sfx_hit = stream.readUInt32();
+    const hitModel = stream.readUInt32();
+    const destroyModel = stream.readUInt32();
+    readLinks(stream, ent);
+    return { ent, animSpeed, initAnimState, health, spawnItemID, dflags, collType, fxType, pad, blast_radius,
+        blast_strength, shrapnelID_destroy, shrapnelID_hit, sfx_destroy, sfx_hit, hitModel, destroyModel };
+}
+
+export interface NPCAsset {
+    ent: EntAsset;
+    npcFlags: number;
+    npcModel: number;
+    npcProps: number;
+    movepoint: number;
+    taskWidgetPrime: number;
+    taskWidgetSecond: number;
+}
+
+export function readNPCAsset(stream: DataStream, beta: boolean): NPCAsset {
+    const ent = readEntAsset(stream, beta);
+    const npcFlags = stream.readInt32();
+    const npcModel = stream.readInt32();
+    const npcProps = stream.readInt32();
+    const movepoint = stream.readUInt32();
+    const taskWidgetPrime = stream.readUInt32();
+    const taskWidgetSecond = stream.readUInt32();
+    readLinks(stream, ent);
+    return { ent, npcFlags, npcModel, npcProps, movepoint, taskWidgetPrime, taskWidgetSecond };
+}
+
+export interface PickupAsset {
+    ent: EntAsset;
+    pickupHash: number;
+    pickupFlags: number;
+    pickupValue: number;
+}
+
+export function readPickupAsset(stream: DataStream, beta: boolean): PickupAsset {
+    const ent = readEntAsset(stream, beta);
+    const pickupHash = stream.readUInt32();
+    const pickupFlags = stream.readUInt16();
+    const pickupValue = stream.readUInt16();
+    readLinks(stream, ent);
+    return { ent, pickupHash, pickupFlags, pickupValue };
 }
 
 interface PlatformERData { nodata: number;}
@@ -403,8 +515,8 @@ export interface PlatformAsset {
     motion: MotionAsset;
 }
 
-export function readPlatformAsset(stream: DataStream): PlatformAsset {
-    const ent = readEntAsset(stream, 0x3C + MotionAssetSize);
+export function readPlatformAsset(stream: DataStream, beta: boolean): PlatformAsset {
+    const ent = readEntAsset(stream, beta);
     const type = stream.readUInt8();
     const pad = stream.readUInt8();
     const flags = stream.readUInt16();
@@ -533,8 +645,8 @@ export interface PlayerAsset {
     lightKitID: number;
 }
 
-export function readPlayerAsset(stream: DataStream): PlayerAsset {
-    const ent = readEntAsset(stream, 0x4);
+export function readPlayerAsset(stream: DataStream, beta: boolean): PlayerAsset {
+    const ent = readEntAsset(stream, beta);
     readLinks(stream, ent);
     const lightKitID = stream.readUInt32();
 
@@ -549,8 +661,8 @@ export interface SimpleObjAsset {
     flags: number;
 }
 
-export function readSimpleObjAsset(stream: DataStream): SimpleObjAsset {
-    const ent = readEntAsset(stream, 0xC);
+export function readSimpleObjAsset(stream: DataStream, beta: boolean): SimpleObjAsset {
+    const ent = readEntAsset(stream, beta);
     const animSpeed = stream.readFloat();
     const initAnimState = stream.readUInt32();
     const collType = stream.readUInt8();
@@ -595,31 +707,92 @@ export function readLightKit(stream: DataStream): LightKit {
     return { tagID, groupID, lightCount, lightList, lightListArray };
 }
 
-export interface PipeInfo {
-    ModelHashID: number;
-    SubObjectBits: number;
-    PipeFlags: number;
+export interface ModelAssetInst {
+    ModelID: number;
+    Flags: number;
+    Parent: number;
+    Bone: number;
+    MatRight: vec3;
+    MatUp: vec3;
+    MatAt: vec3;
+    MatPos: vec3;
+}
+
+export interface ModelAssetInfo {
+    Magic: number;
+    NumModelInst: number;
+    AnimTableID: number;
+    CombatID: number;
+    BrainID: number;
+    modelInst: ModelAssetInst[];
+}
+
+export function readModelInfo(stream: DataStream): ModelAssetInfo {
+    const Magic = stream.readUInt32();
+    const NumModelInst = stream.readUInt32();
+    const AnimTableID = stream.readUInt32();
+    const CombatID = stream.readUInt32();
+    const BrainID = stream.readUInt32();
+    const modelInst: ModelAssetInst[] = [];
+    for (let i = 0; i < NumModelInst; i++) {
+        const ModelID = stream.readUInt32();
+        const Flags = stream.readUInt16();
+        const Parent = stream.readUInt8();
+        const Bone = stream.readUInt8();
+        const MatRight = stream.readVec3();
+        const MatUp = stream.readVec3();
+        const MatAt = stream.readVec3();
+        const MatPos = stream.readVec3();
+        modelInst.push({ ModelID, Flags, Parent, Bone, MatRight, MatUp, MatAt, MatPos });
+    }
+    return { Magic, NumModelInst, AnimTableID, CombatID, BrainID, modelInst };
+}
+
+// try not to confuse this with PickupAsset lol
+export interface PickupTableEntry {
+    pickupHash: number;
+    pickupType: number;
+    pickupIndex: number;
+    pickupFlags: number;
+    quantity: number;
+    modelID: number;
+    animID: number;
+}
+
+export interface PickupTableAsset {
+    Magic: number;
+    Count: number;
+    entries: PickupTableEntry[];
+}
+
+export function readPickupTable(stream: DataStream): PickupTableAsset {
+    const Magic = stream.readUInt32();
+    const Count = stream.readUInt32();
+    const entries: PickupTableEntry[] = [];
+    for (let i = 0; i < Count; i++) {
+        const pickupHash = stream.readUInt32();
+        const pickupType = stream.readUInt8();
+        const pickupIndex = stream.readUInt8();
+        const pickupFlags = stream.readUInt16();
+        const quantity = stream.readUInt32();
+        const modelID = stream.readUInt32();
+        const animID = stream.readUInt32();
+        entries.push({ pickupHash, pickupType, pickupIndex, pickupFlags, quantity, modelID, animID });
+    }
+    return { Magic, Count, entries };
 }
 
 export const enum PipeZWriteMode {
-    Enable,
-    Disable,
-    Unknown2,
-    Unknown3
+    Enabled,
+    Disabled,
+    Dual
 }
 
 export const enum PipeCullMode {
     Unknown0,
     None,
     Back,
-    Unknown3 // front+back?
-}
-
-export const enum PipeLightMode {
-    Unknown0,
-    Unknown1,
-    Unknown2,
-    Unknown3
+    Dual
 }
 
 // RwBlendFunction
@@ -638,36 +811,46 @@ export const enum PipeBlendFunction {
     SrcAlphaSat
 }
 
-export function extractPipeZWriteMode(pipeFlags: number): PipeZWriteMode {
-    return (pipeFlags & 0xC) >> 2;
+export class PipeInfoFlags {
+    constructor(public flags: number) {}
+
+    public get zWriteMode(): PipeZWriteMode {
+        return ((this.flags & 0xC) >>> 2);
+    }
+
+    public get cullMode(): PipeCullMode {
+        return (this.flags & 0x30) >>> 4;
+    }
+
+    public get noLighting(): boolean {
+        return ((this.flags & 0xC0) >>> 6) == 1;
+    }
+
+    public get srcBlend(): PipeBlendFunction {
+        return (this.flags & 0xF00) >>> 8;
+    }
+
+    public get dstBlend(): PipeBlendFunction {
+        return (this.flags & 0xF000) >>> 12;
+    }
+
+    public get noFog(): boolean {
+        return ((this.flags & 0x10000) >>> 16) === 1;
+    }
+
+    public get unknownF00000(): number {
+        return (this.flags & 0xF00000) >>> 20;
+    }
+
+    public get alphaCompare(): number {
+        return (this.flags & 0xFF000000) >>> 24;
+    }
 }
 
-export function extractPipeCullMode(pipeFlags: number): PipeCullMode {
-    return (pipeFlags & 0x30) >> 4;
-}
-
-export function extractPipeLightMode(pipeFlags: number): PipeLightMode {
-    return (pipeFlags & 0xC0) >> 6;
-}
-
-export function extractPipeSrcBlend(pipeFlags: number): PipeBlendFunction {
-    return (pipeFlags & 0xF00) >> 8;
-}
-
-export function extractPipeDstBlend(pipeFlags: number): PipeBlendFunction {
-    return (pipeFlags & 0xF000) >> 12;
-}
-
-export function extractPipeFogUnknown(pipeFlags: number): number {
-    return (pipeFlags & 0x10000) >> 16;
-}
-
-export function extractPipeUnknownF00000(pipeFlags: number): number {
-    return (pipeFlags & 0xF00000) >> 20;
-}
-
-export function extractPipeAlphaCmp(pipeFlags: number): number {
-    return (pipeFlags & 0xFF000000) >> 24;
+export interface PipeInfo {
+    ModelHashID: number;
+    SubObjectBits: number;
+    PipeFlags: PipeInfoFlags;
 }
 
 export function readPipeInfoTable(stream: DataStream): PipeInfo[] {
@@ -676,7 +859,7 @@ export function readPipeInfoTable(stream: DataStream): PipeInfo[] {
     for (let i = 0; i < entryCount; i++) {
         const ModelHashID = stream.readUInt32();
         const SubObjectBits = stream.readUInt32();
-        const PipeFlags = stream.readUInt32();
+        const PipeFlags = new PipeInfoFlags(stream.readUInt32());
         entries.push({ ModelHashID, SubObjectBits, PipeFlags });
     }
     return entries;

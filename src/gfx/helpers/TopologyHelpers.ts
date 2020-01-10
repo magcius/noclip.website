@@ -6,7 +6,6 @@ export const enum GfxTopology {
 };
 
 export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, indexBuffer: Uint16Array): void {
-    assert(topology !== GfxTopology.TRIANGLES);
     assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length) <= dstBuffer.length);
 
     let dst = dstOffs;
@@ -46,11 +45,12 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
             dstBuffer[dst++] = indexBuffer[i + 1];
             dstBuffer[dst++] = indexBuffer[i + 3];
         }
+    } else if (topology === GfxTopology.TRIANGLES) {
+        dstBuffer.set(indexBuffer, dstOffs);
     }
 }
 
 export function convertToTrianglesRange(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
-    assert(topology !== GfxTopology.TRIANGLES);
     assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, numVertices) <= dstBuffer.length);
 
     let dst = dstOffs;
@@ -90,6 +90,9 @@ export function convertToTrianglesRange(dstBuffer: Uint16Array, dstOffs: number,
             dstBuffer[dst++] = baseVertex + i + 1;
             dstBuffer[dst++] = baseVertex + i + 3;
         }
+    } else if (topology === GfxTopology.TRIANGLES) {
+        for (let i = 0; i < numVertices; i++)
+            dstBuffer[dst++] = baseVertex + i;
     }
 }
 

@@ -430,13 +430,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
-        if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.enable(gl.DEPTH_TEST);
-        else if (newMegaState.depthCompare === GfxCompareMode.ALWAYS)
-            gl.disable(gl.DEPTH_TEST);
-
-        if (newMegaState.depthCompare !== GfxCompareMode.ALWAYS)
-            gl.depthFunc(newMegaState.depthCompare);
+        gl.depthFunc(newMegaState.depthCompare);
         currentMegaState.depthCompare = newMegaState.depthCompare;
     }
 
@@ -617,7 +611,12 @@ void main() {
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
+        // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+        this._currentMegaState.depthWrite = false;
+
+        // We always have depth test enabled.
+        gl.enable(gl.DEPTH_TEST);
 
         this._checkForBugQuirks();
 
@@ -629,7 +628,7 @@ void main() {
         const gl = this.gl;
         // Check if row_major is broken by generating a dummy program and checking the uniform data...
         // TODO(jstpierre): Async? Some better way that doesn't block on startup?
-        const shaderVert = this._compileShader(`${this.glslVersion}
+        const shaderVert = this._compileShader(this.glslVersion + `
 precision mediump float;
 layout(row_major, std140) uniform ub_Test {
     mat4x2 u_Test;
@@ -637,7 +636,7 @@ layout(row_major, std140) uniform ub_Test {
 void main() {
     gl_Position = vec4(1);
 }`, gl.VERTEX_SHADER);
-        const shaderFrag = this._compileShader(`${this.glslVersion}
+        const shaderFrag = this._compileShader(this.glslVersion + `
 precision mediump float;
 out vec4 o_Color;
 void main() {
