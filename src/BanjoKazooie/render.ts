@@ -9,7 +9,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
@@ -947,8 +947,22 @@ class GeoNodeRenderer {
     }
 }
 
-const enum ObjectFlags {
-    Blink = 0x100,
+export const enum ObjectFlags {
+    FinalLayer  = 0x00400000,
+    Translucent = 0x00020000,
+    LateOpaque  = 0x00000400,
+
+    Blink       = 0x00000100,
+}
+
+export function layerFromFlags(flags: number): GfxRendererLayer {
+    if (flags & ObjectFlags.FinalLayer)
+        return GfxRendererLayer.TRANSLUCENT + 2; // unused in our current data
+    if (flags & ObjectFlags.Translucent)
+        return GfxRendererLayer.TRANSLUCENT + 1; // render after translucent level geometry
+    if (flags & ObjectFlags.LateOpaque)
+        return GfxRendererLayer.OPAQUE + 1; // lighthouse railing, etc
+    return GfxRendererLayer.OPAQUE;
 }
 
 const enum BlinkState {
@@ -1028,6 +1042,7 @@ const xluSortScratch: XLUSortState = {
     mask: 0x800, // max depth is 11, so this should be enough
 }
 
+const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
@@ -1313,7 +1328,11 @@ export class GeometryRenderer {
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
-        template.sortKey = this.sortKeyBase;
+
+        mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(lookatScratch, this.modelMatrix);
+        vec3.sub(depthScratch, depthScratch, lookatScratch);
+        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(depthScratch));
 
         const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);

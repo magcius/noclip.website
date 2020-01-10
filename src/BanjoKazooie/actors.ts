@@ -5,6 +5,7 @@ import { MathConstants, lerp, angleDist } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
 import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB } from './particles';
 import { ViewerRenderInput } from '../viewer';
+import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 
 export class ClankerTooth extends GeometryRenderer {
     constructor(geometryData: GeometryData, public index: number) {
@@ -135,6 +136,8 @@ export class SnowballChunk extends GeometryRenderer {
     public init(start: vec3) {
         this.visible = true;
         this.animationController.resetPhase();
+        // put in translucent object layer since these fade out
+        this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
         for (let i = 0; i < 3; i++)
             start[i] += randomRange(20);
         fromBB(chunkScratch, chunkVelMin, chunkVelMax);

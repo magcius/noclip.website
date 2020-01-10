@@ -8,7 +8,7 @@ import * as Actors from './actors';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -426,6 +426,7 @@ class ObjectData {
         const renderer = spawnEntry.GeoFileID !== 0 ? this.baseSpawnObject(device, emitters, id, spawnEntry.GeoFileID, pos, yaw) : null;
         if (renderer !== null) {
             (renderer as any).spawnEntry = spawnEntry;
+            renderer.sortKeyBase = makeSortKey(layerFromFlags(spawnEntry.Flags));
             if (spawnEntry.AnimationTable.length > 0) {
                 if (renderer instanceof GeometryRenderer) {
                     const indices = this.getObjectAnimations(spawnEntry);
@@ -678,7 +679,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (opaFile !== null) {
                 const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
                 const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                opa.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+                opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
                 setLevelGeoSelector(opa, obj.SceneID);
             }
 
