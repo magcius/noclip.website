@@ -1671,7 +1671,7 @@ export class d_thunder extends kankyo_class {
 
         const fwd = globals.cameraFwd;
         const a = Math.atan2(fwd[0], fwd[2]);
-        const theta = (cM_rndFX(1.0) < 0.0) ? a - Math.PI : a + Math.PI;
+        const theta = (cM_rndFX(1.0) < 0.0) ? a - Math.PI / 2 : a + Math.PI / 2;
         const phi = vecPitch(fwd);
         const sinT = Math.sin(theta), cosT = Math.cos(theta);
         const cosP = Math.cos(phi);

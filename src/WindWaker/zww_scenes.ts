@@ -656,11 +656,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // Not sure exactly where this is ordered...
         dKy_setLight(this.globals);
 
-        fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
-
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         this.extraTextures.prepareToRender(device);
 
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
 
         const dlst = this.globals.dlst;
 
