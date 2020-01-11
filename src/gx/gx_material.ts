@@ -1115,7 +1115,10 @@ export class GX_Program extends DeviceProgram {
     private generateWire(): string {
 return `
     vec3 t_BaryWire = v_Color1.rgb / (fwidth(v_Color1.rgb) * 0.5);
-    if (!any(lessThan(t_BaryWire, vec3(1.5))))
+    float t_BaryBlend = u_LightParams[6].DistAtten.y;
+    float t_BaryClip = u_LightParams[6].DistAtten.z;
+    gl_FragColor = mix(gl_FragColor, vec4(1.0), (t_BaryBlend * (1.0 - TevSaturate(baryedge(t_BaryWire)))));
+    if (!any(lessThan(t_BaryWire, vec3(t_BaryClip))))
         discard;
 `;
     }
@@ -1215,7 +1218,7 @@ ${this.generateTexGens()}
     float t_Time = u_LightParams[7].DistAtten.x;
     float t_PosAnimTime = u_LightParams[7].DistAtten.z;
     t_Position.xyz += (t_Normal * posnoise(a_Position, t_Time * 10.0)) * pulse(t_PosAnimTime + t_Key) * u_LightParams[7].DistAtten.y;
-    v_TexCoord0.xy += (vec2(bnoise(a_Position.x + t_Time), bnoise(a_Position.y + t_Time))) * u_LightParams[7].CosAtten.z;
+    v_TexCoord0.xy += (vec2(bnoise(a_Position.x + t_Time), bnoise(a_Position.y + t_Time))) * pulse(t_PosAnimTime + t_Key) * u_LightParams[7].CosAtten.z;
     v_Color2.rgb = vec3(1.0) + (posnoise(a_Position, t_Time * 3.0) * u_LightParams[7].CosAtten.y);
     v_Color2.a = 1.0;
 
@@ -1244,6 +1247,10 @@ float TevPerCompGT(float a, float b) { return float(a >  b); }
 float TevPerCompEQ(float a, float b) { return float(a == b); }
 vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
+
+float baryedge(in vec3 b) {
+    return min(b.x, min(b.y, b.z));
+}
 
 void main() {
     vec4 s_kColor0   = u_KonstColor[0];

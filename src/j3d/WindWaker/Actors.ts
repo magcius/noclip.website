@@ -10,7 +10,7 @@ import * as Yaz0 from '../../Common/Compression/Yaz0';
 import * as UI from '../../ui';
 
 import { mat4, vec3 } from "gl-matrix";
-import { hexzero, leftPad, nArray } from '../../util';
+import { hexzero, leftPad, nArray, assert } from '../../util';
 import { J3DModelInstanceSimple, BMDModelMaterialData, MaterialInstance } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
 import { ANK1, BTK, BRK, BCK, TTK1, TRK1, TPT1, BTP, LoopMode, BMT } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
@@ -19,12 +19,12 @@ import * as DZB from './DZB';
 import { ColorKind } from "../../gx/gx_render";
 import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgramDescriptorSimple, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendMode, GfxBlendFactor, GfxBufferUsage } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgramDescriptorSimple, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendMode, GfxBlendFactor, GfxBufferUsage, GfxCullMode, GfxFrontFaceMode } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult, colorLerp, colorCopy } from '../../Color';
 import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst, makeSortKeyTranslucent } from '../../gfx/render/GfxRenderer';
 import { CombineColorInput, RasColorChannelID, TevColorChan } from '../../gx/gx_enum';
-import { computeModelMatrixSRT, MathConstants, lerp } from '../../MathHelpers';
+import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../../MathHelpers';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { preprocessProgramObj_GLSL } from '../../gfx/shaderc/GfxShaderCompiler';
 import { setAttachmentStateSimple } from '../../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -66,6 +66,7 @@ export const enum LightTevColorType {
 }
 
 const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 
@@ -163,6 +164,8 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setKankyoColors(colors);
     }
 
+    public lightPos = vec3.fromValues(-1e7, 1.2e7, -2e7);
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -181,7 +184,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
         }
 
         const light = this.modelInstance.getGXLightReference(0);
-        GX_Material.lightSetWorldPosition(light, viewerInput.camera, -1e7, 1.2e7, -2e7);
+        GX_Material.lightSetWorldPosition(light, viewerInput.camera, this.lightPos[0], this.lightPos[1], this.lightPos[2]);
         // Toon lighting works by setting the color to red.
         colorFromRGBA(light.Color, 1, 0, 0, 0);
         vec3.set(light.CosAtten, 1.075, 0, 0);
@@ -2190,6 +2193,8 @@ in vec3 v_Normal;
 void main() {
     float t_LightIntensity = max(dot(v_Normal, normalize(u_LightDirection.xyz)), 0.0);
     vec4 t_Color = mix(u_Color[0], u_Color[1], t_LightIntensity);
+    if (t_Color.a <= 0.1)
+        discard;
     gl_FragColor.rgba = t_Color;
 }
 `;
@@ -2212,19 +2217,22 @@ class NormalArrowData {
     private program: GfxProgramDescriptorSimple;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
+    public arrowLightAmount: number = 1.0;
     public arrowColor: Color = colorNew(0.8, 1.0, 1.5);
     @UI.dfRange(0, 10, 0.01)
     public baseScale = 0.3;
     @UI.dfRange(3, 24, 1)
-    private numSegments = 16;
+    public numSegments = 16;
     @UI.dfRange(0, 100, 0.01)
-    private tailHeight = 10;
+    public tailHeight = 10;
     @UI.dfRange(0, 100, 0.01)
-    private coneHeight = 6;
+    public coneHeight = 6;
     @UI.dfRange(0, 32, 0.01)
-    private tailWidth = 1;
+    public tailWidth = 1;
     @UI.dfRange(0, 32, 0.01)
-    private coneWidth = 3;
+    public coneWidth = 3;
+    @UI.dfRange(0, 100, 0.01)
+    public gapHeight = 0;
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache) {
         this.program = preprocessProgramObj_GLSL(device, new NormalArrowProgram());
@@ -2247,12 +2255,14 @@ class NormalArrowData {
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         });
+        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+        this.megaStateFlags.cullMode = GfxCullMode.BACK;
 
         this.generate();
 
         const observer = new Proxy(this, { set: (obj, prop, value) => {
             (obj as any)[prop] = value;
-            if (prop === 'numSegments' || prop === 'tailHeight' || prop === 'coneHeight' || prop === 'tailWidth' || prop === 'coneWidth')
+            if (prop === 'numSegments')
                 this.generate();
             return true;
         }});
@@ -2261,16 +2271,12 @@ class NormalArrowData {
 
     private generate(): void {
         const numSegments = this.numSegments;
-        const tailHeight = this.tailHeight;
-        const coneHeight = this.coneHeight;
-        const tailWidth = this.tailWidth;
-        const coneWidth = this.coneWidth;
 
         const vertexData = new Float32Array((numSegments * 4) * 6);
         const indexData = new Uint16Array(numSegments * 5 * 3);
         this.indexCount = indexData.length;
 
-        const y0 = 0, y1 = tailHeight, y2 = y1 + coneHeight;
+        const y0 = 0, y1 = 1;
 
         let offs: number;
 
@@ -2282,8 +2288,8 @@ class NormalArrowData {
             const tailBottomIdx = (numSegments * 0 + i);
             offs = tailBottomIdx * 6;
             vertexData[offs++] = y0;
-            vertexData[offs++] = cos * tailWidth;
-            vertexData[offs++] = sin * tailWidth;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
             // normal
             vertexData[offs++] = 0;
             vertexData[offs++] = cos;
@@ -2293,8 +2299,8 @@ class NormalArrowData {
             const tailTopIdx = (numSegments * 1 + i);
             offs = tailTopIdx * 6;
             vertexData[offs++] = y1;
-            vertexData[offs++] = cos * tailWidth;
-            vertexData[offs++] = sin * tailWidth;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
             // normal
             vertexData[offs++] = 0;
             vertexData[offs++] = cos;
@@ -2303,9 +2309,9 @@ class NormalArrowData {
             // cone bottom
             const coneBottomIdx = (numSegments * 2 + i);
             offs = coneBottomIdx * 6;
-            vertexData[offs++] = y1;
-            vertexData[offs++] = cos * coneWidth;
-            vertexData[offs++] = sin * coneWidth;
+            vertexData[offs++] = 0;
+            vertexData[offs++] = cos;
+            vertexData[offs++] = sin;
             // normal
             vertexData[offs++] = 0;
             vertexData[offs++] = cos;
@@ -2313,7 +2319,7 @@ class NormalArrowData {
             // cone top
             const coneTopIdx = (numSegments * 3 + i);
             offs = coneTopIdx * 6;
-            vertexData[offs++] = y2;
+            vertexData[offs++] = y1;
             vertexData[offs++] = 0;
             vertexData[offs++] = 0;
             // normal
@@ -2344,7 +2350,7 @@ class NormalArrowData {
             indexData[offs++] = modm(coneBottomIdx + 1, numSegments*2, numSegments);
         }
 
-        const device = this.device, cache = this.cache;
+        const device = this.device;
 
         if (this.vertexBuffer !== undefined)
             device.destroyBuffer(this.vertexBuffer);
@@ -2367,7 +2373,14 @@ class NormalArrowData {
         renderInst.setGfxProgram(gfxProgram);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.drawIndexes(this.indexCount);
+    }
+
+    public drawTail(renderInst: GfxRenderInst): void {
+        renderInst.drawIndexes(this.numSegments * 4 * 3, 0);
+    }
+
+    public drawCone(renderInst: GfxRenderInst): void {
+        renderInst.drawIndexes(this.numSegments * 1 * 3, this.numSegments * 4 * 3);
     }
 
     public destroy(device: GfxDevice): void {
@@ -2381,30 +2394,79 @@ const aeanim = bezier(0.8, 0.0, 0.2, 1.0);
 
 type Callback = (t: number) => boolean | void;
 
-function animate(duration: number, callback: Callback): Promise<void> {
-    const begin = window.performance.now();
-    let time = begin;
-    return new Promise((resolve, reject) => {
-        const cb = (nt: number) => {
-            time = (nt - begin);
-            const t = time / duration;
-            if (t > 1.0)
-                resolve();
-            else if (callback(t) === false)
-                resolve();
-            else
-                requestAnimationFrame(cb);
-        };
-        requestAnimationFrame(cb);
-    });
+function forever(): Promise<void> {
+    return new Promise(() => {});
 }
 
-function wait(duration: number): Promise<void> {
-    return animate(duration, () => {});
+class animsched {
+    public time = 0;
+    public idx = 0;
+    public test = -1;
+
+    public callbacks: Callback[] = [];
+
+    public reset(): void {
+        this.time = 0;
+        this.idx = 0;
+        this.callbacks.length = 0;
+    }
+
+    public update(dt: number): void {
+        for (let i = this.callbacks.length - 1; i >= 0; i--)
+            this.callbacks[i](dt);
+    }
+
+    private animate(duration: number, callback: Callback): Promise<void> {
+        let time = 0;
+        return new Promise((resolve, reject) => {
+            const cb = (dt: number) => {
+                time += dt;
+                const t = time / duration;
+                const res = callback(clamp(t, 0.0, 1.0));
+                if (res === false || t > 1.0) {
+                    this.callbacks.splice(this.callbacks.indexOf(cb), 1);
+                    resolve();
+                }
+            };
+            this.callbacks.push(cb);
+        });
+    }
+
+    private wait(duration: number): Promise<void> {
+        return this.animate(duration, () => {});
+    }
+
+    public async anim(startTimeInSeconds: number, durationInSeconds: number, callback: Callback): Promise<void> {
+        const startTime = startTimeInSeconds * 1000, duration = durationInSeconds * 1000;
+
+        if (this.test > -1) {
+            const thisidx = this.idx++;
+            if (thisidx === this.test) {
+                this.time = startTime;
+            } else if (thisidx < this.test) {
+                callback(1.0);
+                return;
+            } else {
+                await forever();
+            }
+        }
+
+        const waitTime = startTime - this.time;
+        assert(waitTime >= 0);
+        if (waitTime > 0)
+            await this.wait(waitTime);
+        await this.animate(duration, callback);
+        this.time = startTime + duration;
+    }
 }
 
 const posArr = nArray(1024, () => vec3.create());
 const nrmArr = nArray(1024, () => vec3.create());
+
+function colorMultLerp(dst: Color, a: Color, b: Color, t: number): void {
+    colorMult(dst, a, b);
+    colorLerp(dst, a, dst, t);
+}
 
 const enum LinkMatMode { vlight, toonify, paletteify }
 const scratchColor = colorNewCopy(White);
@@ -2416,7 +2478,12 @@ class LinkThing extends BMDObjectRenderer {
     private posTime = 0.0;
     private txcAmt = 0.0;
     private colorAmt = 0.0;
+    private wireBlendWhite = 0.0;
+    private wireClip = 1.5;
     private normalArrowData: NormalArrowData;
+    private animsched = new animsched();
+
+    public arrowCallback: ((modelViewMatrix: mat4, pos: vec3, nrm: vec3) => void) | null = null;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, modelInstance: J3DModelInstanceSimple) {
         super(modelInstance);
@@ -2432,11 +2499,13 @@ class LinkThing extends BMDObjectRenderer {
 
         this.normalArrowData = new NormalArrowData(device, cache);
         this.normalArrowData.baseScale = 0.0;
+
+        this.setMode(LinkMatMode.vlight);
     }
 
     private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
         const m = inst.materialHelper.material;
-        m.tevStages.length = 1;
+        // m.tevStages.length = 1;
         if (mode === LinkMatMode.vlight) {
             // Vertex Lighting.
             m.tevStages[0].colorInA = CombineColorInput.ZERO;
@@ -2462,39 +2531,91 @@ class LinkThing extends BMDObjectRenderer {
     }
 
     private prepareToRenderArrow(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelViewMatrix: mat4): void {
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInst.filterKey = WindWakerPass.MAIN;
-        renderInst.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT + 5);
-        this.normalArrowData.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
-        const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+        const data = this.normalArrowData;
 
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(d, offs, modelViewMatrix);
-        offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
-        colorMult(scratchColor, this.normalArrowData.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0]);
-        offs += fillColor(d, offs, scratchColor);
-        colorMult(scratchColor, this.normalArrowData.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0]);
-        offs += fillColor(d, offs, scratchColor);
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.filterKey = WindWakerPass.MAIN;
+        template.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT + 5);
+        data.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+
+        {
+            mat4.copy(scratchMat4a, modelViewMatrix);
+
+            vec3.set(scratchVec3a, data.baseScale * (data.gapHeight), 0, 0);
+            mat4.translate(scratchMat4a, scratchMat4a, scratchVec3a);
+    
+            vec3.set(scratchVec3a,
+                data.baseScale * data.tailHeight,
+                data.baseScale * data.tailWidth,
+                data.baseScale * data.tailWidth);
+            mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            const renderInst = renderInstManager.pushRenderInst();
+            data.drawTail(renderInst);
+            let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
+            const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMat4a);
+            offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+        }
+
+        {
+            mat4.copy(scratchMat4a, modelViewMatrix);
+
+            vec3.set(scratchVec3a, data.baseScale * (data.gapHeight + data.tailHeight), 0, 0);
+            mat4.translate(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            vec3.set(scratchVec3a,
+                data.baseScale * data.coneHeight,
+                data.baseScale * data.coneWidth,
+                data.baseScale * data.coneWidth);
+            mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            const renderInst = renderInstManager.pushRenderInst();
+            data.drawCone(renderInst);
+            let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
+            const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMat4a);
+            offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+        }
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     private prepareToRenderArrows(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, i: number): void {
         const nv = this.modelInstance.shapeInstances[i].skinCPU(posArr, nrmArr, this.modelInstance.shapeInstanceState);
-        const scale = this.normalArrowData.baseScale;
         for (let i = 0; i < nv; i++) {
             const p = posArr[i];
             const n = nrmArr[i];
             const yaw = Math.atan2(n[1], n[0]);
             const pitch = Math.atan2(n[2], Math.hypot(n[0], n[1]));
+
             computeModelMatrixSRT(scratchMatrix,
-                scale, scale, scale,
+                1.0, 1.0, 1.0,
                 0, -pitch, yaw,
                 p[0], p[1], p[2]);
+
+            if (this.arrowCallback !== null)
+                this.arrowCallback(scratchMatrix, p, n);
+
             this.prepareToRenderArrow(device, renderInstManager, viewerInput, scratchMatrix);
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animsched.update(viewerInput.deltaTime);
+
         const l7 = this.modelInstance.getGXLightReference(7);
         l7.DistAtten[0] = viewerInput.time / 1000;
         l7.DistAtten[1] = this.posAmt;
@@ -2502,6 +2623,10 @@ class LinkThing extends BMDObjectRenderer {
         l7.CosAtten[0] = 1.0 - this.wireDepth;
         l7.CosAtten[1] = this.colorAmt;
         l7.CosAtten[2] = this.txcAmt;
+
+        const l6 = this.modelInstance.getGXLightReference(6);
+        l6.DistAtten[1] = this.wireBlendWhite;
+        l6.DistAtten[2] = this.wireClip;
 
         super.prepareToRender(device, renderInstManager, viewerInput);
 
@@ -2523,27 +2648,157 @@ class LinkThing extends BMDObjectRenderer {
         matInstB.setAlphaWriteEnabled(true);
     }
 
-    public async animate(): Promise<void> {
-        /*
-        await animate(1000, (t) => {
+    public async animateVlight(test: number = -1): Promise<void> {
+        this.setMode(LinkMatMode.vlight);
+
+        const sch = this.animsched;
+        sch.reset();
+        sch.test = test;
+
+        // reset defaults
+        this.wireDepth = 0.0;
+        this.posAmt = 0.0;
+        this.posTime = 0.0;
+        this.txcAmt = 0.0;
+        this.colorAmt = 0.0;
+        this.wireBlendWhite = 0.0;
+        this.wireClip = 1.5;
+
+        await sch.anim(12, 1, (t) => {
             this.wireDepth = lerp(0.7, 1.0, aeanim(t));
         });
 
-        await wait(1000);
-        */
+        // "the individual points on these triangles"
+        this.normalArrowData.arrowLightAmount = 0.0;
+        this.normalArrowData.baseScale = 0.45;
+        colorCopy(this.normalArrowData.arrowColor, White);
+        this.normalArrowData.arrowColor.a = 0.0;
+
+        this.normalArrowData.tailHeight = 0.0;
+        this.normalArrowData.tailWidth = 0.0;
+        this.normalArrowData.coneWidth = 5.0;
+        this.normalArrowData.coneHeight = 0.0;
+
+        {
+            let arrowTime: number = 0;
+            this.arrowCallback = (mtx) => {
+                const key = (-mtx[12] + mtx[13]) / 100.0;
+                const time = aeanim(clamp(lerp(-0.5, 1.2, arrowTime) + key, 0.0, 1.0));
+                this.normalArrowData.arrowColor.a = time;
+                this.normalArrowData.baseScale = lerp(0.45, 0.2, time);
+                this.normalArrowData.tailHeight = lerp(10.0, 1.0, time);
+            };
+            await sch.anim(16.5, 2, (t) => {
+                arrowTime = t;
+            });
+            this.arrowCallback = null;
+        }
+
+        // "each one has quite a bit of information"
+        {
+            this.normalArrowData.tailHeight = 1.0;
+            await sch.anim(21, 1, (t) => {
+                this.wireDepth = lerp(1.0, 0.98, aeanim(t));
+                this.wireBlendWhite = lerp(0.0, 0.7, aeanim(t));
+                this.wireClip = lerp(1.5, 30.0, aeanim(t));
+                this.normalArrowData.arrowColor.a = lerp(1.0, 0.0, aeanim(t));
+                this.normalArrowData.baseScale = lerp(0.2, 0.0, aeanim(t));
+            });
+        }
 
         this.posAmt = 10.0;
-        await animate(2000, (t) => {
+        await sch.anim(26, 2, (t) => {
             this.posTime = lerp(0.2, 2.8, t);
         });
         this.posAmt = 0.0;
 
-        await animate(2000, (t) => {
-            this.colorAmt = t;
+        // texture coordinates
+        this.txcAmt = 0.4;
+        await sch.anim(28, 3, (t) => {
+            this.posTime = lerp(0.2, 2.8, t);
+        });
+        this.txcAmt = 0.0;
+
+        // additional color information
+        await sch.anim(35.5, 1, (t) => {
+            this.colorAmt = lerp(0.0, 0.8, aeanim(t));
+        });
+        await sch.anim(43.5, 1, (t) => {
+            this.colorAmt = lerp(0.8, 0.0, aeanim(t));
         });
 
-        await animate(2000, (t) => {
-            this.colorAmt = 1.0 - t;
-        });
+        // vertex normal
+        {
+            colorFromRGBA(this.normalArrowData.arrowColor, 0.8, 1.0, 1.5);
+            this.normalArrowData.tailWidth = 1;
+            this.normalArrowData.coneWidth = 3;
+            this.normalArrowData.arrowLightAmount = 1.0;
+            this.normalArrowData.gapHeight = 6;
+
+            let arrowTime: number = 0;
+            this.arrowCallback = (mtx) => {
+                const key = (-mtx[12] + mtx[13]) / 100.0;
+                const time = aeanim(clamp(lerp(-0.5, 1.2, arrowTime) + key, 0.0, 1.0));
+                this.normalArrowData.baseScale = lerp(0.0, 0.3, time);
+                this.normalArrowData.tailHeight = lerp(0.0, 10.0, time);
+                this.normalArrowData.coneHeight = lerp(0.0, 6.0, time);
+                this.normalArrowData.gapHeight = lerp(6.0, 3.0, time);
+            };
+            await sch.anim(46.5, 2, (t) => {
+                arrowTime = t;
+                this.wireBlendWhite = lerp(0.6, 0.0, aeanim(t));
+            });
+            this.arrowCallback = null;
+        }
+
+        {
+            this.normalArrowData.baseScale = 0.3;
+            this.normalArrowData.tailHeight = 10.0;
+            this.normalArrowData.coneHeight = 6.0;
+            this.normalArrowData.gapHeight = 3.0;
+
+            let arrowTime = 0;
+            let dotMul = 1;
+            let dotMulCutoff = 0.8;
+            let dotScaleMax = 2.0;
+            const l0 = this.modelInstance.getGXLightReference(0);
+            this.arrowCallback = (mtx, p, n) => {
+                vec3.sub(scratchVec3a, l0.Position, p);
+                vec3.normalize(scratchVec3a, scratchVec3a);
+                const dot1 = clamp(vec3.dot(scratchVec3a, n), 0.0, 1.0);
+                const dot = clamp((dot1 - dotMulCutoff) * dotMul + dotMulCutoff, 0.0, 1.0);
+                const dotColor = lerp(0.4, 1.5, dot);
+                const clr = this.normalArrowData.arrowColor;
+                colorFromRGBA(clr, 0.8, 1.0, 1.5);
+                clr.r = lerp(clr.r, clr.r * dotColor, arrowTime);
+                clr.g = lerp(clr.g, clr.g * dotColor, arrowTime);
+                clr.b = lerp(clr.b, clr.b * dotColor, arrowTime);
+                clr.a = clamp(lerp(clr.a, clr.a *  lerp(0.0, 1.0, dot), arrowTime), 0.0, 1.0);
+                const dotScale = lerp(0.4, 1.0, dot) * dotScaleMax;
+                this.normalArrowData.tailWidth = lerp(1.0, 1.0 * dotScale, aeanim(arrowTime));
+                this.normalArrowData.coneHeight = lerp(6.0, 6.0 * dotScale, aeanim(arrowTime));
+                this.normalArrowData.coneWidth = lerp(3.0, 3.0 * dotScale, aeanim(arrowTime));
+                this.normalArrowData.gapHeight = lerp(3.0, Math.pow(3.0, dotScale), aeanim(arrowTime));
+            };
+            await sch.anim(73.5, 1, (t) => {
+                arrowTime = t;
+            });
+
+            await sch.anim(86, 1.5, (t) => {
+                dotMul = lerp(1.0, 5.0, aeanim(t));
+                dotScaleMax = lerp(2.0, 3.0, aeanim(t));
+            });
+
+            await sch.anim(88, 3, (t) => {
+                this.lightPos[0] = lerp(-1e7, 1e7, aeanim(t));
+                this.lightPos[1] = lerp(1.2e7, 1.2e7, aeanim(t));
+                this.lightPos[2] = lerp(-2e7, 0, aeanim(t));
+            });
+            await sch.anim(91, 3, (t) => {
+                this.lightPos[0] = lerp(1e7, -1e5, aeanim(t));
+                this.lightPos[1] = lerp(1.2e7, -1.2e7, aeanim(t));
+                this.lightPos[2] = lerp(0, -1e6, aeanim(t));
+            });
+        }
     }
 }
