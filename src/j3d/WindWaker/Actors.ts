@@ -2714,8 +2714,9 @@ class LinkThing extends BMDObjectRenderer {
 
         // texture coordinates
         this.txcAmt = 0.4;
-        await sch.anim(28, 3, (t) => {
-            this.posTime = lerp(0.2, 2.8, t);
+        await sch.anim(29, 4, (t) => {
+            const t2 = Math.sin(t * Math.PI);
+            this.posTime = lerp(0.2, 2.4, t2);
         });
         this.txcAmt = 0.0;
 
@@ -2775,10 +2776,11 @@ class LinkThing extends BMDObjectRenderer {
                 clr.b = lerp(clr.b, clr.b * dotColor, arrowTime);
                 clr.a = clamp(lerp(clr.a, clr.a *  lerp(0.0, 1.0, dot), arrowTime), 0.0, 1.0);
                 const dotScale = lerp(0.4, 1.0, dot) * dotScaleMax;
-                this.normalArrowData.tailWidth = lerp(1.0, 1.0 * dotScale, aeanim(arrowTime));
-                this.normalArrowData.coneHeight = lerp(6.0, 6.0 * dotScale, aeanim(arrowTime));
-                this.normalArrowData.coneWidth = lerp(3.0, 3.0 * dotScale, aeanim(arrowTime));
-                this.normalArrowData.gapHeight = lerp(3.0, Math.pow(3.0, dotScale), aeanim(arrowTime));
+                const t = aeanim(arrowTime);
+                this.normalArrowData.tailWidth = lerp(1.0, 1.0 * dotScale, t);
+                this.normalArrowData.coneHeight = lerp(6.0, 6.0 * dotScale, t);
+                this.normalArrowData.coneWidth = lerp(3.0, 3.0 * dotScale, t);
+                this.normalArrowData.gapHeight = lerp(3.0, Math.pow(3.0, dotScale), t);
             };
             await sch.anim(73.5, 1, (t) => {
                 arrowTime = t;
