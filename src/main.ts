@@ -532,6 +532,8 @@ class Main {
         if (scene.createPanels)
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
+        // Force time to play when loading a map.
+        this.ui.togglePlayPause(true);
 
         const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
         this.viewer.inputManager.isInteractive = isInteractive;
