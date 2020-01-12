@@ -641,7 +641,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mtx = backMat1.texMatrices[1]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed1) % 1.0;
 
-        const scrollSpeed2 = scrollSpeed0 * 0.8;
+        const scrollSpeed2 = scrollSpeed0 * 0.6;
 
         const backMat2 = this.backCloud.materialInstances[2].materialData.material;
         mtx = backMat2.texMatrices[0]!.matrix;

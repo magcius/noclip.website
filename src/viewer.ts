@@ -180,11 +180,6 @@ export class Viewer {
         this.cameraController = null;
     }
 
-    public setSceneTime(newTime: number): void {
-        this.viewerRenderInput.deltaTime += newTime - this.sceneTime;
-        this.sceneTime = newTime;
-    }
-
     public update(nt: number): void {
         const dt = nt - this.rafTime;
         this.updateDT(dt);
