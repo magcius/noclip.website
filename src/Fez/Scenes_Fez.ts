@@ -31,7 +31,7 @@ export class ModelCache {
     }
 
     public async fetchXNB<T>(path: string): Promise<T> {
-        const data = await this.dataFetcher.fetchData(`${pathBase}/${path}`);
+        const data = await this.dataFetcher.fetchData(`${pathBase}/${path.toLowerCase()}`);
         return parse<T>(this.fezTypeReaderManager, data);
     }
 
@@ -94,15 +94,6 @@ export class ModelCache {
         for (let i = 0; i < this.skyDatas.length; i++)
             this.skyDatas[i].destroy(device);
     }
-}
-
-function parseBoolean(str: string): boolean {
-    if (str === 'True')
-        return true;
-    else if (str === 'False')
-        return false;
-    else
-        throw "whoops";
 }
 
 class FezSceneDesc implements Viewer.SceneDesc {
