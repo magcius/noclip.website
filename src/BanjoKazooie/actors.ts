@@ -3,14 +3,14 @@ import { vec3, mat4, vec2 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
 import { MathConstants, lerp, angleDist } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter } from './particles';
+import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter, randomRange } from './particles';
 import { ViewerRenderInput } from '../viewer';
 import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 export class ClankerTooth extends GeometryRenderer {
-    constructor(geometryData: GeometryData, public index: number) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, public index: number) {
+        super(device, geometryData);
     }
 }
 
@@ -70,8 +70,8 @@ export class ClankerBolt extends GeometryRenderer {
 }
 
 class ShinyObject extends GeometryRenderer {
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder, sparkleRate: number, private turnRate: number = 0, sparkleColor = SparkleColor.Yellow) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder, sparkleRate: number, private turnRate: number = 0, sparkleColor = SparkleColor.Yellow) {
+        super(device, geometryData);
         for (let i = 0; i < 4; i++) {
             const sparkler = new Sparkler(sparkleRate, sparkleColor);
             sparkler.movementController = new ModelPin(this.modelPointArray, i + 5);
@@ -85,8 +85,8 @@ class ShinyObject extends GeometryRenderer {
 }
 
 class Brentilda extends GeometryRenderer {
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
         const wandEmitter = new ConfigurableEmitter(brentildaWandConfig);
         wandEmitter.movementController = new ModelPin(this.modelPointArray, 31);
         emitters.flipbookManager.emitters.push(wandEmitter);
@@ -96,8 +96,8 @@ class Brentilda extends GeometryRenderer {
 class MovingJumpPad extends GeometryRenderer {
     private center = vec3.create();
     private emitters: ConfigurableEmitter[] = [];
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
         this.emitters.push(
             new JumpPadEmitter(nearJumpPadConfig),
             new JumpPadEmitter(farJumpPadConfig),
@@ -119,10 +119,6 @@ class MovingJumpPad extends GeometryRenderer {
         this.emitters[0].modelMatrix[14] = this.center[2] - 590 * Math.sin(trailingAngle);
         mat4.copy(this.emitters[1].modelMatrix, this.emitters[0].modelMatrix);
     }
-}
-
-function randomRange(a: number, b = -a): number {
-    return lerp(a, b, Math.random());
 }
 
 const chunkVelMin = vec3.fromValues(-220, 210, -220);
@@ -175,8 +171,8 @@ export class Snowball extends GeometryRenderer {
     private sparkleEmitter = new StreamEmitter(30, ParticleType.SnowSparkle);
     private chunkEmitter = new SnowballChunkEmitter();
 
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
         this.die();
         emitters.flipbookManager.emitters.push(this.sparkleEmitter);
         this.sparkleEmitter.movementController = new ModelPin(this.modelPointArray, 5);
@@ -257,8 +253,8 @@ export class SirSlush extends GeometryRenderer {
     public snowball: Snowball;
     private throwTimer = 0;
 
-    constructor(geometryData: GeometryData) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData) {
+        super(device, geometryData);
         this.currAnimation = SirSlushState.Idle;
         this.animationMode = AnimationMode.Loop;
     }
@@ -723,8 +719,8 @@ export class RailRider extends GeometryRenderer {
     public railYaw = true;
     public railPitch = true;
 
-    constructor(geometryData: GeometryData) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData) {
+        super(device, geometryData);
     }
 
     public setRail(rails: Rail[]): void {
@@ -772,8 +768,6 @@ export class RailRider extends GeometryRenderer {
             return;
         if (this.waitTimer > 0) {
             this.waitTimer = Math.max(this.waitTimer - deltaSeconds, 0);
-            if (this.waitTimer < 0)
-                this.waitTimer = 0;
             return;
         }
         const oldIndex = getKeyframeIndex(this.rail, this.moveTimer);
@@ -823,8 +817,8 @@ const enum GloopState {
 class Gloop extends RailRider {
     private bubbler = new Emitter(ParticleType.AirBubble);
 
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
         this.bubbler.movementController = new ModelPin(this.modelPointArray, 5);
         emitters.flipbookManager.emitters.push(this.bubbler);
     }
@@ -844,10 +838,72 @@ class Gloop extends RailRider {
     }
 }
 
+const enum CarpetState {
+    Normal,
+    Disappearing,
+    Hidden,
+    Reappearing,
+}
+
+function triangleWave(t: number, min: number, max: number, halfPeriod: number): number {
+    const relTime = t/halfPeriod;
+    return lerp(max, min, Math.abs((relTime % 2) - 1));
+}
+
 class MagicCarpet extends RailRider {
+    public currAnimation = CarpetState.Normal;
+    public animationMode = AnimationMode.Loop;
+    private blinkTimer = 0;
+
+    private emitter = new StreamEmitter(30, ParticleType.Carpet);
+
+    constructor(device: GfxDevice, geometryData:GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
+        this.emitter.movementController = new ModelPin(this.modelPointArray, 6);
+        emitters.flipbookManager.emitters.push(this.emitter);
+    }
+
     protected applyKeyframe(keyframe: RailKeyframe): void {
         super.applyKeyframe(keyframe);
         this.railPitch = false; // actually sets pitch to 0
+    }
+
+    protected movement(viewerInput: ViewerRenderInput): void {
+        let opacity = 1;
+        switch (this.currAnimation) {
+            case CarpetState.Normal:
+                this.emitter.active = true;
+                super.movement(viewerInput);
+                if (this.waitTimer > 0)
+                    this.changeAnimation(CarpetState.Disappearing, AnimationMode.None);
+                break;
+            case CarpetState.Disappearing:
+                this.emitter.active = false;
+                opacity = triangleWave(this.blinkTimer, 1, 0, 1 / 10);
+                if (this.blinkTimer >= 1.5) {
+                    this.blinkTimer = 0;
+                    this.changeAnimation(CarpetState.Hidden, AnimationMode.None);
+                }
+                this.blinkTimer += viewerInput.deltaTime / 1000;
+                break;
+            case CarpetState.Hidden:
+                super.movement(viewerInput);
+                opacity = 0;
+                if (this.waitTimer === 0)
+                    this.changeAnimation(CarpetState.Reappearing, AnimationMode.None);
+                break;
+            case CarpetState.Reappearing:
+                // the game reactivates the emitter here, possibly a bug as the animation is stopped
+                // it tries to check for motion by saving the old moveTimer, but uses a member that's probably a union,
+                // and an unrelated function modifies the same value so that the emitter isn't skipped
+                opacity = triangleWave(this.blinkTimer, 0, 1, 1 / 10);
+                if (this.blinkTimer >= 1.5) {
+                    this.blinkTimer = 0;
+                    this.changeAnimation(CarpetState.Normal, AnimationMode.Loop);
+                }
+                this.blinkTimer += viewerInput.deltaTime / 1000;
+        }
+        this.setEnvironmentAlpha(opacity);
     }
 }
 
@@ -870,8 +926,8 @@ export class LavaRock extends GeometryRenderer {
 
     public parent: LavaRockEmitter;
 
-    constructor(geometryData: GeometryData, emitters: SceneEmitterHolder) {
-        super(geometryData);
+    constructor(device: GfxDevice, geometryData: GeometryData, emitters: SceneEmitterHolder) {
+        super(device, geometryData);
 
         emitters.flipbookManager.emitters.push(
             this.flameEmitter,
@@ -961,31 +1017,31 @@ export class LavaRock extends GeometryRenderer {
 export const clankerID = 0x10001;
 
 // TODO: avoid having to thread the emitter list all the way through
-export function createRenderer(emitters: SceneEmitterHolder, objectID: number, geometryData: GeometryData): GeometryRenderer | FlipbookRenderer {
+export function createRenderer(device: GfxDevice, emitters: SceneEmitterHolder, objectID: number, geometryData: GeometryData): GeometryRenderer | FlipbookRenderer {
     switch (objectID) {
-        case 0x043: return new ClankerBolt(geometryData);
-        case 0x044: return new ClankerTooth(geometryData, 7); // left
-        case 0x045: return new ClankerTooth(geometryData, 9); // right
+        case 0x043: return new ClankerBolt(device, geometryData);
+        case 0x044: return new ClankerTooth(device, geometryData, 7); // left
+        case 0x045: return new ClankerTooth(device, geometryData, 9); // right
 
-        case 0x046: return new ShinyObject(geometryData, emitters, .015, 230); // jiggy
+        case 0x046: return new ShinyObject(device, geometryData, emitters, .015, 230); // jiggy
         case 0x047:  // empty honeycomb
         case 0x050:  // honeycomb
-            return new ShinyObject(geometryData, emitters, .03, Math.random() > .5 ? 200 : -200);
-        case 0x1d8: return new ShinyObject(geometryData, emitters, 1 / 60, 0, SparkleColor.DarkBlue);
-        case 0x1d9: return new ShinyObject(geometryData, emitters, 1 / 60, 0, SparkleColor.Red);
-        case 0x1da: return new ShinyObject(geometryData, emitters, 1 / 60);
+            return new ShinyObject(device, geometryData, emitters, .03, Math.random() > .5 ? 200 : -200);
+        case 0x1d8: return new ShinyObject(device, geometryData, emitters, 1 / 60, 0, SparkleColor.DarkBlue);
+        case 0x1d9: return new ShinyObject(device, geometryData, emitters, 1 / 60, 0, SparkleColor.Red);
+        case 0x1da: return new ShinyObject(device, geometryData, emitters, 1 / 60);
 
-        case 0x0e6: return new Gloop(geometryData, emitters);
-        case 0x0f1: return new RailRider(geometryData); // swamp leaf
-        case 0x123: return new MagicCarpet(geometryData);
+        case 0x0e6: return new Gloop(device, geometryData, emitters);
+        case 0x0f1: return new RailRider(device, geometryData); // swamp leaf
+        case 0x123: return new MagicCarpet(device, geometryData, emitters);
 
-        case 0x124: return new SirSlush(geometryData);
-        case 0x125: return new Snowball(geometryData, emitters);
-        case 0x249: return new MovingJumpPad(geometryData, emitters);
-        case 0x348: return new Brentilda(geometryData, emitters);
-        case 0x3bb: return new LavaRock(geometryData, emitters);
+        case 0x124: return new SirSlush(device, geometryData);
+        case 0x125: return new Snowball(device, geometryData, emitters);
+        case 0x249: return new MovingJumpPad(device, geometryData, emitters);
+        case 0x348: return new Brentilda(device, geometryData, emitters);
+        case 0x3bb: return new LavaRock(device, geometryData, emitters);
     }
-    return new GeometryRenderer(geometryData);
+    return new GeometryRenderer(device, geometryData);
 }
 
 const movementScratch = vec3.create();

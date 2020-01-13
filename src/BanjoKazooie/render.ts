@@ -432,7 +432,10 @@ export class RenderData {
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
+    public dynamicBufferCopies: GfxBuffer[] = [];
+    public dynamicStateCopies: GfxInputState[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput) {
         const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
@@ -441,16 +444,7 @@ export class RenderData {
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
-        if (dynamic) {
-            // there are vertex effects, so the vertex buffer data will change
-            this.vertexBuffer = device.createBuffer(
-                align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
-            );
-        } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
-        }
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
@@ -504,6 +498,10 @@ export class RenderData {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
+        for (let i = 0; i < this.dynamicBufferCopies.length; i++)
+            device.destroyBuffer(this.dynamicBufferCopies[i]);
+        for (let i = 0; i < this.dynamicStateCopies.length; i++)
+            device.destroyInputState(this.dynamicStateCopies[i]);
     }
 }
 
@@ -736,8 +734,7 @@ export class BoneAnimator {
     public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
         timeInFrames = getAnimFrame(this.animFile, timeInFrames, mode);
 
-        mat4.identity(scratchMatrix);
-
+        let rotX = 0, rotY = 0, rotZ = 0;
         let scaleX = 1, scaleY = 1, scaleZ = 1;
         let transX = 0, transY = 0, transZ = 0;
         for (let i = 0; i < this.animFile.tracks.length; i++) {
@@ -748,11 +745,11 @@ export class BoneAnimator {
             const value = sampleAnimationTrackLinear(track, timeInFrames);
 
             if (track.trackType === AnimationTrackType.RotationX)
-                mat4.rotateX(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotX = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.RotationY)
-                mat4.rotateY(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotY = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.RotationZ)
-                mat4.rotateZ(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotZ = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.ScaleX)
                 scaleX = value;
             else if (track.trackType === AnimationTrackType.ScaleY)
@@ -774,6 +771,13 @@ export class BoneAnimator {
 
         mat4.translate(dst, dst, bone.offset);
 
+        mat4.identity(scratchMatrix);
+        if (rotZ !== 0)
+            mat4.rotateZ(scratchMatrix, scratchMatrix, rotZ)
+        if (rotY !== 0)
+            mat4.rotateY(scratchMatrix, scratchMatrix, rotY)
+        if (rotX !== 0)
+            mat4.rotateX(scratchMatrix, scratchMatrix, rotX)
         mat4.mul(dst, dst, scratchMatrix);
 
         vec3.set(scratchVec3, scaleX, scaleY, scaleZ);
@@ -803,6 +807,9 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     case AnimationMode.Once:
         if (frame > lastFrame)
             frame = lastFrame;
+        break;
+    case AnimationMode.None:
+        return anim.startFrame;
     }
     return frame + anim.startFrame;
 }
@@ -858,8 +865,10 @@ class AdjustableAnimationController {
 
 export class GeometryData {
     public renderData: RenderData;
+    public dynamic: boolean;
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
-        this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null);
+        this.renderData = new RenderData(device, cache, geo.sharedOutput);
+        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null;
     }
 }
 const geoNodeScratch = vec3.create();
@@ -1074,8 +1083,11 @@ export class GeometryRenderer {
     private animationSetup: AnimationSetup | null;
     private vertexEffects: VertexAnimationEffect[];
     private rootNodeRenderer: GeoNodeRenderer;
+    private vertexBuffer: GfxBuffer;
+    private vertexBufferData: Float32Array;
+    private inputState: GfxInputState;
 
-    constructor(private geometryData: GeometryData) {
+    constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -1093,6 +1105,30 @@ export class GeometryRenderer {
         if (geo.vertexBoneTable !== null) {
             const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
             this.boneToModelMatrixArray = nArray(boneToModelMatrixArrayCount, () => mat4.create());
+        }
+
+
+        if (this.geometryData.dynamic) {
+            // there are vertex effects, so the vertex buffer data will change
+            // make a copy for this renderer
+            this.vertexBufferData = new Float32Array(this.geometryData.renderData.vertexBufferData);
+            this.vertexBuffer = device.createBuffer(
+                align(this.vertexBufferData.byteLength, 4) / 4,
+                GfxBufferUsage.VERTEX,
+                GfxBufferFrequencyHint.DYNAMIC
+            );
+            this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
+                [{ buffer: this.vertexBuffer, byteOffset: 0, }],
+                { buffer: this.geometryData.renderData.indexBuffer, byteOffset: 0 }
+            );
+
+            // allow the render data to destroy the copies later
+            this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);
+            this.geometryData.renderData.dynamicStateCopies.push(this.inputState);
+        } else {
+            this.vertexBufferData = this.geometryData.renderData.vertexBufferData; // shouldn't be necessary
+            this.vertexBuffer = this.geometryData.renderData.vertexBuffer;
+            this.inputState = this.geometryData.renderData.inputState;
         }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -1320,11 +1356,9 @@ export class GeometryRenderer {
         this.calcModelPoints();
         this.calcSelectorState();
 
-        const renderData = this.geometryData.renderData;
-
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(renderData.inputLayout, renderData.inputState);
+        template.setInputLayoutAndState(this.geometryData.renderData.inputLayout, this.inputState);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
@@ -1361,7 +1395,7 @@ export class GeometryRenderer {
                 const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
                 for (let j = 0; j < effect.vertexIndices.length; j++) {
-                    applyVertexEffect(effect, renderData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
+                    applyVertexEffect(effect, this.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
         }
@@ -1374,15 +1408,15 @@ export class GeometryRenderer {
                 vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
                 for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
                     const vertexID = boneEntries[i].vertexIDs[j];
-                    renderData.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
-                    renderData.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
-                    renderData.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                    this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+                    this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+                    this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
                 }
             }
         }
-        if (reuploadVertices) {
+        if (this.geometryData.dynamic) {
             const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(renderData.vertexBuffer, 0, new Uint8Array(renderData.vertexBufferData.buffer));
+            hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
             device.submitPass(hostAccessPass);
         }
 

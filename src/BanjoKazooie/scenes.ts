@@ -278,10 +278,10 @@ class ObjectData {
             const magic = view.getUint32(0x00);
 
             if (magic === 0x0000000B) {
-                // Z and opacity modes are sometimes set on the fly,
-                // so allow transparency in the one case where we need it
-                const opaque = geoFileID !== 0x37a
-                const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, opaque);
+                // Z and opacity modes can be set dynamically,
+                // but most objects support switching beteween opaque and translucent,
+                // so setting translucent by default seems safe
+                const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, false);
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
@@ -334,7 +334,7 @@ class ObjectData {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
         }
-        const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(emitters, objectID, geoData);
+        const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(device, emitters, objectID, geoData);
 
         renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
         mat4.fromTranslation(renderer.modelMatrix, pos);
@@ -391,6 +391,7 @@ class ObjectData {
     private getObjectAnimations(spawnEntry: ObjectLoadEntry): number[] {
         switch (spawnEntry.SpawnID) {
             case 0x0e6: return [2, 4]; // gloop
+            case 0x123: return [1,2,3,4]; // magic carpet
             case 0x124: return [1, 2]; // sir slush
         }
         return [spawnEntry.AnimationStartIndex];
@@ -421,6 +422,9 @@ class ObjectData {
                         const animFile = parseAnimationFile(file.Data);
                         renderer.boneAnimators.push(new BoneAnimator(animFile, animEntry.Duration));
                     }
+                    // make sure FPS is set correctly for initial animation
+                    if (renderer.boneAnimators.length > 0)
+                        renderer.changeAnimation(renderer.currAnimation, renderer.animationMode);
                 } else
                     console.warn(`animation data for flipbook object ${hexzero(id, 4)}`);
             }
@@ -492,7 +496,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const geoData = new GeometryData(device, cache, geo);
         sceneRenderer.geoDatas.push(geoData.renderData);
-        const geoRenderer = new GeometryRenderer(geoData);
+        const geoRenderer = new GeometryRenderer(device, geoData);
         sceneRenderer.geoRenderers.push(geoRenderer);
         return geoRenderer;
     }

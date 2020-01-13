@@ -11,6 +11,7 @@ import { LavaRock, SnowballChunk } from "./actors";
 export const enum ParticleType {
     Sparkle,
     SnowSparkle,
+    Carpet,
 
     Configurable, // from a separate particle system
     AirBubble, // actually an object in the game
@@ -22,6 +23,10 @@ const enum MotionType {
     Projectile,
     StopOnCollision,
     BounceOnCollision,
+}
+
+export function randomRange(a: number, b = -a): number {
+    return lerp(a, b, Math.random());
 }
 
 // particle graphics mostly start at 0x700, number indices from there
@@ -85,9 +90,9 @@ class Particle {
                 this.timer = 20 / 30;
                 this.motionType = MotionType.ConstantVelocity;
                 this.velocity[1] = -200;
-                this.modelMatrix[12] += Math.random() * 60 - 30;
-                this.modelMatrix[13] += Math.random() * 60 - 30;
-                this.modelMatrix[14] += Math.random() * 60 - 30;
+                this.modelMatrix[12] += randomRange(30);
+                this.modelMatrix[13] += randomRange(30);
+                this.modelMatrix[14] += randomRange(30);
 
                 let index = SparkleColor.Purple;
                 if (Math.random() < .25)
@@ -95,6 +100,20 @@ class Particle {
                 else if (Math.random() < .5)
                     index = SparkleColor.LightBlue;
                 this.flipbook.changeData(manager.getFlipbook(index), FlipbookMode.Translucent);
+                break;
+            case ParticleType.Carpet:
+                this.timer = 14/30;
+                this.velocity[1] = -40;
+                this.motionType = MotionType.ConstantVelocity;
+                this.modelMatrix[12] += randomRange(40);
+                this.modelMatrix[14] += randomRange(40);
+                vec4.set(this.flipbook.primColor,
+                    randomRange(210 / 255, 1),
+                    randomRange(190 / 255, 1),
+                    randomRange(200 / 255, 1),
+                    1,
+                );
+                this.flipbook.changeData(manager.getFlipbook(0xf), FlipbookMode.Opaque, true);
                 break;
             case ParticleType.AirBubble:
                 this.timer = 10;
@@ -117,6 +136,7 @@ class Particle {
         switch (this.type) {
             case ParticleType.Sparkle:
             case ParticleType.SnowSparkle:
+            case ParticleType.Carpet:
                 this.scaleX = Particle.sparkleDimensions[(this.timer * 30) >>> 0];
                 this.scaleY = this.scaleX;
                 break;
@@ -817,7 +837,7 @@ export class SceneEmitterHolder {
         this.lavaRockManager = new BaseEmitterManager<LavaRock>(2, () => spawner.spawnObject(device, this, 0x3bb, emitterScratch)[0] as LavaRock);
 
         const snowballChunkData = spawner.ensureGeoData(device, 0x37a) as GeometryData;
-        this.snowballChunkManager = new BaseEmitterManager<SnowballChunk>(16, () => new SnowballChunk(snowballChunkData));
+        this.snowballChunkManager = new BaseEmitterManager<SnowballChunk>(16, () => new SnowballChunk(device, snowballChunkData));
 
     }
 
