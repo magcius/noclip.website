@@ -1,9 +1,10 @@
 
-// Mario Kart DS
+// Metroid Prime: Hunters
 
 import * as Viewer from '../viewer';
 import * as CX from '../Common/Compression/CX';
-import * as NARC from '../nns_g3d/narc';
+import * as ARC from './mph_arc';
+import { parseMPHbin } from './mph_binModel';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -33,13 +34,14 @@ class ModelCache {
         return Promise.all(p);
     }
 
-    private mountNARC(narc: NARC.NitroFS): void {
-        for (let i = 0; i < narc.files.length; i++) {
-            const file = narc.files[i];
+    private mountARC(arc: ARC.NitroFS): void {
+        for (let i = 0; i < arc.files.length; i++) {
+            const file = arc.files[i];
             this.fileDataCache.set(assertExists(file.path), file.buffer);
         }
     }
 
+    //public async fetchFile(path: string): Promise<ArrayBufferSlice> {
     private fetchFile(path: string): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
         const p = this.dataFetcher.fetchData(`${pathBase}/${path}`);
@@ -47,10 +49,10 @@ class ModelCache {
         return p;
     }
 
-    public async fetchNARC(path: string) {
+    public async fetchMPHARC(path: string) {
         const fileData = await this.fetchFile(path);
-        const narc = NARC.parse(CX.decompress(fileData));
-        this.mountNARC(narc);
+        const arc = ARC.parse(CX.decompress(fileData));
+        this.mountARC(arc);
     }
 
     public getFileData(path: string): ArrayBufferSlice | null {
@@ -140,7 +142,9 @@ interface OBJI {
 
 const scratchMatrix = mat4.create();
 class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {}
+    constructor(public id: string, public name: string) {
+
+    }
 
     private spawnObjectFromNKM(device: GfxDevice, modelCache: ModelCache, renderer: MPHRenderer, obji: OBJI): void {
         function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
@@ -166,32 +170,16 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const modelCache = new ModelCache(dataFetcher);
 
-        modelCache.fetchNARC(`archives/${this.id}.arc`);
+        modelCache.fetchMPHARC(`archives/${this.id}.arc`);
+        //modelCache.fetchFile(`levels/textures/${this.id}.bin`);
         await modelCache.waitForLoad();
 
-        const stageBin = parseNSBMD(assertExists(modelCache.getFileData(`/${this.id}_Model.bin`)));
+        const stageBin = parseMPHbin(assertExists(modelCache.getFileData(`${this.id}_model.bin`)));
         assert(stageBin.models.length === 1);
 
-        const courseBtxFile = modelCache.getFileData(`/course_model.nsbtx`);
-        const courseBtx = courseBtxFile !== null ? parseNSBTX(courseBtxFile) : null;
-        const stageRenderer = new MDL0Renderer(device, stageBin.models[0], stageBin.tex0 !== null ? stageBin.tex0 : assertExists(assertExists(courseBtx).tex0));
-
-        let skyboxRenderer: MDL0Renderer | null = null;
-        const skyboxBmdFile = modelCache.getFileData(`/course_model_V.nsbmd`);
-        if (skyboxBmdFile !== null) {
-            const skyboxBmd = parseNSBMD(skyboxBmdFile);
-            const skyboxBtxFile = modelCache.getFileData(`/course_model_V.nsbtx`);
-            const skyboxBtx = skyboxBtxFile !== null ? parseNSBTX(skyboxBtxFile) : null;
-            assert(skyboxBmd.models.length === 1);
-            skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
-            //skyboxRenderer.modelMatrix[13] -= 1500;
-            //skyboxRenderer.isSkybox = true;
-            skyboxRenderer.isSkybox = false;
-            
-            const skyboxBtaFile = modelCache.getFileData(`/course_model_V.nsbta`);
-            if (skyboxBtaFile !== null)
-                skyboxRenderer.bindSRT0(parseNSBTA(skyboxBtaFile).srt0);
-        }
+        const textureFile = modelCache.getFileData(`${this.id}.bin`);
+        const stageTex = textureFile !== null ? parseNSBTX(textureFile) : null;
+        const stageRenderer = new MDL0Renderer(device, stageBin.models[0], stageBin.tex0 !== null ? stageBin.tex0 : assertExists(assertExists(stageTex).tex0));
 
         const renderer = new MPHRenderer(device, stageRenderer);
 
@@ -229,7 +217,7 @@ const sceneDescs = [
     //new MetroidPrimeHuntersSceneDesc("mp", "Elder Passage"),
     //new MetroidPrimeHuntersSceneDesc("mp", "Fuel Stack"),
     //new MetroidPrimeHuntersSceneDesc("mp", "Fault Line"),
-    //new MetroidPrimeHuntersSceneDesc("e3Level", "Stasis Bunker"),
+    new MetroidPrimeHuntersSceneDesc("e3Level", "Stasis Bunker"),
     new MetroidPrimeHuntersSceneDesc("mp6", "Head Shot"),
     //new MetroidPrimeHuntersSceneDesc("mp", "Celestial Gateway"),
     //new MetroidPrimeHuntersSceneDesc("mp", "Alinos Gateway"),
