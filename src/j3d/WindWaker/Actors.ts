@@ -21,7 +21,7 @@ import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgramDescriptorSimple, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendMode, GfxBlendFactor, GfxBufferUsage, GfxCullMode, GfxFrontFaceMode } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult, colorLerp, colorCopy } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult, colorLerp, colorCopy, OpaqueBlack } from '../../Color';
 import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst, makeSortKeyTranslucent } from '../../gfx/render/GfxRenderer';
 import { CombineColorInput, RasColorChannelID, TevColorChan } from '../../gx/gx_enum';
 import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../../MathHelpers';
@@ -105,6 +105,7 @@ const bboxScratch = new AABB();
 const screenProjection = new ScreenSpaceProjection();
 export class BMDObjectRenderer implements ObjectRenderer {
     public visible = true;
+    public visible2 = false;
     public modelMatrix: mat4 = mat4.create();
     public lightTevColorType = LightTevColorType.ACTOR;
     public layer: number;
@@ -167,6 +168,8 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public lightPos = vec3.fromValues(-1e7, 1.2e7, -2e7);
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.visible2 = false;
+
         if (!this.visible)
             return;
 
@@ -183,10 +186,12 @@ export class BMDObjectRenderer implements ObjectRenderer {
                 return;
         }
 
+        this.visible2 = true;
+
         const light = this.modelInstance.getGXLightReference(0);
         GX_Material.lightSetWorldPosition(light, viewerInput.camera, this.lightPos[0], this.lightPos[1], this.lightPos[2]);
         // Toon lighting works by setting the color to red.
-        colorFromRGBA(light.Color, 1, 0, 0, 0);
+        colorFromRGBA(light.Color, 0, 0, 0, 0);
         vec3.set(light.CosAtten, 1.075, 0, 0);
         vec3.set(light.DistAtten, 1.075, 0, 0);
 
@@ -1275,8 +1280,18 @@ function loadGenericActor(renderer: WindWakerRenderer, roomRenderer: WindWakerRo
         case 0:
             // Small Pot
             fetchArchive(`Always.arc`).then((rarc) => {
-                model = buildModel(rarc, `bdl/obm_kotubo1.bdl`);
-                setToNearestFloor(model.modelMatrix, model.modelMatrix);
+                const model = modelCache.getModel(renderer.device, cache, rarc, `bdl/obm_kotubo1.bdl`);
+                const modelInstance = new J3DModelInstanceSimple(model);
+                aup(modelInstance);
+                modelInstance.passMask = WindWakerPass.MAIN;
+                renderer.extraTextures.fillExtraTextures(modelInstance);
+                modelInstance.name = name;
+                modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+                const b = new PotThing(renderer.device, cache, modelInstance);
+                setModelMatrix(b.modelMatrix);
+                setToNearestFloor(b.modelMatrix, b.modelMatrix);
+                b.layer = actor.layer;
+                roomRenderer.objectRenderers.push(b);
             });
             break;
         case 1:
@@ -2802,5 +2817,136 @@ class LinkThing extends BMDObjectRenderer {
                 this.lightPos[2] = lerp(0, -1e6, aeanim(t));
             });
         }
+    }
+}
+
+class PotThing extends BMDObjectRenderer {
+    private normalArrowData: NormalArrowData;
+
+    public arrowCallback: ((modelViewMatrix: mat4, pos: vec3, nrm: vec3) => void) | null = null;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, modelInstance: J3DModelInstanceSimple) {
+        super(modelInstance);
+        this.normalArrowData = new NormalArrowData(device, cache);
+        this.normalArrowData.baseScale = 0.5;
+
+        vec3.set(this.lightPos, 0, 2e7, 1.2e7);
+
+        let arrowTime = 1.0;
+        let dotMul = 1;
+        let dotMulCutoff = 0.8;
+        let dotScaleMax = 2.0;
+
+        const l0 = this.modelInstance.getGXLightReference(0);
+
+        this.arrowCallback = (mtx, p, n) => {
+            vec3.sub(scratchVec3a, l0.Position, p);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            const dot1 = clamp(vec3.dot(scratchVec3a, n), 0.0, 1.0);
+            const dot = clamp((dot1 - dotMulCutoff) * dotMul + dotMulCutoff, 0.0, 1.0);
+            const dotColor = lerp(0.4, 1.5, dot);
+            const clr = this.normalArrowData.arrowColor;
+            colorFromRGBA(clr, 1.5, 0.8, 0.8);
+            clr.r = lerp(clr.r, clr.r * dotColor, arrowTime);
+            clr.g = lerp(clr.g, clr.g * dotColor, arrowTime);
+            clr.b = lerp(clr.b, clr.b * dotColor, arrowTime);
+            clr.a = clamp(lerp(clr.a, clr.a *  lerp(0.4, 1.0, dot), arrowTime), 0.0, 1.0);
+            const dotScale = lerp(0.4, 1.0, dot) * dotScaleMax;
+            const t = aeanim(arrowTime);
+            this.normalArrowData.tailWidth = lerp(1.0, 1.0 * dotScale, t);
+            this.normalArrowData.coneHeight = lerp(6.0, 6.0 * dotScale, t);
+            this.normalArrowData.coneWidth = lerp(3.0, 3.0 * dotScale, t);
+            this.normalArrowData.gapHeight = 0.0;
+        };
+    }
+
+    private prepareToRenderArrow(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelViewMatrix: mat4): void {
+        const data = this.normalArrowData;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.filterKey = WindWakerPass.MAIN;
+        template.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT + 5);
+        data.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+
+        {
+            mat4.copy(scratchMat4a, modelViewMatrix);
+
+            vec3.set(scratchVec3a, data.baseScale * (data.gapHeight), 0, 0);
+            mat4.translate(scratchMat4a, scratchMat4a, scratchVec3a);
+    
+            vec3.set(scratchVec3a,
+                data.baseScale * data.tailHeight,
+                data.baseScale * data.tailWidth,
+                data.baseScale * data.tailWidth);
+            mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            const renderInst = renderInstManager.pushRenderInst();
+            data.drawTail(renderInst);
+            let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
+            const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMat4a);
+            offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+        }
+
+        {
+            mat4.copy(scratchMat4a, modelViewMatrix);
+
+            vec3.set(scratchVec3a, data.baseScale * (data.gapHeight + data.tailHeight), 0, 0);
+            mat4.translate(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            vec3.set(scratchVec3a,
+                data.baseScale * data.coneHeight,
+                data.baseScale * data.coneWidth,
+                data.baseScale * data.coneWidth);
+            mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+
+            const renderInst = renderInstManager.pushRenderInst();
+            data.drawCone(renderInst);
+            let offs = renderInst.allocateUniformBuffer(NormalArrowProgram.ub_SceneParams, 16+12+4+4*2);
+            const d = renderInst.mapUniformBufferF32(NormalArrowProgram.ub_SceneParams);
+
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMat4a);
+            offs += fillVec3v(d, offs, this.modelInstance.getGXLightReference(0).Position);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+            colorMultLerp(scratchColor, data.arrowColor, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0], data.arrowLightAmount);
+            offs += fillColor(d, offs, scratchColor);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    private prepareToRenderArrows(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, i: number): void {
+        const nv = this.modelInstance.shapeInstances[i].skinCPU(posArr, nrmArr, this.modelInstance.shapeInstanceState);
+        for (let i = 0; i < nv; i++) {
+            const p = posArr[i];
+            const n = nrmArr[i];
+            const yaw = Math.atan2(n[1], n[0]);
+            const pitch = Math.atan2(n[2], Math.hypot(n[0], n[1]));
+
+            computeModelMatrixSRT(scratchMatrix,
+                1.0, 1.0, 1.0,
+                0, -pitch, yaw,
+                p[0], p[1], p[2]);
+
+            if (this.arrowCallback !== null)
+                this.arrowCallback(scratchMatrix, p, n);
+
+            this.prepareToRenderArrow(device, renderInstManager, viewerInput, scratchMatrix);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.prepareToRender(device, renderInstManager, viewerInput);
+        if (!this.visible2)
+            return;
+        // this.prepareToRenderArrows(device, renderInstManager, viewerInput, 0);
     }
 }

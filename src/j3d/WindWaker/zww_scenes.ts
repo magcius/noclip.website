@@ -51,10 +51,10 @@ class DynToonTex {
     public gfxTexture: GfxTexture;
     public desiredPower: number = 0;
     private texPower: number = 0;
-    private textureData: Uint8Array[] = [new Uint8Array(256*1*2)];
+    private textureData: Uint8Array[] = [new Uint8Array(256*1*4)];
 
     constructor(device: GfxDevice) {
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RG_NORM, 256, 1, 1));
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 256, 1, 1));
         device.setResourceName(this.gfxTexture, 'DynToonTex');
     }
 
@@ -64,8 +64,9 @@ class DynToonTex {
         for (let i = 0; i < 256; i++) {
             const t = i / 255;
             dst[dstOffs++] = gain(t, k) * 255;
-            // TODO(jstpierre): Lantern
-            dst[dstOffs++] = 0;
+            dst[dstOffs++] = gain(t, k) * 255;
+            dst[dstOffs++] = gain(t, k) * 255;
+            dst[dstOffs++] = gain(t, k) * 255;
         }
     }
 
