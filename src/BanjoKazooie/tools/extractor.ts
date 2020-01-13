@@ -164,6 +164,41 @@ interface ObjectLoadEntry {
     Scale: number;
 }
 
+const altAnimations = new Map<number, number>([
+        [0x39, 0xa3], // napper
+        [0x3a, 0xa7], // motzand
+        [0x12E, 0xD9], // gobi
+        [0x12F, 0xDD], // rope?
+        [0x131, 0xF4], // gobi
+        [0x132, 0xFE], // trunker
+        [0x133, 0xFA], // red flibbit
+        [0x134, 0xF9], // buzzbomb
+        [0x135, 0xF4], // gobi
+        [0x137, 0xFA], // yellow flibbit
+        [0x139, 0x125], // yumbly
+        [0x13A, 0xE1], // mr vile
+        [0x13B, 0x132], // flotsam
+        [0x1CC, 0x15A], // grille chompa
+        [0x27A, 0x12B], // tip top conductor
+        [0x27B, 0x12E], // tip top choir
+        [0x27C, 0x12E],
+        [0x27D, 0x12E],
+        [0x27E, 0x12E],
+        [0x27F, 0x12E],
+        [0x280, 0x12E],
+        [0x285, 0xF0], // pharaohs
+        [0x286, 0xF0],
+        [0x287, 0xF0],
+        [0x289, 0x169], // grating?
+        [0x28A, 0x15C], // whipslash
+        [0x28F, 0x169], // another grating?
+        [0x29F, 0x184], // clucker
+        [0x30F, 0x22A], // whipcrack
+        [0x380, 0x23A], // scabby
+        [0x381, 0x23E], // portrait chompa
+        // about 30 more
+]);
+
 function parseObjectLoadEntry(map: RAMMapper, startAddress: number, flags: number): ObjectLoadEntry {
     const view = map.lookup(startAddress);
     let offs = 0;
@@ -201,6 +236,15 @@ function parseObjectLoadEntry(map: RAMMapper, startAddress: number, flags: numbe
             animationTable.push({ FileID: fileID, Duration: duration });
             offs += 0x08;
         }
+    }
+
+    // objects with this flag use a different method to set their functions
+    // I just quickly scanned their init logic to find the first file referenced,
+    // there are generally several
+    if (flags & 0x800) {
+        const FileID = altAnimations.get(spawnID);
+        if (FileID !== undefined)
+            animationTable.push({FileID, Duration: 1});
     }
 
     return {
@@ -280,6 +324,9 @@ function extractObjectLoad(fs: FS) {
     for (let i = 0x2d1; i <= 0x36e; i++) {
         extractFileAndAppend(fileTable, fs, i);
     }
+
+    // snowball chunk
+    extractFileAndAppend(fileTable, fs, 0x37a);
 
     const flipbookIDs = [
         0x41a, 0x42a, 0x4a0, 0x580, 0x5b7, 0x5b8, 0x5b9, 0x5c2, 0x5d7, 0x5d8, 0x648, 0x68c, 0x693,

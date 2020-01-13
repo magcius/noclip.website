@@ -957,11 +957,12 @@ class GeoNodeRenderer {
 }
 
 const enum ObjectFlags {
-    FinalLayer  = 0x00400000,
-    Translucent = 0x00020000,
+    FinalLayer   = 0x00400000,
+    Translucent  = 0x00020000,
     EarlyOpaque  = 0x00000400,
 
-    Blink       = 0x00000100,
+    AltAnimation = 0x00000800, // see extractor
+    Blink        = 0x00000100,
 }
 
 // multiple flags can be set, so order is important

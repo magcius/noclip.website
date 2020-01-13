@@ -422,9 +422,6 @@ class ObjectData {
                         const animFile = parseAnimationFile(file.Data);
                         renderer.boneAnimators.push(new BoneAnimator(animFile, animEntry.Duration));
                     }
-                    // make sure FPS is set correctly for initial animation
-                    if (renderer.boneAnimators.length > 0)
-                        renderer.changeAnimation(renderer.currAnimation, renderer.animationMode);
                 } else
                     console.warn(`animation data for flipbook object ${hexzero(id, 4)}`);
             }
@@ -457,7 +454,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=9`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=10`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
