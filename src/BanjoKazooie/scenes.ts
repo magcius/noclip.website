@@ -8,7 +8,7 @@ import * as Actors from './actors';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -318,7 +318,7 @@ class ObjectData {
         }
 
         const renderer = new FlipbookRenderer(flipbookData, phase, initialMirror);
-        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
         return renderer;
@@ -336,7 +336,7 @@ class ObjectData {
         }
         const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(device, emitters, objectID, geoData);
 
-        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
         mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, roll * MathConstants.DEG_TO_RAD);
@@ -408,7 +408,8 @@ class ObjectData {
         const renderer = spawnEntry.GeoFileID !== 0 ? this.baseSpawnObject(device, emitters, id, spawnEntry.GeoFileID, pos, yaw) : null;
         if (renderer !== null) {
             (renderer as any).spawnEntry = spawnEntry;
-            renderer.sortKeyBase = makeSortKey(layerFromFlags(spawnEntry.Flags));
+            // the game sorts everything back-to-front, so do everything in the "translucent" layer
+            renderer.sortKeyBase = makeSortKey( GfxRendererLayer.TRANSLUCENT + layerFromFlags(spawnEntry.Flags));
             if (spawnEntry.AnimationTable.length > 0) {
                 if (renderer instanceof GeometryRenderer) {
                     const indices = this.getObjectAnimations(spawnEntry);
@@ -669,7 +670,7 @@ class SceneDesc implements Viewer.SceneDesc {
             if (xluFile !== null) {
                 const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
                 const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
             }
 
             const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);

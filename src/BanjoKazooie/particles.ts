@@ -1,8 +1,8 @@
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects } from "./render";
+import { FlipbookRenderer, MovementController, FlipbookData, GeometryData, SpawnedObjects, BKLayer } from "./render";
 import { nArray, hexzero } from "../util";
 import { MathConstants, lerp } from "../MathHelpers";
 import { FlipbookMode } from "./flipbook";
@@ -58,6 +58,7 @@ class Particle {
 
     constructor(dummyFlipbookData: FlipbookData) {
         this.flipbook = new FlipbookRenderer(dummyFlipbookData);
+        this.flipbook.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Particles)
     }
 
     // maybe turn this into a piecewise linear function?

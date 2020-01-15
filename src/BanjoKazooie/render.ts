@@ -9,7 +9,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, setSortKeyDepthKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
@@ -965,15 +965,23 @@ const enum ObjectFlags {
     Blink        = 0x00000100,
 }
 
+export const enum BKLayer {
+    Early,
+    Opaque,
+    LevelXLU,
+    Translucent,
+    Particles,
+}
+
 // multiple flags can be set, so order is important
-export function layerFromFlags(flags: number): GfxRendererLayer {
-    if (flags & ObjectFlags.FinalLayer)
-        return GfxRendererLayer.TRANSLUCENT + 2; // unused in our current data
+export function layerFromFlags(flags: number): BKLayer {
+    if (flags & ObjectFlags.FinalLayer) // unused in our current data
+        return BKLayer.Particles;
     if (flags & ObjectFlags.Translucent)
-        return GfxRendererLayer.TRANSLUCENT + 1; // render after translucent level geometry
+        return BKLayer.Translucent;
     if (flags & ObjectFlags.EarlyOpaque)
-        return GfxRendererLayer.OPAQUE - 1;
-    return GfxRendererLayer.OPAQUE;
+        return BKLayer.Early;
+    return BKLayer.Opaque;
 }
 
 const enum BlinkState {
@@ -1466,6 +1474,7 @@ interface FlipbookAnimationParams {
 }
 
 const texMappingScratch = nArray(1, () => new TextureMapping());
+const flipbookScratch = nArray(2, () => vec3.create());
 export class FlipbookRenderer {
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
@@ -1628,7 +1637,10 @@ export class FlipbookRenderer {
         renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        renderInst.sortKey = this.sortKeyBase;
+        mat4.getTranslation(flipbookScratch[0], viewerInput.camera.worldMatrix);
+        mat4.getTranslation(flipbookScratch[1], this.modelMatrix);
+        vec3.sub(flipbookScratch[0], flipbookScratch[0], flipbookScratch[1]);
+        renderInst.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(flipbookScratch[0]));
         renderInst.filterKey = BKPass.MAIN;
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);

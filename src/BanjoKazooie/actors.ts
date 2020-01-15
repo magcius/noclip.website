@@ -1,4 +1,4 @@
-import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects } from './render';
+import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects, BKLayer } from './render';
 import { vec3, mat4, vec2 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
 import { MathConstants, lerp, angleDist } from '../MathHelpers';
@@ -129,7 +129,7 @@ const chunkScratch = nArray(2, () => vec3.create());
 export class SnowballChunk extends GeometryRenderer {
     public movementController: Projectile = new Projectile(800);
     public timer = -1;
-    public sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+    public sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Particles);
 
     public init(start: mat4) {
         this.timer = .8;
