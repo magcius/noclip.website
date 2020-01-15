@@ -329,8 +329,6 @@ export class MDL0Renderer {
         for (let i = 0; i < this.materialInstances.length; i++)
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
-
-        this.execSBC(device);
     }
 
     public bindSRT0(srt0: SRT0, animationController: AnimationController = this.animationController): void {
@@ -345,75 +343,6 @@ export class MDL0Renderer {
                 this.materialInstances[i].translatePAT0Textures(device, hostAccessPass, this.tex0);
         }
         device.submitPass(hostAccessPass);
-    }
-
-    private execSBC(device: GfxDevice) {
-        const model = this.model;
-        const view = model.sbcBuffer.createDataView();
-
-        const enum Op {
-            NOP, RET, NODE, MTX, MAT, SHP, NODEDESC, BB, BBY, NODEMIX, CALLDL, POSSCALE, ENVMAP, PRJMAP,
-        };
-
-        let idx = 0;
-        let currentNode: Node | null = null;
-        let currentMaterial: MaterialInstance | null = null;
-        while (true) {
-            const w0 = view.getUint8(idx++);
-            const cmd = w0 & 0x1F;
-            const opt = (w0 & 0xE0) >>> 5;
-            if (cmd === Op.NOP)
-                continue;
-            else if (cmd === Op.RET)
-                break;
-            else if (cmd === Op.NODE) {
-                const nodeIdx = view.getUint8(idx++);
-                const visible = view.getUint8(idx++);
-                currentNode = this.nodes[nodeIdx];
-            } else if (cmd === Op.MTX) {
-                const mtxIdx = view.getUint8(idx++);
-            } else if (cmd === Op.MAT) {
-                const matIdx = view.getUint8(idx++);
-                currentMaterial = this.materialInstances[matIdx];
-            } else if (cmd === Op.SHP) {
-                const shpIdx = view.getUint8(idx++);
-                const shape = model.shapes[shpIdx];
-                this.shapeInstances.push(new ShapeInstance(device, assertExists(currentMaterial), assertExists(currentNode), shape, this.model.posScale));
-            } else if (cmd === Op.NODEDESC) {
-                const idxNode = view.getUint8(idx++);
-                const idxNodeParent = view.getUint8(idx++);
-                const flags = view.getUint8(idx++);
-                let destIdx = -1, srcIdx = -1;
-                if (opt & 0x01)
-                    destIdx = view.getUint8(idx++);
-                if (opt & 0x02)
-                    srcIdx = view.getUint8(idx++);
-            } else if (cmd === Op.BB) {
-                const nodeIdx = view.getUint8(idx++);
-                let destIdx = -1, srcIdx = -1;
-                if (opt & 0x01)
-                    destIdx = view.getUint8(idx++);
-                if (opt & 0x02)
-                    srcIdx = view.getUint8(idx++);
-
-                if (opt === 0)
-                    this.nodes[nodeIdx].billboardMode = BillboardMode.BB;
-            } else if (cmd === Op.BBY) {
-                const nodeIdx = view.getUint8(idx++);
-                let destIdx = -1, srcIdx = -1;
-                if (opt & 0x01)
-                    destIdx = view.getUint8(idx++);
-                if (opt & 0x02)
-                    srcIdx = view.getUint8(idx++);
-
-                if (opt === 0)
-                    this.nodes[nodeIdx].billboardMode = BillboardMode.BBY;
-            } else if (cmd === Op.POSSCALE) {
-                //
-            } else {
-                throw new Error(`UNKNOWN SBC ${cmd.toString(16)}`);
-            }
-        }
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
