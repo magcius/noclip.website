@@ -84,6 +84,13 @@ interface ColorCombinePass {
     d: CCMUX;
 }
 
+function colorCombinePassUsesT1(ccp: ColorCombinePass) {
+    return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
+        (ccp.b == CCMUX.TEXEL1) || (ccp.b == CCMUX.TEXEL1_A) ||
+        (ccp.c == CCMUX.TEXEL1) || (ccp.c == CCMUX.TEXEL1_A) ||
+        (ccp.d == CCMUX.TEXEL1) || (ccp.d == CCMUX.TEXEL1_A);
+}
+
 interface AlphaCombinePass {
     a: ACMUX;
     b: ACMUX;
@@ -91,11 +98,20 @@ interface AlphaCombinePass {
     d: ACMUX;
 }
 
+function alphaCombinePassUsesT1(acp: AlphaCombinePass) {
+    return (acp.a == ACMUX.TEXEL1 || acp.b == ACMUX.TEXEL1 || acp.c == ACMUX.TEXEL1 || acp.d == ACMUX.TEXEL1);
+}
+
 export interface CombineParams {
     c0: ColorCombinePass;
     a0: AlphaCombinePass;
     c1: ColorCombinePass;
     a1: AlphaCombinePass;
+}
+
+function combineParamsUsesT1(cp: CombineParams) {
+    return colorCombinePassUsesT1(cp.c0) || colorCombinePassUsesT1(cp.c1) ||
+        alphaCombinePassUsesT1(cp.a0) || alphaCombinePassUsesT1(cp.a1);
 }
 
 export function decodeCombineParams(w0: number, w1: number): CombineParams {
@@ -343,6 +359,11 @@ export class DrawCall {
 
     public firstIndex: number = 0;
     public indexCount: number = 0;
+
+    public usesTexture1(): boolean {
+        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE &&
+            combineParamsUsesT1(this.DP_Combine);
+    }
 }
 
 function getSizBitsPerPixel(siz: ImageSize): number {
@@ -417,6 +438,7 @@ function packParams(params: ColorCombinePass | AlphaCombinePass): number {
 }
 
 export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
+    //console.log(`CombineParams ${JSON.stringify(params, null, '\t')}`);
     const cc0 = packParams(params.c0);
     const cc1 = packParams(params.c1);
     const ac0 = packParams(params.a0);
@@ -609,8 +631,8 @@ export class RSPState {
     private SP_GeometryMode: number = 0;
 
     private DP_OtherModeL: number = 0;
-    // XXX: enable bilerp filtering here, since levels don't enable filtering by themselves.
-    private DP_OtherModeH: number = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
+    // Initialize with bilinear filtering and 2-cycle mode. Levels don't enable these modes.
+    private DP_OtherModeH: number = (TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT) | (OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new TextureImageState();
@@ -618,7 +640,7 @@ export class RSPState {
     private tileNum: number = 0;
     private tmem: Uint8Array = new Uint8Array(TMEM_SIZE);
     private primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
-    private envColor: vec4 = vec4.fromValues(1, 1, 1, 1);
+    private envColor: vec4 = vec4.fromValues(0.5, 0.5, 0.5, 0.5);
 
     constructor(public rom: Rom, public sharedOutput: RSPSharedOutput) {
         for (let i = 0; i < NUM_TILE_DESCRIPTORS; i++)
@@ -630,6 +652,12 @@ export class RSPState {
             return null;
 
         return this.output;
+    }
+
+    private _usesTexture1() {
+        const combineParams = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
+        return getCycleTypeFromOtherModeH(this.DP_OtherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE &&
+            combineParamsUsesT1(combineParams);
     }
 
     private _setGeometryMode(newGeometryMode: number) {
@@ -719,10 +747,9 @@ export class RSPState {
             //     dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             // }
 
-            if (desc.level > 0) {
+            if (this._usesTexture1()) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
-                // FIXME: is level > 0 a good way to detect multitexturing?
-                const desc2 = this.tileDescriptors[this.tileNum + 1]; // FIXME: & 0x7 ?
+                const desc2 = this.tileDescriptors[(this.tileNum + 1) & 0x7];
                 dc.textures[1] = translateTileTexture(new DataView(this.tmem.buffer), desc2, textlut);
                 dc.tileDescriptors[1] = desc2.clone();
             }
@@ -786,7 +813,6 @@ export class RSPState {
             const view = lkup.buffer.createDataView();
             const desc = this.tileDescriptors[tile];
             const palTmem = 0x100 + (desc.palette << 4);
-            console.log(`loading tile ${tile} palette ${desc.palette}`);
             // FIXME: copy correctly
             for (let i = 0; i < (count + 1) * 4; i++) {
                 this.tmem[palTmem + i] = view.getUint8(lkup.offs + i);
@@ -804,7 +830,7 @@ export class RSPState {
         // Verify that we're loading into LOADTILE.
         assert(tileIndex === 7);
 
-        // const tile = this.DP_TileState[tileIndex];
+        const tile = this.tileDescriptors[tileIndex];
         // // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
         // // in B-K due to hackery.
         // const numWordsTotal = lrs + 1;
@@ -821,7 +847,7 @@ export class RSPState {
             const view = lkup.buffer.createDataView();
             // TODO: copy correctly; perform interleaving (maybe unnecessary?)
             // In color-indexed mode, textures are stored in the second half of TMEM (FIXME: really?)
-            const tmemAddr = this.DP_TextureImageState.fmt == ImageFormat.G_IM_FMT_CI ? 0x800 : 0;
+            const tmemAddr = this.DP_TextureImageState.fmt == ImageFormat.G_IM_FMT_CI ? 0x800 : (tile.tmem * 8);
             const numBytes = ((getSizBitsPerPixel(this.DP_TextureImageState.siz) * (texels + 1) + 7) / 8)|0;
             for (let i = 0; i < numBytes; i++) {
                 this.tmem[tmemAddr + i] = view.getUint8(lkup.offs + i);
