@@ -15,16 +15,18 @@ export interface NitroFS {
 function parseNitroFS(fileCount: number, fileSize: number, imgBuffer: ArrayBufferSlice): NitroFS {
     const imgView = imgBuffer.createDataView();
 
+    const secSize = 0x40;
+
     function getBufferForFileId(fileId: number): ArrayBufferSlice {
-        const fileStartOffs = imgView.getUint32(fileId * 0x40 + 0x30, true);
-        const fileEndOffs = imgView.getUint32(fileId * 0x40 + 0x34, true);
-        return imgBuffer.slice(fileStartOffs, fileEndOffs);
+        const fileStartOffs = imgView.getUint32(fileId * secSize + 0x40, false);
+        const fileEndOffs = imgView.getUint32(fileId * secSize + 0x48, false);
+        return imgBuffer.slice(fileStartOffs, fileStartOffs+fileEndOffs);
     }
 
     const files: NitroFSEntry[] = [];
     let nameOffset = 0;
     for (let i = 0; i < fileCount; i++) {
-        nameOffset = i * 0x40;
+        nameOffset = i * secSize + 0x20;
         const buffer = getBufferForFileId(i);
         const name = readString(imgBuffer, nameOffset, 0x20, true);
         files.push({ path: name, fileId: i, buffer });
@@ -39,5 +41,5 @@ const view = buffer.createDataView();
     const fileCount = view.getUint32(0x08, false);
     const fileSize = view.getUint32(0x0C, false);
 
-    return parseNitroFS(fileCount, fileSize, buffer.slice(0x20, buffer.byteLength));
+    return parseNitroFS(fileCount, fileSize, buffer);
 }
