@@ -191,6 +191,9 @@ function translateWrapMode(wrapMode: GfxWrapMode): GLenum {
         return WebGL2RenderingContext.REPEAT;
     case GfxWrapMode.MIRROR:
         return WebGL2RenderingContext.MIRRORED_REPEAT;
+    default:
+        console.warn(`Invalid texture wrap mode ${wrapMode}`);
+        return WebGL2RenderingContext.CLAMP_TO_EDGE;
     }
 }
 

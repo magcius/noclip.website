@@ -279,6 +279,10 @@ function translateCM(cm: TexCM): GfxWrapMode {
     case TexCM.WRAP:   return GfxWrapMode.REPEAT;
     case TexCM.MIRROR: return GfxWrapMode.MIRROR;
     case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    // TODO: handle TexCM.MIRROR | TexCM.CLAMP (0x3) -- "mirror once" mode; occurs in Forest Temple
+    default:
+        console.warn(`Unknown TexCM ${cm}`);
+        return GfxWrapMode.CLAMP;
     }
 }
 
