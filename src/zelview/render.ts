@@ -85,7 +85,7 @@ void main() {
         float intensity = max(0.0, dot(normal, lightDirection));
         vec3 ambient = vec3(0.25, 0.25, 0.25);
         vec3 lightColor = vec3(1.0, 1.0, 1.0);
-        v_Color.xyz = ambient + intensity * lightColor;
+        v_Color.rgb = ambient + intensity * lightColor;
     }
 
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
