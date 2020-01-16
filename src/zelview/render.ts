@@ -42,6 +42,7 @@ layout(row_major, std140) uniform ub_DrawParams {
 uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
+    float u_Lighting;
 };
 
 uniform sampler2D u_Texture[2];
@@ -74,6 +75,15 @@ void main() {
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
+
+    if (u_Lighting != 0.0) {
+        vec3 normal = normalize(v_Color.xyz); // TODO: transform normal by inverse transpose model-view matrix
+        vec3 light = normalize(vec3(0, 1, 0));
+        vec3 ambient = vec3(0.5);
+        vec3 lightColor = vec3(1.0);
+        float nDotL = clamp(dot(normal, light), 0.0, 1.0);
+        v_Color.xyz = mix(ambient, lightColor, vec3(nDotL));
+    }
 
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
     v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
@@ -529,10 +539,12 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
 
-        offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_CombineParams, 8);
+        offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_CombineParams, 9);
         const comb = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.drawCall.primColor); // primitive color
         offs += fillVec4v(comb, offs, this.drawCall.envColor); // environment color
+        comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
+        offs++;
     }
 }
 
