@@ -38,7 +38,7 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this.tx = view.getInt16(offs + 0x08) / 32; // FIXME: Is 1/32 scaling really correct?
+        this.tx = view.getInt16(offs + 0x08) / 32; // Convert 11.5 fixed-point format
         this.ty = view.getInt16(offs + 0x0A) / 32;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
@@ -438,7 +438,6 @@ function packParams(params: ColorCombinePass | AlphaCombinePass): number {
 }
 
 export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    //console.log(`CombineParams ${JSON.stringify(params, null, '\t')}`);
     const cc0 = packParams(params.c0);
     const cc1 = packParams(params.c1);
     const ac0 = packParams(params.a0);
@@ -700,25 +699,6 @@ export class RSPState {
         }
     }
 
-    // private _translateTileTexture(tileIndex: number): number {
-    //     const tile = this.DP_TileState[tileIndex];
-
-    //     const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
-
-    //     let dramPalAddr: number;
-    //     if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
-    //         const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-    //         // assert(textlut === TextureLUT.G_TT_RGBA16);
-
-    //         const palTmem = 0x100 + (tile.palette << 4);
-    //         dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
-    //     } else {
-    //         dramPalAddr = 0;
-    //     }
-
-    //     return this.sharedOutput.textureCache.translateTileTexture(this.rom, dramAddr, dramPalAddr, tile);
-    // }
-
     private _flushTextures(dc: DrawCall): void {
         dc.textures = [];
         dc.tileDescriptors = [];
@@ -739,13 +719,6 @@ export class RSPState {
             const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
             dc.textures[0] = translateTileTexture(new DataView(this.tmem.buffer), desc, textlut);
             dc.tileDescriptors[0] = desc.clone();
-
-            // dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
-
-            // if (this.SP_TextureState.level > 0) {
-            //     // In 2CYCLE mode, it uses tile and tile + 1.
-            //     dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
-            // }
 
             if (this._usesTexture1()) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
@@ -804,10 +777,6 @@ export class RSPState {
     }
 
     public gDPLoadTLUT(tile: number, count: number): void {
-        // Track the TMEM destination back to the originating DRAM address.
-        // const tmemDst = this.DP_TileState[tile].tmem;
-        // this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
-
         try {
             const lkup = this.rom.lookupAddress(this.DP_TextureImageState.addr);
             const view = lkup.buffer.createDataView();
@@ -830,19 +799,8 @@ export class RSPState {
         // Verify that we're loading into LOADTILE.
         assert(tileIndex === 7);
 
-        const tile = this.tileDescriptors[tileIndex];
-        // // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
-        // // in B-K due to hackery.
-        // const numWordsTotal = lrs + 1;
-        // const numWordsInLine = (1 << 11) / dxt;
-        // const numPixelsInLine = (numWordsInLine * 8 * 8) / getSizBitsPerPixel(tile.siz);
-        // tile.lrs = (numPixelsInLine - 1) << 2;
-        // tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
-
-        // // Track the TMEM destination back to the originating DRAM address.
-        // this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
-
         try {
+            const tile = this.tileDescriptors[tileIndex];
             const lkup = this.rom.lookupAddress(this.DP_TextureImageState.addr);
             const view = lkup.buffer.createDataView();
             // TODO: copy correctly; perform interleaving (maybe unnecessary?)
