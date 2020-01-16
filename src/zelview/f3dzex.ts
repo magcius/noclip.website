@@ -627,7 +627,9 @@ export class RSPState {
     private stateChanged: boolean = false;
     private vertexCache = nArray(64, () => new StagingVertex());
 
-    private SP_GeometryMode: number = 0;
+    // Initialize with shade mode. Levels don't enable this.
+    // FIXME: Levels actually disable these flags -- wtf?
+    private SP_GeometryMode: number = (RSP_Geometry.G_SHADE | RSP_Geometry.G_SHADING_SMOOTH);
 
     private DP_OtherModeL: number = 0;
     // Initialize with bilinear filtering and 2-cycle mode. Levels don't enable these modes.

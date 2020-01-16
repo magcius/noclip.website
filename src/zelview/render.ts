@@ -422,12 +422,6 @@ class DrawCallInstance {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, geometryData: RenderData, private drawMatrix: mat4[], private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
-            // if (i < this.drawCall.textureIndices.length) {
-            //     const idx = this.drawCall.textureIndices[i];
-            //     this.textureEntry[i] = geometryData.sharedOutput.textureCache.textures[idx];
-            //     this.textureMappings[i].gfxTexture = geometryData.textures[idx];
-            //     this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
-            // }
             const tex = drawCall.textures[i];
             if (tex) {
                 this.textureEntry[i] = tex;
@@ -449,8 +443,8 @@ class DrawCallInstance {
         if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
 
-        // FIXME: For some reason, SHADE flag is off when it should be on
-        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
+        // FIXME: Levels disable the SHADE flags. wtf?
+        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
