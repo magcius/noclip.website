@@ -77,12 +77,15 @@ void main() {
 #endif
 
     if (u_Lighting != 0.0) {
-        vec3 normal = normalize(v_Color.xyz); // TODO: transform normal by inverse transpose model-view matrix
-        vec3 light = normalize(vec3(0, 1, 0));
-        vec3 ambient = vec3(0.5);
-        vec3 lightColor = vec3(1.0);
-        float nDotL = clamp(dot(normal, light), 0.0, 1.0);
-        v_Color.xyz = mix(ambient, lightColor, vec3(nDotL));
+        // Note: If there is a non-identity model matrix, the normal must be transformed according to the normal matrix:
+        // normalMatrix = transpose(inverse(modelMatrix))
+        // However, there is no model matrix here.
+        vec3 normal = normalize(v_Color.xyz);
+        vec3 lightDirection = normalize(vec3(1, 1, 1));
+        float intensity = max(0.0, dot(normal, lightDirection));
+        vec3 ambient = vec3(0.25, 0.25, 0.25);
+        vec3 lightColor = vec3(1.0, 1.0, 1.0);
+        v_Color.xyz = ambient + intensity * lightColor;
     }
 
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
