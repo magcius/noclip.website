@@ -86,7 +86,7 @@ export const enum ACMUX {
     ZERO = 7,
 }
 
-interface ColorCombinePass {
+export interface ColorCombinePass {
     a: CCMUX;
     b: CCMUX;
     c: CCMUX;
@@ -100,7 +100,7 @@ function colorCombinePassUsesT1(ccp: ColorCombinePass) {
         (ccp.d == CCMUX.TEXEL1) || (ccp.d == CCMUX.TEXEL1_A);
 }
 
-interface AlphaCombinePass {
+export interface AlphaCombinePass {
     a: ACMUX;
     b: ACMUX;
     c: ACMUX;
@@ -442,17 +442,17 @@ export const enum OtherModeL_Layout {
     P_1 = 30,
 }
 
-function packParams(params: ColorCombinePass | AlphaCombinePass): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
-}
+// function packParams(params: ColorCombinePass | AlphaCombinePass): number {
+//     return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
+// }
 
-export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    const cc0 = packParams(params.c0);
-    const cc1 = packParams(params.c1);
-    const ac0 = packParams(params.a0);
-    const ac1 = packParams(params.a1);
-    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
-}
+// export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
+//     const cc0 = packParams(params.c0);
+//     const cc1 = packParams(params.c1);
+//     const ac0 = packParams(params.a0);
+//     const ac1 = packParams(params.a1);
+//     return fillVec4(d, offs, cc0, ac0, cc1, ac1);
+// }
 
 export function getImageFormatString(fmt: ImageFormat, siz: ImageSize): string {
     return `${getImageFormatName(fmt)}${getImageSizeName(siz)}`;
