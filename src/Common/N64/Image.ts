@@ -53,15 +53,15 @@ export function getTLUTSize(siz: ImageSize) {
 }
 
 function expand3to8(n: number): number {
-    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+    return ((n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8))) & 0xFF;
 }
 
 function expand4to8(n: number): number {
-    return (n << (8 - 4)) | (n >>> (8 - 8));
+    return ((n << (8 - 4)) | (n >>> (8 - 8))) & 0xFF;
 }
 
 function expand5to8(n: number): number {
-    return (n << (8 - 5)) | (n >>> (10 - 8));
+    return ((n << (8 - 5)) | (n >>> (10 - 8))) & 0xFF;
 }
 
 function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {

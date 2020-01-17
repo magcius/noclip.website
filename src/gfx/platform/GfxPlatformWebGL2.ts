@@ -191,6 +191,8 @@ function translateWrapMode(wrapMode: GfxWrapMode): GLenum {
         return WebGL2RenderingContext.REPEAT;
     case GfxWrapMode.MIRROR:
         return WebGL2RenderingContext.MIRRORED_REPEAT;
+    default:
+        throw "whoops";
     }
 }
 

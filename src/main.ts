@@ -14,6 +14,7 @@ import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy1';
 import * as Scenes_SuperMarioGalaxy2 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy2';
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes';
+import * as Scenes_Zelda_OcarinaOfTime from './zelview/scenes';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
@@ -123,6 +124,7 @@ const sceneGroups = [
     Scenes_GTA.sceneGroup.sa,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
+    Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
