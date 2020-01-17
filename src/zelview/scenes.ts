@@ -213,7 +213,7 @@ const sceneDescs = [
 
     "Gerudo Desert",
     new ZelviewSceneDesc('spot09_scene', 'Gerudo Valley'),
-    new ZelviewSceneDesc('tent_scene', "Carpenter's Tent"),
+    // new ZelviewSceneDesc('tent_scene', "Carpenter's Tent"),
     new ZelviewSceneDesc('spot12_scene', "Gerudo's Fortress"),
     new ZelviewSceneDesc('men_scene', 'Gerudo Training Grounds'),
     new ZelviewSceneDesc('gerudoway_scene', "Thieves' Hideout"),
