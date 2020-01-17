@@ -7,7 +7,7 @@ import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
 import { readZELVIEW0, Headers } from './zelview0';
 import { RootMeshRenderer, MeshData, Mesh } from './render';
-import { RSPState } from './f3dzex';
+import { RSPState, RSPOutput } from './f3dzex';
 
 const pathBase = `zelview`;
 
@@ -69,21 +69,31 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
         const headers = zelview.loadMainScene();
         //console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
 
+        function createMeshRenderer(rspOutput: (RSPOutput | null)) {
+            if (!rspOutput) {
+                return;
+            }
+            
+            const cache = renderer.renderHelper.getCache();
+            const mesh: Mesh = {
+                sharedOutput: zelview.sharedOutput,
+                rspState: new RSPState(headers.rom, zelview.sharedOutput),
+                rspOutput: rspOutput,
+            }
+            const meshData = new MeshData(device, cache, mesh);
+            const meshRenderer = new RootMeshRenderer(device, cache, meshData);
+            renderer.meshRenderers.push(meshRenderer);
+        }
+
         function createRenderer(headers: Headers) {
             if (headers.mesh) {
                 for (let i = 0; i < headers.mesh.opaque.length; i++) {
-                    if (headers.mesh.opaque[i]) {
-                        console.log(`Loading ${headers.filename} mesh ${i}...`);
-                        const cache = renderer.renderHelper.getCache();
-                        const mesh: Mesh = {
-                            sharedOutput: zelview.sharedOutput,
-                            rspState: new RSPState(headers.rom, zelview.sharedOutput),
-                            rspOutput: headers.mesh.opaque[i],
-                        }
-                        const meshData = new MeshData(device, cache, mesh);
-                        const meshRenderer = new RootMeshRenderer(device, cache, meshData);
-                        renderer.meshRenderers.push(meshRenderer);
-                    }
+                    createMeshRenderer(headers.mesh.opaque[i]);
+                }
+                
+                for (let i = 0; i < headers.mesh.transparent.length; i++) {
+                    // FIXME: sort transparent meshes back-to-front
+                    createMeshRenderer(headers.mesh.transparent[i]);
                 }
             } else {
                 for (let i = 0; i < headers.rooms.length; i++) {
