@@ -77,12 +77,15 @@ void main() {
 #endif
 
     if (u_Lighting != 0.0) {
-        // Note: If there is a non-identity model matrix, the normal must be transformed according to the normal matrix:
+        // convert (unsigned) colors to normal vector components
+        vec3 t_Normal = 2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb);
+        t_Normal = normalize(t_Normal);
+        // TODO: If the model matrix is non-identity, the normal must be transformed by the normal matrix:
         // normalMatrix = transpose(inverse(modelMatrix))
-        // However, there is no model matrix here.
-        vec3 normal = normalize(v_Color.xyz);
+        // We don't use a model matrix right now, so the normal matrix is omitted.
+
         vec3 lightDirection = normalize(vec3(1, 1, 1));
-        float intensity = max(0.0, dot(normal, lightDirection));
+        float intensity = max(0.0, dot(t_Normal, lightDirection));
         vec3 ambient = vec3(0.25, 0.25, 0.25);
         vec3 lightColor = vec3(1.0, 1.0, 1.0);
         v_Color.rgb = ambient + intensity * lightColor;
