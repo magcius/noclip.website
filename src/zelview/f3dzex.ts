@@ -5,7 +5,7 @@ import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Rom } from "./zelview0";
-import { vec4 } from "gl-matrix";
+import { vec4, mat4 } from "gl-matrix";
 
 export class Vertex {
     public x: number = 0;
@@ -38,13 +38,22 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this.tx = view.getInt16(offs + 0x08) / 32; // Convert 11.5 fixed-point format
+        this.tx = view.getInt16(offs + 0x08) / 32; // Convert from 11.5 fixed-point format
         this.ty = view.getInt16(offs + 0x0A) / 32;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
         this.a = view.getUint8(offs + 0x0F) / 0xFF;
     }
+}
+
+const enum G_MTX {
+    NOPUSH     = 0x00,
+    PUSH       = 0x01,
+    MUL        = 0x00,
+    LOAD       = 0x02,
+    MODELVIEW  = 0x00,
+    PROJECTION = 0x04,
 }
 
 export const enum CCMUX {
@@ -620,6 +629,7 @@ export function getCycleTypeFromOtherModeH(modeH: number): OtherModeH_CycleType 
 
 const TMEM_SIZE = 4 * 1024;
 const NUM_TILE_DESCRIPTORS = 8;
+const NUM_MODELVIEW_MATS = 32;
 
 export class RSPState {
     private output = new RSPOutput();
@@ -642,6 +652,12 @@ export class RSPState {
     private tmem: Uint8Array = new Uint8Array(TMEM_SIZE);
     private primColor: vec4 = vec4.fromValues(1, 1, 1, 1);
     private envColor: vec4 = vec4.fromValues(0.5, 0.5, 0.5, 0.5);
+    // FIXME: These matrices are currently unused.
+    // Jabu-Jabu's Belly uses the G_MTX command to place certain floors. The data for these commands comes
+    // from an invalid address. So this code can't be tested.
+    private modelViewMats: mat4[] = nArray(NUM_MODELVIEW_MATS, () => mat4.create());
+    private modelViewIndex: number = 0;
+    private projectionMat: mat4 = mat4.create();
 
     constructor(public rom: Rom, public sharedOutput: RSPSharedOutput) {
         for (let i = 0; i < NUM_TILE_DESCRIPTORS; i++)
@@ -674,6 +690,67 @@ export class RSPState {
 
     public gSPClearGeometryMode(mask: number): void {
         this._setGeometryMode(this.SP_GeometryMode & ~mask);
+    }
+
+    public gSPMatrix(rom: Rom, mtxaddr: number, params: number): void {
+        let lkup;
+        try {
+            lkup = rom.lookupAddress(mtxaddr);
+        } catch (e) {
+            console.exception(e);
+            return;
+        }
+
+        const view = lkup.buffer.createDataView();
+        let offs = lkup.offs;
+
+        // Convert matrix from 4x4 column-major 15.16 fixed point format
+        const mtx: number[] = []
+        for (let i = 0; i < 4*4; i++) {
+            mtx.push(view.getUint32(offs));
+            offs += 4;
+        }
+
+        function interpretS32(u32: number): number {
+            const dv = new DataView(new ArrayBuffer(4));
+            dv.setUint32(0, u32);
+            return dv.getInt32(0);
+        }
+
+        const fmtx: mat4 = mat4.create();
+        let m1 = 0;
+        let m2 = 2 * 4;
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 2; c++) {
+                const tmp1 = (mtx[m1] & 0xFFFF0000) | ((mtx[m2] >> 16) & 0xFFFF);
+                const tmp2 = ((mtx[m1] << 16) & 0xFFFF0000) | (mtx[m2] & 0xFFFF);
+                const stmp1 = interpretS32(tmp1);
+                const stmp2 = interpretS32(tmp2);
+                // FIXME: should this be column-major or row-major?
+                fmtx[4 * r + (c * 2 + 0)] = stmp1 / 65536.0;
+                fmtx[4 * r + (c * 2 + 1)] = stmp2 / 65536.0;
+            }
+        }
+
+        if (params & G_MTX.PROJECTION) {
+            if (params & G_MTX.LOAD) {
+                mat4.copy(this.projectionMat, fmtx);
+            } else {
+                mat4.mul(this.projectionMat, fmtx, this.projectionMat);
+            }
+        } else {
+            if ((params & G_MTX.PUSH) && (this.modelViewIndex < NUM_MODELVIEW_MATS)) {
+                mat4.copy(this.modelViewMats[this.modelViewIndex + 1], this.modelViewMats[this.modelViewIndex]);
+                this.modelViewIndex++;
+            }
+            if (params & G_MTX.LOAD) {
+                mat4.copy(this.modelViewMats[this.modelViewIndex], fmtx);
+            } else {
+                mat4.mul(this.modelViewMats[this.modelViewIndex], fmtx, this.modelViewMats[this.modelViewIndex]);
+            }
+        }
+
+        this.stateChanged = true;
     }
 
     public gSPTexture(on: boolean, tile: number, level: number, scaleS: number, scaleT: number): void {
@@ -957,6 +1034,12 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const n = (w0 >>> 12) & 0xFF;
             const v0 = v0w - n;
             state.gSPVertex(rom, w1, n, v0);
+        } break;
+
+        case F3DZEX_GBI.G_MTX: {
+            const pp = w0 & 0xFF;
+            const mtxaddr = w1;
+            state.gSPMatrix(rom, mtxaddr, pp ^ G_MTX.PUSH);
         } break;
 
         case F3DZEX_GBI.G_TRI1: {
