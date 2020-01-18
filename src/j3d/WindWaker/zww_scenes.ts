@@ -31,7 +31,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
-import { computeModelMatrixSRT, range, MathConstants } from '../../MathHelpers';
+import { computeModelMatrixSRT, range, MathConstants, clamp } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
@@ -50,7 +50,9 @@ function gain(v: number, k: number): number {
 class DynToonTex {
     public gfxTexture: GfxTexture;
     public desiredPower: number = 0;
+    public desiredPhase: number = 0;
     private texPower: number = 0;
+    private texPhase: number = 0;
     private textureData: Uint8Array[] = [new Uint8Array(256*1*4)];
 
     constructor(device: GfxDevice) {
@@ -58,24 +60,26 @@ class DynToonTex {
         device.setResourceName(this.gfxTexture, 'DynToonTex');
     }
 
-    private fillTextureData(k: number): void {
+    private fillTextureData(k: number, phase: number): void {
         let dstOffs = 0;
         const dst = this.textureData[0];
         for (let i = 0; i < 256; i++) {
-            const t = i / 255;
-            dst[dstOffs++] = gain(t, k) * 255;
-            dst[dstOffs++] = gain(t, k) * 255;
-            dst[dstOffs++] = gain(t, k) * 255;
-            dst[dstOffs++] = gain(t, k) * 255;
+            const t = clamp((i / 255) + phase, 0, 1);
+            const c = gain(t, k) * 255;
+            dst[dstOffs++] = c;
+            dst[dstOffs++] = 0;
+            dst[dstOffs++] = 0;
+            dst[dstOffs++] = 0;
         }
     }
 
     public prepareToRender(device: GfxDevice): void {
-        if (this.texPower !== this.desiredPower) {
+        if (this.texPower !== this.desiredPower || this.texPhase !== this.desiredPhase) {
             this.texPower = this.desiredPower;
+            this.texPhase = this.desiredPhase;
 
             // Recreate toon texture.
-            this.fillTextureData(this.texPower);
+            this.fillTextureData(this.texPower, this.texPhase);
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadTextureData(this.gfxTexture, 0, this.textureData);
             device.submitPass(hostAccessPass);
@@ -91,8 +95,11 @@ export class ZWWExtraTextures {
     public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
     public dynToonTex: DynToonTex;
 
-    @UI.dfRange(1, 15, 0.01)
-    public toonTexPower: number = 15;
+    @UI.dfRange(1, 20, 0.01)
+    public toonTexPower: number = 20;
+
+    @UI.dfRange(-1, 1, 0.01)
+    public toonTexPhase: number = 0;
 
     constructor(device: GfxDevice, public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
         this.ZAtoon.fillTextureMapping(this.textureMapping[0]);
@@ -100,15 +107,19 @@ export class ZWWExtraTextures {
         this.dynToonTex = new DynToonTex(device);
     }
 
-    public powerPopup(): void {
+    public insertCustom(): void {
         this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
         this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
+    }
 
+    public powerPopup(): void {
+        this.insertCustom();
         window.main.ui.bindSliders(this);
     }
 
     public prepareToRender(device: GfxDevice): void {
         this.dynToonTex.desiredPower = this.toonTexPower;
+        this.dynToonTex.desiredPhase = this.toonTexPhase;
         this.dynToonTex.prepareToRender(device);
     }
 

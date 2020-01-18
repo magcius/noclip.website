@@ -112,6 +112,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
 
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
+    protected extraTextures: ZWWExtraTextures;
 
     constructor(public modelInstance: J3DModelInstanceSimple) {
     }
@@ -152,6 +153,8 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 
     public setExtraTextures(extraTextures: ZWWExtraTextures): void {
+        this.extraTextures = extraTextures;
+
         extraTextures.fillExtraTextures(this.modelInstance);
 
         for (let i = 0; i < this.childObjects.length; i++)
@@ -191,7 +194,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
         const light = this.modelInstance.getGXLightReference(0);
         GX_Material.lightSetWorldPosition(light, viewerInput.camera, this.lightPos[0], this.lightPos[1], this.lightPos[2]);
         // Toon lighting works by setting the color to red.
-        colorFromRGBA(light.Color, 0, 0, 0, 0);
+        colorFromRGBA(light.Color, 1, 0, 0, 1);
         vec3.set(light.CosAtten, 1.075, 0, 0);
         vec3.set(light.DistAtten, 1.075, 0, 0);
 
@@ -2515,12 +2518,12 @@ class LinkThing extends BMDObjectRenderer {
         this.normalArrowData = new NormalArrowData(device, cache);
         this.normalArrowData.baseScale = 0.0;
 
-        this.setMode(LinkMatMode.vlight);
+        this.setMode(LinkMatMode.toonify);
     }
 
     private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
         const m = inst.materialHelper.material;
-        // m.tevStages.length = 1;
+        m.tevStages.length = 1;
         if (mode === LinkMatMode.vlight) {
             // Vertex Lighting.
             m.tevStages[0].colorInA = CombineColorInput.ZERO;
@@ -2645,6 +2648,8 @@ class LinkThing extends BMDObjectRenderer {
 
         super.prepareToRender(device, renderInstManager, viewerInput);
 
+        return;
+
         this.prepareToRenderArrows(device, renderInstManager, viewerInput, 0);
         this.prepareToRenderArrows(device, renderInstManager, viewerInput, 1);
         this.prepareToRenderArrows(device, renderInstManager, viewerInput, 2);
@@ -2661,6 +2666,24 @@ class LinkThing extends BMDObjectRenderer {
         matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
         matInstB.setColorWriteEnabled(false);
         matInstB.setAlphaWriteEnabled(true);
+    }
+
+    public async animateToonify(test: number = -1): Promise<void> {
+        this.setMode(LinkMatMode.toonify);
+        this.extraTextures.insertCustom();
+
+        const sch = this.animsched;
+        sch.reset();
+        sch.test = test;
+
+        const et = this.extraTextures;
+        await sch.anim(0, 2, (t) => {
+            // et.toonTexPower = lerp(20, 5, aeanim(t));
+        });
+
+        await sch.anim(3, 5, (t) => {
+            et.toonTexPhase = Math.sin(t * MathConstants.TAU) * 0.3;
+        });
     }
 
     public async animateVlight(test: number = -1): Promise<void> {
