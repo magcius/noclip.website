@@ -49,6 +49,7 @@ import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
+import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -71,7 +72,6 @@ import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
-import { gfxDeviceGetImpl_GL } from './gfx/platform/GfxPlatformWebGL2';
 
 const sceneGroups = [
     "Wii",
@@ -128,6 +128,7 @@ const sceneGroups = [
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
+    Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];
