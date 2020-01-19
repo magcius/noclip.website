@@ -387,7 +387,7 @@ class Main {
             byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, byteOffs);
 
         const s = btoa(this._saveStateTmp, byteOffs);
-        return `A${s}`;
+        return `ShareData=${s}`;
     }
 
     private _loadSceneSaveStateVersion2(state: string): boolean {
@@ -432,6 +432,9 @@ class Main {
         // Version 3 starts with 'A' and has no '=' at the end.
         if (state.startsWith('A'))
             return this._loadSceneSaveStateVersion3(state.slice(1));
+
+        if (state.startsWith('ShareData='))
+            return this._loadSceneSaveStateVersion3(state.slice(10));
 
         return false;
     }
@@ -511,7 +514,7 @@ class Main {
         }
 
         if (shouldUpdateURL) {
-            window.history.replaceState('', document.title, `#${currentDescId};${sceneStateStr}`);
+            window.history.replaceState('', document.title, `#${saveState}`);
 
             const timeSeconds = window.performance.now() / 1000;
             this.lastUpdatedURLTimeSeconds = timeSeconds;
