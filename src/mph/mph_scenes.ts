@@ -9,7 +9,7 @@ import { parseMPH_Model } from './mph_binModel';
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass } from './render';
+import { MPHRenderer, G3DPass } from './render';
 import { assert, readString, assertExists } from '../util';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -64,15 +64,15 @@ class ModelCache {
     }
 }
 
-export class MPHRenderer implements Viewer.SceneGfx {
+export class MPHSceneRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public renderInstManager = new GfxRenderInstManager();
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     public textureHolder: FakeTextureHolder;
-    public objectRenderers: MDL0Renderer[] = [];
+    public objectRenderers: MPHRenderer[] = [];
 
-    constructor(device: GfxDevice, public stageRenderer: MDL0Renderer) {
+    constructor(device: GfxDevice, public stageRenderer: MPHRenderer) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
         this.textureHolder = new FakeTextureHolder(this.stageRenderer.viewerTextures);
     }
@@ -147,26 +147,6 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
 
     }
 
-    //private spawnObjectFromNKM(device: GfxDevice, modelCache: ModelCache, renderer: MPHRenderer, obji: OBJI): void {
-    //    function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
-    //        const rotationY = bby ? 0 : obji.rotationY;
-    //        computeModelMatrixSRT(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
-    //        const posScale = 50;
-    //        mat4.fromScaling(mdl0Renderer.modelMatrix, [posScale, posScale, posScale]);
-    //        mat4.mul(mdl0Renderer.modelMatrix, mdl0Renderer.modelMatrix, scratchMatrix);
-    //    }
-
-    //    function spawnModel(filePath: string): MDL0Renderer {
-    //        const buffer = assertExists(modelCache.getFileData(filePath));
-    //        const bmd = parseNSBMD(buffer);
-    //        assert(bmd.models.length === 1);
-    //        const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
-    //        setModelMtx(mdl0Renderer);
-    //        renderer.objectRenderers.push(mdl0Renderer);
-    //        return mdl0Renderer;
-    //    }
-    //}
-
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const modelCache = new ModelCache(dataFetcher);
@@ -180,9 +160,9 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
 
         const textureFile = modelCache.getFileData(`${this.id}.bin`);
         const stageTex = textureFile !== null ? parseNSBTX(textureFile) : null;
-        const stageRenderer = new MDL0Renderer(device, stageBin.models[0], stageBin.tex0 !== null ? stageBin.tex0 : assertExists(assertExists(stageTex).tex0));
+        const stageRenderer = new MPHRenderer(device, stageBin.models[0], stageBin.tex0 !== null ? stageBin.tex0 : assertExists(assertExists(stageTex).tex0));
 
-        const renderer = new MPHRenderer(device, stageRenderer);
+        const renderer = new MPHSceneRenderer(device, stageRenderer);
 
         return renderer;
     }

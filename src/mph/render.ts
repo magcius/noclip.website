@@ -301,7 +301,8 @@ const enum BillboardMode {
     NONE, BB, BBY,
 }
 
-export class MDL0Renderer {
+
+export class MPHRenderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
     public animationController = new AnimationController();
@@ -329,20 +330,11 @@ export class MDL0Renderer {
         for (let i = 0; i < this.materialInstances.length; i++)
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
-    }
 
-    public bindSRT0(srt0: SRT0, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindSRT0(animationController, srt0);
-    }
 
-    public bindPAT0(device: GfxDevice, pat0: PAT0, animationController: AnimationController = this.animationController): void {
-        const hostAccessPass = device.createHostAccessPass();
-        for (let i = 0; i < this.materialInstances.length; i++) {
-            if (this.materialInstances[i].bindPAT0(animationController, pat0))
-                this.materialInstances[i].translatePAT0Textures(device, hostAccessPass, this.tex0);
-        }
-        device.submitPass(hostAccessPass);
+        for (let i = 0; i < this.model.shapes.length; i++)
+            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[0], this.nodes[0], this.model.shapes[i], posScale));
+
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
