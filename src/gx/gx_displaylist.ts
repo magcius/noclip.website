@@ -938,9 +938,9 @@ class VtxLoaderImpl implements VtxLoader {
                     dstIndexData[indexDataIdx++] = vertexId + 1;
                     dstIndexData[indexDataIdx++] = vertexId + 2;
 
-                    dstIndexData[indexDataIdx++] = vertexId + 1;
-                    dstIndexData[indexDataIdx++] = vertexId + 3;
+                    dstIndexData[indexDataIdx++] = vertexId + 0;
                     dstIndexData[indexDataIdx++] = vertexId + 2;
+                    dstIndexData[indexDataIdx++] = vertexId + 3;
                     vertexId += 4;
                 }
             }

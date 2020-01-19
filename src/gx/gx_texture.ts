@@ -60,7 +60,7 @@ export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
 }
 
 export function calcTextureSize(format: GX.TexFormat, width: number, height: number) {
-    const numPixels = width * height;
+    const numPixels = align(width, 0x08) * align(height, 0x08);
     switch (format) {
     case GX.TexFormat.I4:
         return numPixels / 2;
