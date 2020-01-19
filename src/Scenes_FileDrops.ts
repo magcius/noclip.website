@@ -18,7 +18,6 @@ import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import * as JPAExplorer from './interactive_examples/JPAExplorer';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
-import { JetSetRadioScene } from "./Scenes_Test";
 
 function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedArrayBufferSlice> {
     const progressMeter = dataFetcher.progressMeter;
@@ -105,28 +104,6 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
 
-    if (buffer.name.toLowerCase().endsWith('.pvr')) {
-        // Load texture data
-        let image = DC_PVRT.parse(buffer, buffer.name);
-
-        // Create faux scene
-        const jsrScene = new JetSetRadioScene();
-        jsrScene.textureHolder.addTextures(device, [image]);
-        
-        return jsrScene;
-    }
-
-    if (buffer.name.toLowerCase().endsWith('.afs')) {
-        // Load texture data
-        let image = JSR.parse(buffer, buffer.name);
-
-        // Create faux scene
-        const jsrScene = new JetSetRadioScene();
-        jsrScene.textureHolder.addTextures(device, image.textures);
-        
-        return jsrScene;
-    }
-    
     throw "whoops";
 }
 
