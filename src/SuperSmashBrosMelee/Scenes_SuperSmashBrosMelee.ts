@@ -5,9 +5,8 @@ import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data } from "./SYSDOLPHIN_Render";
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot } from "./SYSDOLPHIN";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint } from "./SYSDOLPHIN";
 import { IS_DEVELOPMENT } from "../BuildVersion";
-import { hexdump } from "../util";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -44,10 +43,13 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
+        const deltaTimeInFrames = viewerInput.deltaTime / 1000.0 * 60.0;
+
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
         for (let i = 0; i < this.jobjRoots.length; i++) {
             const root = this.jobjRoots[i];
+            root.calcAnim(deltaTimeInFrames);
             root.calcMtx(viewerInput);
             root.draw(device, this.renderHelper.renderInstManager, viewerInput);
         }
@@ -81,7 +83,29 @@ class HSDDesc implements SceneDesc {
     }
 }
 
+class MeleeTitleDesc implements SceneDesc {
+    constructor(public id: string = `Title`, public name: string = `Title`) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/GmTtAll.usd`));
+
+        const scene = new MeleeRenderer(device);
+
+        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`))));
+        bg.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)), null, null);
+        scene.jobjRoots.push(bg);
+
+        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`))));
+        moji.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), null, null);
+        scene.jobjRoots.push(moji);
+
+        return scene;
+    }
+}
+
 const sceneDescs = [
+    new MeleeTitleDesc(),
     new HSDDesc(`PlFxNr.dat`),
     new HSDDesc(`PlKbNr.dat`),
     new HSDDesc(`MnExtAll.usd`, 1),

@@ -1,5 +1,5 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags } from "./SYSDOLPHIN";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_FObj__JointTrackType, HSD_AObjFlags } from "./SYSDOLPHIN";
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { GfxDevice, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -8,13 +8,14 @@ import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4 } from "gl-matrix";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
 import { calcMipChain } from "../gx/gx_texture";
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 import { Camera } from "../Camera";
+import { getPointHermite } from "../Spline";
 
 class HSD_TObj_Data {
     public texImage: HSD__TexImageData_Data;
@@ -397,8 +398,55 @@ class HSD_DObj_Instance {
     }
 }
 
+class HSD_AObj_Instance {
+    public framerate: number = 1.0;
+    public currFrame: number = 0;
+
+    constructor(public aobj: HSD_AObj) {
+    }
+
+    private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        const time = this.currFrame;
+
+        let i = 0;
+        for (; i < fobj.keyframes.length; i++) {
+            if (time < fobj.keyframes[i].time)
+                break;
+        }
+
+        if (i > 0)
+            i--;
+
+        const k0 = fobj.keyframes[i];
+        if (k0.kind === 'Constant') {
+            callback(fobj.type, k0.p0, obj);
+        } else if (k0.kind === 'Linear') {
+            const t = (time - k0.time) / k0.duration;
+            callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
+        } else if (k0.kind === 'Hermite') {
+            const t = (time - k0.time) / k0.duration;
+            callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
+        }
+    }
+
+    public calcAnim<T>(deltaTimeInFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        this.currFrame += this.framerate * deltaTimeInFrames;
+
+        if (!!(this.aobj.flags & HSD_AObjFlags.ANIM_LOOP)) {
+            while (this.currFrame >= this.aobj.endFrame) {
+                // TODO(jstpierre): Rewind Frame
+                this.currFrame -= this.aobj.endFrame;
+            }
+        }
+
+        for (let i = 0; i < this.aobj.fobj.length; i++)
+            this.calcFObj(this.aobj.fobj[i], callback, obj);
+    }
+}
+
 class HSD_JObj_Instance {
     private dobj: HSD_DObj_Instance[] = [];
+    private aobj: HSD_AObj_Instance | null = null;
     public children: HSD_JObj_Instance[] = [];
     public jointMtx = mat4.create();
 
@@ -418,6 +466,74 @@ class HSD_JObj_Instance {
         vec3.copy(this.translation, jobj.translation);
         vec3.copy(this.rotation, jobj.rotation);
         vec3.copy(this.scale, jobj.scale);
+        this.visible = !(jobj.flags & HSD_JObjFlags.HIDDEN);
+    }
+
+    public setVisible(v: boolean): void {
+        this.visible = v;
+    }
+
+    public setVisibleAll(v: boolean): void {
+        this.visible = v;
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setVisibleAll(v);
+    }
+
+    public addAnim(animJoint: HSD_AnimJoint | null, matAnimJoint: HSD_MatAnimJoint | null, shapeAnimJoint: HSD_ShapeAnimJoint | null): void {
+        if (animJoint !== null && animJoint.aobj !== null)
+            this.aobj = new HSD_AObj_Instance(animJoint.aobj);
+    }
+
+    public addAnimAll(animJoint: HSD_AnimJoint | null, matAnimJoint: HSD_MatAnimJoint | null, shapeAnimJoint: HSD_ShapeAnimJoint | null): void {
+        this.addAnim(animJoint, matAnimJoint, shapeAnimJoint);
+
+        for (let i = 0; i < this.children.length; i++) {
+            const child = this.children[i];
+            child.addAnimAll(
+                animJoint !== null ? animJoint.children[i] : null,
+                matAnimJoint !== null ? matAnimJoint.children[i] : null,
+                shapeAnimJoint !== null ? shapeAnimJoint.children[i] : null,
+            );
+        }
+    }
+
+    private static updateAnim(trackType: HSD_FObj__JointTrackType, value: number, jobj: HSD_JObj_Instance): void {
+        if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTX) {
+            jobj.rotation[0] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTY) {
+            jobj.rotation[1] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTZ) {
+            jobj.rotation[2] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_PATH) {
+            // TODO
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAX) {
+            jobj.translation[0] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAY) {
+            jobj.translation[1] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAZ) {
+            jobj.translation[2] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAX) {
+            jobj.scale[0] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAY) {
+            jobj.scale[1] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAZ) {
+            jobj.scale[2] = value;
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_NODE) {
+            jobj.setVisible(value >= 0.5);
+        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_BRANCH) {
+            jobj.setVisibleAll(value >= 0.5);
+        } else {
+            debugger;
+        }
+    }
+
+    public calcAnim(deltaTimeInFrames: number): void {
+        if (this.aobj !== null)
+            this.aobj.calcAnim(deltaTimeInFrames, HSD_JObj_Instance.updateAnim, this);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].calcAnim(deltaTimeInFrames);
     }
 
     public calcMtx(parentJointMtx: mat4 | null = null): void {
@@ -435,11 +551,9 @@ class HSD_JObj_Instance {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, root: HSD_JObjRoot_Instance): void {
-        if (!this.visible)
-            return;
-
-        for (let i = 0; i < this.dobj.length; i++)
-            this.dobj[i].draw(device, renderInstManager, viewerInput, this, root);
+        if (this.visible)
+            for (let i = 0; i < this.dobj.length; i++)
+                this.dobj[i].draw(device, renderInstManager, viewerInput, this, root);
         for (let i = 0; i < this.children.length; i++)
             this.children[i].draw(device, renderInstManager, viewerInput, root);
     }
@@ -463,8 +577,20 @@ export class HSD_JObjRoot_Instance {
         registerJObj(this.rootInst);
     }
 
+    public addAnimAll(animJoint: HSD_AnimJointRoot | null, matAnimJoint: HSD_MatAnimJointRoot | null, shapeAnimJoint: HSD_ShapeAnimJointRoot | null): void {
+        this.rootInst.addAnimAll(
+            animJoint !== null ? animJoint.root : null,
+            matAnimJoint !== null ? matAnimJoint.root : null,
+            shapeAnimJoint !== null ? shapeAnimJoint.root : null,
+        );
+    }
+
     public findJObjByJointReferenceID(jointReferenceID: number): HSD_JObj_Instance {
         return this.allJObjsByID.get(jointReferenceID)!;
+    }
+
+    public calcAnim(deltaTimeInFrames: number): void {
+        this.rootInst.calcAnim(deltaTimeInFrames);
     }
 
     public calcMtx(viewerInput: ViewerRenderInput): void {

@@ -4,7 +4,7 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero } from "../util";
+import { readString, assert, hexzero, hexdump } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
@@ -64,12 +64,17 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
     return { dataBuffer, publics, externs };
 }
 
+export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol {
+    return arc.publics.find((sym) => sym.name === symbolName)!;
+}
+
 function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
     return arc.dataBuffer.subarray(offs, size);
 }
 
 class LoadContext {
     public texImageDatas: HSD__TexImageData[] = [];
+
     constructor(public archive: HSD_Archive) {
     }
 }
@@ -657,5 +662,267 @@ export function HSD_JObjLoadJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbo
 
     const texImageDatas = ctx.texImageDatas;
     return { jobj, texImageDatas };
+}
+//#endregion
+
+//#region AObj
+interface HSD_FObj__KeyframeConstant {
+    kind: 'Constant';
+    time: number;
+    p0: number;
+}
+
+interface HSD_FObj__KeyframeLinear {
+    kind: 'Linear';
+    time: number;
+    duration: number;
+    p0: number;
+    p1: number;
+}
+
+interface HSD_FObj__KeyframeHermite {
+    kind: 'Hermite';
+    time: number;
+    duration: number;
+    p0: number;
+    p1: number;
+    d0: number;
+    d1: number;
+}
+
+type HSD_FObj__Keyframe = HSD_FObj__KeyframeConstant | HSD_FObj__KeyframeLinear | HSD_FObj__KeyframeHermite;
+
+export interface HSD_FObj {
+    type: number;
+    keyframes: HSD_FObj__Keyframe[];
+}
+
+export const enum HSD_AObjFlags {
+    ANIM_LOOP = 1 << 29,
+}
+
+export interface HSD_AObj {
+    flags: number;
+    endFrame: number;
+    fobj: HSD_FObj[];
+    objID: number;
+}
+
+const enum FObjFmt {
+    HSD_A_FRAC_FLOAT,
+    HSD_A_FRAC_S16,
+    HSD_A_FRAC_U16,
+    HSD_A_FRAC_S8,
+    HSD_A_FRAC_U8,
+}
+
+const enum FObjOpcode {
+    HSD_A_OP_NONE,
+    HSD_A_OP_CON,
+    HSD_A_OP_LIN,
+    HSD_A_OP_SPL0,
+    HSD_A_OP_SPL,
+    HSD_A_OP_SLP,
+    HSD_A_OP_KEY,
+}
+
+export const enum HSD_FObj__JointTrackType {
+    HSD_A_J_ROTX = 1,
+    HSD_A_J_ROTY,
+    HSD_A_J_ROTZ,
+    HSD_A_J_PATH,
+    HSD_A_J_TRAX,
+    HSD_A_J_TRAY,
+    HSD_A_J_TRAZ,
+    HSD_A_J_SCAX,
+    HSD_A_J_SCAY,
+    HSD_A_J_SCAZ,
+    HSD_A_J_NODE,
+    HSD_A_J_BRANCH,
+}
+
+function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+    const nextSiblingOffs = view.getUint32(0x00);
+    const length = view.getUint32(0x04);
+    const startFrame = view.getFloat32(0x08);
+    const type = view.getUint8(0x0C);
+    const fracValue = view.getUint8(0x0D);
+    const fracSlope = view.getUint8(0x0E);
+    const dataOffs = view.getUint32(0x10);
+    const dataView = HSD_LoadContext__ResolvePtr(ctx, dataOffs).createDataView();
+
+    let dataIdx = 0;
+    function parseValue(frac: number): number {
+        const fmt: FObjFmt = frac >>> 5;
+        let res: number;
+        if (fmt === FObjFmt.HSD_A_FRAC_FLOAT) {
+            res = dataView.getFloat32(dataIdx + 0x00);
+            dataIdx += 0x04;
+        } else if (fmt === FObjFmt.HSD_A_FRAC_S16) {
+            res = dataView.getInt16(dataIdx + 0x00);
+            dataIdx += 0x02;
+        } else if (fmt === FObjFmt.HSD_A_FRAC_U16) {
+            res = dataView.getUint16(dataIdx + 0x00);
+            dataIdx += 0x02;
+        } else if (fmt === FObjFmt.HSD_A_FRAC_S8) {
+            res = dataView.getInt8(dataIdx + 0x00);
+            dataIdx += 0x01;
+        } else if (fmt === FObjFmt.HSD_A_FRAC_U8) {
+            res = dataView.getUint8(dataIdx + 0x00);
+            dataIdx += 0x01;
+        } else {
+            throw "whoops";
+        }
+
+        const shift = frac & 0x1F;
+        return res / (1 << shift);
+    }
+
+    function parseVLQ(): number {
+        let byte = 0x80;
+        let res = 0;
+        for (let i = 0; !!(byte & 0x80); i++) {
+            byte = dataView.getUint8(dataIdx++);
+            res |= (byte & 0x7F) << (i * 7);
+        }
+        return res;
+    }
+
+    let p0 = 0.0, p1 = 0.0, d0 = 0.0, d1 = 0.0;
+    let time = 0;
+
+    const keyframes: HSD_FObj__Keyframe[] = [];
+    while (dataIdx < length) {
+        const headerByte = parseVLQ();
+        const opcode: FObjOpcode = headerByte & 0x0F;
+        let nbPack = (headerByte >>> 4) + 1;
+
+        for (let i = 0; i < nbPack; i++) {
+            // SLP is special, as it doesn't mark a keyframe by itself.
+            if (opcode === FObjOpcode.HSD_A_OP_SLP) {
+                d0 = d1;
+                d1 = parseValue(fracSlope);
+                continue;
+            }
+
+            if (opcode === FObjOpcode.HSD_A_OP_CON) {
+                p0 = p1;
+                p1 = parseValue(fracValue);
+                const duration = parseVLQ();
+                keyframes.push({ kind: 'Constant', time, p0 });
+                time += duration;
+            } else if (opcode === FObjOpcode.HSD_A_OP_LIN) {
+                p0 = p1;
+                p1 = parseValue(fracValue);
+                const duration = parseVLQ();
+                keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
+                time += duration;
+            } else if (opcode === FObjOpcode.HSD_A_OP_SPL0) {
+                p0 = p1;
+                p1 = parseValue(fracValue);
+                d0 = d1;
+                d1 = 0.0;
+                const duration = parseVLQ();
+                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
+                time += duration;
+            } else if (opcode === FObjOpcode.HSD_A_OP_SPL) {
+                p0 = p1;
+                p1 = parseValue(fracValue);
+                d0 = d1;
+                d1 = parseValue(fracSlope);
+                const duration = parseVLQ();
+                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
+                time += duration;
+            } else if (opcode === FObjOpcode.HSD_A_OP_KEY) {
+                p0 = p1 = parseValue(fracValue);
+                const duration = parseVLQ();
+                keyframes.push({ kind: 'Constant', time, p0 });
+                time += duration;
+            } else {
+                debugger;
+            }
+        }
+    }
+
+    fobj.push({ type, keyframes });
+
+    if (nextSiblingOffs !== 0)
+        HSD_FObjLoadDesc(fobj, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
+}
+
+function HSD_AObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_AObj {
+    const view = buffer.createDataView();
+
+    const flags = view.getUint32(0x00);
+    const endFrame = view.getFloat32(0x04);
+    const fobjDescOffs = view.getUint32(0x08);
+    const objID = view.getUint32(0x0C);
+
+    const fobj: HSD_FObj[] = [];
+    if (fobjDescOffs !== 0)
+        HSD_FObjLoadDesc(fobj, ctx, HSD_LoadContext__ResolvePtr(ctx, fobjDescOffs));
+
+    return { flags, endFrame, fobj, objID };
+}
+
+export interface HSD_AnimJoint {
+    children: HSD_AnimJoint[];
+    aobj: HSD_AObj | null;
+}
+
+export interface HSD_AnimJointRoot {
+    root: HSD_AnimJoint;
+}
+
+function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadContext, offs: number): void {
+    assert(offs !== 0);
+    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+    const view = buffer.createDataView();
+    const firstChildOffs = view.getUint32(0x00);
+    const nextSiblingOffs = view.getUint32(0x04);
+    const aobjDescOffs = view.getUint32(0x08);
+    const robjAnimJointOffs = view.getUint32(0x0C);
+    const flags = view.getUint32(0x10);
+
+    const children: HSD_AnimJoint[] = [];
+    if (firstChildOffs !== 0)
+        HSD_AObjLoadAnimJointInternal(children, ctx, firstChildOffs);
+
+    let aobj: HSD_AObj | null = null;
+    if (aobjDescOffs !== 0)
+        aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
+
+    animJoints.push({ children, aobj });
+    
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadAnimJointInternal(animJoints, ctx, nextSiblingOffs);
+}
+
+export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_AnimJointRoot {
+    const ctx = new LoadContext(archive);
+
+    const animJoints: HSD_AnimJoint[] = [];
+    HSD_AObjLoadAnimJointInternal(animJoints, ctx, symbol.offset);
+    assert(animJoints.length === 1);
+    const root = animJoints[0];
+
+    return { root };
+}
+
+export interface HSD_MatAnimJoint {
+    children: HSD_MatAnimJoint[];
+}
+
+export interface HSD_MatAnimJointRoot {
+    root: HSD_MatAnimJoint;
+}
+
+export interface HSD_ShapeAnimJoint {
+    children: HSD_ShapeAnimJoint[];
+}
+
+export interface HSD_ShapeAnimJointRoot {
+    root: HSD_ShapeAnimJoint;
 }
 //#endregion
