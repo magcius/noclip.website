@@ -19,11 +19,12 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert, hexzero } from "../util";
 import { uShortTo2PI } from "./Grass";
 import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -179,6 +180,19 @@ export class dKankyo__CommonTextures {
     public destroy(device: GfxDevice): void {
         this.snowTexture.destroy(device);
     }
+}
+
+function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
+    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
+    if (en)
+        colorWriteMask |= bits;
+    else
+        colorWriteMask &= ~bits;
+    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
+}
+
+function aup(materialHelper: GXMaterialHelperGfx): void {
+    setChanWriteEnabled(materialHelper, GfxColorWriteMask.ALPHA, false);
 }
 
 const scratchMatrix = mat4.create();
@@ -593,6 +607,7 @@ export class dKankyo_vrkumo_packet {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_vrkumo_packet'));
+        aup(this.materialHelper);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

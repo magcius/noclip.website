@@ -575,7 +575,7 @@ function setSunpos(envLight: dScnKy_env_light_c, cameraPos: vec3): void {
 
     const theta = MathConstants.DEG_TO_RAD * angle;
     const sinR = Math.sin(theta), cosR = Math.cos(theta);
-    const baseX = 80000 * sinR, baseY = -80000 * cosR, baseZ = -48000 * cosR;
+    const baseX = 80000 * sinR, baseY = -60000 * cosR, baseZ = -20000 + 10000 * cosR;
     vec3.set(envLight.sunPos,   baseX,  baseY,  baseZ);
     vec3.set(envLight.moonPos, -baseX, -baseY, -baseZ);
 
@@ -674,6 +674,8 @@ function dKy_event_proc(globals: dGlobals): void {
 
     if (globals.stageName !== 'sea')
         return;
+
+    return;
 
     if (dKy_checkEventNightStop(globals)) {
         // Special case: Cursed Great Sea.
@@ -807,7 +809,7 @@ function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeIn
     const timePass = GetTimePass(globals);
 
     if (timePass) {
-        envLight.curTime += envLight.timeAdv * deltaTimeInFrames;
+        // envLight.curTime += envLight.timeAdv * deltaTimeInFrames;
         if (envLight.curTime >= 360.0) {
             envLight.curTime = 0.0;
             envLight.calendarDay += 1;
@@ -1017,8 +1019,10 @@ export function envcolor_init(globals: dGlobals): void {
 
     // For funsies, set the time/date to something fun :)
     const today = new Date();
-    envLight.calendarDay = today.getDay();
-    envLight.curTime = 15 * today.getHours();
+    // envLight.calendarDay = today.getDay();
+    // envLight.curTime = 15 * today.getHours();
+    envLight.calendarDay = 0;
+    envLight.curTime = 220;
 
     envLight.timeAdv = 0.02;
 

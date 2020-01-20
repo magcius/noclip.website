@@ -378,8 +378,12 @@ export class MaterialInstance {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.materialData.material.translucent)
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer, useTransparent: boolean = true): void {
+        if (useTransparent && this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
@@ -981,6 +985,11 @@ export class JointMatrixCalcNoAnm {
     }
 }
 
+function aup(modelInstance: J3DModelInstance): void {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        modelInstance.materialInstances[i].setAlphaWriteEnabled(false);
+}
+
 const bboxScratch = new AABB();
 const scratchViewMatrix = mat4.create();
 export class J3DModelInstance {
@@ -1032,6 +1041,8 @@ export class J3DModelInstance {
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
+
+        aup(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1063,9 +1074,9 @@ export class J3DModelInstance {
             this.materialInstances[i].setMaterialHacks(materialHacks);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: GfxRendererLayer, useTransparent: boolean = true): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
+            this.materialInstances[i].setSortKeyLayer(layer, useTransparent);
     }
 
     /**

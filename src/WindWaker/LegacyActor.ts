@@ -1,24 +1,32 @@
 
+import bezier from 'bezier-easing';
+
 import * as Viewer from '../viewer';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
-import { BMT, LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMT, LoopMode, ANK1, TTK1, TRK1, TPT1, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as DZB from './DZB';
 import { assertExists, hexzero, leftPad, assert } from '../util';
 import { ResType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
-import { computeModelMatrixSRT } from '../MathHelpers';
+import { computeModelMatrixSRT, clamp, lerp } from '../MathHelpers';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
 import { fpc__ProcessName, fopAcM_prm_class, fpcSCtRq_Request, fpcLy_CurrentLayer } from './framework';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { colorNewCopy, White, TransparentBlack, colorLerp, colorNew, OpaqueBlack } from '../Color';
+import { ColorKind } from '../gx/gx_render';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { CombineColorInput, RasColorChannelID, TevColorChan } from '../gx/gx_enum';
+import { BMDModelInstance } from '../SuperMario64DS/render';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -41,16 +49,18 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return modelCache.fetchObjectData(objArcName);
     }
 
-    function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
-        const model = modelCache.getModel(rarc, modelPath);
-        const modelInstance = new J3DModelInstanceSimple(model);
+    function buildChildModelRes(modelData: J3DModelData): BMDObjectRenderer {
+        const modelInstance = new J3DModelInstanceSimple(modelData);
         renderer.extraTextures.fillExtraTextures(modelInstance);
-        modelInstance.name = actor.name;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         const objectRenderer = new BMDObjectRenderer(modelInstance);
         dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
         objectRenderer.layer = actor.layer;
         return objectRenderer;
+    }
+
+    function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
+        return buildChildModelRes(modelCache.getModel(rarc, modelPath));
     }
 
     function setModelMatrix(m: mat4): void {
@@ -64,18 +74,12 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return objectRenderer;
     }
 
-    function buildModelRes(context: WindWakerRenderer, modelData: J3DModelData, actor: PlacedActor): BMDObjectRenderer {
-        const modelInstance = new J3DModelInstanceSimple(modelData);
-        context.extraTextures.fillExtraTextures(modelInstance);
-        modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-        const objectRenderer = new BMDObjectRenderer(modelInstance);
-        dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
-        objectRenderer.layer = actor.layer;
+    function buildModelRes(modelData: J3DModelData): BMDObjectRenderer {
+        const objectRenderer = buildChildModelRes(modelData);
         setModelMatrix(objectRenderer.modelMatrix);
         actor.roomRenderer.objectRenderers.push(objectRenderer);
         return objectRenderer;
     }
-
 
     function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
@@ -124,8 +128,8 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
 
     const globals = renderer.globals;
 
-    const objName = assertExists(globals.dStage_searchName(actor.name));
-    const pcName = objName.pcName;
+    const objName = globals.dStage_searchName(actor.name);
+    const pcName = objName !== null ? objName.pcName : -1;
 
     // Tremendous special thanks to LordNed, Sage-of-Mirrors & LagoLunatic for their work on actor mapping
     // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
@@ -135,22 +139,22 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         if (type === 0) {
             // Light Wood
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else if (type === 1) {
             // Dark Wood
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else if (type === 2) {
             // Metal
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
             const b = globals.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
             b.loopMode = LoopMode.ONCE;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actor.name} / ${actor.roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
@@ -1687,6 +1691,27 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         // Flags (only contains textures)
     } else if (actor.name === 'Akabe') {
         // Collision
+    } else if (actor.name === 'LinkThing') {
+        (async() => {
+            const rarc = await fetchArchive(`Link`);
+            const anm = await fetchArchive(`LkAnm`);
+
+            const model = modelCache.getModel(rarc, `bdl/cl.bdl`);
+            const modelInstance = new J3DModelInstanceSimple(model);
+            // aup(modelInstance);
+            renderer.extraTextures.fillExtraTextures(modelInstance);
+            const cl = new LinkThing(renderer, modelInstance);
+            dKy_tevstr_init(cl.tevstr, actor.roomNo);
+            setModelMatrix(cl.modelMatrix);
+            setToNearestFloor(cl.modelMatrix, cl.modelMatrix);
+            roomRenderer.objectRenderers.push(cl);
+            (async() => {
+                cl.bindANK1(BCK.parse(anm.findFileData(`bcks/wait.bck`)!));
+            })();
+            cl.layer = actor.layer;
+        
+            (window as any).cl = cl;
+        })();
     } else {
         return false;
     }
@@ -1778,9 +1803,14 @@ export class BMDObjectRenderer {
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
+        this.fudgeColors();
+
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);
+    }
+
+    public fudgeColors(): void {
     }
 
     public destroy(device: GfxDevice): void {
@@ -1793,18 +1823,22 @@ export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRe
     // Attempt to find an implementation of this Actor in our table
     const objName = globals.dStage_searchName(processNameStr);
 
-    if (objName === null) {
+    /*
+    if (objName !== null) {
         // Game specified a completely bogus actor. For funsies, what was it?
         console.log(`Stage data references missing actor: ${processNameStr}`);
         return;
     }
+    */
 
     // New-style system.
 
-    // This is supposed to be executing in the context of the stage, I believe.
-    assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
-    if (fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor))
-        return;
+    if (objName !== null) {
+        // This is supposed to be executing in the context of the stage, I believe.
+        assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
+        if (fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor))
+            return;
+    }
 
     // Legacy actor system.
     actor.name = processNameStr;
@@ -1813,7 +1847,201 @@ export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRe
         // Warn about legacy actors?
         // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
     } else {
-        const dbgName = globals.objNameGetDbgName(objName);
+        // const dbgName = globals.objNameGetDbgName(objName);
         // console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
+    }
+}
+
+type Callback = (t: number) => boolean | void;
+
+function forever(): Promise<void> {
+    return new Promise(() => {});
+}
+
+class animsched {
+    public time = 0;
+    public idx = 0;
+    public test = -1;
+
+    public callbacks: Callback[] = [];
+
+    public reset(): void {
+        this.time = 0;
+        this.idx = 0;
+        this.callbacks.length = 0;
+    }
+
+    public update(dt: number): void {
+        for (let i = this.callbacks.length - 1; i >= 0; i--)
+            this.callbacks[i](dt);
+    }
+
+    private animate(duration: number, callback: Callback): Promise<void> {
+        let time = 0;
+        return new Promise((resolve, reject) => {
+            const cb = (dt: number) => {
+                time += dt;
+                const t = time / duration;
+                const res = callback(clamp(t, 0.0, 1.0));
+                if (res === false || t > 1.0) {
+                    this.callbacks.splice(this.callbacks.indexOf(cb), 1);
+                    resolve();
+                }
+            };
+            this.callbacks.push(cb);
+        });
+    }
+
+    private wait(duration: number): Promise<void> {
+        return this.animate(duration, () => {});
+    }
+
+    public async anim(startTimeInSeconds: number, durationInSeconds: number, callback: Callback): Promise<void> {
+        const startTime = startTimeInSeconds * 1000, duration = durationInSeconds * 1000;
+
+        if (this.test > -1) {
+            const thisidx = this.idx++;
+            if (thisidx === this.test) {
+                this.time = startTime;
+            } else if (thisidx < this.test) {
+                callback(1.0);
+                return;
+            // } else {
+            //     await forever();
+            }
+        }
+
+        const waitTime = startTime - this.time;
+        assert(waitTime >= 0);
+        if (waitTime > 0)
+            await this.wait(waitTime);
+        await this.animate(duration, callback);
+        this.time = startTime + duration;
+    }
+}
+
+const aeanim = bezier(0.8, 0.0, 0.2, 1.0);
+
+const enum LinkMatMode { vlight, toonify, paletteify }
+class LinkThing extends BMDObjectRenderer {
+    public bodyMatInsts: MaterialInstance[] = [];
+    private animsched = new animsched();
+
+    public arrowCallback: ((modelViewMatrix: mat4, pos: vec3, nrm: vec3) => void) | null = null;
+
+    constructor(private renderer: WindWakerRenderer, modelInstance: J3DModelInstanceSimple) {
+        super(modelInstance);
+
+        this.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+
+        this.setupDam('eyeL');
+        this.setupDam('eyeR');
+        this.setupDam('mayuL');
+        this.setupDam('mayuR');
+
+        this.bodyMatInsts = this.modelInstance.materialInstances.filter((g) => !g.name.startsWith('eye') && !g.name.startsWith('mayu'));
+
+        // turn off ambient color
+        this.modelInstance.setColorOverride(ColorKind.AMB0, TransparentBlack);
+
+        this.setMode(LinkMatMode.paletteify);
+
+        this.fakeK0Fade = 1.0;
+        this.fakeC0Fade = 1.0;
+    }
+
+    private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
+        const m = inst.materialHelper.material;
+        m.tevStages.length = 1;
+        if (mode === LinkMatMode.vlight) {
+            // Vertex Lighting.
+            m.tevStages[0].colorInA = CombineColorInput.ZERO;
+            m.tevStages[0].colorInB = CombineColorInput.ONE;
+            m.tevStages[0].colorInC = CombineColorInput.RASC;
+            m.tevStages[0].channelId = RasColorChannelID.COLOR0A0;
+            m.tevStages[0].rasSwapTable = [TevColorChan.R, TevColorChan.R, TevColorChan.R, TevColorChan.R];
+        } else if (mode === LinkMatMode.toonify) {
+            // Toonification
+            m.tevStages[0].colorInA = CombineColorInput.ZERO;
+            m.tevStages[0].colorInB = CombineColorInput.ONE;
+            m.tevStages[0].colorInC = CombineColorInput.TEXC;
+        } else if (mode === LinkMatMode.paletteify) {
+            m.tevStages[0].colorInA = CombineColorInput.C0;
+            m.tevStages[0].colorInB = CombineColorInput.KONST;
+            m.tevStages[0].colorInC = CombineColorInput.TEXC;
+        }
+        inst.materialHelper.createProgram();
+    }
+
+    public setMode(mode: LinkMatMode): void {
+        this.bodyMatInsts.forEach((v) => this.patchMat(v, mode));
+    }
+
+    private setupDam(pref: string): void {
+        const matInstA = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damA`)!;
+        const matInstB = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damB`)!;
+        // Needs to render before Link.
+        matInstA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
+        matInstA.setColorWriteEnabled(false);
+        matInstA.setAlphaWriteEnabled(true);
+        matInstB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+        matInstB.setColorWriteEnabled(false);
+        matInstB.setAlphaWriteEnabled(true);
+    }
+
+    public fakeK0Fade = 1.0;
+    public fakeC0Fade = 1.0;
+    public fakeK0 = colorNewCopy(White);
+    public fakeC0 = colorNewCopy(OpaqueBlack);
+    public copyK0 = colorNewCopy(White);
+    public copyC0 = colorNewCopy(OpaqueBlack);
+
+    public fudgeColors(): void {
+        colorLerp(this.copyK0, this.tevstr.colorK0, this.fakeK0, this.fakeK0Fade);
+        colorLerp(this.copyC0, this.tevstr.colorC0, this.fakeC0, this.fakeC0Fade);
+
+        this.modelInstance.setColorOverride(ColorKind.K0, this.copyK0);
+        this.modelInstance.setColorOverride(ColorKind.C0, this.copyC0);
+    }
+
+    public async animatePaletteify(test: number = -1): Promise<void> {
+        this.setMode(LinkMatMode.paletteify);
+
+        const sch = this.animsched;
+        sch.reset();
+        sch.test = test;
+
+        this.fakeK0Fade = 1.0;
+        this.fakeC0Fade = 1.0;
+
+        const envLight = this.renderer.globals.g_env_light;
+        envLight.curTime = 220;
+
+        const fakeK0Target0 = colorNew(0.96, 0.9, 0.87);
+        const fakeC0Target0 = colorNewCopy(this.tevstr.colorC0);
+
+        console.log("AAA");
+        await sch.anim(9, 2, (t) => {
+            colorLerp(this.fakeK0, White, fakeK0Target0, aeanim(t));
+        });
+        console.log("BBB");
+        await sch.anim(12, 2, (t) => {
+            colorLerp(this.fakeC0, OpaqueBlack, fakeC0Target0, aeanim(t));
+        });
+        console.log("CCC");
+
+        await sch.anim(38, 4, (t) => {
+            envLight.curTime = lerp(220, 360, aeanim(t));
+            console.log(envLight.curTime);
+        });
+
+        const fakeK0Target1 = colorNewCopy(this.tevstr.colorK0);
+        const fakeC0Target1 = colorNewCopy(this.tevstr.colorC0);
+        await sch.anim(44, 2, (t) => {
+            colorLerp(this.fakeC0, fakeC0Target0, fakeC0Target1, aeanim(t));
+        });
+        await sch.anim(46, 2, (t) => {
+            colorLerp(this.fakeK0, fakeK0Target0, fakeK0Target1, aeanim(t));
+        });
     }
 }
