@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, CombineParams, ColorCombinePass, AlphaCombinePass, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -77,12 +77,15 @@ void main() {
 #endif
 
     if (u_Lighting != 0.0) {
-        // Note: If there is a non-identity model matrix, the normal must be transformed according to the normal matrix:
+        // convert (unsigned) colors to normal vector components
+        vec3 t_Normal = 2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb);
+        t_Normal = normalize(t_Normal);
+        // TODO: If the model matrix is non-identity, the normal must be transformed by the normal matrix:
         // normalMatrix = transpose(inverse(modelMatrix))
-        // However, there is no model matrix here.
-        vec3 normal = normalize(v_Color.xyz);
+        // We don't use a model matrix right now, so the normal matrix is omitted.
+
         vec3 lightDirection = normalize(vec3(1, 1, 1));
-        float intensity = max(0.0, dot(normal, lightDirection));
+        float intensity = max(0.0, dot(t_Normal, lightDirection));
         vec3 ambient = vec3(0.25, 0.25, 0.25);
         vec3 lightColor = vec3(1.0, 1.0, 1.0);
         v_Color.rgb = ambient + intensity * lightColor;
@@ -111,11 +114,11 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: CombineParams) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
-        this.frag = this.generateFrag(combParams);
+        this.frag = this.generateFrag();
     }
 
     private generateAlphaTest(): string {
@@ -146,7 +149,7 @@ void main() {
         }
     }
 
-    private generateFrag(combParams: vec4): string {
+    private generateFrag(): string {
         const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
@@ -175,19 +178,13 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
         ];
 
-        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
-            return {
-                x: (params >>> 12) & 0xf,
-                y: (params >>> 8) & 0xf,
-                z: (params >>> 4) & 0xf,
-                w: (params >>> 0) & 0xf
-            }
+        function generateColorCombine(c: ColorCombinePass) {
+            return `((${colorInputs[c.a]} - ${colorInputs[c.b]}) * ${multInputs[c.c]} + ${colorInputs[c.d]})`;
         }
-
-        const px = unpackParams(combParams[0]);
-        const py = unpackParams(combParams[1]);
-        const pz = unpackParams(combParams[2]);
-        const pw = unpackParams(combParams[3]);
+        
+        function generateAlphaCombine(a: AlphaCombinePass) {
+            return `((${alphaInputs[a.a]} - ${alphaInputs[a.b]}) * ${alphaInputs[a.c]} + ${alphaInputs[a.d]})`;
+        }
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -214,19 +211,19 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
 vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
+    return ${generateColorCombine(this.DP_Combine.c0)};
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
+    return ${generateAlphaCombine(this.DP_Combine.a0)};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+    return ${generateColorCombine(this.DP_Combine.c1)};
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return ${generateAlphaCombine(this.DP_Combine.a1)};
 }
 
 void main() {
@@ -405,6 +402,14 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.NONE;
 }
 
+function calcScaleForShift(shift: number): number {
+    if (shift <= 10) {
+        return 1 / (1 << shift);
+    } else {
+        return 1 << (16 - shift);
+    }
+}
+
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -436,9 +441,7 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const combParams = vec4.create();
-        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DZEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
+        const program = new F3DZEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
 
         if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -493,15 +496,12 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            // TODO(jstpierre): whatever this is
-            // const s = (0x7FFF / this.drawCall.SP_TextureState.s);
-            // const t = (0x7FFF / this.drawCall.SP_TextureState.t);
-
+            // G_TEXTURE scaleS and scaleT parameters always seem to be 0xFFFF, so they're ignored here.
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = 1 / (entry.width);
-            const st = 1 / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            const scaleS0 = calcScaleForShift(entry.tile.shiftS);
+            const scaleT0 = calcScaleForShift(entry.tile.shiftT);
+            mat4.fromScaling(m,
+                [scaleS0 / entry.width, scaleT0 / entry.height, 1]);
         } else {
             mat4.identity(m);
         }
