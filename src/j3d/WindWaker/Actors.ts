@@ -21,7 +21,7 @@ import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../../Camera';
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgramDescriptorSimple, GfxMegaStateDescriptor, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBlendMode, GfxBlendFactor, GfxBufferUsage, GfxCullMode, GfxFrontFaceMode } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult, colorLerp, colorCopy, OpaqueBlack } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, White, colorMult, colorLerp, colorCopy, OpaqueBlack, TransparentBlack } from '../../Color';
 import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst, makeSortKeyTranslucent } from '../../gfx/render/GfxRenderer';
 import { CombineColorInput, RasColorChannelID, TevColorChan } from '../../gx/gx_enum';
 import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../../MathHelpers';
@@ -101,6 +101,27 @@ export interface ObjectRenderer {
     layer: number;
 }
 
+function setSunpos(v: vec3, curTime: number, cameraPos: vec3): void {
+    let angle: number;
+    if (curTime < 15.0)
+        angle = 345.0 + curTime;
+    else
+        angle = curTime - 15.0;
+
+    const theta = MathConstants.DEG_TO_RAD * angle;
+    const sinR = Math.sin(theta), cosR = Math.cos(theta);
+    const baseX = 80000 * sinR, baseY = -60000 * cosR, baseZ = -20000 + 10000 * cosR;
+
+    vec3.set(v,  baseX,  baseY,  baseZ);
+    vec3.add(v, v, cameraPos);
+}
+
+function colorScale(dst: Color, a: Color, b: number): void {
+    dst.r = a.r * b;
+    dst.g = a.g * b;
+    dst.b = a.b * b;
+}
+
 const bboxScratch = new AABB();
 const screenProjection = new ScreenSpaceProjection();
 export class BMDObjectRenderer implements ObjectRenderer {
@@ -161,8 +182,30 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setExtraTextures(extraTextures);
     }
 
+    public curTime = 0;
+    public curTimeOverride = 0;
+    public curTimeOverrideFade = 0;
+    public fakeK0Fade = 0;
+    public fakeC0Fade = 0;
+    public fakeK0 = colorNewCopy(White);
+    public fakeC0 = colorNewCopy(OpaqueBlack);
+    public copyK0 = colorNewCopy(OpaqueBlack);
+    public copyC0 = colorNewCopy(OpaqueBlack);
+
+    public kankyoColors: KankyoColors;
+
     public setKankyoColors(colors: KankyoColors): void {
+        this.kankyoColors = colors;
+
         settingTevStruct(this.modelInstance, this.lightTevColorType, colors);
+
+        colorLerp(this.copyK0, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.K0], this.fakeK0, this.fakeK0Fade);
+        colorLerp(this.copyC0, this.modelInstance.materialInstanceState.colorOverrides[ColorKind.C0], this.fakeC0, this.fakeC0Fade);
+
+        this.modelInstance.setColorOverride(ColorKind.K0, this.copyK0);
+        this.modelInstance.setColorOverride(ColorKind.C0, this.copyC0);
+
+        this.curTime = lerp(colors.curTime, this.curTimeOverride, this.curTimeOverrideFade);
 
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].setKankyoColors(colors);
@@ -192,6 +235,10 @@ export class BMDObjectRenderer implements ObjectRenderer {
         this.visible2 = true;
 
         const light = this.modelInstance.getGXLightReference(0);
+
+        mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        setSunpos(this.lightPos, this.curTime, scratchVec3a);
+
         GX_Material.lightSetWorldPosition(light, viewerInput.camera, this.lightPos[0], this.lightPos[1], this.lightPos[2]);
         // Toon lighting works by setting the color to red.
         colorFromRGBA(light.Color, 1, 0, 0, 1);
@@ -499,7 +546,7 @@ class LinkThingRel implements ActorRel {
         aup(modelInstance);
         modelInstance.passMask = WindWakerPass.MAIN;
         context.extraTextures.fillExtraTextures(modelInstance);
-        const cl = new LinkThing(context.device, context.renderCache, modelInstance);
+        const cl = new LinkThing(context, context.device, context.renderCache, modelInstance);
         computeActorMatrix(cl.modelMatrix, actor);
         setToNearestFloor(roomRenderer, cl.modelMatrix, cl.modelMatrix);
         mat4.mul(cl.modelMatrix, roomRenderer.roomToWorldMatrix, cl.modelMatrix);
@@ -2464,8 +2511,8 @@ class animsched {
             } else if (thisidx < this.test) {
                 callback(1.0);
                 return;
-            } else {
-                await forever();
+            // } else {
+            //     await forever();
             }
         }
 
@@ -2503,7 +2550,7 @@ class LinkThing extends BMDObjectRenderer {
 
     public arrowCallback: ((modelViewMatrix: mat4, pos: vec3, nrm: vec3) => void) | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, modelInstance: J3DModelInstanceSimple) {
+    constructor(private renderer: WindWakerRenderer, device: GfxDevice, cache: GfxRenderCache, modelInstance: J3DModelInstanceSimple) {
         super(modelInstance);
 
         this.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
@@ -2518,7 +2565,13 @@ class LinkThing extends BMDObjectRenderer {
         this.normalArrowData = new NormalArrowData(device, cache);
         this.normalArrowData.baseScale = 0.0;
 
-        this.setMode(LinkMatMode.toonify);
+        // turn off ambient color
+        this.modelInstance.setColorOverride(ColorKind.AMB0, TransparentBlack);
+
+        this.setMode(LinkMatMode.paletteify);
+
+        this.fakeK0Fade = 1.0;
+        this.fakeC0Fade = 1.0;
     }
 
     private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
@@ -2668,6 +2721,41 @@ class LinkThing extends BMDObjectRenderer {
         matInstB.setAlphaWriteEnabled(true);
     }
 
+    public async animatePaletteify(test: number = -1): Promise<void> {
+        this.setMode(LinkMatMode.paletteify);
+
+        const sch = this.animsched;
+        sch.reset();
+        sch.test = test;
+
+        this.fakeK0Fade = 1.0;
+        this.fakeC0Fade = 1.0;
+        this.renderer.curTime = 220;
+
+        const fakeK0Target0 = colorNew(0.96, 0.9, 0.87);
+        const fakeC0Target0 = colorNewCopy(this.kankyoColors.actorC0);
+
+        await sch.anim(9, 2, (t) => {
+            colorLerp(this.fakeK0, White, fakeK0Target0, aeanim(t));
+        });
+        await sch.anim(12, 2, (t) => {
+            colorLerp(this.fakeC0, OpaqueBlack, fakeC0Target0, aeanim(t));
+        });
+
+        await sch.anim(38, 4, (t) => {
+            this.renderer.curTime = lerp(220, 360, aeanim(t));
+        });
+
+        const fakeK0Target1 = colorNewCopy(this.kankyoColors.actorK0);
+        const fakeC0Target1 = colorNewCopy(this.kankyoColors.actorC0);
+        await sch.anim(44, 2, (t) => {
+            colorLerp(this.fakeC0, fakeC0Target0, fakeC0Target1, aeanim(t));
+        });
+        await sch.anim(46, 2, (t) => {
+            colorLerp(this.fakeK0, fakeK0Target0, fakeK0Target1, aeanim(t));
+        });
+    }
+
     public async animateToonify(test: number = -1): Promise<void> {
         this.setMode(LinkMatMode.toonify);
         this.extraTextures.insertCustom();
@@ -2677,12 +2765,31 @@ class LinkThing extends BMDObjectRenderer {
         sch.test = test;
 
         const et = this.extraTextures;
-        await sch.anim(0, 2, (t) => {
-            // et.toonTexPower = lerp(20, 5, aeanim(t));
+
+        function pulse2(n: number) {
+            return 1 - Math.pow((1 - 2*n), 2);
+        }
+
+        et.toonTexPower = 20;
+        et.toonTexPhase = 0;
+        et.toonTexQuant = 255;
+    
+        await sch.anim(4, 4, (t) => {
+            et.toonTexPhase = Math.sin(t * MathConstants.TAU) * 0.35 * pulse2(t);
         });
 
-        await sch.anim(3, 5, (t) => {
-            et.toonTexPhase = Math.sin(t * MathConstants.TAU) * 0.3;
+        await sch.anim(8, 2, (t) => {
+            et.toonTexPower = lerp(20, 5, aeanim(t));
+        });
+
+        await sch.anim(10, 2, (t) => {
+            et.toonTexQuant = lerp(32, 2, aeanim(t));
+            et.toonTexPower = lerp(5, 1, aeanim(t));
+        });
+
+        await sch.anim(15, 2, (t) => {
+            et.toonTexQuant = lerp(2, 64, aeanim(t));
+            et.toonTexPower = lerp(1, 20, aeanim(t));
         });
     }
 

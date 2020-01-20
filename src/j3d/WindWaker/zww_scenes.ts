@@ -31,7 +31,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { Actor, ActorInfo, loadActor, ObjectRenderer, SymbolMap, settingTevStruct, LightTevColorType, PlacedActor, requestArchiveForActor } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
-import { computeModelMatrixSRT, range, MathConstants, clamp } from '../../MathHelpers';
+import { computeModelMatrixSRT, range, MathConstants, clamp, invlerp } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
@@ -47,39 +47,88 @@ function gain(v: number, k: number): number {
     return v < 0.5 ? a : 1.0 - a;
 }
 
+function quantify(v: number, q: number): number {
+    return (((v * q) + 0.5) | 0) / q;
+}
+
+interface dScnKy__ScheduleEntry {
+    timeBegin: number;
+    timeEnd: number;
+    palIdxA: number;
+    palIdxB: number;
+}
+
+class dScnKy__Schedule {
+    public entries: dScnKy__ScheduleEntry[] = [];
+
+    constructor(buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
+        let offs = 0x00;
+        for (let i = 0; i < 11; i++) {
+            const timeBegin = view.getFloat32(offs + 0x00);
+            const timeEnd = view.getFloat32(offs + 0x04);
+            const palIdx0 = view.getUint8(offs + 0x08);
+            const palIdx1 = view.getUint8(offs + 0x09);
+            this.entries.push({ timeBegin, timeEnd, palIdxA: palIdx0, palIdxB: palIdx1 });
+            offs += 0x0C;
+        }
+    }
+}
+
 class DynToonTex {
     public gfxTexture: GfxTexture;
     public desiredPower: number = 0;
     public desiredPhase: number = 0;
+    public desiredQuant: number = 0;
     private texPower: number = 0;
     private texPhase: number = 0;
-    private textureData: Uint8Array[] = [new Uint8Array(256*1*4)];
+    private texQuant: number = 0;
+    private textureData: Uint8ClampedArray[] = [new Uint8ClampedArray(256*1*4)];
+    private canvas: HTMLCanvasElement;
 
     constructor(device: GfxDevice) {
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 256, 1, 1));
         device.setResourceName(this.gfxTexture, 'DynToonTex');
+
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = 256;
+        this.canvas.height = 1;
+        this.canvas.style.width = '512px';
+        this.canvas.style.height = '32px';
+        this.canvas.style.imageRendering = 'pixelated';
+        this.canvas.style.position = 'absolute';
+        this.canvas.style.right = '16px';
+        this.canvas.style.top = '16px';
+        // document.body.appendChild(this.canvas);
     }
 
-    private fillTextureData(k: number, phase: number): void {
+    private fillTextureData(): void {
+        const k = this.texPower, phase = this.texPhase, quant = this.texQuant;
+
         let dstOffs = 0;
         const dst = this.textureData[0];
         for (let i = 0; i < 256; i++) {
             const t = clamp((i / 255) + phase, 0, 1);
-            const c = gain(t, k) * 255;
+            const v = gain(t, k);
+            const c = quantify(v, quant) * 255;
             dst[dstOffs++] = c;
-            dst[dstOffs++] = 0;
-            dst[dstOffs++] = 0;
-            dst[dstOffs++] = 0;
+            dst[dstOffs++] = c;
+            dst[dstOffs++] = c;
+            dst[dstOffs++] = 255;
         }
+
+        const ctx = this.canvas.getContext('2d')!;
+        ctx.putImageData(new ImageData(dst, 256, 1), 0, 0);
     }
 
     public prepareToRender(device: GfxDevice): void {
-        if (this.texPower !== this.desiredPower || this.texPhase !== this.desiredPhase) {
+        if (this.texPower !== this.desiredPower || this.texPhase !== this.desiredPhase || this.texQuant !== this.desiredQuant) {
             this.texPower = this.desiredPower;
             this.texPhase = this.desiredPhase;
+            this.texQuant = this.desiredQuant;
 
             // Recreate toon texture.
-            this.fillTextureData(this.texPower, this.texPhase);
+            this.fillTextureData();
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadTextureData(this.gfxTexture, 0, this.textureData);
             device.submitPass(hostAccessPass);
@@ -101,6 +150,9 @@ export class ZWWExtraTextures {
     @UI.dfRange(-1, 1, 0.01)
     public toonTexPhase: number = 0;
 
+    @UI.dfRange(1, 255, 1)
+    public toonTexQuant: number = 255;
+
     constructor(device: GfxDevice, public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
         this.ZAtoon.fillTextureMapping(this.textureMapping[0]);
         this.ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
@@ -120,6 +172,7 @@ export class ZWWExtraTextures {
     public prepareToRender(device: GfxDevice): void {
         this.dynToonTex.desiredPower = this.toonTexPower;
         this.dynToonTex.desiredPhase = this.toonTexPhase;
+        this.dynToonTex.desiredQuant = this.toonTexQuant;
         this.dynToonTex.prepareToRender(device);
     }
 
@@ -148,6 +201,7 @@ interface VirtColors {
 }
 
 export interface KankyoColors {
+    curTime: number;
     actorC0: Color;
     actorK0: Color;
     bg0C0: Color;
@@ -299,7 +353,7 @@ export function getKankyoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     return {
         actorC0: actorShadow, actorK0: actorAmbient,
         bg0C0, bg0K0, bg1C0, bg1K0, bg2C0, bg2K0, bg3C0, bg3K0,
-        virtColors,
+        virtColors, curTime: 0,
     };
 }
 
@@ -759,7 +813,18 @@ class SkyEnvironment {
     }
 }
 
-const sceneParams = new SceneParams();
+function findTimeInSchejule(schedule: dScnKy__Schedule, time: number): dScnKy__ScheduleEntry {
+    assert(time >= 0.0 && time < 360.0);
+
+    for (let i = 0; i < schedule.entries.length; i++) {
+        const entry = schedule.entries[i];
+        if (time >= entry.timeBegin && time < entry.timeEnd)
+            return entry;
+    }
+
+    throw "whoops";
+}
+
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -785,12 +850,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public currentColors: KankyoColors;
 
     private timeOfDayColors: KankyoColors[] = [];
+    public schejule: dScnKy__Schedule;
 
     public onstatechanged!: () => void;
 
     constructor(public device: GfxDevice, public modelCache: ModelCache, public symbolMap: SymbolMap, public stage: string, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
+
+        const schejuleBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'd_kankyo_data.o' && e.SymbolName === 'l_time_attribute'));
+        this.schejule = new dScnKy__Schedule(schejuleBuf.Data);
 
         const wantsSeaPlane = this.stage === 'sea';
         if (wantsSeaPlane)
@@ -813,11 +882,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     private setTimeOfDay(timeOfDay: number): void {
-        const i0 = ((timeOfDay + 0) % 6) | 0;
-        const i1 = ((timeOfDay + 1) % 6) | 0;
-        const t = timeOfDay % 1;
+        this.currentColors.curTime = timeOfDay;
 
-        kankyoColorsLerp(this.currentColors, this.timeOfDayColors[i0], this.timeOfDayColors[i1], t);
+        const entry = findTimeInSchejule(this.schejule, timeOfDay);
+        const t = invlerp(entry.timeBegin, entry.timeEnd, timeOfDay);
+        kankyoColorsLerp(this.currentColors, this.timeOfDayColors[entry.palIdxA], this.timeOfDayColors[entry.palIdxB], t);
 
         if (this.skyEnvironment !== null)
             this.skyEnvironment.setKankyoColors(this.currentColors);
@@ -944,14 +1013,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
+    public curTime = 220;
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        /*
         const kStartTime = TimeOfDay.DAY;
-        const kProgressTimeOfDay = false;
-        const kDayLengthInSeconds = 60.0;
+        const kProgressTimeOfDay = true;
+        const kDayLengthInSeconds = 10.0;
         const kTimeFactor = kProgressTimeOfDay ? 6 / (kDayLengthInSeconds * 1000.0) : 0.0;
         this.setTimeOfDay(kStartTime + viewerInput.time * kTimeFactor);
+        */
+
+        // this.curTime += 0.02 * viewerInput.deltaTime;
+        while (this.curTime >= 360)
+            this.curTime -= 360;
+        while (this.curTime < 0)
+            this.curTime += 360;
+        this.setTimeOfDay(this.curTime);
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
