@@ -402,6 +402,14 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.NONE;
 }
 
+function calcScaleForShift(shift: number): number {
+    if (shift <= 10) {
+        return 1 / (1 << shift);
+    } else {
+        return 1 << (16 - shift);
+    }
+}
+
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -488,15 +496,12 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            // TODO(jstpierre): whatever this is
-            // const s = (0x7FFF / this.drawCall.SP_TextureState.s);
-            // const t = (0x7FFF / this.drawCall.SP_TextureState.t);
-
+            // G_TEXTURE scaleS and scaleT parameters always seem to be 0xFFFF, so they're ignored here.
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = 1 / (entry.width);
-            const st = 1 / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            const scaleS0 = calcScaleForShift(entry.tile.shiftS);
+            const scaleT0 = calcScaleForShift(entry.tile.shiftT);
+            mat4.fromScaling(m,
+                [scaleS0 / entry.width, scaleT0 / entry.height, 1]);
         } else {
             mat4.identity(m);
         }
