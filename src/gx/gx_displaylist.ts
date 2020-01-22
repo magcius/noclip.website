@@ -40,6 +40,7 @@ import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat';
 import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
+import { Format } from '../SuperMario64DS/nitro_tex';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -205,10 +206,11 @@ export function getAttributeByteSize(vat: GX_VtxAttrFmt[], vtxAttrib: GX.Attr): 
 export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.CompCnt): number {
     switch (vtxAttrib) {
     case GX.Attr.POS:
-        if (compCnt === GX.CompCnt.POS_XY)
-            return FormatCompFlags.COMP_RG;
-        else if (compCnt === GX.CompCnt.POS_XYZ)
-            return FormatCompFlags.COMP_RGB;
+        switch (compCnt) {
+        case GX.CompCnt.POS_XY: return FormatCompFlags.COMP_RG;
+        case GX.CompCnt.POS_XYZ: return FormatCompFlags.COMP_RGB;
+        default: throw Error(`Invalid GX.Attr.POS compCnt ${compCnt}`);
+        }
     case GX.Attr.NRM:
         if (compCnt === GX.CompCnt.NRM_XYZ)
             return FormatCompFlags.COMP_RGB;
@@ -241,7 +243,7 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
     case GX.Attr.NULL:
     default:
         // Shouldn't ever happen
-        throw new Error("whoops");
+        throw Error(`Invalid GX.Attr ${vtxAttrib}`);
     }
 }
 
