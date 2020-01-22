@@ -1038,7 +1038,7 @@ export class GrassPacket {
                 const data = room[i];
 
                 // Perform ground checks for some limited number of data
-                if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
+                if (true || ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame)) {
                     data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
                     data.flags &= ~GrassFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
