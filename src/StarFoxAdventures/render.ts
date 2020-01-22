@@ -54,7 +54,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     private program: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
 
-    constructor(device: GfxDevice, private positions: Uint16Array) {
+    constructor(device: GfxDevice, private positions: Int16Array) {
         this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
         this.program = new SFA_Program();
@@ -75,7 +75,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         const vertexBufferData = new Float32Array(this.positions.length);
         for (let i = 0; i < vertexBufferData.length; i++) {
-            vertexBufferData[i] = this.positions[i] / 65535.0;
+            vertexBufferData[i] = this.positions[i] / 32768.0 * 512.0;
         }
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 3*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -116,7 +116,8 @@ export class SFARenderer implements Viewer.SceneGfx {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         }
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexes(indexBufferData.length);
+        //renderInst.drawIndexes(indexBufferData.length);
+        renderInst.drawPrimitives(indexBufferData.length);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);

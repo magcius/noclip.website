@@ -53,12 +53,12 @@ class SFASceneDesc implements Viewer.SceneDesc {
         const posCount = uncompDv.getUint16(0x90);
         console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         
-        const verts = new Uint16Array(posCount * 3);
+        const verts = new Int16Array(posCount * 3);
         offs = posOffset;
         for (let i = 0; i < posCount; i++) {
-            verts[i * 3 + 0] = uncompDv.getUint16(offs + 0x00, false);
-            verts[i * 3 + 1] = uncompDv.getUint16(offs + 0x02, false);
-            verts[i * 3 + 2] = uncompDv.getUint16(offs + 0x04, false);
+            verts[i * 3 + 0] = uncompDv.getInt16(offs + 0x00, false);
+            verts[i * 3 + 1] = uncompDv.getInt16(offs + 0x02, false);
+            verts[i * 3 + 2] = uncompDv.getInt16(offs + 0x04, false);
             offs += 0x06;
         }
 
