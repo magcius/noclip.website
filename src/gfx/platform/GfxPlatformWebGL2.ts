@@ -563,6 +563,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentTextures: (WebGLTexture | null)[] = [];
     private _currentUniformBuffers: GfxBuffer[] = [];
     private _currentUniformBufferByteOffsets: number[] = [];
+    private _currentUniformBufferByteSizes: number[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];
     private _resolveReadFramebuffer!: WebGLFramebuffer;
     private _resolveDrawFramebuffer!: WebGLFramebuffer;
@@ -1572,13 +1573,14 @@ void main() {
             const buffer = binding.buffer as GfxBufferP_GL;
             const byteOffset = (binding.wordOffset * 4) + dynamicByteOffsets[dynamicByteOffsetsStart + i];
             const byteSize = (binding.wordCount * 4);
-            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index]) {
+            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index] || byteSize !== this._currentUniformBufferByteSizes[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
                 assert(platformBufferByteOffset + byteSize <= buffer.pageByteSize);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
                 this._currentUniformBufferByteOffsets[index] = byteOffset;
+                this._currentUniformBufferByteSizes[index] = byteSize;
             }
         }
 
