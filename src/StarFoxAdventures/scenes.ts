@@ -1,19 +1,21 @@
 import * as pako from 'pako';
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import * as GX_Texture from '../gx/gx_texture';
 
 import { hexzero, nArray } from '../util';
 import * as GX from '../gx/gx_enum';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
+import { gx_texture_asExports } from '../wat_modules';
 
 const pathBase = 'sfa';
 
@@ -22,14 +24,15 @@ class ModelInstance {
     loadedVertexData: LoadedVertexData;
     shapeHelper: GXShapeHelperGfx | null = null;
     materialHelper: GXMaterialHelperGfx;
+    textures: (DecodedTexture | null)[] = [];
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const mb = new GXMaterialBuilder('Basic');
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         mb.setZMode(true, GX.CompareType.LESS, true);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
-        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
@@ -43,6 +46,10 @@ class ModelInstance {
         // this.loadedVertexData = vtxLoader.runVertices(vtxArrays, new ArrayBufferSlice(dl.buffer));
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
         console.log(`loaded vertex data ${JSON.stringify(this.loadedVertexData, null, '\t')}`);
+    }
+
+    public setTextures(textures: (DecodedTexture | null)[]) {
+        this.textures = textures;
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -77,6 +84,16 @@ class ModelInstance {
 
         const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
+        for (let i = 0; i < 8; i++) {
+            if (this.textures[i]) {
+                const tex = this.textures[i]!;
+                materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
+                materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
+            } else {
+                materialParams.m_TextureMapping[i].gfxTexture = null;
+                materialParams.m_TextureMapping[i].gfxSampler = null;
+            }
+        }
         // this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -164,6 +181,55 @@ class LowBitReader {
     }
 }
 
+function loadZLB(compData: ArrayBufferSlice): ArrayBuffer {
+    let offs = 0;
+    const dv = compData.createDataView();
+    const header = new ZLBHeader(dv);
+    offs += ZLBHeader.SIZE;
+
+    if (header.magic != stringToFourCC('ZLB\0')) {
+        throw Error(`Invalid magic identifier 0x${hexzero(header.magic, 8)}`);
+    }
+
+    return pako.inflate(new Uint8Array(compData.copyToBuffer(ZLBHeader.SIZE, header.size))).buffer;
+}
+
+function loadTex(texData: ArrayBufferSlice): GX_Texture.Texture {
+    const dv = texData.createDataView();
+    const result = {
+        name: `Texture`,
+        width: dv.getUint16(0x0A),
+        height: dv.getUint16(0x0C),
+        format: GX.TexFormat.I8, // TODO
+        data: texData.slice(96),
+        mipCount: 1,
+    };
+    return result;
+}
+
+interface DecodedTexture {
+    gfxTexture: GfxTexture;
+    gfxSampler: GfxSampler;
+}
+
+function decodeTex(device: GfxDevice, tex: GX_Texture.Texture): DecodedTexture {
+    const mipChain = GX_Texture.calcMipChain(tex, 1);
+    const gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
+    
+    // GL texture is bound by loadTextureFromMipChain.
+    const gfxSampler = device.createSampler({
+        wrapS: GfxWrapMode.REPEAT, // TODO
+        wrapT: GfxWrapMode.REPEAT, // TODO
+        minFilter: GfxTexFilterMode.BILINEAR,
+        magFilter: GfxTexFilterMode.BILINEAR,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0,
+        maxLOD: 100,
+    });
+
+    return { gfxTexture, gfxSampler };
+}
+
 class SFASceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -171,20 +237,67 @@ class SFASceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.id}`);
+        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
+        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
 
         console.log(`Creating SFA scene for ${this.id} ...`);
 
         let offs = 0;
-        const dv = sceneData.createDataView();
-        const header = new ZLBHeader(dv);
-        offs += ZLBHeader.SIZE;
+        const uncomp = loadZLB(sceneData);
+        const uncompDv = new DataView(uncomp);
 
-        if (header.magic != stringToFourCC('ZLB\0')) {
-            throw Error(`Invalid magic identifier 0x${hexzero(header.magic, 8)}`);
+        const modelType = uncompDv.getUint16(4);
+        if (modelType != 8) {
+            throw Error(`Model type ${modelType} not implemented`);
         }
 
-        const uncompressed = pako.inflate(new Uint8Array(sceneData.copyToBuffer(ZLBHeader.SIZE, header.size)));
-        const uncompDv = new DataView(uncompressed.buffer);
+        //////////// TEXTURE STUFF TODO: move somewhere else
+
+        const texOffset = uncompDv.getUint32(0x54);
+        const texCount = uncompDv.getUint8(0xA0);
+        console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
+        const texIds: number[] = [];
+        for (let i = 0; i < texCount; i++) {
+            texIds.push(uncompDv.getUint32(texOffset + i * 4));
+        }
+        console.log(`tex ids: ${JSON.stringify(texIds)}`);
+
+        const tex0TabDv = tex0Tab.createDataView();
+        
+        interface Texture {
+            data: ArrayBuffer;
+        }
+
+        const textures: (Texture | null)[] = [];
+        for (let i = 0; i < texIds.length; i++) {
+            const tab = tex0TabDv.getUint32(texIds[i] * 4);
+            console.log(`tex ${i} tab 0x${hexzero(tab, 8)}`);
+            if (tab & 0x80000000) {
+                // Loadable texture?
+                const newTex: any = {};
+                const binOffs = (tab & 0x00FFFFFF) * 2;
+                const compData = tex0Bin.slice(binOffs);
+                const uncompData = loadZLB(compData);
+                newTex.data = uncompData;
+                textures.push(newTex);
+            } else {
+                textures.push(null);
+            }
+        }
+
+        const decodedTextures: (DecodedTexture | null)[] = [];
+        for (let i = 0; i < textures.length; i++) {
+            if (textures[i]) {
+                const tex = textures[i]!;
+                const loaded = loadTex(new ArrayBufferSlice(tex.data));
+                const decoded = decodeTex(device, loaded);
+                decodedTextures.push(decoded);
+            } else {
+                decodedTextures.push(null);
+            }
+        }
+
+        //////////////////////////
 
         const posOffset = uncompDv.getUint32(0x58);
         const posCount = uncompDv.getUint16(0x90);
@@ -289,6 +402,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 console.log(`Using VCD ${JSON.stringify(vcd, null, '\t')}`);
                 try {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                    newModel.setTextures(decodedTextures);
                     renderer.addModel(newModel);
                 } catch (e) {
                     console.error(e);
