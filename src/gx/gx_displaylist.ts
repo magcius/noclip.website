@@ -870,7 +870,7 @@ class VtxLoaderImpl implements VtxLoader {
                 indexCount = ((vertexCount * 6) / 4) * 3;
                 break;
             default:
-                throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16));
+                throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16) + " cmd " + cmd.toString(16));
             }
 
             drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });

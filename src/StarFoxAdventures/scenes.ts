@@ -125,18 +125,19 @@ class ModelInstance {
 }
 
 class SFARenderer extends BasicGXRendererHelper {
-    model: ModelInstance;
+    models: ModelInstance[] = [];
 
-    constructor(device: GfxDevice, vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
-        super(device);
-        this.model = new ModelInstance(vtxArrays, vcd, vat, displayList);
+    public addModel(model: ModelInstance) {
+        this.models.push(model);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        this.model.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.models.length; i++) {
+            this.models[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -293,6 +294,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
 
         let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
 
+        const renderer = new SFARenderer(device);
+
         const bits = new LowBitReader(uncompDv, bitsOffset);
         let done = false;
         let curPolyType = 0;
@@ -314,8 +317,22 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 displayList = new ArrayBufferSlice(uncompDv.buffer, dlOffset, dlSize);
                 // displayList = uncompDv.buffer.slice(dlOffset, dlOffset + dlSize);
                 console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
+
+                const vtxArrays: GX_Array[] = [];
+                vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
+                vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.CLR0) };
+                vtxArrays[GX.Attr.TEX0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.TEX0) };
+                console.log(`Using VCD ${JSON.stringify(vcd, null, '\t')}`);
+                try {
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                    renderer.addModel(newModel);
+                } catch (e) {
+                    console.exception(e);
+                }
+                // renderer.addModel(new ModelInstance(vtxArrays, vcd, vat, displayList));
+
                 // XXX: finish now
-                done = true;
+                // done = true;
                 break;
             case 3: // Set vertex attributes
                 const posDesc = bits.get(1);
@@ -362,13 +379,6 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 throw Error(`Unknown model bits opcode ${opcode}`);
             }
         }
-
-        const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.CLR0) };
-        vtxArrays[GX.Attr.TEX0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.TEX0) };
-
-        const renderer = new SFARenderer(device, vtxArrays, vcd, vat, displayList);
         
         return renderer;
     }
