@@ -17,15 +17,12 @@ import { mat4 } from 'gl-matrix';
 const pathBase = 'sfa';
 
 class ModelInstance {
-    verts: Int16Array;
     loadedVertexLayout: LoadedVertexLayout;
     loadedVertexData: LoadedVertexData;
     shapeHelper: GXShapeHelperGfx | null = null;
     materialHelper: GXMaterialHelperGfx;
 
-    constructor(verts: Int16Array, vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
-        this.verts = verts;
-
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const gxMaterial: GX_Material.GXMaterial = {
             name: "sfa-material",
             lightChannels: [],
@@ -130,9 +127,9 @@ class ModelInstance {
 class SFARenderer extends BasicGXRendererHelper {
     model: ModelInstance;
 
-    constructor(device: GfxDevice, verts: Int16Array, vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
+    constructor(device: GfxDevice, vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         super(device);
-        this.model = new ModelInstance(verts, vtxArrays, vcd, vat, displayList);
+        this.model = new ModelInstance(vtxArrays, vcd, vat, displayList);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -223,18 +220,16 @@ class SFASceneDesc implements Viewer.SceneDesc {
 
         const uncompressed = pako.inflate(new Uint8Array(sceneData.copyToBuffer(ZLBHeader.SIZE, header.size)));
         const uncompDv = new DataView(uncompressed.buffer);
+
         const posOffset = uncompDv.getUint32(0x58);
         const posCount = uncompDv.getUint16(0x90);
         console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-        
-        const verts = new Int16Array(posCount * 3);
-        offs = posOffset;
-        for (let i = 0; i < posCount; i++) {
-            verts[i * 3 + 0] = uncompDv.getInt16(offs + 0x00, false);
-            verts[i * 3 + 1] = uncompDv.getInt16(offs + 0x02, false);
-            verts[i * 3 + 2] = uncompDv.getInt16(offs + 0x04, false);
-            offs += 0x06;
-        }
+        const vertBuffer = new ArrayBufferSlice(uncompDv.buffer, posOffset, posCount * 3*2);
+
+        const clrOffset = uncompDv.getUint32(0x5C);
+        const clrCount = uncompDv.getUint16(0x94);
+        console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
+        const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
 
         const polyOffset = uncompDv.getUint32(0x64);
         const polyCount = uncompDv.getUint8(0xA1);
@@ -285,6 +280,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
         vcd[GX.Attr.POS].type = GX.AttrType.INDEX16;
         for (let i = 0; i < 8; i++) {
             vat[i][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+            vat[i][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGB };
+            vat[i][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
         }
 
         const chunkOffset = uncompDv.getUint32(0x68);
@@ -367,11 +364,11 @@ class SFASceneDesc implements Viewer.SceneDesc {
         }
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: new ArrayBufferSlice(verts.buffer), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
-        vtxArrays[GX.Attr.CLR0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.CLR0) };
+        vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
+        vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.CLR0) };
         vtxArrays[GX.Attr.TEX0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.TEX0) };
 
-        const renderer = new SFARenderer(device, verts, vtxArrays, vcd, vat, displayList);
+        const renderer = new SFARenderer(device, vtxArrays, vcd, vat, displayList);
         
         return renderer;
     }
