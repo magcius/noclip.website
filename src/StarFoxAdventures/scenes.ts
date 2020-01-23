@@ -5,6 +5,7 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import * as GX_Material from '../gx/gx_material';
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
 import { hexzero, nArray } from '../util';
 import * as GX from '../gx/gx_enum';
@@ -23,67 +24,15 @@ class ModelInstance {
     materialHelper: GXMaterialHelperGfx;
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
-        const gxMaterial: GX_Material.GXMaterial = {
-            name: "sfa-material",
-            cullMode: GX.CullMode.NONE,
-            lightChannels: [],
-            texGens: [],
-            tevStages: [
-                {
-                    colorInA: GX.CombineColorInput.C0,
-                    colorInB: GX.CombineColorInput.RASC,
-                    colorInC: GX.CombineColorInput.RASC,
-                    colorInD: GX.CombineColorInput.CPREV,
-                    colorOp: GX.TevOp.ADD,
-                    colorScale: GX.TevScale.SCALE_1,
-                    colorRegId: GX.Register.REG0,
-                    colorBias: GX.TevBias.ZERO,
-                    colorClamp: false,
-                    alphaInA: GX.CombineAlphaInput.A0,
-                    alphaInB: GX.CombineAlphaInput.A0,
-                    alphaInC: GX.CombineAlphaInput.A0,
-                    alphaInD: GX.CombineAlphaInput.A0,
-                    alphaOp: GX.TevOp.ADD,
-                    alphaBias: GX.TevBias.ZERO,
-                    alphaClamp: false,
-                    alphaScale: GX.TevScale.SCALE_1,
-                    alphaRegId: GX.Register.REG0,
-                    texCoordId: GX.TexCoordID.TEXCOORD_NULL,
-                    texMap: GX.TexMapID.TEXMAP_NULL,
-                    channelId: GX.RasColorChannelID.COLOR0A0,
-                    konstColorSel: GX.KonstColorSel.KCSEL_1,
-                    konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-                    indTexStage: GX.IndTexStageID.STAGE0,
-                    indTexFormat: GX.IndTexFormat._3,
-                    indTexBiasSel: GX.IndTexBiasSel.NONE,
-                    indTexMatrix: GX.IndTexMtxID.OFF,
-                    indTexWrapS: GX.IndTexWrap.OFF,
-                    indTexWrapT: GX.IndTexWrap.OFF,
-                    indTexAddPrev: false,
-                    indTexUseOrigLOD: false,
-                },
-            ],
-            indTexStages: [],
-            alphaTest: {
-                op: GX.AlphaOp.AND,
-                compareA: GX.CompareType.ALWAYS,
-                referenceA: 0,
-                compareB: GX.CompareType.ALWAYS,
-                referenceB: 0,
-            },
-            ropInfo: {
-                blendMode: {
-                    type: GX.BlendMode.NONE,
-                    srcFactor: GX.BlendFactor.ONE,
-                    dstFactor: GX.BlendFactor.ZERO,
-                    logicOp: GX.LogicOp.COPY,
-                },
-                depthTest: true,
-                depthFunc: GX.CompareType.LESS,
-                depthWrite: true,
-            },
-        };
-        this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
+        const mb = new GXMaterialBuilder('Basic');
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
+        mb.setZMode(true, GX.CompareType.LESS, true);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
@@ -334,15 +283,15 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
 
                 const vtxArrays: GX_Array[] = [];
-                vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
-                vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.CLR0) };
+                vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+                vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
                 vtxArrays[GX.Attr.TEX0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.TEX0) };
                 console.log(`Using VCD ${JSON.stringify(vcd, null, '\t')}`);
                 try {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                     renderer.addModel(newModel);
                 } catch (e) {
-                    console.exception(e);
+                    console.error(e);
                 }
                 // renderer.addModel(new ModelInstance(vtxArrays, vcd, vat, displayList));
 
