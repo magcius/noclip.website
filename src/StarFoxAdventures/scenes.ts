@@ -31,6 +31,7 @@ class ModelInstance {
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         mb.setZMode(true, GX.CompareType.LESS, true);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEXCOORD0, GX.TexGenMatrix.IDENTITY);
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
         mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
@@ -89,11 +90,14 @@ class ModelInstance {
                 const tex = this.textures[i]!;
                 materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
                 materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
+                materialParams.m_TextureMapping[i].width = 32;
+                materialParams.m_TextureMapping[i].height = 32;
+                materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else {
-                materialParams.m_TextureMapping[i].gfxTexture = null;
-                materialParams.m_TextureMapping[i].gfxSampler = null;
+                materialParams.m_TextureMapping[i].reset();
             }
         }
+        mat4.identity(materialParams.u_TexMtx[0])
         // this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -115,7 +119,7 @@ class SFARenderer extends BasicGXRendererHelper {
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
         for (let i = 0; i < this.models.length; i++) {
             this.models[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         }
@@ -200,7 +204,7 @@ function loadTex(texData: ArrayBufferSlice): GX_Texture.Texture {
         name: `Texture`,
         width: dv.getUint16(0x0A),
         height: dv.getUint16(0x0C),
-        format: GX.TexFormat.I8, // TODO
+        format: GX.TexFormat.RGB565, // TODO
         data: texData.slice(96),
         mipCount: 1,
     };
@@ -309,6 +313,11 @@ class SFASceneDesc implements Viewer.SceneDesc {
         console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
 
+        const coordOffset = uncompDv.getUint32(96);
+        const coordCount = uncompDv.getUint16(150);
+        console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
+        const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
+
         const polyOffset = uncompDv.getUint32(0x64);
         const polyCount = uncompDv.getUint8(0xA1);
         console.log(`Loading ${polyCount} polygons from 0x${polyOffset.toString(16)}`);
@@ -359,7 +368,9 @@ class SFASceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < 8; i++) {
             vat[i][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
             vat[i][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGB };
-            vat[i][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+            for (let t = 0; t < 8; t++) {
+                vat[i][GX.Attr.TEX0 + t] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+            }
         }
 
         const chunkOffset = uncompDv.getUint32(0x68);
@@ -398,7 +409,9 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
                 vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
-                vtxArrays[GX.Attr.TEX0] = { buffer: new ArrayBufferSlice(new ArrayBuffer(0x10000)), offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.TEX0) };
+                for (let t = 0; t < 8; t++) {
+                    vtxArrays[GX.Attr.TEX0 + t] = { buffer: coordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+                }
                 console.log(`Using VCD ${JSON.stringify(vcd, null, '\t')}`);
                 try {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
