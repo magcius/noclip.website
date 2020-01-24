@@ -198,13 +198,32 @@ function loadZLB(compData: ArrayBufferSlice): ArrayBuffer {
     return pako.inflate(new Uint8Array(compData.copyToBuffer(ZLBHeader.SIZE, header.size))).buffer;
 }
 
+function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
+    const dv = data.createDataView();
+    const size = dv.getUint32(8);
+    return data.copyToBuffer(0x20, size);
+}
+
+function loadRes(data: ArrayBufferSlice): ArrayBuffer {
+    const dv = data.createDataView();
+    const magic = dv.getUint32(0);
+    switch (magic) {
+    case stringToFourCC('ZLB\0'):
+        return loadZLB(data);
+    case stringToFourCC('DIRn'):
+        return loadDIRn(data);
+    default:
+        throw Error(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
+    }
+}
+
 function loadTex(texData: ArrayBufferSlice): GX_Texture.Texture {
     const dv = texData.createDataView();
     const result = {
         name: `Texture`,
         width: dv.getUint16(0x0A),
         height: dv.getUint16(0x0C),
-        format: GX.TexFormat.RGB565, // TODO
+        format: dv.getUint8(22), // GX.TexFormat.RGB565, // TODO
         data: texData.slice(96),
         mipCount: 1,
     };
@@ -241,13 +260,17 @@ class SFASceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.id}`);
-        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
-        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
+        // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
+        // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
+        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX1.tab`);
+        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX1.bin`);
+        const tex1Tab = await dataFetcher.fetchData(`${pathBase}/TEX1.tab`);
+        const tex1Bin = await dataFetcher.fetchData(`${pathBase}/TEX1.bin`);
 
         console.log(`Creating SFA scene for ${this.id} ...`);
 
         let offs = 0;
-        const uncomp = loadZLB(sceneData);
+        const uncomp = loadRes(sceneData);
         const uncompDv = new DataView(uncomp);
 
         const modelType = uncompDv.getUint16(4);
@@ -281,7 +304,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 const newTex: any = {};
                 const binOffs = (tab & 0x00FFFFFF) * 2;
                 const compData = tex0Bin.slice(binOffs);
-                const uncompData = loadZLB(compData);
+                const uncompData = loadRes(compData);
                 newTex.data = uncompData;
                 textures.push(newTex);
             } else {
@@ -326,6 +349,10 @@ class SFASceneDesc implements Viewer.SceneDesc {
             hasNormal: boolean;
             hasColor: boolean;
             hasTexCoord: boolean[];
+            hasTex0: boolean;
+            tex0Num: number;
+            hasTex1: boolean;
+            tex1Num: number;
         }
 
         const polyTypes: PolygonType[] = [];
@@ -335,12 +362,28 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 hasNormal: false,
                 hasColor: false,
                 hasTexCoord: nArray(8, () => false),
+                hasTex0: false,
+                tex0Num: 0,
+                hasTex1: false,
+                tex1Num: 0,
             };
             console.log(`parsing polygon attributes ${i}`);
-            const unk8 = uncompDv.getUint32(offs + 8);
-            console.log(`unk8 (flag 0x1): ${unk8}`);
-            const unk14 = uncompDv.getUint32(offs + 0x14);
-            console.log(`unk14 (flag 0x2): ${unk14}`);
+            const tex0Flag = uncompDv.getUint32(offs + 8);
+            console.log(`tex0Flag: ${tex0Flag}`);
+            // if (tex0Flag == 1) {
+                // FIXME: tex0Flag doesn't seem to be present...
+                polyType.hasTex0 = true;
+                polyType.tex0Num = uncompDv.getUint32(offs + 36);
+                // TODO: @offs+40: flags, including HasTransparency.
+            // }
+            const tex1Flag = uncompDv.getUint32(offs + 0x14);
+            console.log(`tex1Flag: ${tex1Flag}`);
+            // if (tex1Flag == 1) {
+                // FIXME: tex1Flag doesn't seem to be present...
+                polyType.hasTex1 = true;
+                polyType.tex1Num = uncompDv.getUint32(offs + 44);
+                // TODO: @offs+48: flags, including HasTransparency.
+            // }
             const attrFlags = uncompDv.getUint8(offs + 0x40);
             polyType.hasNormal = (attrFlags & 1) != 0;
             polyType.hasColor = (attrFlags & 2) != 0;
@@ -351,7 +394,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 }
             }
             const unk42 = uncompDv.getUint8(offs + 0x42);
-            console.log(`attrFlags 0x${hexzero(attrFlags, 2)}, numTexCoords ${numTexCoords}, unk42 0x${hexzero(unk42, 2)}`);
+            
+            console.log(`PolyType: ${JSON.stringify(polyType)}`);
             polyTypes.push(polyType);
             offs += 0x44;
         }
@@ -387,13 +431,11 @@ class SFASceneDesc implements Viewer.SceneDesc {
         const bits = new LowBitReader(uncompDv, bitsOffset);
         let done = false;
         let curPolyType = 0;
-        // setPolyType(curPolyType);
         while (!done) {
             const opcode = bits.get(4);
             switch (opcode) {
             case 1: // Set polygon type
                 curPolyType = bits.get(6);
-                // setPolyType(curPolyType);
                 console.log(`setting poly type ${curPolyType}`);
                 break;
             case 2: // Geometry
@@ -403,7 +445,6 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 const dlOffset = uncompDv.getUint32(offs);
                 const dlSize = uncompDv.getUint16(offs + 4);
                 displayList = new ArrayBufferSlice(uncompDv.buffer, dlOffset, dlSize);
-                // displayList = uncompDv.buffer.slice(dlOffset, dlOffset + dlSize);
                 console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
 
                 const vtxArrays: GX_Array[] = [];
@@ -412,18 +453,17 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 for (let t = 0; t < 8; t++) {
                     vtxArrays[GX.Attr.TEX0 + t] = { buffer: coordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
                 }
-                console.log(`Using VCD ${JSON.stringify(vcd, null, '\t')}`);
+
                 try {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                    newModel.setTextures(decodedTextures);
+                    newModel.setTextures([
+                        decodedTextures[polyTypes[curPolyType].tex0Num],
+                        decodedTextures[polyTypes[curPolyType].tex1Num],
+                    ]);
                     renderer.addModel(newModel);
                 } catch (e) {
                     console.error(e);
                 }
-                // renderer.addModel(new ModelInstance(vtxArrays, vcd, vat, displayList));
-
-                // XXX: finish now
-                // done = true;
                 break;
             case 3: // Set vertex attributes
                 const posDesc = bits.get(1);
