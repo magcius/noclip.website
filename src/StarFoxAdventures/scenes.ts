@@ -30,7 +30,7 @@ class ModelInstance {
         const mb = new GXMaterialBuilder('Basic');
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         mb.setZMode(true, GX.CompareType.LESS, true);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR0A0);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
         mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
@@ -253,6 +253,24 @@ function decodeTex(device: GfxDevice, tex: GX_Texture.Texture): DecodedTexture {
     return { gfxTexture, gfxSampler };
 }
 
+function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number): (DecodedTexture | null) {
+    const tabDv = tab.createDataView();
+    const tab0 = tabDv.getUint32(id * 4);
+    console.log(`tex ${id} tab 0x${hexzero(tab0, 8)}`);
+    if (tab0 & 0x80000000) {
+        // Loadable texture (?)
+        const binOffs = (tab0 & 0x00FFFFFF) * 2;
+        const compData = bin.slice(binOffs);
+        const uncompData = loadRes(compData);
+        const loaded = loadTex(new ArrayBufferSlice(uncompData));
+        const decoded = decodeTex(device, loaded);
+        return decoded;
+    } else {
+        // TODO: also seen is value 0x01000000
+        return null;
+    }
+}
+
 class SFASceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -260,10 +278,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.id}`);
-        // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
-        // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
-        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX1.tab`);
-        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX1.bin`);
+        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
+        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
         const tex1Tab = await dataFetcher.fetchData(`${pathBase}/TEX1.tab`);
         const tex1Bin = await dataFetcher.fetchData(`${pathBase}/TEX1.bin`);
 
@@ -289,39 +305,13 @@ class SFASceneDesc implements Viewer.SceneDesc {
         }
         console.log(`tex ids: ${JSON.stringify(texIds)}`);
 
-        const tex0TabDv = tex0Tab.createDataView();
-        
-        interface Texture {
-            data: ArrayBuffer;
-        }
-
-        const textures: (Texture | null)[] = [];
+        const decodedTextures0: (DecodedTexture | null)[] = [];
+        const decodedTextures1: (DecodedTexture | null)[] = [];
         for (let i = 0; i < texIds.length; i++) {
-            const tab = tex0TabDv.getUint32(texIds[i] * 4);
-            console.log(`tex ${i} tab 0x${hexzero(tab, 8)}`);
-            if (tab & 0x80000000) {
-                // Loadable texture?
-                const newTex: any = {};
-                const binOffs = (tab & 0x00FFFFFF) * 2;
-                const compData = tex0Bin.slice(binOffs);
-                const uncompData = loadRes(compData);
-                newTex.data = uncompData;
-                textures.push(newTex);
-            } else {
-                textures.push(null);
-            }
-        }
-
-        const decodedTextures: (DecodedTexture | null)[] = [];
-        for (let i = 0; i < textures.length; i++) {
-            if (textures[i]) {
-                const tex = textures[i]!;
-                const loaded = loadTex(new ArrayBufferSlice(tex.data));
-                const decoded = decodeTex(device, loaded);
-                decodedTextures.push(decoded);
-            } else {
-                decodedTextures.push(null);
-            }
+            const tex0 = loadTextureFromTable(device, tex0Tab, tex0Bin, texIds[i]);
+            const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, texIds[i]);
+            decodedTextures0.push(tex0);
+            decodedTextures1.push(tex1);
         }
 
         //////////////////////////
@@ -457,8 +447,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 try {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                     newModel.setTextures([
-                        decodedTextures[polyTypes[curPolyType].tex0Num],
-                        decodedTextures[polyTypes[curPolyType].tex1Num],
+                        decodedTextures0[polyTypes[curPolyType].tex0Num],
+                        decodedTextures1[polyTypes[curPolyType].tex1Num],
                     ]);
                     renderer.addModel(newModel);
                 } catch (e) {
