@@ -30,7 +30,7 @@ class ModelInstance {
         const mb = new GXMaterialBuilder('Basic');
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         mb.setZMode(true, GX.CompareType.LESS, true);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
         mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
@@ -272,18 +272,18 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 }
 
 class SFASceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
+    constructor(public subdir: string, public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.id}`);
-        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/TEX0.tab`);
-        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/TEX0.bin`);
-        const tex1Tab = await dataFetcher.fetchData(`${pathBase}/TEX1.tab`);
-        const tex1Bin = await dataFetcher.fetchData(`${pathBase}/TEX1.bin`);
+        const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/${this.id}`);
+        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX0.tab`);
+        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX0.bin`);
+        const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX1.tab`);
+        const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX1.bin`);
 
-        console.log(`Creating SFA scene for ${this.id} ...`);
+        console.log(`Creating SFA scene for ${this.subdir}/${this.id} ...`);
 
         let offs = 0;
         const uncomp = loadRes(sceneData);
@@ -326,19 +326,20 @@ class SFASceneDesc implements Viewer.SceneDesc {
         console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
 
-        const coordOffset = uncompDv.getUint32(96);
-        const coordCount = uncompDv.getUint16(150);
+        const coordOffset = uncompDv.getUint32(0x60);
+        const coordCount = uncompDv.getUint16(0x96);
         console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
         const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
 
         const polyOffset = uncompDv.getUint32(0x64);
         const polyCount = uncompDv.getUint8(0xA1);
-        console.log(`Loading ${polyCount} polygons from 0x${polyOffset.toString(16)}`);
+        console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
 
         interface PolygonType {
             hasNormal: boolean;
             hasColor: boolean;
             hasTexCoord: boolean[];
+            numTexCoords: number;
             hasTex0: boolean;
             tex0Num: number;
             hasTex1: boolean;
@@ -352,40 +353,43 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 hasNormal: false,
                 hasColor: false,
                 hasTexCoord: nArray(8, () => false),
+                numTexCoords: 0,
                 hasTex0: false,
-                tex0Num: 0,
+                tex0Num: -1,
                 hasTex1: false,
-                tex1Num: 0,
+                tex1Num: -1,
             };
-            console.log(`parsing polygon attributes ${i}`);
-            const tex0Flag = uncompDv.getUint32(offs + 8);
+            console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
+            const tex0Flag = uncompDv.getUint32(offs + 0x8);
             console.log(`tex0Flag: ${tex0Flag}`);
             // if (tex0Flag == 1) {
                 // FIXME: tex0Flag doesn't seem to be present...
                 polyType.hasTex0 = true;
-                polyType.tex0Num = uncompDv.getUint32(offs + 36);
-                // TODO: @offs+40: flags, including HasTransparency.
+                polyType.tex0Num = uncompDv.getUint32(offs + 0x24);
+                // TODO: @offs+0x28: flags, including HasTransparency.
             // }
             const tex1Flag = uncompDv.getUint32(offs + 0x14);
             console.log(`tex1Flag: ${tex1Flag}`);
             // if (tex1Flag == 1) {
                 // FIXME: tex1Flag doesn't seem to be present...
                 polyType.hasTex1 = true;
-                polyType.tex1Num = uncompDv.getUint32(offs + 44);
-                // TODO: @offs+48: flags, including HasTransparency.
+                polyType.tex1Num = uncompDv.getUint32(offs + 0x2C);
+                // TODO: @offs+0x30: flags, including HasTransparency.
             // }
             const attrFlags = uncompDv.getUint8(offs + 0x40);
+            console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
             polyType.hasNormal = (attrFlags & 1) != 0;
             polyType.hasColor = (attrFlags & 2) != 0;
-            const numTexCoords = uncompDv.getUint8(offs + 0x41);
+            polyType.numTexCoords = uncompDv.getUint8(offs + 0x41);
             if (attrFlags & 4) {
-                for (let j = 0; j < numTexCoords; j++) {
+                for (let j = 0; j < polyType.numTexCoords; j++) {
                     polyType.hasTexCoord[j] = true;
                 }
             }
             const unk42 = uncompDv.getUint8(offs + 0x42);
             
             console.log(`PolyType: ${JSON.stringify(polyType)}`);
+            console.log(`PolyType tex0: ${decodedTextures0[polyType.tex0Num]}, tex1: ${decodedTextures1[polyType.tex1Num]}`);
             polyTypes.push(polyType);
             offs += 0x44;
         }
@@ -445,11 +449,18 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 }
 
                 try {
+                    const polyType = polyTypes[curPolyType];
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                    newModel.setTextures([
-                        decodedTextures0[polyTypes[curPolyType].tex0Num],
-                        decodedTextures1[polyTypes[curPolyType].tex1Num],
-                    ]);
+                    if (polyType.numTexCoords == 2) {
+                        newModel.setTextures([
+                            polyType.hasTex0 ? decodedTextures0[polyType.tex0Num] : null,
+                            polyType.hasTex1 ? decodedTextures1[polyType.tex1Num] : null,
+                        ]);
+                    } else if (polyType.numTexCoords == 1) {
+                        newModel.setTextures([
+                            polyType.hasTex1 ? decodedTextures1[polyType.tex1Num] : null, // ???
+                        ]);
+                    }
                     renderer.addModel(newModel);
                 } catch (e) {
                     console.error(e);
@@ -507,7 +518,22 @@ class SFASceneDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     'Test',
-    new SFASceneDesc('mod48.zlb.bin', 'Cape Claw'),
+    new SFASceneDesc('arwing', 'mod3.zlb.bin', 'Arwing'),
+    new SFASceneDesc('arwingcity', 'mod60.zlb.bin', 'Arwing City'),
+    new SFASceneDesc('arwingtoplanet', 'mod57.zlb.bin', 'Arwing To Planet'),
+    new SFASceneDesc('bossdrakor', 'mod52.zlb.bin', 'Boss Drakor'),
+    new SFASceneDesc('bossgaldon', 'mod36.zlb.bin', 'Boss Galdon'),
+    new SFASceneDesc('bosstrex', 'mod54.zlb.bin', 'Boss T-rex'),
+    new SFASceneDesc('capeclaw', 'mod48.zlb.bin', 'Cape Claw'),
+    new SFASceneDesc('clouddungeon', 'mod25.zlb.bin', 'Cloud Dungeon'),
+    new SFASceneDesc('darkicemines', 'mod27.zlb.bin', 'Dark Ice Mines'),
+    new SFASceneDesc('desert', 'mod29.zlb.bin', 'Desert'),
+    new SFASceneDesc('dragrock', 'mod4.zlb.bin', 'Drag Rock'),
+    new SFASceneDesc('gpshrine', 'mod43.zlb.bin', 'GP Shrine'),
+    new SFASceneDesc('greatfox', 'mod64.zlb.bin', 'Great Fox'),
+    new SFASceneDesc('icemountain', 'mod31.zlb.bin', 'Ice Mountain'),
+    new SFASceneDesc('linka', 'mod65.zlb.bin', 'Link A'),
+    new SFASceneDesc('volcano', 'mod8.zlb.bin', 'Volcano'),
 ];
 
 const id = 'sfa';
