@@ -15,7 +15,6 @@ import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { KonstColorSel } from "../gx/gx_enum";
 
 export const enum LightType {
     Actor = 0,
@@ -57,7 +56,7 @@ export class dScnKy_env_light_c {
     public vrUsoUmiColor = colorNewCopy(White);
     public vrKumoColor = colorNewCopy(White);
     public vrKumoCenterColor = colorNewCopy(White);
-    public vrKasumiMaeCol = colorNewCopy(White);
+    public vrKasumiMaeColor = colorNewCopy(White);
     public fogColor = colorNewCopy(White);
 
     public actAdd = new stage_palet_info_class__DifAmb(TransparentBlack);
@@ -341,7 +340,7 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
     kankyo_color_ratio_set__Color(envLight, envLight.vrUsoUmiColor, virt0A.usoUmiColor, virt0B.usoUmiColor, ret.blendPaleAB, virt1A.usoUmiColor, virt1B.usoUmiColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
     kankyo_color_ratio_set__Color(envLight, envLight.vrKumoColor, virt0A.kumoColor, virt0B.kumoColor, ret.blendPaleAB, virt1A.kumoColor, virt1B.kumoColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
     kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCenterColor, virt0A.kumoCenterColor, virt0B.kumoCenterColor, ret.blendPaleAB, virt1A.kumoCenterColor, virt1B.kumoCenterColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKasumiMaeCol, virt0A.kasumiMaeColor, virt0B.kasumiMaeColor, ret.blendPaleAB, virt1A.kasumiMaeColor, virt1B.kasumiMaeColor, envLight.blendPsel, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrKasumiMaeColor, virt0A.kasumiMaeColor, virt0B.kasumiMaeColor, ret.blendPaleAB, virt1A.kasumiMaeColor, virt1B.kasumiMaeColor, envLight.blendPsel, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
 }
 
 function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c, C0: Color, K0: Color): void {
