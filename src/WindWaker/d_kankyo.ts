@@ -392,7 +392,7 @@ function settingTevStruct_plightcol_plus(envLight: dScnKy_env_light_c, pos: vec3
         lightPos = envLight.baseLight.pos;
         fluctuation = envLight.baseLight.fluctuation;
         lightColor = OpaqueBlack;
-        priority = true;
+        priority = false;
     }
 
     let atten = 1.0;
