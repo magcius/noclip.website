@@ -16,7 +16,7 @@ import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
 import { DeviceProgram } from '../Program';
-import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
+import { colorCopy, TransparentBlack, colorNewCopy, Color, colorToCSS } from '../Color';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
@@ -245,7 +245,7 @@ export class ZWWExtraTextures {
     @UI.dfRange(1, 15, 0.01)
     public toonTexPower: number = 15;
 
-    constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
+    constructor(device: GfxDevice, private ZAtoon: BTIData, private ZBtoonEX: BTIData) {
         ZAtoon.fillTextureMapping(this.textureMapping[0]);
         ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
         this.dynToonTex = new DynToonTex(device);
@@ -552,6 +552,76 @@ class SimpleEffectSystem {
     }
 }
 
+class HipMgr {
+    private actK0: HTMLElement;
+    private actC0: HTMLElement;
+    private bg0K0: HTMLElement;
+    private bg0C0: HTMLElement;
+    private bg1K0: HTMLElement;
+    private bg1C0: HTMLElement;
+    private bg2K0: HTMLElement;
+    private bg2C0: HTMLElement;
+    private bg3K0: HTMLElement;
+    private bg3C0: HTMLElement;
+    private vrSky: HTMLElement;
+    private vrUsoUmi: HTMLElement;
+    private vrKumo: HTMLElement;
+    private vrKumoCenter: HTMLElement;
+    private vrKasumiMae: HTMLElement;
+
+    constructor() {
+        this.actK0 = this.hip(0);
+        this.actC0 = this.hip(1);
+        this.bg0K0 = this.hip(2);
+        this.bg0C0 = this.hip(3);
+        this.bg1K0 = this.hip(4);
+        this.bg1C0 = this.hip(5);
+        this.bg2K0 = this.hip(6);
+        this.bg2C0 = this.hip(7);
+        this.bg3K0 = this.hip(6);
+        this.bg3C0 = this.hip(7);
+        this.vrSky = this.hip(8);
+        this.vrUsoUmi = this.hip(9);
+        this.vrKumo = this.hip(10);
+        this.vrKumoCenter = this.hip(11);
+        this.vrKasumiMae = this.hip(12);
+    }
+
+    private hip(y = 0): HTMLElement {
+        const sq = document.createElement('div');
+        sq.style.width = '32px';
+        sq.style.height = '32px';
+        sq.style.position = 'absolute';
+        sq.style.right = '16px';
+        sq.style.top = `${(48 * y) + 16}px`;
+        sq.style.backgroundColor = 'black';
+        document.body.appendChild(sq);
+        return sq;
+    }
+
+    private upd(sq: HTMLElement, c: Color): void {
+        sq.style.backgroundColor = colorToCSS(c, 1.0);
+    }
+
+    public update(envLight: dScnKy_env_light_c): void {
+        this.upd(this.actK0, envLight.actCol.K0);
+        this.upd(this.actC0, envLight.actCol.C0);
+        this.upd(this.bg0K0, envLight.bgCol[0].K0);
+        this.upd(this.bg0C0, envLight.bgCol[0].C0);
+        this.upd(this.bg1K0, envLight.bgCol[1].K0);
+        this.upd(this.bg1C0, envLight.bgCol[1].C0);
+        this.upd(this.bg2K0, envLight.bgCol[3].K0);
+        this.upd(this.bg2C0, envLight.bgCol[3].C0);
+        this.upd(this.bg3K0, envLight.bgCol[3].K0);
+        this.upd(this.bg3C0, envLight.bgCol[3].C0);
+        this.upd(this.vrSky, envLight.vrSkyColor);
+        this.upd(this.vrUsoUmi, envLight.vrUsoUmiColor);
+        this.upd(this.vrKumo, envLight.vrKumoColor);
+        this.upd(this.vrKumoCenter, envLight.vrKumoCenterColor);
+        this.upd(this.vrKasumiMae, envLight.vrKasumiMaeColor);
+    }
+}
+
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -569,6 +639,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
+    private hipMgr: HipMgr;
+
     constructor(public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderHelper.renderInstManager.disableSimpleMode();
@@ -578,6 +650,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const wantsSeaPlane = globals.stageName === 'sea';
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.renderCache);
+
+        this.hipMgr = new HipMgr();
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
@@ -662,6 +736,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.extraTextures.prepareToRender(device);
 
         fpcM_Management(this.globals.frameworkGlobals, this.globals, renderInstManager, viewerInput);
+
+        this.hipMgr.update(this.globals.g_env_light);
 
         const dlst = this.globals.dlst;
 

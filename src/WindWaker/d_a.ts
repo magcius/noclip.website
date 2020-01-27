@@ -536,7 +536,7 @@ class d_a_vrbox extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
         sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
         sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
         if (sum === 0) {
@@ -546,7 +546,7 @@ class d_a_vrbox extends fopAc_ac_c {
 
             // Can't use overrides because it's per-material.
             const m0 = this.model.modelMaterialData.materialData![0].material;
-            colorCopy(m0.colorConstants[0], envLight.vrKasumiMaeCol);
+            colorCopy(m0.colorConstants[0], envLight.vrKasumiMaeColor);
             const m1 = this.model.modelMaterialData.materialData![1].material;
             colorCopy(m1.colorConstants[0], envLight.vrSkyColor);
         }
@@ -600,7 +600,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
         sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
         sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
         if (sum === 0)
@@ -654,7 +654,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         this.backCloud.setColorOverride(ColorKind.K0, envLight.vrKumoColor);
 
         if (this.kasumiMae !== null) {
-            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeCol);
+            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeColor);
             this.kasumiMaeK0.r = envLight.vrKumoColor.r;
             this.kasumiMae.setColorOverride(ColorKind.K0, this.kasumiMaeK0);
         }
@@ -671,7 +671,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
         sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
         sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
         if (sum === 0)

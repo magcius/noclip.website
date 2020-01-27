@@ -15,18 +15,19 @@ import { assertExists, hexzero, leftPad, assert } from '../util';
 import { ResType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
-import { computeModelMatrixSRT, clamp, lerp } from '../MathHelpers';
+import { computeModelMatrixSRT, clamp, lerp, MathConstants } from '../MathHelpers';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
 import { fpc__ProcessName, fopAcM_prm_class, fpcSCtRq_Request, fpcLy_CurrentLayer } from './framework';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { colorNewCopy, White, TransparentBlack, colorLerp, colorNew, OpaqueBlack } from '../Color';
+import { colorNewCopy, White, TransparentBlack, colorLerp, colorNew, OpaqueBlack, colorToCSS, colorCopy } from '../Color';
 import { ColorKind } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { CombineColorInput, RasColorChannelID, TevColorChan } from '../gx/gx_enum';
 import { BMDModelInstance } from '../SuperMario64DS/render';
+import { dKyw_rain_set } from './d_kankyo_wether';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -505,10 +506,10 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         m.bindANK1(parseBCK(rarc, `bcks/ah_wait01.bck`));
     });
     // Helmarock King
-    else if (actor.name === 'Dk') fetchArchive(`Dk`).then((rarc) => {
-        const m = buildModel(rarc, `bdl/dk.bdl`);
-        m.bindANK1(parseBCK(rarc, `bcks/fly1.bck`));
-    });
+    // else if (actor.name === 'Dk') fetchArchive(`Dk`).then((rarc) => {
+    //     const m = buildModel(rarc, `bdl/dk.bdl`);
+    //     m.bindANK1(parseBCK(rarc, `bcks/fly1.bck`));
+    // });
     // Zunari
     else if (actor.name === 'Rsh1') fetchArchive(`Rsh`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/rs.bdl`);
@@ -1341,9 +1342,9 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         cc.bindTRK1(parseBRK(rarc, `brk/cc.brk`), animFrame(frameNum));
     });
     // Beedle's Shop Ship (in Tip Top Shape)
-    else if (actor.name === 'ikada_h') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp.bdl`));
+    // else if (actor.name === 'ikada_h') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp.bdl`));
     // Helmeted Beedle's Shop Ship
-    else if (actor.name === 'ikada_u') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp2.bdl`));
+    // else if (actor.name === 'ikada_u') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vtsp2.bdl`));
     // The Great Sea
     else if (actor.name === 'Svsp') fetchArchive(`IkadaH`).then((rarc) => buildModel(rarc, `bdl/vsvsp.bdl`));
     else if (actor.name === 'Vtil1') fetchArchive(`Vtil`).then((rarc) => buildModel(rarc, `bdl/vtil1.bdl`));
@@ -1391,7 +1392,11 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         buildModel(rarc, `bdlm/ywuwt00.bdl`).bindTTK1(parseBTK(rarc, `btk/ywuwt00.btk`));
     });
     else if (actor.name === 'Sarace') fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));
-    else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)));
+    else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => {
+        const m = buildModel(rarc, `bdlm/bvkumo.bdl`);
+        m.lightTevColorType = LightType.BG0;
+        m.bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`));
+    });
     // Triangle Island Statue: TODO(jstpierre): finish the submodels
     else if (actor.name === 'Doguu') fetchArchive(`Doguu`).then((rarc) => {
         const which = actor.parameters & 0xFF;
@@ -1436,7 +1441,11 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     else if (actor.name === 'Table') fetchArchive(`Table`).then((rarc) => buildModel(rarc, `bdl/ytble.bdl`));
     else if (actor.name === 'Ppos') fetchArchive(`Ppos`).then((rarc) => buildModel(rarc, `bdl/ppos.bdl`));
     else if (actor.name === 'Rflw') fetchArchive(`Rflw`).then((rarc) => buildModel(rarc, `bdl/phana.bdl`));
-    else if (actor.name === 'Skanran') fetchArchive(`Skanran`).then((rarc) => buildModel(rarc, `bdl/skanran.bdl`));
+    else if (actor.name === 'Skanran') fetchArchive(`Skanran`).then((rarc) => {
+        const m = buildModel(rarc, `bdl/skanran.bdl`);
+        m.spinZ = -0.5 * MathConstants.DEG_TO_RAD;
+        m.lightTevColorType = LightType.BG0;
+    });
     else if (actor.name === 'Stoudai') fetchArchive(`Skanran`).then((rarc) => buildModel(rarc, `bdl/stoudai.bdl`));
     // Pirate stuff
     else if (actor.name === 'Pirates') fetchArchive(`Kaizokusen`).then((rarc) => buildModel(rarc, `bdl/oba_kaizoku_a.bdl`));
@@ -1738,6 +1747,7 @@ export class BMDObjectRenderer {
     public lightTevColorType = LightType.Actor;
     public layer: number;
     public tevstr = new dKy_tevstr_c();
+    public spinZ: number = 0;
 
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
@@ -1786,6 +1796,10 @@ export class BMDObjectRenderer {
             this.modelInstance.setTexturesEnabled(globals.renderHacks.texturesEnabled);
         }
 
+        const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
+        if (this.spinZ !== 0)
+            mat4.rotateZ(this.modelMatrix, this.modelMatrix, this.spinZ * deltaTimeInFrames);
+
         if (this.parentJointMatrix !== null) {
             mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
         } else {
@@ -1799,6 +1813,8 @@ export class BMDObjectRenderer {
                 return;
         }
 
+        this.exec(viewerInput);
+
         mat4.getTranslation(scratchVec3a, this.modelMatrix);
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
@@ -1808,6 +1824,9 @@ export class BMDObjectRenderer {
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);
+    }
+
+    public exec(viewerInput: Viewer.ViewerRenderInput): void {
     }
 
     public fudgeColors(): void {
@@ -1892,7 +1911,7 @@ class animsched {
         });
     }
 
-    private wait(duration: number): Promise<void> {
+    private waitFor(duration: number): Promise<void> {
         return this.animate(duration, () => {});
     }
 
@@ -1914,9 +1933,30 @@ class animsched {
         const waitTime = startTime - this.time;
         assert(waitTime >= 0);
         if (waitTime > 0)
-            await this.wait(waitTime);
+            await this.waitFor(waitTime);
         await this.animate(duration, callback);
         this.time = startTime + duration;
+    }
+
+    public async waitUntil(startTimeInSeconds: number): Promise<void> {
+        const startTime = startTimeInSeconds * 1000;
+
+        if (this.test > -1) {
+            const thisidx = this.idx++;
+            if (thisidx === this.test) {
+                this.time = startTime;
+            } else if (thisidx < this.test) {
+                // callback(1.0);
+                return;
+            // } else {
+            //     await forever();
+            }
+        }
+
+        const waitTime = startTime - this.time;
+        assert(waitTime >= 0);
+        if (waitTime > 0)
+            await this.waitFor(waitTime);
     }
 }
 
@@ -1945,9 +1985,10 @@ class LinkThing extends BMDObjectRenderer {
         this.modelInstance.setColorOverride(ColorKind.AMB0, TransparentBlack);
 
         this.setMode(LinkMatMode.paletteify);
+    }
 
-        this.fakeK0Fade = 1.0;
-        this.fakeC0Fade = 1.0;
+    public exec(viewerInput: Viewer.ViewerRenderInput): void {
+        this.animsched.update(viewerInput.deltaTime);
     }
 
     private patchMat(inst: MaterialInstance, mode: LinkMatMode): void {
@@ -1989,8 +2030,8 @@ class LinkThing extends BMDObjectRenderer {
         matInstB.setAlphaWriteEnabled(true);
     }
 
-    public fakeK0Fade = 1.0;
-    public fakeC0Fade = 1.0;
+    public fakeK0Fade = 0.0;
+    public fakeC0Fade = 0.0;
     public fakeK0 = colorNewCopy(White);
     public fakeC0 = colorNewCopy(OpaqueBlack);
     public copyK0 = colorNewCopy(White);
@@ -2004,6 +2045,18 @@ class LinkThing extends BMDObjectRenderer {
         this.modelInstance.setColorOverride(ColorKind.C0, this.copyC0);
     }
 
+    public copy(): void {
+        this.refreshTev();
+
+        colorCopy(this.fakeK0, this.tevstr.colorK0);
+        colorCopy(this.fakeC0, this.tevstr.colorC0);
+    }
+
+    private refreshTev(): void {
+        mat4.getTranslation(scratchVec3a, this.modelMatrix);
+        settingTevStruct(this.renderer.globals, this.lightTevColorType, scratchVec3a, this.tevstr);
+    }
+
     public async animatePaletteify(test: number = -1): Promise<void> {
         this.setMode(LinkMatMode.paletteify);
 
@@ -2014,27 +2067,28 @@ class LinkThing extends BMDObjectRenderer {
         this.fakeK0Fade = 1.0;
         this.fakeC0Fade = 1.0;
 
-        const envLight = this.renderer.globals.g_env_light;
-        envLight.curTime = 220;
+        const globals = this.renderer.globals;
+        const envLight = globals.g_env_light;
 
+        envLight.curTime = 220;
+        envLight.pselIdxCurrGather = 0;
+
+        this.refreshTev();
         const fakeK0Target0 = colorNew(0.96, 0.9, 0.87);
         const fakeC0Target0 = colorNewCopy(this.tevstr.colorC0);
 
-        console.log("AAA");
         await sch.anim(9, 2, (t) => {
             colorLerp(this.fakeK0, White, fakeK0Target0, aeanim(t));
         });
-        console.log("BBB");
         await sch.anim(12, 2, (t) => {
             colorLerp(this.fakeC0, OpaqueBlack, fakeC0Target0, aeanim(t));
         });
-        console.log("CCC");
 
         await sch.anim(38, 4, (t) => {
             envLight.curTime = lerp(220, 360, aeanim(t));
-            console.log(envLight.curTime);
         });
 
+        this.refreshTev();
         const fakeK0Target1 = colorNewCopy(this.tevstr.colorK0);
         const fakeC0Target1 = colorNewCopy(this.tevstr.colorC0);
         await sch.anim(44, 2, (t) => {
@@ -2042,6 +2096,28 @@ class LinkThing extends BMDObjectRenderer {
         });
         await sch.anim(46, 2, (t) => {
             colorLerp(this.fakeK0, fakeK0Target0, fakeK0Target1, aeanim(t));
+        });
+
+        await sch.waitUntil(48);
+        envLight.pselIdxCurrGather = 1;
+        envLight.blendPselGather = 0.0;
+
+        await sch.anim(50, 2, (t) => {
+            envLight.rainCount = lerp(0, 250, aeanim(t));
+        });
+
+        const pselOld = envLight.blendPsel;
+        envLight.blendPsel = 1.0;
+        this.refreshTev();
+        envLight.blendPsel = pselOld;
+
+        const fakeK0Target2 = colorNewCopy(this.tevstr.colorK0);
+        const fakeC0Target2 = colorNewCopy(this.tevstr.colorC0);
+        await sch.anim(57, 1, (t) => {
+            colorLerp(this.fakeC0, fakeC0Target1, fakeC0Target2, aeanim(t));
+        });
+        await sch.anim(58, 1, (t) => {
+            colorLerp(this.fakeK0, fakeK0Target1, fakeK0Target2, aeanim(t));
         });
     }
 }

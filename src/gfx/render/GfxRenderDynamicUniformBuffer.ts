@@ -55,6 +55,8 @@ export class GfxRenderDynamicUniformBuffer {
             newBuffer.set(this.shadowBufferU8, 0);
             this.shadowBufferU8 = newBuffer;
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
+
+            console.log('Resizing Shadow Buffer to', newWordCount * 4);
         }
     }
 
@@ -79,6 +81,7 @@ export class GfxRenderDynamicUniformBuffer {
                 device.destroyBuffer(this.gfxBuffer);
 
             this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+            console.log('Resizing GFX buffer to', this.currentBufferWordSize);
         }
 
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
