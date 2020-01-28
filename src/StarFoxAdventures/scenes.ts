@@ -301,18 +301,26 @@ class SFASceneDesc implements Viewer.SceneDesc {
         console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
-            texIds.push(uncompDv.getUint32(texOffset + i * 4));
+            const texIdFromFile = uncompDv.getUint32(texOffset + i * 4);
+            texIds.push(-(texIdFromFile | 0x8000)); // wtf??? based on decompilation...
         }
         console.log(`tex ids: ${JSON.stringify(texIds)}`);
 
-        const decodedTextures0: (DecodedTexture | null)[] = [];
-        const decodedTextures1: (DecodedTexture | null)[] = [];
+        const decodedTextures: (DecodedTexture | null)[] = [];
         for (let i = 0; i < texIds.length; i++) {
-            const tex0 = loadTextureFromTable(device, tex0Tab, tex0Bin, texIds[i]);
-            const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, texIds[i]);
-            decodedTextures0.push(tex0);
-            decodedTextures1.push(tex1);
+            const entryNum = (-texIds[i] & 0x7FFF);
+            const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, entryNum);
+            decodedTextures.push(tex1);
         }
+
+        // const decodedTextures0: (DecodedTexture | null)[] = [];
+        // const decodedTextures1: (DecodedTexture | null)[] = [];
+        // for (let i = 0; i < texIds.length; i++) {
+        //     const tex0 = loadTextureFromTable(device, tex0Tab, tex0Bin, texIds[i]);
+        //     const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, texIds[i]);
+        //     decodedTextures0.push(tex0);
+        //     decodedTextures1.push(tex1);
+        // }
 
         //////////////////////////
 
@@ -389,7 +397,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
             const unk42 = uncompDv.getUint8(offs + 0x42);
             
             console.log(`PolyType: ${JSON.stringify(polyType)}`);
-            console.log(`PolyType tex0: ${decodedTextures0[polyType.tex0Num]}, tex1: ${decodedTextures1[polyType.tex1Num]}`);
+            console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
             polyTypes.push(polyType);
             offs += 0x44;
         }
@@ -453,12 +461,12 @@ class SFASceneDesc implements Viewer.SceneDesc {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                     if (polyType.numTexCoords == 2) {
                         newModel.setTextures([
-                            polyType.hasTex0 ? decodedTextures0[polyType.tex0Num] : null,
-                            polyType.hasTex1 ? decodedTextures1[polyType.tex1Num] : null,
+                            polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null,
+                            polyType.hasTex1 ? decodedTextures[polyType.tex1Num] : null,
                         ]);
                     } else if (polyType.numTexCoords == 1) {
                         newModel.setTextures([
-                            polyType.hasTex1 ? decodedTextures1[polyType.tex1Num] : null, // ???
+                            polyType.hasTex1 ? decodedTextures[polyType.tex1Num] : null, // ???
                         ]);
                     }
                     renderer.addModel(newModel);
