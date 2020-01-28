@@ -138,7 +138,9 @@ export class J3DTexRegAnm {
 export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         if (materialInstance.colorCalc[entry.colorKind])
             (materialInstance.colorCalc[entry.colorKind] as J3DTexRegAnm).set(frameCtrl, entry);
         else
@@ -149,7 +151,9 @@ export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1,
 export function removeTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = assertExists(modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName));
+        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
+        if (materialInstance === undefined)
+            continue;
         materialInstance.colorCalc[entry.colorKind] = null;
     }
 }
