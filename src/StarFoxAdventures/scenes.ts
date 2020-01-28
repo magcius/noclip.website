@@ -466,7 +466,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
                         ]);
                     } else if (polyType.numTexCoords == 1) {
                         newModel.setTextures([
-                            polyType.hasTex1 ? decodedTextures[polyType.tex1Num] : null, // ???
+                            polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null, // ???
                         ]);
                     }
                     renderer.addModel(newModel);
