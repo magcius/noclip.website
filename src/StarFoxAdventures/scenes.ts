@@ -381,7 +381,8 @@ class SFASceneDesc implements Viewer.SceneDesc {
             // if (tex1Flag == 1) {
                 // FIXME: tex1Flag doesn't seem to be present...
                 polyType.hasTex1 = true;
-                polyType.tex1Num = uncompDv.getUint32(offs + 0x2C);
+                //polyType.tex1Num = uncompDv.getUint32(offs + 0x2C);
+                polyType.tex1Num = uncompDv.getUint32(offs + 0x34); // According to decompilation
                 // TODO: @offs+0x30: flags, including HasTransparency.
             // }
             const attrFlags = uncompDv.getUint8(offs + 0x40);
