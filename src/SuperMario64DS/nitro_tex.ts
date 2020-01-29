@@ -209,7 +209,7 @@ function readTexture_A5I3(width: number, height: number, texData: ArrayBufferSli
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const texBlock = texView.getUint8(srcOffs++);
-            const palIdx = (texBlock & 0x03) << 1;
+            const palIdx = (texBlock & 0x07) << 1;
             const alpha = texBlock >>> 3;
             const p = palView.getUint16(palIdx, true);
             const dstOffs = 4 * ((y * width) + x);
