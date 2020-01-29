@@ -1,6 +1,6 @@
 ﻿import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D";
-import { mat4, mat2d } from "gl-matrix";
+import { mat4, mat2d, mat2 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
 
@@ -8,14 +8,23 @@ export interface MPHbin {
     models: MDL0Model[];
     tex0: TEX0 | null;
     mphTex: MPHTexture;
+    meshs: MPHMesh[];
+    mtx_shmat: number;
 }
 
-export interface MPHPal {
+interface MPHMesh {
+    matID: number;
+    shapeID: number;
+}
+
+interface MPHPal {
     pal: ArrayBufferSlice;
 }
 
-export interface MPHTex {
+interface MPHTex {
     tex: ArrayBufferSlice;
+    width: number;
+    height: number;
 }
 
 export interface MPHTexture {
@@ -23,43 +32,66 @@ export interface MPHTexture {
     texs: MPHTex[];
 }
 
-function parseMaterial(buffer: ArrayBufferSlice): MDL0Material {
+function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const view = buffer.createDataView();
 
     const name = readString(buffer, 0x00, 0x40, true);
 
     const cullMode = view.getUint8(0x41);
-    const alpha = view.getUint16(0x42, true) * 0x10;
+    const alpha = view.getInt8(0x42);
+
     const palID = view.getUint16(0x44, true);
-    let palletID;
-    if (palID === 0xFFFF) {
-        palletID = 0;
+    let palletIndex;
+    if (palID == 0xFFFF) {
+        palletIndex = 0;
     } else {
-        palletID = palID;
+        palletIndex = palID;
     }
     const texID = view.getUint16(0x46, true);
-    let textureID;
-    if (palID === 0xFFFF) {
-        textureID = 0;
+    let textureIndex;
+    if (texID == 0xFFFF) {
+        textureIndex = 0;
     } else {
-        textureID = texID;
+        textureIndex = texID;
     }    
 
-    const texParams = view.getUint32(0x44, true);
-    
-    //const polyAttribs = 0xFF;
+    const texParams = view.getUint16(0x48, true);
     const polyAttribs = view.getUint32(0x58, true);
 
-    const origWidth = view.getUint16(0x74, true);
-    const origHeight = view.getUint16(0x78, true);
+    const texScaleS = view.getInt16(0x64, true);
+    const texScaleT = view.getInt16(0x68, true);
 
-    const texScaleS = 1 / origWidth;
-    const texScaleT = 1 / origHeight;
+    const scaleWidth = view.getInt16(0x74, true);
+    const scaleHeight = view.getInt16(0x78, true);
+    const rot_Z = view.getInt16(0x7C, true);
 
+    //const mat44 = mat4.create();
+
+
+
+    //function setup_texcoord_matrix(dst: mat4, scale_s:number, scale_t:number, rot_z:number, scale_width:number, scale_height:number, width:number, height:number) {
+    //    const scaled_width = width * scaleWidth;
+    //    const scaled_height = height * scaleHeight;
+
+    //    if (rot_z) {
+
+    //    } else {
+
+    //    }
+    //}
+
+
+    const m00 = 1 / texs[textureIndex].width;
+    const m01 = 0;
+    const m10 = 0;
+    const m11 = 1 / texs[textureIndex].height;
+    const tx = 0;
+    const ty = 0;
     const texMatrix = mat2d.create();
+    mat2d.set(texMatrix, m00, m01, m10, m11, tx, ty);
 
-    const textureName = `texture_${textureID}`; 
-    const paletteName = `pallet_${palletID}`;
+    const textureName = `texture_${textureIndex}`; 
+    const paletteName = `pallet_${palletIndex}`;
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -89,6 +121,15 @@ function parseNode(buffer: ArrayBufferSlice): MDL0Node {
     const jointMatrix = mat4.create();
 
     return { name, jointMatrix, };
+}
+
+function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
+    const view = buffer.createDataView();
+
+    const matID = view.getUint16(0x00, true);
+    const shapeID = view.getUint16(0x02, true);
+
+    return { matID, shapeID }
 }
 
 function parsePallet(buffer: ArrayBufferSlice, PalBuffer: ArrayBufferSlice, index: number): TEX0Palette {
@@ -139,15 +180,15 @@ function parseTexture(buffer: ArrayBufferSlice, TexBuffer: ArrayBufferSlice, ind
             case 1: 
                 return Format.Tex_Palette16;  // 4Bpp      1      3
             case 2:
-                return Format.Tex_Palette256; // 8Bpp      2      7
+                return Format.Tex_Palette256; // 8Bpp      2      4
             case 3:
                 return Format.Tex_CMPR_4x4;   // 4x4       3      5
             case 4:
-                return Format.Tex_A5I3;       // A5I3      4      1
+                return Format.Tex_A5I3;       // A5I3      4      6
             case 5:
-                return Format.Tex_Direct      // 16Bpp     5      4
+                return Format.Tex_Direct      // 16Bpp     5      7
             case 6:
-                Format.Tex_A3I5;              // A3I5      6      6
+                return Format.Tex_A3I5;       // A3I5      6      1
             default:
                 return Format.Tex_None;
         }
@@ -170,7 +211,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const unk_0x1E = view.getInt8(0x1E);
     const unk_0x1F = view.getInt8(0x1F);
     const unk_0x20 = view.getUint32(0x20, true);
-    const unk_0x24 = view.getUint32(0x24, true);
+    const meshOffset = view.getUint32(0x24, true);
     const textureCount = view.getUint16(0x28, true);
     const unk_0x2A = view.getUint16(0x2A, true);
     const textureOffset = view.getUint32(0x2C, true);
@@ -191,25 +232,23 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const meshCount = view.getUint16(0x60, true);
     const matrixCount = view.getUint16(0x62, true);
 
-    // Material
-    const materials: MDL0Material[] = [];
-    for (let i = 0; i < materialCount; i++) {
-        const matOffs = i * 0x84 + materialOffset;
-        materials.push( parseMaterial(buffer.slice(matOffs)) );
-    }
 
-    // Dlist
-    const shapes: MDL0Shape[] = [];
+    // Mesh
+    const meshs: MPHMesh[] = [];
     for (let i = 0; i < meshCount; i++) {
-        const shapeOffs = i * 0x20 + shapeOffset;
-        shapes.push( parseShape(buffer.slice(shapeOffs), buffer, i) );
+        const meshOffs = i * 0x04 + meshOffset;
+        meshs.push( parseMesh(buffer.slice(meshOffs)) );
     }
 
-    // Node
-    const nodes: MDL0Node[] = [];
-    for (var i = 0; i < nodeCount; i++) {
-        const nodeOffs = i * 0xF0 + nodeOffset;
-        nodes.push( parseNode(buffer.slice(nodeOffs)) );
+    // MPH_Texture
+    const texs: MPHTex[] = [];
+    for (let i = 0; i < textureCount; i++) {
+        const texDataStart = i * 0x28 + textureOffset;
+        const texDataEnd = texDataStart + 0x28;
+        const tex = buffer.slice(texDataStart, texDataEnd);
+        const width = view.getInt16(texDataStart+0x2, true);
+        const height = view.getInt16(texDataStart + 0x4, true);
+        texs.push({ tex, width, height });
     }
 
     // MPH_Pallet
@@ -221,15 +260,27 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         pals.push({ pal });
     }
 
-    // MPH_Texture
-    const texs: MPHTex[] = [];
-    for (let i = 0; i < textureCount; i++) {
-        const texDataStart = i * 0x28 + textureOffset;
-        const texDataEnd = texDataStart + 0x28;
-        const tex = buffer.slice(texDataStart, texDataEnd);
-        texs.push({ tex });
+    // Material
+    const materials: MDL0Material[] = [];
+    for (let i = 0; i < materialCount; i++) {
+        const matOffs = i * 0x84 + materialOffset;
+
+        materials.push( parseMaterial(buffer.slice(matOffs), texs) );
     }
 
+    // Dlist
+    const shapes: MDL0Shape[] = [];
+    for (let i = 0; i < meshCount; i++) {
+        const shapeOffs = i * 0x20 + shapeOffset;
+        shapes.push( parseShape(buffer.slice(shapeOffs), buffer, i) );
+    }
+
+    // Node
+    const nodes: MDL0Node[] = [];
+    for (let i = 0; i < nodeCount; i++) {
+        const nodeOffs = i * 0xF0 + nodeOffset;
+        nodes.push( parseNode(buffer.slice(nodeOffs)) );
+    }
     const mphTex = { pals, texs };
 
     let tex0: TEX0 | null = null;
@@ -241,7 +292,7 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const name = `model_0`;
     models.push({ name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
 
-    return { models, tex0, mphTex };
+    return { models, tex0, mphTex, meshs, mtx_shmat };
 }
 
 export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX0 {
