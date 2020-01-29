@@ -1,3 +1,5 @@
+import * as RDP from '../Common/N64/RDP';
+
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
@@ -17,7 +19,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, decodeCombineParams, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, TileState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -344,7 +346,7 @@ interface UVTX {
     levels: UVTX_Level[];
     cms: number;
     cmt: number;
-    combine: CombineParams;
+    combine: RDP.CombineParams;
     otherModeH: number;
     cutOutTransparent: boolean;
     // TODO: actual name
@@ -370,7 +372,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     let primitive: vec4 | undefined;
     let environment: vec4 | undefined;
     let otherModeH = 0;
-    let combine: CombineParams | undefined;
+    let combine: RDP.CombineParams | undefined;
 
     let setTextureImageCount = 0;
     let pairedTile = -1;
@@ -397,7 +399,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             assert(on);
             textureState.set(on, tile, level, s, t);
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
-            combine = decodeCombineParams(w0, w1);
+            combine = RDP.decodeCombineParams(w0, w1);
             // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
             const len = (w0 >>> 0) & 0xFF;
@@ -1462,7 +1464,7 @@ interface DecodeMaterialResult {
     geoMode: number;
     renderMode: number;
     scaleOverride?: number;
-    combineOverride?: CombineParams;
+    combineOverride?: RDP.CombineParams;
 }
 
 const enum PilotwingsRSPFlag {
@@ -1526,21 +1528,21 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     if (rspMode & PilotwingsRSPFlag.FOG)
         geoMode |= RSP_Geometry.G_FOG;
 
-    let combineOverride: CombineParams | undefined;
+    let combineOverride: RDP.CombineParams | undefined;
     let scaleOverride = 0;
 
     if (hasTexture && (rspMode & PilotwingsRSPFlag.LIGHTING)) {
         combineOverride = {
-            c0: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
-            a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
-            c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
-            a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+            c0: { a: RDP.CCMUX.ADD_ZERO, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.MUL_ZERO, d: RDP.CCMUX.TEXEL0 },
+            a0: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.SHADE },
+            c1: { a: RDP.CCMUX.ADD_ZERO, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.MUL_ZERO, d: RDP.CCMUX.TEXEL0 },
+            a1: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.SHADE },
         };
         scaleOverride = 0x7c00 / 0x10000;
     }
 
     if (rspMode & PilotwingsRSPFlag.DECAL) {
-        // another G_TEXTURE command with the same scale as the given texture, 
+        // another G_TEXTURE command with the same scale as the given texture,
         // but setting an unknown flag: 0xbb10____
     }
 
@@ -1569,17 +1571,17 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
         if (modeIndex === 7) {
             if (hasTexture) {
                 combineOverride = {
-                    c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
-                    a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.TEXEL0 },
-                    c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
-                    a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED }
+                    c0: { a: RDP.CCMUX.TEXEL0, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.SHADE, d: RDP.CCMUX.ADD_ZERO },
+                    a0: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.TEXEL0 },
+                    c1: { a: RDP.CCMUX.ADD_ZERO, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.MUL_ZERO, d: RDP.CCMUX.COMBINED },
+                    a1: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.ADD_COMBINED }
                 };
             } else {
                 combineOverride = {
-                    c0: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.SHADE },
-                    a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
-                    c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
-                    a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
+                    c0: { a: RDP.CCMUX.ADD_ZERO, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.MUL_ZERO, d: RDP.CCMUX.SHADE },
+                    a0: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.SHADE },
+                    c1: { a: RDP.CCMUX.ADD_ZERO, b: RDP.CCMUX.ADD_ZERO, c: RDP.CCMUX.MUL_ZERO, d: RDP.CCMUX.COMBINED },
+                    a1: { a: RDP.ACMUX.ZERO, b: RDP.ACMUX.ZERO, c: RDP.ACMUX.ZERO, d: RDP.ACMUX.ADD_COMBINED },
                 };
             }
         }
@@ -1680,7 +1682,7 @@ class MaterialInstance {
             this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
             const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
             const comb = vec4.create();
-            fillCombineParams(comb, 0, chosenCombine);
+            RDP.fillCombineParams(comb, 0, chosenCombine);
             this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode, comb);
         } else {
             this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);

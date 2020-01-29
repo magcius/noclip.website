@@ -1,11 +1,10 @@
+import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
 import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt, decodeTex_I8, decodeTex_I4 } from "../Common/N64/Image";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { vec4 } from "gl-matrix";
 
 // Interpreter for N64 F3DEX microcode.
 
@@ -131,7 +130,7 @@ export class DrawCall {
     public SP_TextureState = new TextureState();
     public DP_OtherModeL: number = 0;
     public DP_OtherModeH: number = 0;
-    public DP_Combine: CombineParams;
+    public DP_Combine: RDP.CombineParams;
 
     public textureIndices: number[] = [];
 
@@ -153,7 +152,7 @@ export class RSPSharedOutput {
         }
     }
 
-    public loadVertex(v: StagingVertex, pushIndex = false): void {
+    public loadVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {
             const n = new Vertex();
             n.copy(v);
@@ -272,101 +271,6 @@ export const enum BlendParam_B {
     G_BL_A_MEM = 1,
     G_BL_1     = 2,
     G_BL_0     = 3,
-}
-
-export const enum CCMUX {
-    COMBINED    = 0,
-    TEXEL0      = 1,
-    TEXEL1      = 2,
-    PRIMITIVE   = 3,
-    SHADE       = 4,
-    ENVIRONMENT = 5,
-    ONE         = 6,
-    ADD_ZERO    = 7,
-    // param C only
-    COMBINED_A  = 7, // only for C
-    TEXEL0_A    = 8,
-    TEXEL1_A    = 9,
-    PRIMITIVE_A = 10,
-    SHADE_A     = 11,
-    ENV_A       = 12,
-    MUL_ZERO    = 15, // should really be 31
-}
-
-export const enum ACMUX {
-    ADD_COMBINED = 0,
-    TEXEL0 = 1,
-    TEXEL1 = 2,
-    PRIMITIVE = 3,
-    SHADE = 4,
-    ENVIRONMENT = 5,
-    ADD_ONE = 6,
-    ZERO = 7,
-}
-
-interface ColorCombinePass {
-    a: CCMUX;
-    b: CCMUX;
-    c: CCMUX;
-    d: CCMUX;
-}
-
-interface AlphaCombinePass {
-    a: ACMUX;
-    b: ACMUX;
-    c: ACMUX;
-    d: ACMUX;
-}
-
-export interface CombineParams {
-    c0: ColorCombinePass;
-    a0: AlphaCombinePass;
-    c1: ColorCombinePass;
-    a1: AlphaCombinePass;
-}
-
-export function decodeCombineParams(w0: number, w1: number): CombineParams {
-    // because we aren't implementing all the combine input options (notably, not noise)
-    // and the highest values are just 0, we can get away with throwing away high bits:
-    // ax,bx,dx can be 3 bits, and cx can be 4
-    const a0  = (w0 >>> 20) & 0x07;
-    const c0  = (w0 >>> 15) & 0x0f;
-    const Aa0 = (w0 >>> 12) & 0x07;
-    const Ac0 = (w0 >>> 9) & 0x07;
-    const a1  = (w0 >>> 5) & 0x07;
-    const c1  = (w0 >>> 0) & 0x0f;
-    const b0  = (w1 >>> 28) & 0x07;
-    const b1  = (w1 >>> 24) & 0x07;
-    const Aa1 = (w1 >>> 21) & 0x07;
-    const Ac1 = (w1 >>> 18) & 0x07;
-    const d0  = (w1 >>> 15) & 0x07;
-    const Ab0 = (w1 >>> 12) & 0x07;
-    const Ad0 = (w1 >>> 9) & 0x07;
-    const d1  = (w1 >>> 6) & 0x07;
-    const Ab1 = (w1 >>> 3) & 0x07;
-    const Ad1 = (w1 >>> 0) & 0x07;
-
-    // CCMUX.ONE only applies to params a and d, the others are not implemented
-    assert(b0 != CCMUX.ONE && c0 != CCMUX.ONE && b1 != CCMUX.ONE && c1 != CCMUX.ONE);
-
-    return {
-        c0: { a: a0, b: b0, c: c0, d: d0 },
-        a0: { a: Aa0, b: Ab0, c: Ac0, d: Ad0 },
-        c1: { a: a1, b: b1, c: c1, d: d1 },
-        a1: { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
-    };
-}
-
-function packParams(params: ColorCombinePass | AlphaCombinePass): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
-}
-
-export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    const cc0 = packParams(params.c0);
-    const cc1 = packParams(params.c1);
-    const ac0 = packParams(params.a0);
-    const ac1 = packParams(params.a1);
-    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
 }
 
 function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
@@ -625,7 +529,7 @@ function translateTile_RGBA32(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
-function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
     switch ((tile.fmt << 4) | tile.siz) {
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_CI4(segmentBuffers, dramAddr, dramPalAddr, tile);
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_CI8(segmentBuffers, dramAddr, dramPalAddr, tile);
@@ -796,7 +700,7 @@ export class RSPState {
             this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
-            dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
+            dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
         }

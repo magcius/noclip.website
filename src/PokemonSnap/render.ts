@@ -1,18 +1,18 @@
 import * as Viewer from '../viewer';
+import * as RDP from '../Common/N64/RDP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import {RenderData, F3DEX_Program} from '../BanjoKazooie/render'
 import { vec4, mat4 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
-import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { nArray } from '../util';
 import { TextureMapping } from '../TextureHolder';
 import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -52,7 +52,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const combParams = vec4.create();
-        F3DEX.fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
+        RDP.fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
         program.defines.set('BONE_MATRIX_COUNT', '1');
 

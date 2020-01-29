@@ -1,9 +1,10 @@
 
 import * as F3DEX from '../BanjoKazooie/f3dex';
+import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image";
+import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
 
 // Interpreter for N64 F3DEX2 microcode.
@@ -117,7 +118,7 @@ export class RSPState {
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level > 0) {
+            if (this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             }
@@ -129,12 +130,12 @@ export class RSPState {
             this.stateChanged = false;
 
             const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
-            this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
-            dc.DP_Combine = F3DEX.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
+            dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            this._flushTextures(dc);
         }
     }
 
@@ -143,9 +144,14 @@ export class RSPState {
             console.log('EXEC TRI');
         this._flushDrawCall();
 
-        this.sharedOutput.loadVertex(this.vertexCache[i0], true);
-        this.sharedOutput.loadVertex(this.vertexCache[i1], true);
-        this.sharedOutput.loadVertex(this.vertexCache[i2], true);
+        this.sharedOutput.loadVertex(this.vertexCache[i0]);
+        this.sharedOutput.loadVertex(this.vertexCache[i1]);
+        this.sharedOutput.loadVertex(this.vertexCache[i2]);
+        this.sharedOutput.indices.push(
+            this.vertexCache[i0].outputIndex,
+            this.vertexCache[i1].outputIndex,
+            this.vertexCache[i2].outputIndex,
+        );
         this.output.currentDrawCall.indexCount += 3;
     }
 
@@ -163,20 +169,13 @@ export class RSPState {
         this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
     }
 
-    public gDPLoadBlock(tileIndex: number, uls: number, ult: number, lrs: number, dxt: number): void {
+    public gDPLoadBlock(tileIndex: number, uls: number, ult: number, texels: number, dxt: number): void {
         // First, verify that we're loading the whole texture.
         assert(uls === 0 && ult === 0);
         // Verify that we're loading into LOADTILE.
         // assert(tileIndex === 7);
 
         const tile = this.DP_TileState[tileIndex];
-        // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
-        // in B-K due to hackery.
-        const numWordsTotal = lrs + 1;
-        const numWordsInLine = (1 << 11) / dxt;
-        const numPixelsInLine = (numWordsInLine * 8 * 8) / getSizBitsPerPixel(tile.siz);
-        tile.lrs = (numPixelsInLine - 1) << 2;
-        tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
 
         // Track the TMEM destination back to the originating DRAM address.
         this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
@@ -221,52 +220,52 @@ export class RSPState {
 
 const enum F3DEX2_GBI {
     // DMA
-    G_VTX = 0x01,
-    G_MODIFYVTX = 0x02,
-    G_CULLDL = 0x03,
-    G_BRANCH_Z = 0x04,
-    G_TRI1 = 0x05,
-    G_TRI2 = 0x06,
-    G_QUAD = 0x07,
-    G_LINE3D = 0x08,
+    G_VTX               = 0x01,
+    G_MODIFYVTX         = 0x02,
+    G_CULLDL            = 0x03,
+    G_BRANCH_Z          = 0x04,
+    G_TRI1              = 0x05,
+    G_TRI2              = 0x06,
+    G_QUAD              = 0x07,
+    G_LINE3D            = 0x08,
 
-    G_TEXTURE = 0xD7,
-    G_POPMTX = 0xD8,
-    G_GEOMETRYMODE = 0xD9,
-    G_MTX = 0xDA,
-    G_DL = 0xDE,
-    G_ENDDL = 0xDF,
+    G_TEXTURE           = 0xD7,
+    G_POPMTX            = 0xD8,
+    G_GEOMETRYMODE      = 0xD9,
+    G_MTX               = 0xDA,
+    G_DL                = 0xDE,
+    G_ENDDL             = 0xDF,
 
     // RDP
-    G_SETCIMG = 0xFF,
-    G_SETZIMG = 0xFE,
-    G_SETTIMG = 0xFD,
-    G_SETCOMBINE = 0xFC,
-    G_SETENVCOLOR = 0xFB,
-    G_SETPRIMCOLOR = 0xFA,
-    G_SETBLENDCOLOR = 0xF9,
-    G_SETFOGCOLOR = 0xF8,
-    G_SETFILLCOLOR = 0xF7,
-    G_FILLRECT = 0xF6,
-    G_SETTILE = 0xF5,
-    G_LOADTILE = 0xF4,
-    G_LOADBLOCK = 0xF3,
-    G_SETTILESIZE = 0xF2,
-    G_LOADTLUT = 0xF0,
-    G_RDPSETOTHERMODE = 0xEF,
-    G_SETPRIMDEPTH = 0xEE,
-    G_SETSCISSOR = 0xED,
-    G_SETCONVERT = 0xEC,
-    G_SETKEYR = 0xEB,
-    G_SETKEYFB = 0xEA,
-    G_RDPFULLSYNC = 0xE9,
-    G_RDPTILESYNC = 0xE8,
-    G_RDPPIPESYNC = 0xE7,
-    G_RDPLOADSYNC = 0xE6,
-    G_TEXRECTFLIP = 0xE5,
-    G_TEXRECT = 0xE4,
-    G_SETOTHERMODE_H = 0xE3,
-    G_SETOTHERMODE_L = 0xE2,
+    G_SETCIMG           = 0xFF,
+    G_SETZIMG           = 0xFE,
+    G_SETTIMG           = 0xFD,
+    G_SETCOMBINE        = 0xFC,
+    G_SETENVCOLOR       = 0xFB,
+    G_SETPRIMCOLOR      = 0xFA,
+    G_SETBLENDCOLOR     = 0xF9,
+    G_SETFOGCOLOR       = 0xF8,
+    G_SETFILLCOLOR      = 0xF7,
+    G_FILLRECT          = 0xF6,
+    G_SETTILE           = 0xF5,
+    G_LOADTILE          = 0xF4,
+    G_LOADBLOCK         = 0xF3,
+    G_SETTILESIZE       = 0xF2,
+    G_LOADTLUT          = 0xF0,
+    G_RDPSETOTHERMODE   = 0xEF,
+    G_SETPRIMDEPTH      = 0xEE,
+    G_SETSCISSOR        = 0xED,
+    G_SETCONVERT        = 0xEC,
+    G_SETKEYR           = 0xEB,
+    G_SETKEYFB          = 0xEA,
+    G_RDPFULLSYNC       = 0xE9,
+    G_RDPTILESYNC       = 0xE8,
+    G_RDPPIPESYNC       = 0xE7,
+    G_RDPLOADSYNC       = 0xE6,
+    G_TEXRECTFLIP       = 0xE5,
+    G_TEXRECT           = 0xE4,
+    G_SETOTHERMODE_H    = 0xE3,
+    G_SETOTHERMODE_L    = 0xE2,
 }
 
 
@@ -412,7 +411,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
                 const g = (w1 >>> 16) & 0xff;
                 const b = (w1 >>> 8) & 0xff;
                 const a = (w1 >>> 0) & 0xff;
-                state.gSPSetPrimColor(r,g,b,a)
+                state.gSPSetPrimColor(r, g, b, a);
             } break;
 
             case F3DEX2_GBI.G_SETBLENDCOLOR: {

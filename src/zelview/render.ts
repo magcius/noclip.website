@@ -1,8 +1,9 @@
 
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
+import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, CombineParams, ColorCombinePass, AlphaCombinePass, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -114,7 +115,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: CombineParams) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: RDP.CombineParams) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
@@ -178,11 +179,11 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
         ];
 
-        function generateColorCombine(c: ColorCombinePass) {
+        function generateColorCombine(c: RDP.ColorCombinePass) {
             return `((${colorInputs[c.a]} - ${colorInputs[c.b]}) * ${multInputs[c.c]} + ${colorInputs[c.d]})`;
         }
-        
-        function generateAlphaCombine(a: AlphaCombinePass) {
+
+        function generateAlphaCombine(a: RDP.AlphaCombinePass) {
             return `((${alphaInputs[a.a]} - ${alphaInputs[a.b]}) * ${alphaInputs[a.c]} + ${alphaInputs[a.d]})`;
         }
 
