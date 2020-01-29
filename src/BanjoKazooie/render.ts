@@ -607,13 +607,9 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            // TODO(jstpierre): whatever this is
-            // const s = (0x7FFF / this.drawCall.SP_TextureState.s);
-            // const t = (0x7FFF / this.drawCall.SP_TextureState.t);
-
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = 1 / (entry.width);
-            const st = 1 / (entry.height);
+            const ss = this.drawCall.SP_TextureState.s / (entry.width);
+            const st = this.drawCall.SP_TextureState.t / (entry.height);
             m[0] = ss;
             m[5] = st;
         } else {
