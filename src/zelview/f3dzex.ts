@@ -697,7 +697,7 @@ export class RSPState {
         try {
             lkup = rom.lookupAddress(mtxaddr);
         } catch (e) {
-            console.exception(e);
+            console.error(e);
             return;
         }
 
@@ -866,7 +866,7 @@ export class RSPState {
                 this.tmem[palTmem + i] = view.getUint8(lkup.offs + i);
             }
         } catch (e) {
-            console.exception(e);
+            console.error(e);
         }
 
         this.stateChanged = true;
@@ -890,7 +890,7 @@ export class RSPState {
                 this.tmem[tmemAddr + i] = view.getUint8(lkup.offs + i);
             }
         } catch (e) {
-            console.exception(e);
+            console.error(e);
         }
 
         this.stateChanged = true;
