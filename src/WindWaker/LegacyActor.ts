@@ -900,7 +900,10 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         const b = buildModel(rarc, `bdl/alwd.bdl`);
         b.lightTevColorType = LightType.BG0;
     });
-    else if (actor.name === 'Oyashi') fetchArchive(`Oyashi`).then((rarc) => buildModel(rarc, `bdl/oyashi.bdl`));
+    else if (actor.name === 'Oyashi') fetchArchive(`Oyashi`).then((rarc) => {
+        const b = buildModel(rarc, `bdl/oyashi.bdl`);
+        b.lightTevColorType = LightType.BG0;
+    });
     else if (actor.name === 'Vyasi') fetchArchive(`Vyasi`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
     // Barrels
     else if (actor.name === 'Ktarux') fetchArchive(`Ktaru_01`).then((rarc) => buildModel(rarc, `bdl/ktaru_01.bdl`));

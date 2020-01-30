@@ -12,7 +12,7 @@ import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
-import { preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
+import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 import { DisplayListRegisters } from './gx_displaylist';
 
 // TODO(jstpierre): Move somewhere better...
@@ -1146,9 +1146,7 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        const vendorInfo = device.queryVendorInfo();
-
-        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', `
+        const vert = `
 ${both}
 ${this.generateVertAttributeDefs()}
 
@@ -1178,9 +1176,9 @@ ${this.generateLightChannels()}
 ${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
-`);
+`;
 
-        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', `
+        const frag = `
 ${both}
 ${this.generateTexCoordGetters()}
 
@@ -1222,10 +1220,9 @@ ${this.generateTevStagesLastMinuteFixup()}
     t_TevOutput = TevOverflow(t_TevOutput);
 ${this.generateAlphaTest()}
     gl_FragColor = t_TevOutput;
-}
-`);
+}`;
 
-        return { preprocessedVert, preprocessedFrag };
+        return preprocessProgramObj_GLSL(device, { vert, frag });
     }
 }
 // #endregion

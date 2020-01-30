@@ -107,10 +107,15 @@ ${rest}
 `.trim();
 }
 
-export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimple {
+interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {
+    vert: string;
+    frag: string;
+}
+
+export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimpleWithOrig {
     const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', vert, defines);
     const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', frag, defines);
-    return { preprocessedVert, preprocessedFrag };
+    return { vert, frag, preprocessedVert, preprocessedFrag };
 }
 
 export interface GfxProgramObjBag {
@@ -120,7 +125,7 @@ export interface GfxProgramObjBag {
     defines?: DefineMap;
 }
 
-export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimple {
+export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimpleWithOrig {
     const defines = obj.defines !== undefined ? obj.defines : null;
     const vert = obj.both !== undefined ? obj.both + obj.vert : obj.vert;
     const frag = obj.both !== undefined ? obj.both + obj.frag : obj.frag;
