@@ -441,7 +441,7 @@ function translateTile_RGBA16(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
         truncated = true;
     }
     if (truncated)
-        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
+        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
@@ -487,7 +487,7 @@ function translateTile_I4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, 
         truncated = true;
     }
     if (truncated)
-        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
+        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
@@ -514,7 +514,7 @@ function translateTile_I8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, 
         truncated = true;
     }
     if (truncated)
-        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
+        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
