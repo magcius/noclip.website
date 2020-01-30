@@ -17,6 +17,7 @@ export const enum CCMUX {
     PRIMITIVE_A = 10,
     SHADE_A     = 11,
     ENV_A       = 12,
+    PRIM_LOD    = 14,
     MUL_ZERO    = 15, // should really be 31
 }
 

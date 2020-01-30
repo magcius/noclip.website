@@ -22,15 +22,33 @@ export const enum RSP_Geometry {
     G_CLIPPING = 1 << 23,
 }
 
+export class DrawCall extends F3DEX.DrawCall {
+    public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
+    public DP_PrimLOD = 0;
+}
+
+// same logic, just with the new type
+export class RSPOutput extends F3DEX.RSPOutput {
+    public drawCalls: DrawCall[] = [];
+
+    public currentDrawCall = new DrawCall();
+
+    public newDrawCall(firstIndex: number): DrawCall {
+        this.currentDrawCall = new DrawCall();
+        this.currentDrawCall.firstIndex = firstIndex;
+        this.drawCalls.push(this.currentDrawCall);
+        return this.currentDrawCall;
+    }
+}
+
 export class RSPState {
-    private output = new F3DEX.RSPOutput();
+    private output = new RSPOutput();
 
     private stateChanged: boolean = false;
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new F3DEX.TextureState();
-    private primColor = vec4.create();
 
     private DP_OtherModeL: number = 0;
     private DP_OtherModeH: number = 0;
@@ -40,16 +58,15 @@ export class RSPState {
     private DP_TileState = nArray(8, () => new F3DEX.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
+    private DP_primColor = vec4.create();
+    private DP_PrimLOD = 0;
+
     constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataStart: number) {
     }
 
-    public finish(): F3DEX.RSPOutput | null {
-        this._flushDrawCall();
-        if (this.output.drawCalls.length === 0) {
-            console.log("empty", this.sharedOutput)
+    public finish(): RSPOutput | null {
+        if (this.output.drawCalls.length === 0)
             return null;
-        }
-
         return this.output;
     }
 
@@ -86,7 +103,7 @@ export class RSPState {
     private _translateTileTexture(tileIndex: number): number {
         const tile = this.DP_TileState[tileIndex];
 
-        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
+        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem)) - this.dataStart;
 
         let dramPalAddr: number;
         if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
@@ -94,12 +111,12 @@ export class RSPState {
             // assert(textlut === TextureLUT.G_TT_RGBA16);
 
             const palTmem = 0x100 + (tile.palette << 4);
-            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
+            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem)) - this.dataStart;
         } else {
             dramPalAddr = 0;
         }
 
-        return this.sharedOutput.textureCache.translateTileTexture(this.segments, dramAddr - this.dataStart, dramPalAddr - this.dataStart, tile);
+        return this.sharedOutput.textureCache.translateTileTexture(this.segments, dramAddr, dramPalAddr, tile);
     }
 
     private _flushTextures(dc: F3DEX.DrawCall): void {
@@ -135,13 +152,13 @@ export class RSPState {
             dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            vec4.copy(dc.DP_PrimColor, this.DP_primColor);
+            dc.DP_PrimLOD = this.DP_PrimLOD;
             this._flushTextures(dc);
         }
     }
 
     public gSPTri(i0: number, i1: number, i2: number): void {
-        if (window.debug)
-            console.log('EXEC TRI');
         this._flushDrawCall();
 
         this.sharedOutput.loadVertex(this.vertexCache[i0]);
@@ -212,13 +229,14 @@ export class RSPState {
         }
     }
 
-    public gSPSetPrimColor(r: number, g: number, b: number, a: number) {
-        vec4.set(this.primColor, r, g, b, a);
+    public gSPSetPrimColor(lod: number, r: number, g: number, b: number, a: number) {
+        vec4.set(this.DP_primColor, r/0xFF, g/0xFF, b/0xFF, a/0xFF);
+        this.DP_PrimLOD = lod/0xFF;
         this.stateChanged = true;
     }
 }
 
-const enum F3DEX2_GBI {
+enum F3DEX2_GBI {
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,
@@ -268,16 +286,17 @@ const enum F3DEX2_GBI {
     G_SETOTHERMODE_L    = 0xE2,
 }
 
+export type dlRunner = (state: RSPState, addr: number) => void;
 
-export function runDL_F3DEX2(state: RSPState, addr: number): void {
+export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunner = runDL_F3DEX2): void {
     const view = state.segments[0].createDataView();
     for (let i = addr - state.dataStart; i < view.byteLength; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX2_GBI = w0 >>> 24;
-        // if (window.debug)
-        //     console.log(hexzero(i, 8), F3DEX2_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        if (window.debug)
+            console.log(hexzero(i, 8), F3DEX2_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
             case F3DEX2_GBI.G_ENDDL:
@@ -356,10 +375,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             } break;
 
             case F3DEX2_GBI.G_DL: {
-                // console.log("skipping DL", hexzero(i + state.dataStart))
-                // return;
-                const endEarly = (w0 >>> 16) & 0xFF;
-                if (endEarly === 1)
+                subDLHandler(state, w1);
+                if ((w0 >>> 16) & 0xFF)
                     return;
             } break;
 
@@ -407,18 +424,20 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             } break;
 
             case F3DEX2_GBI.G_SETPRIMCOLOR: {
-                const r = (w1 >>> 24) & 0xff;
-                const g = (w1 >>> 16) & 0xff;
-                const b = (w1 >>> 8) & 0xff;
-                const a = (w1 >>> 0) & 0xff;
-                state.gSPSetPrimColor(r, g, b, a);
+                const lod = (w0 >>> 0) & 0xFF;
+                const r = (w1 >>> 24) & 0xFF;
+                const g = (w1 >>> 16) & 0xFF;
+                const b = (w1 >>> 8) & 0xFF;
+                const a = (w1 >>> 0) & 0xFF;
+                state.gSPSetPrimColor(lod, r, g, b, a);
             } break;
 
             case F3DEX2_GBI.G_SETBLENDCOLOR: {
-                const r = (w1 >>> 24) & 0xff;
-                const g = (w1 >>> 16) & 0xff;
-                const b = (w1 >>> 8) & 0xff;
-                const a = (w1 >>> 0) & 0xff;
+                const r = (w1 >>> 24) & 0xFF;
+                const g = (w1 >>> 16) & 0xFF;
+                const b = (w1 >>> 8) & 0xFF;
+                const a = (w1 >>> 0) & 0xFF;
+                //state.gSPSetBlendColor(r, g, b, a);
             } break;
 
             case F3DEX2_GBI.G_CULLDL:

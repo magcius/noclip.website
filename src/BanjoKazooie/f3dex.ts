@@ -159,8 +159,6 @@ export class RSPSharedOutput {
             this.vertices.push(n);
             v.outputIndex = this.vertices.length - 1;
         }
-        if (pushIndex)
-            this.indices.push(v.outputIndex);
     }
 }
 
@@ -431,13 +429,19 @@ function translateTile_RGBA16(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
 
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    // assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    // assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-    if (tile.masks !== 0 && (1 << tile.masks) !== tileW)
+    if (tile.shiftt !== 0)
+        console.warn("ignoring texture LOD shift"); // one pokemon snap texture
+    let truncated = false;
+    if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
         tileW = (1 << tile.masks);
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH)
+        truncated = true;
+    }
+    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
         tileH = (1 << tile.maskt);
+        truncated = true;
+    }
+    if (truncated)
+        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
@@ -473,13 +477,17 @@ function translateTile_I4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, 
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
     assert(tile.shiftt === 0); // G_TX_NOLOD
+    let truncated = false;
     if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
         tileW = (1 << tile.masks);
+        truncated = true;
     }
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH)
+    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
         tileH = (1 << tile.maskt);
-    // assert(tile.masks === 0 || (1 << tile.masks) === tileW, `s ${tile.masks} ${tileW} ${tile.cms}`);
-    // assert(tile.maskt === 0 || (1 << tile.maskt) === tileH,`t ${tile.maskt} ${tileH} ${tile.cmt}`);
+        truncated = true;
+    }
+    if (truncated)
+        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
@@ -496,14 +504,17 @@ function translateTile_I8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, 
     // TODO(jstpierre): Support more tile parameters
     assert(tile.shifts === 0); // G_TX_NOLOD
     assert(tile.shiftt === 0); // G_TX_NOLOD
+    let truncated = false;
     if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-        console.log("s diff", tile)
         tileW = (1 << tile.masks);
+        truncated = true;
     }
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH)
+    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
         tileH = (1 << tile.maskt);
-    // assert(tile.masks === 0 || (1 << tile.masks) === tileW, `s ${tile.masks} ${tileW} ${tile.cms}`);
-    // assert(tile.maskt === 0 || (1 << tile.maskt) === tileH,`t ${tile.maskt} ${tileH} ${tile.cmt}`);
+        truncated = true;
+    }
+    if (truncated)
+        console.warn('truncated textre', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
 
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
@@ -548,8 +559,7 @@ export class TextureCache {
 
     public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
         const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && t.dramPalAddr === dramPalAddr);
-        if (existingIndex >= 0 && this.textures) {
-            const texture = this.textures[existingIndex];
+        if (existingIndex >= 0) {
             return existingIndex;
         } else {
             const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);

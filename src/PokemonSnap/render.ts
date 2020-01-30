@@ -12,7 +12,7 @@ import { TextureMapping } from '../TextureHolder';
 import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -35,7 +35,7 @@ class DrawCallInstance {
     public envAlpha = 1;
     public visible = true;
 
-    constructor(geometryData: RenderData, private drawCall: F3DEX.DrawCall) {
+    constructor(geometryData: RenderData, private drawCall: F3DEX2.DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -76,7 +76,6 @@ class DrawCallInstance {
 
         if (this.alphaVisualizerEnabled)
             program.defines.set('USE_ALPHA_VISUALIZER', '1');
-
 
         this.program = program;
         this.gfxProgram = null;
@@ -146,13 +145,13 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 0);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
-        // this.computeTextureMatrix(texMatrixScratch, 1);
-        // offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
+        this.computeTextureMatrix(texMatrixScratch, 1);
+        offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4(comb, offs, 1,1,1,1);   // primitive color
+        offs += fillVec4v(comb, offs, this.drawCall.DP_PrimColor);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
     }
 }
@@ -162,16 +161,45 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
-export class MeshRenderer {
+export class ModelRenderer {
     private visible = true;
-    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     public modelMatrix = mat4.create();
 
     public drawCalls: DrawCallInstance[] = [];
 
-    constructor(private renderData: RenderData, rspOutput: F3DEX.RSPOutput, public isSkybox = false) {
+    constructor(private renderData: RenderData, rspOutput: F3DEX2.RSPOutput, public isSkybox = false) {
         for (let i = 0; i < rspOutput.drawCalls.length; i++)
             this.drawCalls.push(new DrawCallInstance(renderData, rspOutput.drawCalls[i]));
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].setBackfaceCullingEnabled(v);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].setTexturesEnabled(v);
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].setAlphaVisualizerEnabled(v);
+    }
+
+    public setEnvironmentAlpha(a: number): void {
+        for (let i = 0; i < this.drawCalls.length; i++)
+            this.drawCalls[i].envAlpha = a
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
