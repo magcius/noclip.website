@@ -340,7 +340,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
         const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
 
         const polyOffset = uncompDv.getUint32(0x64);
-        const polyCount = uncompDv.getUint8(0xA1);
+        const polyCount = uncompDv.getUint8(0xA2);
         console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
 
         interface PolygonType {
@@ -394,6 +394,9 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 for (let j = 0; j < polyType.numTexCoords; j++) {
                     polyType.hasTexCoord[j] = true;
                 }
+            }
+            if (polyType.numTexCoords == 1) {
+                polyType.hasTex1 = false;
             }
             const unk42 = uncompDv.getUint8(offs + 0x42);
             
