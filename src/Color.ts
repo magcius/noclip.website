@@ -1,5 +1,5 @@
 
-import { lerp } from "./MathHelpers";
+import { lerp, clamp } from "./MathHelpers";
 import { assert } from "./util";
 
 // Color utilities
@@ -29,11 +29,18 @@ export function colorScaleAndAdd(dst: Color, a: Color, b: Color, v: number) {
     dst.a = a.a + b.a * v;
 }
 
-export function colorSum(dst: Color, a: Color, b: Color) {
+export function colorAdd(dst: Color, a: Color, b: Color) {
     dst.r = a.r + b.r;
     dst.g = a.g + b.g;
     dst.b = a.b + b.b;
     dst.a = a.a + b.a;
+}
+
+export function colorClampLDR(dst: Color, a: Color) {
+    dst.r = clamp(a.r, 0.0, 1.0);
+    dst.g = clamp(a.g, 0.0, 1.0);
+    dst.b = clamp(a.b, 0.0, 1.0);
+    dst.a = clamp(a.a, 0.0, 1.0);
 }
 
 export function colorMult(dst: Color, k0: Color, k1: Color): void {

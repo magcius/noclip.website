@@ -10,6 +10,7 @@ export const enum fpc__ProcessName {
     d_s_play     = 0x0007,
     d_kankyo     = 0x0015,
     d_envse      = 0x0017,
+    d_a_sea      = 0x0028,
     d_a_ep       = 0x00BA,
     d_a_tbox     = 0x0126,
     d_a_grass    = 0x01B8,

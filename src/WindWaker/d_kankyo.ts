@@ -1,5 +1,5 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd } from "../Color";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR } from "../Color";
 import { Light, lightSetFromWorldLight } from "../gx/gx_material";
 import { vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage";
@@ -311,11 +311,11 @@ function kankyo_color_ratio_set(envLight: dScnKy_env_light_c, v0A: number, v0B: 
     return clamp((lerp(v0, v1, blend01) + add) * mul, 0.0, 1.0);
 }
 
-function kankyo_color_ratio_set__Color(envLight: dScnKy_env_light_c, dst: Color, c0A: Color, c0B: Color, blendAB: number, c1A: Color, c1B: Color, blend01: number, add: Color, ratio: number): void {
-    dst.r = kankyo_color_ratio_set(envLight, c0A.r, c0B.r, blendAB, c1A.r, c1B.r, blend01, add.r, ratio);
-    dst.g = kankyo_color_ratio_set(envLight, c0A.g, c0B.g, blendAB, c1A.g, c1B.g, blend01, add.g, ratio);
-    dst.b = kankyo_color_ratio_set(envLight, c0A.b, c0B.b, blendAB, c1A.b, c1B.b, blend01, add.b, ratio);
-    dst.a = kankyo_color_ratio_set(envLight, c0A.a, c0B.a, blendAB, c1A.a, c1B.a, blend01, add.a, ratio);
+function kankyo_color_ratio_set__Color(envLight: dScnKy_env_light_c, dst: Color, c0A: Color, c0B: Color, blendAB: number, c1A: Color, c1B: Color, blend01: number, add: Color | null, ratio: number): void {
+    dst.r = kankyo_color_ratio_set(envLight, c0A.r, c0B.r, blendAB, c1A.r, c1B.r, blend01, add !== null ? add.r : 0, ratio);
+    dst.g = kankyo_color_ratio_set(envLight, c0A.g, c0B.g, blendAB, c1A.g, c1B.g, blend01, add !== null ? add.g : 0, ratio);
+    dst.b = kankyo_color_ratio_set(envLight, c0A.b, c0B.b, blendAB, c1A.b, c1B.b, blend01, add !== null ? add.b : 0, ratio);
+    dst.a = kankyo_color_ratio_set(envLight, c0A.a, c0B.a, blendAB, c1A.a, c1B.a, blend01, add !== null ? add.a : 0, ratio);
 }
 
 const setLight_palno_ret_scratch = new setLight_palno_ret();
@@ -323,11 +323,11 @@ const setLight_palno_ret_scratch = new setLight_palno_ret();
 function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
     const ret = setLight_palno_get(setLight_palno_ret_scratch, envLight, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, envLight.actCol.C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, envLight.blendPsel, envLight.actAdd.C0, envLight.actColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.actCol.K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, envLight.blendPsel, envLight.actAdd.K0, envLight.actColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.actCol.C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, envLight.blendPsel, null, envLight.actColRatio * envLight.actColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.actCol.K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, envLight.blendPsel, null, envLight.actColRatio);
     for (let whichBG = 0; whichBG < 4; whichBG++) {
-        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.blendPsel, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
-        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.blendPsel, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
+        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.blendPsel, null, envLight.bgColRatio);
+        kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.blendPsel, null, envLight.bgColRatio);
     }
     kankyo_color_ratio_set__Color(envLight, envLight.fogColor, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.blendPsel, envLight.fogAdd, envLight.fogColRatio);
 
@@ -351,7 +351,7 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.blendPsel, envLight.actAdd.C0, envLight.actColRatio);
+    kankyo_color_ratio_set__Color(envLight, C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.blendPsel, envLight.actAdd.C0, envLight.actColRatio * envLight.actColRatio);
     kankyo_color_ratio_set__Color(envLight, K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, tevStr.blendPsel, envLight.actAdd.K0, envLight.actColRatio);
 }
 
@@ -1111,6 +1111,13 @@ export function dKy_set_vrboxkumocol_ratio(envLight: dScnKy_env_light_c, ratio: 
 export function dKy_set_vrboxcol_ratio(envLight: dScnKy_env_light_c, ratio: number): void {
     dKy_set_vrboxsoracol_ratio(envLight, ratio);
     dKy_set_vrboxkumocol_ratio(envLight, ratio);
+}
+
+export function dKy_get_seacolor(envLight: dScnKy_env_light_c, dstAmb: Color, dstDif: Color): void {
+    colorAdd(dstAmb, envLight.bgCol[1].C0, envLight.bgAdd[1].C0);
+    colorClampLDR(dstAmb, dstAmb);
+    colorAdd(dstDif, envLight.bgCol[1].K0, envLight.bgAdd[1].K0);
+    colorClampLDR(dstDif, dstDif);
 }
 
 export function dKy_change_colpat(envLight: dScnKy_env_light_c, idx: number): void {

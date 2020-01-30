@@ -286,6 +286,9 @@ function extractExtra() {
     extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_pselect_default`);
     extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_vr_box_data`);
 
+    // d_a_sea.o
+    extractSymbol(datas, dolHeader, framework, `d_a_sea.o`, `wi_prm_ocean`);
+
     const crg1 = {
         SymbolData: datas,
     };

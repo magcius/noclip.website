@@ -113,6 +113,8 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
+    // This really should be .sky[15], but we don't have multiple buffers in the render inst list...
+    public sea = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards);
     public main: dDlst_list_Set = [
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
@@ -126,6 +128,7 @@ export class dDlst_list_c {
     public reset(): void {
         this.sky[0].reset();
         this.sky[1].reset();
+        this.sea.reset();
         this.main[0].reset();
         this.main[1].reset();
         this.wetherEffect.reset();
@@ -573,7 +576,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
-        const wantsSeaPlane = globals.stageName === 'sea';
+        const wantsSeaPlane = false && globals.stageName === 'sea';
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.renderCache);
     }
@@ -723,6 +726,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        this.executeList(device, renderInstManager, skyboxPassRenderer, dlst.sea);
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
@@ -939,7 +943,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 5);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 6);
         modelCache.fetchFileData(`${pathBase}/f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
@@ -996,6 +1000,10 @@ class SceneDesc {
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
         dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
+
+        // If this is a single-room scene, then set mStayNo.
+        if (this.rooms.length === 1)
+            globals.mStayNo = Math.abs(this.rooms[0]);
 
         const isSea = this.stageDir === 'sea';
         const isFullSea = isSea && this.rooms.length > 1;

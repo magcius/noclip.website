@@ -16,6 +16,7 @@ import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
+import { d_a_sea } from "./d_a_sea";
 
 // Framework'd actors
 
@@ -717,4 +718,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_bg);
     R(d_a_vrbox);
     R(d_a_vrbox2);
+    R(d_a_sea);
 }

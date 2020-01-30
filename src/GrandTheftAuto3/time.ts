@@ -1,4 +1,4 @@
-import { Color, colorNew, colorLerp, colorNewCopy, White, colorSum } from '../Color';
+import { Color, colorNew, colorLerp, colorNewCopy, White, colorAdd } from '../Color';
 import { lerp } from '../MathHelpers';
 
 function colorNorm(r: number, g: number, b: number, a: number = 255.0): Color {
@@ -136,7 +136,7 @@ export async function parseTimeCycle(text: string, name: string) {
             water.b = waterB / 0xFF;
             water.a = waterA / 0xFF;
         } else {
-            colorSum(water, amb, dir);
+            colorAdd(water, amb, dir);
         }
         sets.push({
             amb, dir, skyTop, skyBot,
