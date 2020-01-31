@@ -50,6 +50,7 @@ import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
+import * as Scenes_MetroidPrimeHunters from './mph/mph_scenes'
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -103,6 +104,7 @@ const sceneGroups = [
     Scenes_MarioKartDS.sceneGroup,
     Scenes_NewSuperMarioBrosDS.sceneGroup,
     Scenes_SuperMario64DS.sceneGroup,
+    Scenes_MetroidPrimeHunters.sceneGroup,
     "Nintendo 64",
     Scenes_BanjoKazooie.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
