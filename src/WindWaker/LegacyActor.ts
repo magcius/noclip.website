@@ -1390,7 +1390,11 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         buildModel(rarc, `bdlm/ywuwt00.bdl`).bindTTK1(parseBTK(rarc, `btk/ywuwt00.btk`));
     });
     else if (actor.name === 'Sarace') fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));
-    else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)));
+    else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => {
+        const m = buildModel(rarc, `bdlm/bvkumo.bdl`);
+        m.bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`));
+        m.lightTevColorType = LightType.BG0;
+    });
     // Triangle Island Statue: TODO(jstpierre): finish the submodels
     else if (actor.name === 'Doguu') fetchArchive(`Doguu`).then((rarc) => {
         const which = actor.parameters & 0xFF;
