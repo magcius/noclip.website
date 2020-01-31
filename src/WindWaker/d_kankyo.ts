@@ -551,7 +551,9 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
     // TODO(jstpierre): Fog.
 }
 
-function SetBaseLight(envLight: dScnKy_env_light_c): void {
+function SetBaseLight(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
     // TODO(jstpierre): Stage lightVec.
 
     if (dKyr__sun_arrival_check(envLight)) {
@@ -586,7 +588,7 @@ function drawKankyo(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
     setSunpos(envLight, globals.cameraPosition);
-    SetBaseLight(envLight);
+    SetBaseLight(globals);
     setLight(globals, envLight);
 }
 
