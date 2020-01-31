@@ -1390,7 +1390,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         buildModel(rarc, `bdlm/ywuwt00.bdl`).bindTTK1(parseBTK(rarc, `btk/ywuwt00.btk`));
     });
     else if (actor.name === 'Sarace') fetchArchive(`Sarace`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));
-    else if (actor.name === 'Ocloud') fetchArchive(`BVkumo`).then((rarc) => {
+    else if (actor.name === 'Ocloud' || actor.name === 'Rcloud') fetchArchive(`BVkumo`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bvkumo.bdl`);
         m.bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`));
         m.lightTevColorType = LightType.BG0;
@@ -1472,7 +1472,6 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         buildModel(rarc, `bdlm/vbakh.bdl`);
         buildModel(rarc, `bdlm/vbakm.bdl`);
     });
-    else if (actor.name === 'Rcloud') fetchArchive(`BVkumo`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)))
     else if (actor.name === 'TrFlag') fetchArchive(`Trflag`).then((rarc) => buildModel(rarc, `bdl/ethata.bdl`));
     else if (actor.name === 'Piwa') fetchArchive(`Piwa`).then((rarc) => buildModel(rarc, `bdl/piwa.bdl`));
     else if (actor.name === 'Gryw00') fetchArchive(`Gryw00`).then((rarc) => buildModel(rarc, `bdlm/gryw00.bdl`));
