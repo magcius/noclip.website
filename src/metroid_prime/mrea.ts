@@ -401,6 +401,8 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         };
 
         const ropInfo: GX_Material.RopInfo = {
+            fogType: GX.FogType.NONE,
+            fogAdjEnabled: false,
             blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
             blendSrcFactor,
             blendDstFactor,
@@ -1437,6 +1439,8 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         };
 
         const ropInfo: GX_Material.RopInfo = {
+            fogType: GX.FogType.NONE,
+            fogAdjEnabled: false,
             blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
             blendSrcFactor: additiveBlend ? GX.BlendFactor.ONE :GX.BlendFactor.SRCALPHA,
             blendDstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,

@@ -658,6 +658,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const tevStageTableOffs = view.getUint32(0x5C);
     const tevSwapModeInfoOffs = view.getUint32(0x60);
     const tevSwapModeTableInfoOffset = view.getUint32(0x64);
+    const fogInfoTableOffs = view.getUint32(0x68);
     const alphaTestTableOffs = view.getUint32(0x6C);
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
@@ -827,7 +828,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             if (tevStageIndex < 0)
                 continue;
 
-            const index = j;
             const tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
 
             // const unknown0 = view.getUint8(tevStageOffs + 0x00);
@@ -948,7 +948,20 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
         const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
 
+        const fogInfoIndex = view.getUint16(materialEntryIdx + 0x144);
+        const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;
+        const fogType: GX.FogType = view.getUint8(fogInfoOffs + 0x00);
+        const fogAdjEnabled = !!view.getUint8(fogInfoOffs + 0x01);
+        const fogAdjCenter = view.getUint16(fogInfoOffs + 0x02);
+        const fogStartZ = view.getFloat32(fogInfoOffs + 0x04);
+        const fogEndZ = view.getFloat32(fogInfoOffs + 0x08);
+        const fogNearZ = view.getFloat32(fogInfoOffs + 0x0C);
+        const fogFarZ = view.getFloat32(fogInfoOffs + 0x10);
+        const fogColor = readColorU8(view, fogInfoOffs + 0x14);
+        const fogAdjTable = buffer.createTypedArray(Uint16Array, fogInfoOffs + 0x18, 10, Endianness.BIG_ENDIAN);
+
         const ropInfo: GX_Material.RopInfo = {
+            fogType, fogAdjEnabled,
             blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
             depthTest, depthFunc, depthWrite,
         };

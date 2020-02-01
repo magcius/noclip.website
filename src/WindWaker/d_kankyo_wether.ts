@@ -21,7 +21,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assertExists, assert, hexzero } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
 import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 
@@ -713,7 +713,7 @@ export class dKankyo_vrkumo_packet {
 
                 ddraw.end();
 
-                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoColor, envLight.vrKumoCenterColor, kumo.distFalloff);
+                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.vrKumoCenterCol, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
 
                 const renderInst = ddraw.makeRenderInst(device, renderInstManager);

@@ -212,6 +212,7 @@ export class ShapeInstance {
 export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
     public textureMappings: TextureMapping[];
+    public fogBlock = new GX_Material.FogBlock();
 }
 
 function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
@@ -727,6 +728,8 @@ export class MaterialInstance {
 
         for (let i = 0; i < materialInstanceState.lights.length; i++)
             materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
+
+        materialParams.u_FogBlock.copy(materialInstanceState.fogBlock);
 
         if (this.materialData.fillMaterialParamsCallback !== null)
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);

@@ -78,6 +78,8 @@ function copyIndTexStage(indStage: IndTexStage): IndTexStage {
 
 function copyRopInfo(ropInfo: RopInfo): RopInfo {
     return {
+        fogType: ropInfo.fogType,
+        fogAdjEnabled: ropInfo.fogAdjEnabled,
         blendMode: ropInfo.blendMode,
         blendSrcFactor: ropInfo.blendSrcFactor,
         blendDstFactor: ropInfo.blendDstFactor,
@@ -114,6 +116,7 @@ export class GXMaterialBuilder {
 
         this.ropInfo = {
         } as RopInfo;
+        this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
     }
@@ -296,6 +299,11 @@ export class GXMaterialBuilder {
         this.alphaTest.op = op;
         this.alphaTest.compareB = compareB;
         this.alphaTest.referenceB = referenceB / 0xFF;
+    }
+
+    public setFog(fogType: GX.FogType, fogAdjEnabled: boolean): void {
+        this.ropInfo.fogType = fogType;
+        this.ropInfo.fogAdjEnabled = fogAdjEnabled;
     }
 
     public setBlendMode(blendMode: GX.BlendMode, srcFactor: GX.BlendFactor, dstFactor: GX.BlendFactor, logicOp: GX.LogicOp = GX.LogicOp.CLEAR): void {

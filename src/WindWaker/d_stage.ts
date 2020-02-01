@@ -57,19 +57,19 @@ export class stage_pselect_info_class {
 }
 
 export class stage_vrbox_info_class {
-    public kumoColor = colorNewCopy(White);
-    public kumoCenterColor = colorNewCopy(White);
-    public skyColor = colorNewCopy(White);
-    public usoUmiColor = colorNewCopy(White);
-    public kasumiMaeColor = colorNewCopy(White);
+    public kumoCol = colorNewCopy(White);
+    public kumoCenterCol = colorNewCopy(White);
+    public skyCol = colorNewCopy(White);
+    public usoUmiCol = colorNewCopy(White);
+    public kasumiMaeCol = colorNewCopy(White);
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
-        colorFromRGBA8(this.kumoColor, view.getUint32(0x10));
-        colorFromRGBA8(this.kumoCenterColor, view.getUint32(0x14));
-        colorFromRGB8(this.skyColor, view.getUint32(0x18));
-        colorFromRGB8(this.usoUmiColor, view.getUint32(0x1B));
-        colorFromRGB8(this.kasumiMaeColor, view.getUint32(0x1E));
+        colorFromRGBA8(this.kumoCol, view.getUint32(0x10));
+        colorFromRGBA8(this.kumoCenterCol, view.getUint32(0x14));
+        colorFromRGB8(this.skyCol, view.getUint32(0x18));
+        colorFromRGB8(this.usoUmiCol, view.getUint32(0x1B));
+        colorFromRGB8(this.kasumiMaeCol, view.getUint32(0x1E));
         return 0x24;
     }
 }

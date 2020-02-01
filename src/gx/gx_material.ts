@@ -8,8 +8,8 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
-import { assert } from '../util';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { assert, nArray } from '../util';
+import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
 import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
@@ -45,6 +45,7 @@ export interface GXMaterial {
     useTexMtxIdx?: boolean[];
     hasPostTexMtxBlock?: boolean;
     hasLightsBlock?: boolean;
+    hasFogBlock?: boolean;
 }
 
 export class Light {
@@ -72,6 +73,35 @@ export class Light {
         vec3.copy(this.DistAtten, o.DistAtten);
         vec3.copy(this.CosAtten, o.CosAtten);
         colorCopy(this.Color, o.Color);
+    }
+}
+
+export class FogBlock {
+    public Color = colorNewCopy(TransparentBlack);
+    public A: number = 0;
+    public B: number = 0;
+    public C: number = 0;
+    public AdjTable: number[] = nArray(10, () => 0);
+    public AdjCenter: number = 0;
+
+    public reset(): void {
+        colorFromRGBA(this.Color, 0, 0, 0, 0);
+        this.A = 0;
+        this.B = 0;
+        this.C = 0;
+        for (let i = 0; i < 10; i++)
+            this.AdjTable[i] = 0;
+        this.AdjCenter = 0;
+    }
+
+    public copy(o: FogBlock): void {
+        colorCopy(this.Color, o.Color);
+        this.A = o.A;
+        this.B = o.B;
+        this.C = o.C;
+        for (let i = 0; i < 10; i++)
+            this.AdjTable[i] = o.AdjTable[i];
+        this.AdjCenter = o.AdjCenter;
     }
 }
 
@@ -158,13 +188,15 @@ export interface AlphaTest {
 }
 
 export interface RopInfo {
+    fogType: GX.FogType;
+    fogAdjEnabled: boolean;
+    depthTest: boolean;
+    depthFunc: GX.CompareType;
+    depthWrite: boolean;
     blendMode: GX.BlendMode;
     blendSrcFactor: GX.BlendFactor;
     blendDstFactor: GX.BlendFactor;
     blendLogicOp: GX.LogicOp;
-    depthTest: boolean;
-    depthFunc: GX.CompareType;
-    depthWrite: boolean;
 }
 // #endregion
 
@@ -237,7 +269,11 @@ export function materialHasLightsBlock(material: { hasLightsBlock?: boolean }): 
     return material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
 }
 
-function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean }): string {
+export function materialHasFogBlock(material: { hasFogBlock?: boolean }): boolean {
+    return material.hasFogBlock !== undefined ? material.hasFogBlock : false;
+}
+
+function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
@@ -253,6 +289,15 @@ struct Light {
     vec4 Direction;
     vec4 DistAtten;
     vec4 CosAtten;
+};
+
+struct FogBlock {
+    // A, B, C, Center
+    vec4 Param;
+    // 10 items
+    vec4 AdjTable[3];
+    // Fog color is RGB
+    vec4 Color;
 };
 
 // Expected to change with each material.
@@ -273,6 +318,9 @@ ${materialHasPostTexMtxBlock(material) ? `
 ${materialHasLightsBlock(material) ? `
     Light u_LightParams[8];
 ` : ``}
+${materialHasFogBlock(material) ? `
+    FogBlock u_FogBlock;
+` : ``}
 };
 
 // Expected to change with each shape packet.
@@ -285,14 +333,17 @@ uniform sampler2D u_Texture[8];
 }
 
 export function getMaterialParamsBlockSize(material: GXMaterial): number {
-    const hasPostTexMtxBlock = material.hasPostTexMtxBlock !== undefined ? material.hasPostTexMtxBlock : true;
-    const hasLightsBlock = material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
+    const hasPostTexMtxBlock = materialHasPostTexMtxBlock(material);
+    const hasLightsBlock = materialHasLightsBlock(material);
+    const hasFogBlock = materialHasFogBlock(material);
 
     let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*2*3 + 4*8;
     if (hasPostTexMtxBlock)
         size += 4*3*20;
     if (hasLightsBlock)
         size += 4*5*8;
+    if (hasFogBlock)
+        size += 4*5;
 
     return size;
 }
@@ -982,12 +1033,12 @@ ${this.generateLightAttnFn(chan, lightName)}
         const ref = this.generateFloat(reference);
         switch (compare) {
         case GX.CompareType.NEVER:   return `false`;
-        case GX.CompareType.LESS:    return `t_TevOutput.a <  ${ref}`;
-        case GX.CompareType.EQUAL:   return `t_TevOutput.a == ${ref}`;
-        case GX.CompareType.LEQUAL:  return `t_TevOutput.a <= ${ref}`;
-        case GX.CompareType.GREATER: return `t_TevOutput.a >  ${ref}`;
-        case GX.CompareType.NEQUAL:  return `t_TevOutput.a != ${ref}`;
-        case GX.CompareType.GEQUAL:  return `t_TevOutput.a >= ${ref}`;
+        case GX.CompareType.LESS:    return `t_PixelOut.a <  ${ref}`;
+        case GX.CompareType.EQUAL:   return `t_PixelOut.a == ${ref}`;
+        case GX.CompareType.LEQUAL:  return `t_PixelOut.a <= ${ref}`;
+        case GX.CompareType.GREATER: return `t_PixelOut.a >  ${ref}`;
+        case GX.CompareType.NEQUAL:  return `t_PixelOut.a != ${ref}`;
+        case GX.CompareType.GEQUAL:  return `t_PixelOut.a >= ${ref}`;
         case GX.CompareType.ALWAYS:  return `true`;
         }
     }
@@ -1011,6 +1062,77 @@ ${this.generateLightAttnFn(chan, lightName)}
     bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
         discard;`;
+    }
+
+    private generateFogZCoordRaw() {
+        const isDepthReversed = IS_DEPTH_REVERSED;
+        if (isDepthReversed)
+            return `(1.0 - gl_FragCoord.z)`;
+        else
+            return `gl_FragCoord.z`;
+    }
+
+    private generateFogZCoord() {
+        const ropInfo = this.material.ropInfo;
+        const base = this.generateFogZCoordRaw();
+
+        if (ropInfo.fogType === GX.FogType.PERSP_LIN) {
+            return base;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    private generateFogBase() {
+        const ropInfo = this.material.ropInfo;
+        const proj = !!(ropInfo.fogType >>> 3);
+
+        const A = `u_FogBlock.Param.x`;
+        const B = `u_FogBlock.Param.y`;
+        const z = this.generateFogZCoord();
+
+        if (proj) {
+            // Orthographic
+            return `${A} * ${z}`;
+        } else {
+            // Perspective
+            return `${A} / (${B} - ${z})`;
+        }
+    }
+
+    private generateFogAdj(base: string) {
+        if (this.material.ropInfo.fogAdjEnabled) {
+            // TODO(jstpierre)
+            return ``;
+        } else {
+            return ``;
+        }
+    }
+
+    private generateFogFunc(base: string) {
+        const fogType = (this.material.ropInfo.fogType & 0x07);
+        if (fogType === GX.FogType.PERSP_LIN) {
+            return ``;
+        } else {
+            // TODO(jstpierre)
+            return ``;
+        }
+    }
+
+    private generateFog() {
+        const ropInfo = this.material.ropInfo;
+        if (ropInfo.fogType === GX.FogType.NONE)
+            return "";
+
+        const C = `u_FogBlock.Param.z`;
+
+        return `
+    float t_FogBase = ${this.generateFogBase()};
+${this.generateFogAdj(`t_FogBase`)}
+    float t_Fog = TevSaturate(t_FogBase - ${C});
+${this.generateFogFunc(`t_Fog`)}
+    t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_Fog);
+`;
     }
 
     private generateAttributeStorageType(fmt: GfxFormat): string {
@@ -1142,9 +1264,10 @@ ${this.generateIndTexStages()}
 ${this.generateTevStages()}
 
 ${this.generateTevStagesLastMinuteFixup()}
-    t_TevOutput = TevOverflow(t_TevOutput);
+    vec4 t_PixelOut = TevOverflow(t_TevOutput);
 ${this.generateAlphaTest()}
-    gl_FragColor = t_TevOutput;
+${this.generateFog()}
+    gl_FragColor = t_PixelOut;
 }`;
 
         return preprocessProgramObj_GLSL(device, { vert, frag });
@@ -1516,6 +1639,11 @@ export function parseIndirectStages(r: DisplayListRegisters, numInds: number): I
 }
 
 export function parseRopInfo(r: DisplayListRegisters): RopInfo {
+    // Fog state.
+    // TODO(jstpierre): Support Fog
+    const fogType = GX.FogType.NONE;
+    const fogAdjEnabled = false;
+
     // Blend mode.
     const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
     const bmboe = (cm0 >>> 0) & 0x01;
@@ -1536,7 +1664,7 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const depthWrite = !!((zm >>> 4) & 0x01);
 
     const ropInfo: RopInfo = {
-        blendMode, blendDstFactor, blendSrcFactor, blendLogicOp, depthFunc, depthTest, depthWrite,
+        fogType, fogAdjEnabled, blendMode, blendDstFactor, blendSrcFactor, blendLogicOp, depthFunc, depthTest, depthWrite,
     };
 
     return ropInfo;
@@ -1711,4 +1839,20 @@ export function lightSetDistAttn(light: Light, refDist: number, refBrightness: n
         vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
     else if (distFunc === GX.DistAttnFunction.OFF)
         vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
+}
+
+export function fogBlockSet(fog: FogBlock, type: GX.FogType, startZ: number, endZ: number, nearZ: number, farZ: number): void {
+    const proj = !!(type >>> 3);
+
+    assert(Number.isFinite(farZ));
+
+    if (proj) {
+        // Orthographic
+        // TODO(jstpierre)
+        fog.A;
+    } else {
+        fog.A = (farZ * nearZ) / ((farZ - nearZ) * (endZ - startZ));
+        fog.B = (farZ) / (farZ - nearZ);
+        fog.C = (startZ) / (endZ - startZ);
+    }
 }

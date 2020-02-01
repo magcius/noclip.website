@@ -15,7 +15,7 @@ import { ViewerRenderInput } from "../viewer";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { GXMaterialHelperGfx, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { dKy_get_seacolor } from './d_kankyo';
+import { dKy_get_seacolor, dKy_GxFog_set, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
 
 const scratchVec2a = vec2.create();
@@ -263,6 +263,7 @@ export class d_a_sea extends fopAc_ac_c {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
         mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ZERO, GX.BlendFactor.ZERO);
+        mb.setFog(GX.FogType.PERSP_LIN, true);
 
         mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
         mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_K1);
@@ -506,6 +507,7 @@ export class d_a_sea extends fopAc_ac_c {
         this.texWyurayura.fillTextureMapping(materialParams.m_TextureMapping[1]);
         this.texSeaBTI.fillTextureMapping(materialParams.m_TextureMapping[2]);
         materialParams.m_TextureMapping[2].lodBias = 1.0;
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
 
         const renderInst = this.ddraw.endDraw(device, renderInstManager);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -553,7 +555,7 @@ export class d_a_sea extends fopAc_ac_c {
         const waveHeightRaw = this.waterHeightMng.GetHeightPos(globals, this.playerPos[0], this.playerPos[2]);
 
         // noclip modification: Since you spend so much time "above ground", give the waves a bit more oomph when further up.
-        const waveHeightScale = lerp(1.0, 5.0, saturate(invlerp(1000.0, 5000.0, this.playerPos[1])));
+        const waveHeightScale = lerp(1.0, 2.0, saturate(invlerp(1000.0, 5000.0, this.playerPos[1])));
 
         const waveHeight = this.waveInfo.GetScale(waveHeightRaw) * this.flatInter * waveHeightScale;
 
@@ -564,9 +566,6 @@ export class d_a_sea extends fopAc_ac_c {
             this.scratchThetaZ[i] = wavePrm.thetaScaleZ * km;
             this.scratchOffsAnim[i] = MathConstants.TAU * (this.waveInfo.GetRatio(i) - 0.5);
             this.scratchHeight[i] = wavePrm.height * waveHeight;
-
-            if (i >= 1)
-                this.scratchHeight[i] = 0;
         }
 
         this.fadeTable.fill(1.0);

@@ -12,15 +12,24 @@ import { Endianness } from '../endian';
 
 import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist';
-import { parseMaterial } from '../gx/gx_material';
+import { parseMaterial, GXMaterial } from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { ColorKind, PacketParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../viewer';
 import { colorCopy, colorFromRGBA } from '../Color';
+import { dKy_GxFog_set } from './d_kankyo';
+
+function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
+    // Patch material.
+    material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+    material.ropInfo.fogAdjEnabled = true;
+    material.hasFogBlock = true;
+    return new GXMaterialHelperGfx(material);
+}
 
 function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {
     const attrFmts = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
@@ -186,19 +195,19 @@ class FlowerModel {
         displayListRegistersInitGX(matRegisters);
 
         displayListRegistersRun(matRegisters, l_matDL);
-        this.whiteMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL'));
+        this.whiteMaterial = createMaterialHelper(parseMaterial(matRegisters, 'l_matDL'));
         const whiteTex = createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
         this.whiteTextureData = new BTIData(device, cache, whiteTex);
         this.whiteTextureData.fillTextureMapping(this.whiteTextureMapping[0]);
 
         displayListRegistersRun(matRegisters, l_matDL2);
-        this.pinkMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL2'));
+        this.pinkMaterial = createMaterialHelper(parseMaterial(matRegisters, 'l_matDL2'));
         const pinkTex = createTexture(matRegisters, l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
         this.pinkTextureData = new BTIData(device, cache, pinkTex);
         this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping[0]);
 
         displayListRegistersRun(matRegisters, l_matDL3);
-        this.bessouMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL3'));
+        this.bessouMaterial = createMaterialHelper(parseMaterial(matRegisters, 'l_matDL3'));
         const bessouTexture = createTexture(matRegisters, l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
         this.bessouTextureData = new BTIData(device, cache, bessouTexture);
         this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping[0]);
@@ -387,8 +396,8 @@ export class FlowerPacket {
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.whiteTextureMapping);
             const materialParamsOffs = this.flowerModel.whiteMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -412,8 +421,8 @@ export class FlowerPacket {
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.pinkTextureMapping);
             const materialParamsOffs = this.flowerModel.pinkMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -437,8 +446,8 @@ export class FlowerPacket {
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.bessouTextureMapping);
             const materialParamsOffs = this.flowerModel.bessouMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -557,7 +566,7 @@ class TreeModel {
         // Tree material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-        this.woodMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
+        this.woodMaterial = createMaterialHelper(parseMaterial(matRegisters, 'd_tree::l_matDL'));
         const woodTexture = createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX');
         this.woodTextureData = new BTIData(device, cache, woodTexture);
         this.woodTextureData.fillTextureMapping(this.woodTextureMapping[0]);
@@ -567,7 +576,7 @@ class TreeModel {
         displayListRegistersRun(matRegisters, l_shadowMatDL);
         const shadowMat = parseMaterial(matRegisters, 'd_tree::l_shadowMatDL');
 
-        this.shadowMaterial = new GXMaterialHelperGfx(shadowMat);
+        this.shadowMaterial = createMaterialHelper(shadowMat);
         const shadowTexture = createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX');
         this.shadowTextureData = new BTIData(device, cache, shadowTexture);
         this.shadowTextureData.fillTextureMapping(this.shadowTextureMapping[0]);
@@ -781,8 +790,8 @@ export class TreePacket {
             // Set transparent
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
             this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
@@ -804,8 +813,8 @@ export class TreePacket {
         template = renderInstManager.pushTemplateRenderInst();
         {
             const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
             this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
@@ -908,13 +917,13 @@ class GrassModel {
         displayListRegistersInitGX(matRegisters);
 
         displayListRegistersRun(matRegisters, l_matDL);
-        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_matDL'));
+        this.grassMaterial = createMaterialHelper(parseMaterial(matRegisters, 'd_grass::l_matDL'));
         const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
         this.grassTextureData = new BTIData(device, cache, grassTexture);
         this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
 
         displayListRegistersRun(matRegisters, l_Vmori_matDL);
-        this.vmoriMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
+        this.vmoriMaterial = createMaterialHelper(parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
         const vmoriTexture = createTexture(matRegisters, l_K_kusa_00TEX, 'l_K_kusa_00TEX');
         this.vmoriTextureData = new BTIData(device, cache, vmoriTexture);
         this.vmoriTextureData.fillTextureMapping(this.vmoriTextureMapping);
@@ -1074,8 +1083,8 @@ export class GrassPacket {
         {
             template.setSamplerBindingsFromTextureMappings(this.textureMapping);
             const materialParamsOffs = this.material.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             this.material.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
             this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 

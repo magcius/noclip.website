@@ -235,6 +235,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         };
 
         const ropInfo: GX_Material.RopInfo = {
+            fogType: GX.FogType.NONE,
+            fogAdjEnabled: false,
             blendMode: GX.BlendMode.NONE,
             blendSrcFactor: GX.BlendFactor.ONE,
             blendDstFactor: GX.BlendFactor.ONE,

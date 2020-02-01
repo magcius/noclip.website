@@ -1,13 +1,13 @@
 
-import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR } from "../Color";
-import { Light, lightSetFromWorldLight } from "../gx/gx_material";
+import { Color, colorNewCopy, White, colorFromRGBA, TransparentBlack, OpaqueBlack, colorScaleAndAdd, colorAdd, colorClampLDR, colorCopy } from "../Color";
+import { Light, lightSetFromWorldLight, fogBlockSet, FogBlock } from "../gx/gx_material";
 import { vec3 } from "gl-matrix";
 import { stage_palet_info_class, stage_pselect_info_class, stage_envr_info_class, stage_vrbox_info_class, stage_palet_info_class__DifAmb } from "./d_stage";
 import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers";
 import { nArray, assert, arrayRemove, assertExists } from "../util";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
-import { ColorKind } from "../gx/gx_render";
+import { ColorKind, MaterialParams } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline } from "./d_kankyo_wether";
@@ -15,6 +15,7 @@ import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { FogType } from "../gx/gx_enum";
 
 export const enum LightType {
     Actor = 0,
@@ -52,12 +53,12 @@ export class dScnKy_env_light_c {
     // Color palette
     public actCol = new stage_palet_info_class__DifAmb(White);
     public bgCol = nArray(4, () => new stage_palet_info_class__DifAmb(White));
-    public vrSkyColor = colorNewCopy(White);
-    public vrUsoUmiColor = colorNewCopy(White);
-    public vrKumoColor = colorNewCopy(White);
-    public vrKumoCenterColor = colorNewCopy(White);
-    public vrKasumiMaeColor = colorNewCopy(White);
-    public fogColor = colorNewCopy(White);
+    public vrSkyCol = colorNewCopy(White);
+    public vrUsoUmiCol = colorNewCopy(White);
+    public vrKumoCol = colorNewCopy(White);
+    public vrKumoCenterCol = colorNewCopy(White);
+    public vrKasumiMaeCol = colorNewCopy(White);
+    public fogCol = colorNewCopy(White);
 
     public actAdd = new stage_palet_info_class__DifAmb(TransparentBlack);
     public bgAdd = nArray(4, () => new stage_palet_info_class__DifAmb(TransparentBlack));
@@ -71,6 +72,12 @@ export class dScnKy_env_light_c {
     public vrSoraColRatio: number = 1.0;
     public vrKumoColRatio: number = 1.0;
     public fogColRatio: number = 1.0;
+
+    public fogStartZ: number = 0.0;
+    public fogEndZ: number = 0.0;
+    public fogGlobalStartZ: number = 0.0;
+    public fogGlobalEndZ: number = 0.0;
+    public fogGlobalRatio: number = 0.0;
 
     public blendPsel: number = 1.0;
     public blendPselGather: number = -1.0;
@@ -156,7 +163,9 @@ export class dKy_tevstr_c {
     public colorC0: Color = colorNewCopy(White);
     public colorK0: Color = colorNewCopy(White);
     public colorK1: Color = colorNewCopy(White);
-    // fogColor, fogStartZ, fogEndZ
+    public fogCol: Color = colorNewCopy(White);
+    public fogStartZ: number = 0;
+    public fogEndZ: number = 0;
     public blendPsel: number = 0.0;
     // someAnimTimer
     public envrIdxCurr: number;
@@ -304,18 +313,25 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
     return dst;
 }
 
-function kankyo_color_ratio_set(envLight: dScnKy_env_light_c, v0A: number, v0B: number, blendAB: number, v1A: number, v1B: number, blend01: number, add: number, ratio: number): number {
-    const mul = ratio * envLight.allColRatio;
+function float_kankyo_color_ratio_set(v0A: number, v0B: number, blendAB: number, v1A: number, v1B: number, blend01: number, global: number, ratio: number): number {
+    const v0 = lerp(v0A, v0B, blendAB);
+    const v1 = lerp(v1A, v1B, blendAB);
+    const v = lerp(v0, v1, blend01);
+    return Math.max(0.0, lerp(v, global, ratio));
+}
+
+function kankyo_color_ratio_set(v0A: number, v0B: number, blendAB: number, v1A: number, v1B: number, blend01: number, add: number, mul: number): number {
     const v0 = lerp(v0A, v0B, blendAB);
     const v1 = lerp(v1A, v1B, blendAB);
     return clamp((lerp(v0, v1, blend01) + add) * mul, 0.0, 1.0);
 }
 
 function kankyo_color_ratio_set__Color(envLight: dScnKy_env_light_c, dst: Color, c0A: Color, c0B: Color, blendAB: number, c1A: Color, c1B: Color, blend01: number, add: Color | null, ratio: number): void {
-    dst.r = kankyo_color_ratio_set(envLight, c0A.r, c0B.r, blendAB, c1A.r, c1B.r, blend01, add !== null ? add.r : 0, ratio);
-    dst.g = kankyo_color_ratio_set(envLight, c0A.g, c0B.g, blendAB, c1A.g, c1B.g, blend01, add !== null ? add.g : 0, ratio);
-    dst.b = kankyo_color_ratio_set(envLight, c0A.b, c0B.b, blendAB, c1A.b, c1B.b, blend01, add !== null ? add.b : 0, ratio);
-    dst.a = kankyo_color_ratio_set(envLight, c0A.a, c0B.a, blendAB, c1A.a, c1B.a, blend01, add !== null ? add.a : 0, ratio);
+    const mul = ratio * envLight.allColRatio;
+    dst.r = kankyo_color_ratio_set(c0A.r, c0B.r, blendAB, c1A.r, c1B.r, blend01, add !== null ? add.r : 0, mul);
+    dst.g = kankyo_color_ratio_set(c0A.g, c0B.g, blendAB, c1A.g, c1B.g, blend01, add !== null ? add.g : 0, mul);
+    dst.b = kankyo_color_ratio_set(c0A.b, c0B.b, blendAB, c1A.b, c1B.b, blend01, add !== null ? add.b : 0, mul);
+    dst.a = kankyo_color_ratio_set(c0A.a, c0B.a, blendAB, c1A.a, c1B.a, blend01, add !== null ? add.a : 0, mul);
 }
 
 const setLight_palno_ret_scratch = new setLight_palno_ret();
@@ -329,21 +345,23 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
         kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, envLight.blendPsel, null, envLight.bgColRatio);
         kankyo_color_ratio_set__Color(envLight, envLight.bgCol[whichBG].K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, envLight.blendPsel, null, envLight.bgColRatio);
     }
-    kankyo_color_ratio_set__Color(envLight, envLight.fogColor, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.blendPsel, envLight.fogAdd, envLight.fogColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, envLight.blendPsel, envLight.fogAdd, envLight.fogColRatio);
+    envLight.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, envLight.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
+    envLight.fogEndZ = Math.max(envLight.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
 
     const virt0A = envLight.virt[ret.palePrevA.virtIdx];
     const virt0B = envLight.virt[ret.palePrevB.virtIdx];
     const virt1A = envLight.virt[ret.paleCurrA.virtIdx];
     const virt1B = envLight.virt[ret.paleCurrB.virtIdx];
 
-    kankyo_color_ratio_set__Color(envLight, envLight.vrSkyColor, virt0A.skyColor, virt0B.skyColor, ret.blendPaleAB, virt1A.skyColor, virt1B.skyColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrUsoUmiColor, virt0A.usoUmiColor, virt0B.usoUmiColor, ret.blendPaleAB, virt1A.usoUmiColor, virt1B.usoUmiColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoColor, virt0A.kumoColor, virt0B.kumoColor, ret.blendPaleAB, virt1A.kumoColor, virt1B.kumoColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCenterColor, virt0A.kumoCenterColor, virt0B.kumoCenterColor, ret.blendPaleAB, virt1A.kumoCenterColor, virt1B.kumoCenterColor, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
-    kankyo_color_ratio_set__Color(envLight, envLight.vrKasumiMaeColor, virt0A.kasumiMaeColor, virt0B.kasumiMaeColor, ret.blendPaleAB, virt1A.kasumiMaeColor, virt1B.kasumiMaeColor, envLight.blendPsel, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrSkyCol, virt0A.skyCol, virt0B.skyCol, ret.blendPaleAB, virt1A.skyCol, virt1B.skyCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrUsoUmiCol, virt0A.usoUmiCol, virt0B.usoUmiCol, ret.blendPaleAB, virt1A.usoUmiCol, virt1B.usoUmiCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCol, virt0A.kumoCol, virt0B.kumoCol, ret.blendPaleAB, virt1A.kumoCol, virt1B.kumoCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrKumoCenterCol, virt0A.kumoCenterCol, virt0B.kumoCenterCol, ret.blendPaleAB, virt1A.kumoCenterCol, virt1B.kumoCenterCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrKumoColRatio);
+    kankyo_color_ratio_set__Color(envLight, envLight.vrKasumiMaeCol, virt0A.kasumiMaeCol, virt0B.kasumiMaeCol, ret.blendPaleAB, virt1A.kasumiMaeCol, virt1B.kasumiMaeCol, envLight.blendPsel, envLight.vrKasumiAdd, envLight.vrSoraColRatio);
 }
 
-function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c, C0: Color, K0: Color): void {
+function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c): void {
     tevStr.pselIdxPrev = envLight.pselIdxPrev;
     tevStr.pselIdxCurr = envLight.pselIdxCurr;
     if (tevStr.pselIdxPrev !== tevStr.pselIdxCurr)
@@ -351,11 +369,15 @@ function setLight_actor(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr:
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, C0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.blendPsel, envLight.actAdd.C0, envLight.actColRatio * envLight.actColRatio);
-    kankyo_color_ratio_set__Color(envLight, K0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, tevStr.blendPsel, envLight.actAdd.K0, envLight.actColRatio);
+    kankyo_color_ratio_set__Color(envLight, tevStr.colorC0, ret.palePrevA.actCol.C0, ret.palePrevB.actCol.C0, ret.blendPaleAB, ret.paleCurrA.actCol.C0, ret.paleCurrB.actCol.C0, tevStr.blendPsel, envLight.actAdd.C0, envLight.actColRatio * envLight.actColRatio);
+    kankyo_color_ratio_set__Color(envLight, tevStr.colorK0, ret.palePrevA.actCol.K0, ret.palePrevB.actCol.K0, ret.blendPaleAB, ret.paleCurrA.actCol.K0, ret.paleCurrB.actCol.K0, tevStr.blendPsel, envLight.actAdd.K0, envLight.actColRatio);
+
+    kankyo_color_ratio_set__Color(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.blendPsel, envLight.fogAdd, envLight.fogColRatio);
+    tevStr.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, tevStr.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
+    tevStr.fogEndZ = Math.max(tevStr.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, tevStr.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
 }
 
-function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c, C0: Color, K0: Color, whichBG: number): void {
+function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dKy_tevstr_c, whichBG: number): void {
     tevStr.pselIdxPrev = envLight.pselIdxPrev;
     tevStr.pselIdxCurr = envLight.pselIdxCurr;
     if (tevStr.pselIdxPrev !== tevStr.pselIdxCurr)
@@ -363,8 +385,18 @@ function setLight_bg(globals: dGlobals, envLight: dScnKy_env_light_c, tevStr: dK
 
     const ret = setLight_palno_get(setLight_palno_ret_scratch, tevStr, globals, envLight);
 
-    kankyo_color_ratio_set__Color(envLight, C0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, tevStr.blendPsel, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
-    kankyo_color_ratio_set__Color(envLight, K0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, tevStr.blendPsel, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
+    kankyo_color_ratio_set__Color(envLight, tevStr.colorC0, ret.palePrevA.bgCol[whichBG].C0, ret.palePrevB.bgCol[whichBG].C0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].C0, ret.paleCurrB.bgCol[whichBG].C0, tevStr.blendPsel, envLight.bgAdd[whichBG].C0, envLight.bgColRatio);
+    kankyo_color_ratio_set__Color(envLight, tevStr.colorK0, ret.palePrevA.bgCol[whichBG].K0, ret.palePrevB.bgCol[whichBG].K0, ret.blendPaleAB, ret.paleCurrA.bgCol[whichBG].K0, ret.paleCurrB.bgCol[whichBG].K0, tevStr.blendPsel, envLight.bgAdd[whichBG].K0, envLight.bgColRatio);
+
+    if (whichBG === 1) {
+        // BG1 (Sea) gets UsoUmi as a fog color
+        colorCopy(tevStr.fogCol, envLight.vrUsoUmiCol);
+    } else {
+        kankyo_color_ratio_set__Color(envLight, tevStr.fogCol, ret.palePrevA.fogCol, ret.palePrevB.fogCol, ret.blendPaleAB, ret.paleCurrA.fogCol, ret.paleCurrB.fogCol, tevStr.blendPsel, envLight.fogAdd, envLight.fogColRatio);
+    }
+
+    tevStr.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, tevStr.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
+    tevStr.fogEndZ = Math.max(tevStr.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, tevStr.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
 }
 
 function settingTevStruct_plightcol_plus(envLight: dScnKy_env_light_c, pos: vec3, tevStr: dKy_tevstr_c, initTimer: number): void {
@@ -465,7 +497,7 @@ function settingTevStruct_colget_actor(globals: dGlobals, envLight: dScnKy_env_l
 
     if (tevStr.envrIdxPrev !== tevStr.envrIdxCurr && (tevStr.blendPsel >= 0.0 || tevStr.blendPsel <= 1.0))
         tevStr.blendPsel = 0.0;
-    setLight_actor(globals, envLight, tevStr, tevStr.colorC0, tevStr.colorK0);
+    setLight_actor(globals, envLight, tevStr);
 }
 
 export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: vec3 | null, tevStr: dKy_tevstr_c): void {
@@ -502,7 +534,7 @@ export function settingTevStruct(globals: dGlobals, lightType: LightType, pos: v
             fullLight = false;
         }
 
-        setLight_bg(globals, envLight, tevStr, tevStr.colorC0, tevStr.colorK0, whichBG);
+        setLight_bg(globals, envLight, tevStr, whichBG);
 
         vec3.copy(tevStr.lightObj.Position, envLight.lightStatus[0].Position);
         // Direction does not matter.
@@ -520,6 +552,23 @@ export function dKy_tevstr_init(tevstr: dKy_tevstr_c, roomNo: number, envrOverri
     tevstr.envrOverride = envrOverride;
 }
 
+function GxFogSet_Sub(fog: FogBlock, tevStr: { fogStartZ: number, fogEndZ: number, fogCol: Color }, camera: Camera, fogColor = tevStr.fogCol) {
+    colorCopy(fog.Color, fogColor);
+
+    // Empirically decided.
+    const fogFarPlane = 32000;
+
+    fogBlockSet(fog, FogType.PERSP_LIN, tevStr.fogStartZ, tevStr.fogEndZ, -camera.frustum.near, fogFarPlane);
+}
+
+export function dKy_GxFog_set(envLight: dScnKy_env_light_c, fog: FogBlock, camera: Camera): void {
+    GxFogSet_Sub(fog, envLight, camera);
+}
+
+export function dKy_GxFog_sea_set(envLight: dScnKy_env_light_c, fog: FogBlock, camera: Camera): void {
+    GxFogSet_Sub(fog, envLight, camera, envLight.vrUsoUmiCol);
+}
+
 // This is effectively the global state that dKy_setLight sets up, but since we don't
 // have global state, we have to do this here.
 export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, modelInstance: J3DModelInstance, camera: Camera): void {
@@ -528,6 +577,8 @@ export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, mode
 
     const light1 = modelInstance.getGXLightReference(1);
     lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
+
+    dKy_GxFog_set(envLight, modelInstance.materialInstanceState.fogBlock, camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
@@ -548,7 +599,8 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
     modelInstance.setColorOverride(ColorKind.C0, tevStr.colorC0);
     modelInstance.setColorOverride(ColorKind.K0, tevStr.colorK0);
 
-    // TODO(jstpierre): Fog.
+    const fog = modelInstance.materialInstanceState.fogBlock;
+    GxFogSet_Sub(fog, tevStr, camera);
 }
 
 function SetBaseLight(globals: dGlobals): void {
