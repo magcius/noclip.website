@@ -1064,23 +1064,12 @@ ${this.generateLightAttnFn(chan, lightName)}
         discard;`;
     }
 
-    private generateFogZCoordRaw() {
+    private generateFogZCoord() {
         const isDepthReversed = IS_DEPTH_REVERSED;
         if (isDepthReversed)
             return `(1.0 - gl_FragCoord.z)`;
         else
             return `gl_FragCoord.z`;
-    }
-
-    private generateFogZCoord() {
-        const ropInfo = this.material.ropInfo;
-        const base = this.generateFogZCoordRaw();
-
-        if (ropInfo.fogType === GX.FogType.PERSP_LIN) {
-            return base;
-        } else {
-            throw "whoops";
-        }
     }
 
     private generateFogBase() {
@@ -1102,7 +1091,7 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     private generateFogAdj(base: string) {
         if (this.material.ropInfo.fogAdjEnabled) {
-            // TODO(jstpierre)
+            // TODO(jstpierre): Fog adj
             return ``;
         } else {
             return ``;
@@ -1114,7 +1103,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (fogType === GX.FogType.PERSP_LIN) {
             return ``;
         } else {
-            // TODO(jstpierre)
+            // TODO(jstpierre): Other fog types.
             return ``;
         }
     }
