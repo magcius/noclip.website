@@ -331,112 +331,6 @@ export class WindWakerRoomRenderer {
     }
 }
 
-class PlaneColorProgram extends DeviceProgram {
-    public static a_Position: number = 0;
-
-    public both = `
-precision mediump float;
-layout(row_major, std140) uniform ub_Params {
-    Mat4x4 u_Projection;
-    Mat4x3 u_ModelView;
-    vec4 u_PlaneColor;
-};
-#ifdef VERT
-layout(location = ${PlaneColorProgram.a_Position}) in vec3 a_Position;
-void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
-}
-#endif
-#ifdef FRAG
-void main() {
-    gl_FragColor = u_PlaneColor;
-}
-#endif
-`;
-}
-
-const scratchMatrix = mat4.create();
-const seaPlaneBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
-class SeaPlane {
-    private posBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-    private gfxProgram: GfxProgram;
-    private modelMatrix = mat4.create();
-    private color = colorNewCopy(TransparentBlack);
-
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.createBuffers(device);
-        mat4.fromScaling(this.modelMatrix, [2000000, 1, 2000000]);
-        mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
-
-        this.gfxProgram = cache.createProgram(device, new PlaneColorProgram());
-    }
-
-    private computeModelView(dst: mat4, camera: Camera): void {
-        computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, this.modelMatrix);
-    }
-
-    public prepareToRender(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        colorCopy(this.color, globals.g_env_light.bgCol[1].K0);
-
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInst.setBindingLayouts(seaPlaneBindingLayouts);
-        renderInst.setMegaStateFlags({
-            depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LESS),
-        });
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexes(6);
-
-        let offs = renderInst.allocateUniformBuffer(0, 32);
-        const d = renderInst.mapUniformBufferF32(0);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        this.computeModelView(scratchMatrix, viewerInput.camera);
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
-        offs += fillColor(d, offs, this.color);
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.posBuffer);
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
-    }
-
-    private createBuffers(device: GfxDevice) {
-        const posData = new Float32Array(4 * 3);
-        posData[0]  = -1;
-        posData[1]  = 0;
-        posData[2]  = -1;
-        posData[3]  = 1;
-        posData[4]  = 0;
-        posData[5]  = -1;
-        posData[6]  = -1;
-        posData[7]  = 0;
-        posData[8]  = 1;
-        posData[9]  = 1;
-        posData[10] = 0;
-        posData[11] = 1;
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { format: GfxFormat.F32_RGB, location: PlaneColorProgram.a_Position, bufferByteOffset: 0, bufferIndex: 0 },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-        ];
-        const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.posBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
-    }
-}
-
 function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
     m.gfxTexture = sceneTexture;
     m.width = EFB_WIDTH;
@@ -553,12 +447,11 @@ class SimpleEffectSystem {
     }
 }
 
+const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
     public renderHelper: GXRenderHelperGfx;
-
-    private seaPlane: SeaPlane | null = null;
 
     public roomRenderers: WindWakerRoomRenderer[] = [];
     public effectSystem: SimpleEffectSystem;
@@ -575,10 +468,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
-
-        const wantsSeaPlane = false && globals.stageName === 'sea';
-        if (wantsSeaPlane)
-            this.seaPlane = new SeaPlane(device, this.renderCache);
     }
 
     public getRoomDZB(roomIdx: number): DZB.DZB {
@@ -667,8 +556,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
 
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
-        if (this.seaPlane)
-            this.seaPlane.prepareToRender(this.globals, renderInstManager, viewerInput);
 
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(this.globals, device, renderInstManager, viewerInput);
@@ -748,8 +635,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
         this.renderTarget.destroy(device);
-        if (this.seaPlane)
-            this.seaPlane.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
