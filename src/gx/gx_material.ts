@@ -81,7 +81,7 @@ export class FogBlock {
     public A: number = 0;
     public B: number = 0;
     public C: number = 0;
-    public AdjTable: number[] = nArray(10, () => 0);
+    public AdjTable: Uint16Array = new Uint16Array(10);
     public AdjCenter: number = 0;
 
     public reset(): void {
@@ -89,8 +89,7 @@ export class FogBlock {
         this.A = 0;
         this.B = 0;
         this.C = 0;
-        for (let i = 0; i < 10; i++)
-            this.AdjTable[i] = 0;
+        this.AdjTable.fill(0);
         this.AdjCenter = 0;
     }
 
@@ -99,8 +98,7 @@ export class FogBlock {
         this.A = o.A;
         this.B = o.B;
         this.C = o.C;
-        for (let i = 0; i < 10; i++)
-            this.AdjTable[i] = o.AdjTable[i];
+        this.AdjTable.set(o.AdjTable);
         this.AdjCenter = o.AdjCenter;
     }
 }

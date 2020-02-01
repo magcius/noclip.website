@@ -183,6 +183,13 @@ export class dKankyo__CommonTextures {
 
 const scratchMatrix = mat4.create();
 
+const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec4 = vec4.create();
+
 export class dKankyo_sun_packet {
     // Shared
     private ddraw = new TDDraw();
@@ -974,12 +981,22 @@ export class dKankyo__Windline {
     public hasCustomWindPower: boolean = false;
 }
 
-const scratchVec3 = vec3.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
-const scratchVec4 = vec4.create();
+class WAVE_EFF {
+}
+
+export class dKankyo_wave_Packet {
+    public waveEff: WAVE_EFF[] = nArray(300, () => new WAVE_EFF());
+
+    private texUsonami: BTIData;
+    private texUsonamiM: BTIData;
+
+    constructor(globals: dGlobals) {
+        const resCtrl = globals.resCtrl;
+
+        this.texUsonami = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8b);
+        this.texUsonamiM = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8c);
+    }
+}
 
 function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);

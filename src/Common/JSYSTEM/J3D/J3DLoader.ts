@@ -17,7 +17,7 @@ import { getPointHermite } from '../../../Spline';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNew } from '../../../Color';
+import { Color, colorNew, colorCopy } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 import { VAF1_getVisibility } from './J3DGraphAnimator';
 
@@ -575,6 +575,7 @@ export interface MaterialEntry {
     colorAmbRegs: Color[];
     colorConstants: Color[];
     colorRegisters: Color[];
+    fogBlock: GX_Material.FogBlock;
 }
 
 export interface MAT3 {
@@ -960,6 +961,12 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const fogColor = readColorU8(view, fogInfoOffs + 0x14);
         const fogAdjTable = buffer.createTypedArray(Uint16Array, fogInfoOffs + 0x18, 10, Endianness.BIG_ENDIAN);
 
+        const fogBlock = new GX_Material.FogBlock();
+        GX_Material.fogBlockSet(fogBlock, fogType, fogStartZ, fogEndZ, fogNearZ, fogFarZ);
+        colorCopy(fogBlock.Color, fogColor);
+        fogBlock.AdjTable.set(fogAdjTable);
+        fogBlock.AdjCenter = fogAdjCenter;
+
         const ropInfo: GX_Material.RopInfo = {
             fogType, fogAdjEnabled,
             blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
@@ -991,6 +998,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorAmbRegs,
             colorRegisters,
             colorConstants,
+            fogBlock,
         });
     }
 

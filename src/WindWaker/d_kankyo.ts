@@ -7,10 +7,10 @@ import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers";
 import { nArray, assert, arrayRemove, assertExists } from "../util";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
-import { ColorKind, MaterialParams } from "../gx/gx_render";
+import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline, dKankyo_wave_Packet } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -139,6 +139,7 @@ export class dScnKy_env_light_c {
     public vrkumoPacket: dKankyo_vrkumo_packet | null = null;
     public rainPacket: dKankyo_rain_packet | null = null;
     public windline: dKankyo__Windline | null = null;
+    public wavePacket: dKankyo_wave_Packet | null = null;
 
     public eventNightStop: boolean = false;
 }
@@ -578,7 +579,8 @@ export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, mode
     const light1 = modelInstance.getGXLightReference(1);
     lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
 
-    dKy_GxFog_set(envLight, modelInstance.materialInstanceState.fogBlock, camera);
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        dKy_GxFog_set(envLight, modelInstance.materialInstances[i].fogBlock, camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {
@@ -599,8 +601,8 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
     modelInstance.setColorOverride(ColorKind.C0, tevStr.colorC0);
     modelInstance.setColorOverride(ColorKind.K0, tevStr.colorK0);
 
-    const fog = modelInstance.materialInstanceState.fogBlock;
-    GxFogSet_Sub(fog, tevStr, camera);
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        GxFogSet_Sub(modelInstance.materialInstances[i].fogBlock, tevStr, camera);
 }
 
 function SetBaseLight(globals: dGlobals): void {
