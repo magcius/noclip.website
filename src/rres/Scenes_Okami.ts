@@ -336,9 +336,9 @@ const enum OkamiPass {
 function patchMaterialSetAlpha(material: BRRES.MDL0_MaterialEntry, alpha: number): void {
     if (alpha === 0x44) {
         // 0x44; SrcA*Src + (1.0-SrcA)*Dst
-        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+        material.gxMaterial.ropInfo.blendMode = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendSrcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendDstFactor = GX.BlendFactor.INVSRCALPHA;
     } else {
         // TODO(jstpierre): Rest of them.
         throw "whoops";
