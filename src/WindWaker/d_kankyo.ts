@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline, dKankyo_wave_Packet } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -86,6 +86,7 @@ export class dScnKy_env_light_c {
     public baseLight = new LIGHT_INFLUENCE();
     public plights: LIGHT_INFLUENCE[] = [];
     public eflights: LIGHT_INFLUENCE[] = [];
+    public waveInfluences: WAVE_INFLUENCE[] = [];
     // The game records this in a separate struct with a bunch of extra data, but we don't need it lol.
     public lightStatus = nArray(2, () => new Light());
 
@@ -133,6 +134,18 @@ export class dScnKy_env_light_c {
     public thunderFlashTimer: number = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 
+    // Wave.
+    public waveCount = 0;
+    public waveFlatInter = 0.0;
+    public waveSpawnRadius = 0.0;
+    public waveSpawnDist = 0.0;
+    public waveScale = 0.0;
+    public waveSpeed = 0.0;
+    public waveScaleRand = 0.0;
+    public waveCounterSpeedScale = 0.0;
+    public waveScaleBottom = 0.0;
+    public waveReset = false;
+
     // Wether packets
     public wetherCommonTextures: dKankyo__CommonTextures;
     public sunPacket: dKankyo_sun_packet | null = null;
@@ -150,6 +163,12 @@ export class LIGHT_INFLUENCE {
     public power: number = 0;
     public fluctuation: number = 0;
     public priority: boolean = false;
+}
+
+export class WAVE_INFLUENCE {
+    public pos = vec3.create();
+    public outerRadius: number = 0.0;
+    public innerRadius: number = 0.0;
 }
 
 const enum LightMode {
@@ -1216,6 +1235,14 @@ export function dKy_efplight_cut(envLight: dScnKy_env_light_c, plight: LIGHT_INF
         envLight.playerEflightIdx = -1;
 }
 
+export function dKy__waveinfl_set(envLight: dScnKy_env_light_c, infl: WAVE_INFLUENCE): void {
+    envLight.waveInfluences.push(infl);
+}
+
+export function dKy__waveinfl_cut(envLight: dScnKy_env_light_c, infl: WAVE_INFLUENCE): void {
+    arrayRemove(envLight.waveInfluences, infl);
+}
+
 export function dKy_get_dayofweek(envLight: dScnKy_env_light_c): number {
     return envLight.calendarDay % 7;
 }
@@ -1226,7 +1253,7 @@ class d_kankyo extends kankyo_class {
     public subload(globals: dGlobals): cPhs__Status {
         envcolor_init(globals);
         // dKy_setLight_init();
-        // dKy_wave_chan_init();
+        dKy_wave_chan_init(globals);
         // dKy_event_init();
         // dKy_Sound_init();
         // dKyw_wind_set();
@@ -1290,7 +1317,7 @@ class d_kyeff extends kankyo_class {
         } else {
             dKyw_wether_move(globals, deltaTimeInFrames);
         }
-        dKyw_wether_move_draw(globals);
+        dKyw_wether_move_draw(globals, deltaTimeInFrames);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1307,6 +1334,10 @@ class d_kyeff extends kankyo_class {
             envLight.sunPacket.destroy(device);
         if (envLight.rainPacket !== null)
             envLight.rainPacket.destroy(device);
+        if (envLight.vrkumoPacket !== null)
+            envLight.vrkumoPacket.destroy(device);
+        if (envLight.wavePacket !== null)
+            envLight.wavePacket.destroy(device);
     }
 }
 

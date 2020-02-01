@@ -17,6 +17,7 @@ import { GXMaterialHelperGfx, ub_PacketParams, u_PacketParamsBufferSize, fillPac
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dKy_get_seacolor, dKy_GxFog_set, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
+import { dKy_usonami_set } from './d_kankyo_wether';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
@@ -534,7 +535,7 @@ export class d_a_sea extends fopAc_ac_c {
             this.CheckRoomChange(globals);
 
         this.CalcFlatInter(globals);
-        // dKy_usonami_set(this.flatInter);
+        dKy_usonami_set(globals, this.flatInter);
 
         this.drawMinX = this.playerPos[0] - 25600.0;
         this.drawMaxX = this.playerPos[0] + 25600.0;

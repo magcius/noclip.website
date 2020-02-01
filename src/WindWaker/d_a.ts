@@ -6,7 +6,7 @@ import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance } from "./d_kankyo";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc } from "./SComponent";
@@ -616,7 +616,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
         const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
         if (roomType === 2) {
-            // TODO(jstpierre): Overwrite with tact wind.
+            // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
         }
 
         // Camera forward in XZ plane
@@ -709,11 +709,11 @@ class d_a_kytag00 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
 
     private pselIdx = 0;
-    private mode = 0;
+    private effectMode = 0;
     private invert = false;
     private alwaysCheckPlayerPos = false;
     private target = 0.0;
-    private efSet = false;
+    private effectSet = false;
     private pselSet = false;
 
     // Cylinder
@@ -723,7 +723,7 @@ class d_a_kytag00 extends fopAc_ac_c {
 
     public subload(globals: dGlobals): cPhs__Status {
         this.pselIdx = this.parameters & 0xFF;
-        this.mode = (this.parameters >>> 8) & 0xFF;
+        this.effectMode = (this.parameters >>> 8) & 0xFF;
         this.invert = !!((this.rot[0] >>> 8) & 0xFF);
         this.alwaysCheckPlayerPos = !!(this.rot[2] & 0xFF);
 
@@ -833,18 +833,18 @@ class d_a_kytag00 extends fopAc_ac_c {
             }
 
             // wether_tag_efect_move
-            this.efSet = true;
+            this.effectSet = true;
 
-            if (this.mode === 1) {
+            if (this.effectMode === 1) {
                 this.raincnt_set(globals, target);
-            } else if (this.mode === 7) {
+            } else if (this.effectMode === 7) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
-            } else if (this.mode === 8) {
+            } else if (this.effectMode === 8) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
-            } else if (this.mode === 9) {
+            } else if (this.effectMode === 9) {
                 // TODO(jstpierre): moya
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
@@ -861,19 +861,19 @@ class d_a_kytag00 extends fopAc_ac_c {
                 envLight.colSetModeGather = 1;
             }
 
-            if (this.efSet) {
-                this.efSet = false;
+            if (this.effectSet) {
+                this.effectSet = false;
 
-                if (this.mode === 1) {
+                if (this.effectMode === 1) {
                     this.raincnt_cut(globals);
-                } else if (this.mode === 7) {
+                } else if (this.effectMode === 7) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
-                } else if (this.mode === 8) {
+                } else if (this.effectMode === 8) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
                     this.raincnt_cut(globals);
-                } else if (this.mode === 9) {
+                } else if (this.effectMode === 9) {
                     // TODO(jstpierre): moya
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
@@ -881,6 +881,29 @@ class d_a_kytag00 extends fopAc_ac_c {
                 }
             }
         }
+    }
+}
+
+class d_a_kytag01 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag01;
+
+    private influence = new WAVE_INFLUENCE();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        vec3.copy(this.influence.pos, this.pos);
+
+        this.influence.innerRadius = this.scale[0] * 5000.0;
+        this.influence.outerRadius = Math.max(this.scale[2] * 5000.0, this.influence.innerRadius + 500.0);
+        dKy__waveinfl_set(globals.g_env_light, this.influence);
+
+        // TODO(jstpierre): Need a Create/Destroy hook that happens on room load / unload.
+        // this.wave_make(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    public delete(globals: dGlobals): void {
+        dKy__waveinfl_cut(globals.g_env_light, this.influence);
     }
 }
 
@@ -900,4 +923,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_vrbox2);
     R(d_a_sea);
     R(d_a_kytag00);
+    R(d_a_kytag01);
 }

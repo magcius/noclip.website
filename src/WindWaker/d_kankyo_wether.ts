@@ -1,10 +1,10 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop } from "./d_kankyo";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_plight_cut, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy } from "../Color";
-import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
+import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, Magenta } from "../Color";
+import { computeMatrixWithoutTranslation, MathConstants, saturate } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
@@ -104,9 +104,9 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
             ef.pos[2] = cameraPos[2];
 
             const brightness = (0.2 * flash) / 0xFF;
-            ef.color.r = clamp(0xB4 * brightness, 0.0, 1.0);
-            ef.color.g = clamp(0xEB * brightness, 0.0, 1.0);
-            ef.color.b = clamp(0xFF * brightness, 0.0, 1.0);
+            ef.color.r = saturate(0xB4 * brightness);
+            ef.color.g = saturate(0xEB * brightness);
+            ef.color.b = saturate(0xFF * brightness);
 
             // This field is written to by dKy_Itemgetcol_chg_move, I think it's true
             // when we're in some sort of a getitem cutscene...
@@ -944,8 +944,9 @@ export class dKankyo_rain_packet {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = globals.modelCache.device;
+        const envLight = globals.g_env_light;
 
-        if (globals.g_env_light.rainCount === 0)
+        if (envLight.rainCount === 0)
             return;
 
         this.ddraw.beginDraw();
@@ -982,19 +983,142 @@ export class dKankyo__Windline {
 }
 
 class WAVE_EFF {
+    public initialized = false;
+    public basePos = vec3.create();
+    public pos = vec3.create();
+    public animCounter = 0;
+    public alpha = 0.0;
+    public strengthEnv = 0.0;
+    public scale = 0.0;
+    public speed = 0.0;
+    public animCounterSpeed = 0.0;
 }
 
 export class dKankyo_wave_Packet {
-    public waveEff: WAVE_EFF[] = nArray(300, () => new WAVE_EFF());
+    public instances: WAVE_EFF[] = nArray(300, () => new WAVE_EFF());
 
     private texUsonami: BTIData;
     private texUsonamiM: BTIData;
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    public skewDirection: number = 0.0;
+    public skewWidth: number = 0.0;
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
 
         this.texUsonami = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8b);
         this.texUsonamiM = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8c);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+
+        const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the alpha.
+        mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.C0, GX.CombineColorInput.KONST, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setUsePnMtxIdx(false);
+        mb.setFog(GX.FogType.PERSP_LIN, true);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_wave_Packet'));
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        const envLight = globals.g_env_light;
+
+        if (envLight.waveCount === 0 || envLight.waveFlatInter >= 1.0)
+            return;
+
+        const ddraw = this.ddraw;
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        dKy_get_seacolor(envLight, materialParams.u_Color[ColorKind.K0], materialParams.u_Color[ColorKind.C0]);
+        if (globals.stageName === 'MajyuE')
+            this.texUsonamiM.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        else
+            this.texUsonami.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+
+        this.ddraw.beginDraw();
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * envLight.waveCount);
+
+        const txc1 = 0xFA/0xFF;
+
+        for (let i = 0; i < envLight.waveCount; i++) {
+            const wave = this.instances[i];
+            const sin = Math.sin(wave.animCounter);
+            if (sin < 0.0)
+                continue;
+
+            const alpha = wave.alpha * 0xFF;
+
+            const scale = wave.scale * envLight.waveScale;
+            const y = scale * sin * wave.strengthEnv;
+
+            const x = scale * envLight.waveScaleBottom * (wave.strengthEnv - (y * 0.00000015 * (i * 15)));
+
+            const skewFlip = this.skewDirection >= 0.0 ? 1.0 : -1.0;
+            const skew = (skewFlip * this.skewWidth * x * 1.2 * wave.speed);
+
+            vec3.add(scratchVec3a, wave.basePos, wave.pos);
+
+            vec3.set(scratchVec3, -x + skew, y, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            vec3.set(scratchVec3,  x + skew, y, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, txc1, 0);
+    
+            vec3.set(scratchVec3,  x, 0.0, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, txc1, txc1);
+    
+            vec3.set(scratchVec3, -x, 0.0, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, txc1);
+        }
+
+        ddraw.end();
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+
+        this.ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }
 
@@ -1110,7 +1234,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     pkt.hideLenz = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
-        const pulsePos = 1.0 - sqr(1.0 - clamp(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0, 0.0, 1.0));
+        const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
 
         dKy_set_actcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
         dKy_set_bgcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
@@ -1303,7 +1427,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 }
             }
 
-            const swerveT = clamp(eff.swerveAnimCounter / MathConstants.TAU, 0.0, 1.0);
+            const swerveT = saturate(eff.swerveAnimCounter / MathConstants.TAU);
             const swervePosMag = (1.3 * swerveSize - (0.2 * swerveSize * (1.0 - windPow))) * swerveT;
 
             // Swerve coordinates
@@ -1465,11 +1589,142 @@ function wether_move_housi(globals: dGlobals): void {
 function wether_move_moya(globals: dGlobals): void {
 }
 
-function wether_move_wave(globals: dGlobals): void {
-    const envLight = globals.g_env_light;
+function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRadius: number, outerRadius: number): void {
+    if (dist < outerRadius) {
+        if (dist < innerRadius || innerRadius > outerRadius) {
+            wave.strengthEnv = 0.0;
+        } else {
+            const speedFade = (dist - innerRadius) / (outerRadius - innerRadius);
+            if (speedFade < wave.strengthEnv)
+                wave.strengthEnv = speedFade;
+        }
+    }
 }
 
-export function dKyw_wether_move_draw(globals: dGlobals): void {
+function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.waveCount === 0)
+        return;
+
+    if (envLight.wavePacket === null)
+        envLight.wavePacket = new dKankyo_wave_Packet(globals);
+
+    const pkt = envLight.wavePacket;
+
+    if (envLight.waveFlatInter >= 1.0)
+        return;
+
+    // wave_move
+
+    dKyw_get_wind_vecpow(scratchVec3, envLight);
+    dKy_set_eyevect_calc2(globals, scratchVec3b, envLight.waveSpawnDist, 0.0);
+
+    const windVec = dKyw_get_wind_vec(envLight);
+    let windPow = dKyw_get_wind_pow(envLight);
+
+    // noclip modification: max wind power is 0.6. Anything above this and the skew looks pretty awful.
+    windPow = Math.min(windPow, 0.6);
+
+    let windX = windVec[0];
+    let windY = windVec[1];
+    let windZ = windVec[2];
+
+    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    if (roomType === 2) {
+        // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
+    }
+
+    const fili = globals.roomStatus[globals.mStayNo].fili;
+    let skyboxY = 0.0;
+    if (fili !== null)
+        skyboxY = fili.skyboxY;
+
+    // Camera forward in XZ plane
+    vec3.copy(scratchVec3a, globals.cameraFwd);
+    scratchVec3a[1] = 0;
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    pkt.skewDirection = ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
+    const skewWidth = (1.0 - Math.abs(windX * scratchVec3a[0] + windZ * scratchVec3a[2])) * (1.0 - windY) * Math.abs(pkt.skewDirection);
+    pkt.skewWidth = windPow * 0.6 * skewWidth;
+
+    for (let i = 0; i < envLight.waveCount; i++) {
+        const wave = pkt.instances[i];
+
+        if (envLight.waveReset)
+            wave.initialized = false;
+
+        if (!wave.initialized) {
+            wave.basePos[0] = scratchVec3b[0];
+            wave.basePos[1] = skyboxY;
+            wave.basePos[2] = scratchVec3b[2];
+            wave.pos[0] = cM_rndFX(envLight.waveSpawnRadius);
+            wave.pos[1] = 0.0;
+            wave.pos[2] = cM_rndFX(envLight.waveSpawnRadius);
+            wave.animCounter = cM_rndF(65536.0);
+            wave.alpha = 0.0;
+            wave.strengthEnv = 1.0;
+            wave.scale = envLight.waveScaleRand + cM_rndF(1.0 - envLight.waveScaleRand);
+            wave.speed = wave.scale;
+            wave.animCounterSpeed = (0.02 + 0.05 * (1.0 - wave.scale)) * envLight.waveCounterSpeedScale;
+            wave.initialized = true;
+        }
+
+        const speed = (0.2 + 0.8 * wave.alpha) * (0.5 + 0.5 * wave.strengthEnv) * wave.speed * envLight.waveSpeed;
+        wave.pos[0] += speed * scratchVec3[0] * deltaTimeInFrames;
+        wave.pos[2] += speed * scratchVec3[2] * deltaTimeInFrames;
+        wave.animCounter += wave.animCounterSpeed * deltaTimeInFrames;
+
+        // Reached end of animation, recycle.
+        vec3.add(scratchVec3d, wave.basePos, wave.pos);
+        const dist = Math.hypot(scratchVec3b[0] - scratchVec3d[0], scratchVec3b[2] - scratchVec3d[2]);
+        if (dist > envLight.waveSpawnRadius) {
+            wave.basePos[0] = scratchVec3b[0];
+            wave.basePos[2] = scratchVec3b[2];
+
+            if (dist <= envLight.waveSpawnRadius + 350) {
+                dKyr_get_vectle_calc(scratchVec3d, scratchVec3b, scratchVec3c);
+                wave.pos[0] = scratchVec3c[0] * envLight.waveSpawnRadius;
+                wave.pos[2] = scratchVec3c[2] * envLight.waveSpawnRadius;
+            } else {
+                wave.pos[0] = cM_rndFX(envLight.waveSpawnRadius);
+                wave.pos[2] = cM_rndFX(envLight.waveSpawnRadius);
+            }
+
+            wave.alpha = 0.0;
+        }
+
+        wave.strengthEnv = 1.0;
+
+        // Wave influence fade.
+        for (let i = 0; i < envLight.waveInfluences.length; i++) {
+            const infl = envLight.waveInfluences[i];
+            const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
+            wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
+        }
+
+        // Sea flat fade.
+        if (envLight.waveFlatInter > 0.0) {
+            const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);
+            const innerRadius = envLight.waveFlatInter * 1.5 * envLight.waveSpawnRadius;
+            const outerRadius = innerRadius + 1000.0;
+            wether_move_wave__FadeStrengthEnv(wave, dist, innerRadius, outerRadius);
+        }
+
+        // Player location fade.
+        const playerDist = Math.hypot(globals.playerPosition[0] - scratchVec3d[0], globals.playerPosition[2] - scratchVec3d[2]);
+        wether_move_wave__FadeStrengthEnv(wave, playerDist, 200.0, 2000.0);
+
+        vec3.add(scratchVec3d, wave.basePos, wave.pos);
+        const windSpeed = Math.max(windPow, vec3.distance(scratchVec3d, globals.cameraPosition));
+        const alphaTarget = saturate(1.03 * (1.0 - (windSpeed / (2.0 * envLight.waveSpawnDist))) * Math.sin(wave.animCounter));
+        wave.alpha = cLib_addCalc(wave.alpha, alphaTarget, 0.5, 0.5, 0.001);
+        wave.basePos[1] = skyboxY;
+    }
+}
+
+export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
     if (globals.stageName !== 'Name') {
         wether_move_sun(globals);
         wether_move_rain(globals);
@@ -1480,7 +1735,7 @@ export function dKyw_wether_move_draw(globals: dGlobals): void {
         wether_move_poison(globals);
         wether_move_housi(globals);
         wether_move_moya(globals);
-        wether_move_wave(globals);
+        wether_move_wave(globals, deltaTimeInFrames);
     }
 }
 
@@ -1630,6 +1885,11 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     const envLight = globals.g_env_light;
 
     if (globals.stageName !== 'Name') {
+        if (envLight.wavePacket !== null)
+            envLight.wavePacket.draw(globals, renderInstManager, viewerInput);
+    }
+
+    if (globals.stageName !== 'Name') {
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
     }
@@ -1657,6 +1917,38 @@ export function dKyw_get_wind_pow(envLight: dScnKy_env_light_c): number {
 
 export function dKyw_get_wind_vecpow(dst: vec3, envLight: dScnKy_env_light_c): void {
     vec3.scale(dst, envLight.windVec, envLight.windPower);
+}
+
+export function dKy_wave_chan_init(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    envLight.waveSpeed = 0.1;
+    envLight.waveSpawnDist = 3000.0;
+    envLight.waveSpawnRadius = 3150.0;
+    envLight.waveScale = 250.0;
+    envLight.waveScaleRand = 0.217;
+    envLight.waveCounterSpeedScale = 1.6;
+    envLight.waveScaleBottom = 5.0;
+    envLight.waveCount = 0;
+    envLight.waveReset = false;
+}
+
+export function dKy_usonami_set(globals: dGlobals, waveFlatInter: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.waveCount < 200) {
+        envLight.waveSpawnDist = 20000.0;
+        envLight.waveSpawnRadius = 22000.0;
+        envLight.waveReset = false;
+        envLight.waveScale = 300.0;
+        envLight.waveScaleRand = 0.001;
+        envLight.waveCounterSpeedScale = 1.2;
+        envLight.waveScaleBottom = 6.0;
+        envLight.waveCount = 300;
+        envLight.waveSpeed = 30.0;
+    }
+
+    envLight.waveFlatInter = waveFlatInter;
 }
 
 export class d_thunder extends kankyo_class {
