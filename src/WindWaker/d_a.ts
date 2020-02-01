@@ -9,7 +9,7 @@ import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2 } from "./SComponent";
+import { cLib_addCalc2, cLib_addCalc } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
@@ -17,6 +17,7 @@ import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
+import { saturate } from "../MathHelpers";
 
 // Framework'd actors
 
@@ -704,6 +705,185 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
+class d_a_kytag00 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
+
+    private pselIdx = 0;
+    private mode = 0;
+    private invert = false;
+    private alwaysCheckPlayerPos = false;
+    private target = 0.0;
+    private efSet = false;
+    private envrSet = false;
+
+    // Cylinder
+    private innerFadeY = 0.0;
+    private innerRadius = 0.0;
+    private outerRadius = 0.0;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        this.pselIdx = this.parameters & 0xFF;
+        this.mode = (this.parameters >>> 8) & 0xFF;
+        this.invert = !!((this.rot[0] >>> 8) & 0xFF);
+        this.alwaysCheckPlayerPos = !!(this.rot[2] & 0xFF);
+
+        if (this.invert) {
+            this.target = 1.0;
+        } else {
+            this.target = 0.0;
+        }
+
+        this.innerFadeY = ((this.parameters >> 24) & 0xFF) * 100.0;
+
+        const paramRadius = (this.parameters >>> 16) & 0xFF;
+        if (this.alwaysCheckPlayerPos) {
+            this.innerRadius = this.scale[0] * 500.0;
+            this.outerRadius = this.innerRadius + paramRadius * 10.0;
+        } else {
+            this.innerRadius = this.scale[0] * 5000.0;
+            this.outerRadius = this.innerRadius + paramRadius * 100.0;
+        }
+
+        this.wether_tag_efect_move(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    private get_check_pos(globals: dGlobals): vec3 {
+        // Return the closer of the two.
+        if (this.alwaysCheckPlayerPos || vec3.distance(this.pos, globals.playerPosition) < vec3.distance(this.pos, globals.cameraPosition))
+            return globals.playerPosition;
+        else
+            return globals.cameraPosition;
+    }
+
+    private wether_tag_efect_move(globals: dGlobals): void {
+        // Moved inside wether_tag_move.
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.invert) {
+            this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
+        } else {
+            this.target = cLib_addCalc(this.target, 1.0, 0.1, 0.01, 0.0001);
+        }
+
+        this.wether_tag_move(globals);
+    }
+
+    private raincnt_set(globals: dGlobals, target: number): void {
+        const envLight = globals.g_env_light;
+
+        let newRainCount = (target * target * target) * 250.0;
+
+        if (dKy_checkEventNightStop(globals)) {
+            if (newRainCount < envLight.rainCount)
+                newRainCount = envLight.rainCount;
+        }
+
+        if (newRainCount > envLight.rainCountOrig)
+            envLight.rainCount = newRainCount;
+    }
+
+    private raincnt_cut(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        if (!dKy_checkEventNightStop(globals))
+            envLight.rainCount = envLight.rainCountOrig;
+    }
+
+    private wether_tag_move(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        const checkPos = this.get_check_pos(globals);
+
+        const distXZ = Math.hypot(checkPos[0] - this.pos[0], checkPos[2] - this.pos[2]);
+
+        const innerBottomY = this.pos[1], outerBottomY = innerBottomY - this.innerFadeY;
+        const innerTopY = this.pos[1] + (this.scale[1] * 5000.0), outerTopY = innerTopY + this.innerFadeY;
+
+        if (distXZ < this.outerRadius && checkPos[1] > outerBottomY && checkPos[1] <= outerTopY) {
+            const fadeRadius = this.outerRadius - this.innerRadius;
+            const blendXZ = Math.min((this.outerRadius - distXZ) / fadeRadius, 1.0);
+
+            let blendY = 1.0;
+            if (this.innerFadeY !== 0) {
+                if (checkPos[1] > innerBottomY)
+                    blendY = 1.0 - saturate((checkPos[1] - outerTopY) / this.innerFadeY);
+                else
+                    blendY = 1.0 - saturate((innerBottomY - checkPos[1]) / this.innerFadeY);
+            }
+
+            const target = this.target * blendXZ * blendY;
+
+            if (envLight.envrIdxPrev === envLight.envrIdxCurr) {
+                this.envrSet = true;
+
+                if (target > 0.5) {
+                    envLight.blendPselGather = target;
+                    envLight.pselIdxPrevGather = envLight.weatherPselIdx;
+                    envLight.pselIdxCurrGather = this.pselIdx;
+                    envLight.colSetModeGather = 1;
+                } else {
+                    envLight.blendPselGather = 1.0 - target;
+                    envLight.pselIdxPrevGather = this.pselIdx;
+                    envLight.pselIdxCurrGather = envLight.weatherPselIdx;
+                    envLight.colSetModeGather = 1;
+                }
+            }
+
+            // wether_tag_efect_move
+            this.efSet = true;
+
+            if (this.mode === 1) {
+                this.raincnt_set(globals, target);
+            } else if (this.mode === 7) {
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+            } else if (this.mode === 8) {
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+                this.raincnt_set(globals, target);
+            } else if (this.mode === 9) {
+                // TODO(jstpierre): moya
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+                this.raincnt_set(globals, target);
+            } else {
+                // TODO(jstpierre): The rest of the modes.
+            }
+        } else {
+            if (this.envrSet) {
+                this.envrSet = false;
+                envLight.pselIdxPrevGather = envLight.weatherPselIdx;
+                envLight.pselIdxCurrGather = envLight.weatherPselIdx;
+                envLight.blendPselGather = 0.0;
+                envLight.colSetModeGather = 1;
+            }
+
+            if (this.efSet) {
+                this.efSet = false;
+
+                if (this.mode === 1) {
+                    this.raincnt_cut(globals);
+                } else if (this.mode === 7) {
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                } else if (this.mode === 8) {
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                    this.raincnt_cut(globals);
+                } else if (this.mode === 9) {
+                    // TODO(jstpierre): moya
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                    this.raincnt_cut(globals);
+                }
+            }
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -719,4 +899,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_vrbox);
     R(d_a_vrbox2);
     R(d_a_sea);
+    R(d_a_kytag00);
 }

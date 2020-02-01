@@ -3,7 +3,7 @@ import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate } from "../MathHelpers";
+import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
@@ -370,20 +370,6 @@ export class d_a_sea extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (false) {
-            const ctx = getDebugOverlayCanvas2D();
-            let z = this.drawMinZ, idx = 0;
-            for (let i = 0; i < 65; i++) {
-                let x = this.drawMinX;
-                for (let j = 0; j < 65; j++) {
-                    vec3.set(scratchVec3a, x, this.heightTable[idx++], z);
-                    drawWorldSpacePoint(ctx, viewerInput.camera, scratchVec3a);
-                    x += 800.0;
-                }
-                z += 800.0;
-            }
-        }
-
         renderInstManager.setCurrentRenderInstList(globals.dlst.sea);
 
         this.ddraw.beginDraw();
@@ -535,6 +521,13 @@ export class d_a_sea extends fopAc_ac_c {
 
         if (globals.stageName === 'ADMumi')
             this.flatInter = 0.0;
+
+        // noclip modification: Usually, this is done by the collision system -- Room 0 of the sea is always loaded, and
+        // has giant collision triangles tagged as the individual room. Here, we special case the logic for rooms.
+        if (globals.stageName === 'sea') {
+            const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 0, 64);
+            globals.mStayNo = roomNo;
+        }
 
         if (this.roomNo !== globals.mStayNo && globals.mStayNo !== 0)
             this.CheckRoomChange(globals);

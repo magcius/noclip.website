@@ -878,6 +878,20 @@ function CalcTevColor(envLight: dScnKy_env_light_c, playerPos: vec3): void {
 function exeKankyo(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
     const colSetModeGather = envLight.colSetModeGather;
 
+    // Normally, this is done in the player code / settingTevStruct_colget_player.
+    const newEnvrIdxCurr = globals.mStayNo;
+    if (envLight.envrIdxCurr !== newEnvrIdxCurr) {
+        if (envLight.envrIdxPrev === newEnvrIdxCurr) {
+            // Previous room, so resume the old fade.
+            envLight.envrIdxPrev = envLight.envrIdxCurr;
+            envLight.blendPsel = 1.0 - envLight.blendPsel;
+            envLight.envrIdxCurr = newEnvrIdxCurr;
+        } else if (envLight.blendPsel === 1.0 || envLight.blendPsel === 0.0) {
+            envLight.blendPsel = 0.0;
+            envLight.envrIdxCurr = newEnvrIdxCurr;
+        }
+    }
+
     envLight.colSetMode = envLight.colSetModeGather;
     if (envLight.colSetModeGather !== 0) {
         if (envLight.colSetModeGather < 3)
