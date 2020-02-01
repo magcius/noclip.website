@@ -597,9 +597,6 @@ export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, mode
 
     const light1 = modelInstance.getGXLightReference(1);
     lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
-
-    for (let i = 0; i < modelInstance.materialInstances.length; i++)
-        dKy_GxFog_set(envLight, modelInstance.materialInstances[i].fogBlock, camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {

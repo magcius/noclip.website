@@ -1679,8 +1679,12 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         // Photo tags
     } else if (actor.name === 'LTag0' || actor.name === 'LTag1' || actor.name === 'LTagR0') {
         // Light tags?
-    } else if (actor.name === 'kytag00' || actor.name === 'ky_tag0' || actor.name === 'ky_tag1' || actor.name === 'ky_tag2' || actor.name === 'kytag5' || actor.name === 'kytag6' || actor.name === 'kytag7') {
-        // Environment tags (Kankyo)
+    } else if (actor.name.startsWith('ky')) {
+        // Kytag
+        // fetchArchive(`Kkiba_00`).then((rarc) => {
+        //     const model = buildModel(rarc, `bdl/kkiba_00.bdl`);
+        //     mat4.scale(model.modelMatrix, model.modelMatrix, [100, 100, 100]);
+        // });
     } else if (
         actor.name === 'TagEv' || actor.name === 'TagKb' || actor.name === 'TagIsl' || actor.name === 'TagMk' || actor.name === 'TagWp' || actor.name === 'TagMd' ||
         actor.name === 'TagHt' || actor.name === 'TagMsg' || actor.name === 'TagMsg2' || actor.name === 'ReTag0' ||
