@@ -400,15 +400,11 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             referenceB: 0,
         };
 
-        const blendMode: GX_Material.BlendMode = {
-            type: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            srcFactor: blendSrcFactor,
-            dstFactor: blendDstFactor,
-            logicOp: GX.LogicOp.CLEAR,
-        };
-
         const ropInfo: GX_Material.RopInfo = {
-            blendMode,
+            blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
+            blendSrcFactor,
+            blendDstFactor,
+            blendLogicOp: GX.LogicOp.CLEAR,
             depthTest: true,
             depthFunc: GX.CompareType.LESS,
             depthWrite: depthWrite && !isTransparent,
@@ -1440,15 +1436,11 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             referenceB: 0,
         };
 
-        const blendMode: GX_Material.BlendMode = {
-            type: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            srcFactor: additiveBlend ? GX.BlendFactor.ONE :GX.BlendFactor.SRCALPHA,
-            dstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
-            logicOp: GX.LogicOp.CLEAR,
-        };
-
         const ropInfo: GX_Material.RopInfo = {
-            blendMode,
+            blendMode: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
+            blendSrcFactor: additiveBlend ? GX.BlendFactor.ONE :GX.BlendFactor.SRCALPHA,
+            blendDstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
+            blendLogicOp: GX.LogicOp.CLEAR,
             depthTest: true,
             depthFunc: GX.CompareType.LESS,
             depthWrite: depthWrite && !isTransparent,

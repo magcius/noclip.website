@@ -234,15 +234,11 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             referenceB: 0.0,
         };
 
-        const blendMode: GX_Material.BlendMode = {
-            type: GX.BlendMode.NONE,
-            srcFactor: GX.BlendFactor.ONE,
-            dstFactor: GX.BlendFactor.ONE,
-            logicOp: GX.LogicOp.CLEAR,
-        };
-
         const ropInfo: GX_Material.RopInfo = {
-            blendMode,
+            blendMode: GX.BlendMode.NONE,
+            blendSrcFactor: GX.BlendFactor.ONE,
+            blendDstFactor: GX.BlendFactor.ONE,
+            blendLogicOp: GX.LogicOp.CLEAR,
             depthFunc: GX.CompareType.LESS,
             depthTest: true,
             depthWrite: true,

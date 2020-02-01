@@ -75,77 +75,6 @@ export class Light {
     }
 }
 
-const scratchVec4 = vec4.create();
-export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    vec4.set(v, x, y, z, 1.0);
-    vec4.transformMat4(v, v, viewMatrix);
-    vec3.set(light.Position, v[0], v[1], v[2]);
-}
-
-export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
-}
-
-export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    vec4.set(v, x, y, z, 0.0);
-    vec4.transformMat4(v, v, normalMatrix);
-    vec4.normalize(v, v);
-    vec3.set(light.Direction, v[0], v[1], v[2]);
-}
-
-export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
-    // However, I don't want to calculate that right now, and it shouldn't matter too much...
-    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
-}
-
-export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
-    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
-    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
-    vec3.copy(dst.DistAtten, worldLight.DistAtten);
-    vec3.copy(dst.CosAtten, worldLight.CosAtten);
-    colorCopy(dst.Color, worldLight.Color);
-}
-
-export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
-    if (cutoff <= 0 || cutoff >= 90)
-        spotFunc = GX.SpotFunction.OFF;
-
-    const cr = Math.cos(cutoff * MathConstants.DEG_TO_RAD);
-    if (spotFunc === GX.SpotFunction.FLAT) {
-        vec3.set(light.CosAtten, -1000.0 * cr, 1000.0, 0.0);
-    } else if (spotFunc === GX.SpotFunction.COS) {
-        vec3.set(light.CosAtten, -cr / (1.0 - cr), 1.0 / (1.0 - cr), 0.0);
-    } else if (spotFunc === GX.SpotFunction.COS2) {
-        vec3.set(light.CosAtten, 0.0, -cr / (1.0 - cr), 1.0 / (1.0 - cr));
-    } else if (spotFunc === GX.SpotFunction.SHARP) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, cr * (cr - 2.0) / d, 2.0 / d, -1.0 / d);
-    } else if (spotFunc === GX.SpotFunction.RING1) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, -4.0 * cr / d, 4.0 * (1.0 + cr) / d, -4.0 / d);
-    } else if (spotFunc === GX.SpotFunction.RING2) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, 1.0 - 2.0 * cr * cr / d, 4.0 * cr / d, -2.0 / d);
-    } else if (spotFunc === GX.SpotFunction.OFF) {
-        vec3.set(light.CosAtten, 1.0, 0.0, 0.0);
-    }
-}
-
-export function lightSetDistAttn(light: Light, refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
-    if (refDist < 0 || refBrightness <= 0 || refBrightness >= 1)
-        distFunc = GX.DistAttnFunction.OFF;
-
-    if (distFunc === GX.DistAttnFunction.GENTLE)
-        vec3.set(light.DistAtten, 1.0, (1.0 - refBrightness) / (refBrightness * refDist), 0.0);
-    else if (distFunc === GX.DistAttnFunction.MEDIUM)
-        vec3.set(light.DistAtten, 1.0, 0.5 * (1.0 - refBrightness) / (refBrightness * refDist), 0.5 * (1.0 - refBrightness) / (refBrightness * refDist * refDist));
-    else if (distFunc === GX.DistAttnFunction.STEEP)
-        vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
-    else if (distFunc === GX.DistAttnFunction.OFF)
-        vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
-}
-
 export interface ColorChannelControl {
     lightingEnabled: boolean;
     matColorSource: GX.ColorSrc;
@@ -228,15 +157,11 @@ export interface AlphaTest {
     referenceB: number;
 }
 
-export interface BlendMode {
-    type: GX.BlendMode;
-    srcFactor: GX.BlendFactor;
-    dstFactor: GX.BlendFactor;
-    logicOp: GX.LogicOp;
-}
-
 export interface RopInfo {
-    blendMode: BlendMode;
+    blendMode: GX.BlendMode;
+    blendSrcFactor: GX.BlendFactor;
+    blendDstFactor: GX.BlendFactor;
+    blendLogicOp: GX.LogicOp;
     depthTest: boolean;
     depthFunc: GX.CompareType;
     depthWrite: boolean;
@@ -1311,19 +1236,19 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
 
     const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
 
-    if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
+    if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
+    } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
-        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
+        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
+        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
+    } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
         attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
+    } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
         // Sonic Colors uses this? WTF?
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
@@ -1597,16 +1522,12 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const bmloe = (cm0 >>> 1) & 0x01;
     const bmbop = (cm0 >>> 11) & 0x01;
 
-    const blendType: GX.BlendMode =
+    const blendMode: GX.BlendMode =
         bmboe ? (bmbop ? GX.BlendMode.SUBTRACT : GX.BlendMode.BLEND) :
         bmloe ? GX.BlendMode.LOGIC : GX.BlendMode.NONE;;
-    const dstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
-    const srcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
-    const logicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
-    const blendMode: BlendMode = {
-        type: blendType,
-        dstFactor, srcFactor, logicOp,
-    };
+    const blendDstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
+    const blendSrcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
+    const blendLogicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
 
     // Depth state.
     const zm = r.bp[GX.BPRegister.PE_ZMODE_ID];
@@ -1615,7 +1536,7 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const depthWrite = !!((zm >>> 4) & 0x01);
 
     const ropInfo: RopInfo = {
-        blendMode, depthFunc, depthTest, depthWrite,
+        blendMode, blendDstFactor, blendSrcFactor, blendLogicOp, depthFunc, depthTest, depthWrite,
     };
 
     return ropInfo;
@@ -1719,4 +1640,75 @@ export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID
     default:
         throw "whoops";
     }
+}
+
+const scratchVec4 = vec4.create();
+export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 1.0);
+    vec4.transformMat4(v, v, viewMatrix);
+    vec3.set(light.Position, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 0.0);
+    vec4.transformMat4(v, v, normalMatrix);
+    vec4.normalize(v, v);
+    vec3.set(light.Direction, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
+    // However, I don't want to calculate that right now, and it shouldn't matter too much...
+    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
+    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
+    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
+    vec3.copy(dst.DistAtten, worldLight.DistAtten);
+    vec3.copy(dst.CosAtten, worldLight.CosAtten);
+    colorCopy(dst.Color, worldLight.Color);
+}
+
+export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
+    if (cutoff <= 0 || cutoff >= 90)
+        spotFunc = GX.SpotFunction.OFF;
+
+    const cr = Math.cos(cutoff * MathConstants.DEG_TO_RAD);
+    if (spotFunc === GX.SpotFunction.FLAT) {
+        vec3.set(light.CosAtten, -1000.0 * cr, 1000.0, 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS) {
+        vec3.set(light.CosAtten, -cr / (1.0 - cr), 1.0 / (1.0 - cr), 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS2) {
+        vec3.set(light.CosAtten, 0.0, -cr / (1.0 - cr), 1.0 / (1.0 - cr));
+    } else if (spotFunc === GX.SpotFunction.SHARP) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, cr * (cr - 2.0) / d, 2.0 / d, -1.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING1) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, -4.0 * cr / d, 4.0 * (1.0 + cr) / d, -4.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING2) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, 1.0 - 2.0 * cr * cr / d, 4.0 * cr / d, -2.0 / d);
+    } else if (spotFunc === GX.SpotFunction.OFF) {
+        vec3.set(light.CosAtten, 1.0, 0.0, 0.0);
+    }
+}
+
+export function lightSetDistAttn(light: Light, refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
+    if (refDist < 0 || refBrightness <= 0 || refBrightness >= 1)
+        distFunc = GX.DistAttnFunction.OFF;
+
+    if (distFunc === GX.DistAttnFunction.GENTLE)
+        vec3.set(light.DistAtten, 1.0, (1.0 - refBrightness) / (refBrightness * refDist), 0.0);
+    else if (distFunc === GX.DistAttnFunction.MEDIUM)
+        vec3.set(light.DistAtten, 1.0, 0.5 * (1.0 - refBrightness) / (refBrightness * refDist), 0.5 * (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.STEEP)
+        vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.OFF)
+        vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
 }

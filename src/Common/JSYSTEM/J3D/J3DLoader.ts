@@ -937,11 +937,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
         // SetBlendMode
         const blendModeOffs = blendModeTableOffs + blendModeIndex * 0x04;
-        const blendType: GX.BlendMode = view.getUint8(blendModeOffs + 0x00);
-        const blendSrc: GX.BlendFactor = view.getUint8(blendModeOffs + 0x01);
-        const blendDst: GX.BlendFactor = view.getUint8(blendModeOffs + 0x02);
+        const blendMode: GX.BlendMode = view.getUint8(blendModeOffs + 0x00);
+        const blendSrcFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x01);
+        const blendDstFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x02);
         const blendLogicOp: GX.LogicOp = view.getUint8(blendModeOffs + 0x03);
-        const blendMode: GX_Material.BlendMode = { type: blendType, srcFactor: blendSrc, dstFactor: blendDst, logicOp: blendLogicOp };
 
         const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
         const depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
@@ -949,7 +948,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
         const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
 
-        const ropInfo: GX_Material.RopInfo = { blendMode, depthTest, depthFunc, depthWrite };
+        const ropInfo: GX_Material.RopInfo = {
+            blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
+            depthTest, depthFunc, depthWrite,
+        };
         const translucent = !(flags & 0x03);
 
         const gxMaterial: GX_Material.GXMaterial = {
