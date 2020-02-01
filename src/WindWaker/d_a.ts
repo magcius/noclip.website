@@ -714,7 +714,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private alwaysCheckPlayerPos = false;
     private target = 0.0;
     private efSet = false;
-    private envrSet = false;
+    private pselSet = false;
 
     // Cylinder
     private innerFadeY = 0.0;
@@ -816,8 +816,8 @@ class d_a_kytag00 extends fopAc_ac_c {
 
             const target = this.target * blendXZ * blendY;
 
-            if (envLight.envrIdxPrev === envLight.envrIdxCurr) {
-                this.envrSet = true;
+            if (envLight.envrIdxPrev === envLight.envrIdxCurr && this.pselIdx < 4) {
+                this.pselSet = true;
 
                 if (target > 0.5) {
                     envLight.blendPselGather = target;
@@ -853,8 +853,8 @@ class d_a_kytag00 extends fopAc_ac_c {
                 // TODO(jstpierre): The rest of the modes.
             }
         } else {
-            if (this.envrSet) {
-                this.envrSet = false;
+            if (this.pselSet) {
+                this.pselSet = false;
                 envLight.pselIdxPrevGather = envLight.weatherPselIdx;
                 envLight.pselIdxCurrGather = envLight.weatherPselIdx;
                 envLight.blendPselGather = 0.0;

@@ -1449,6 +1449,7 @@ function wether_move_moya(globals: dGlobals): void {
 }
 
 function wether_move_wave(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
 }
 
 export function dKyw_wether_move_draw(globals: dGlobals): void {

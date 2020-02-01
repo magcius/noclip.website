@@ -14,20 +14,14 @@ import * as UI from '../ui';
 import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
-import { DeviceProgram } from '../Program';
-import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
+import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { range, getMatrixAxisZ } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
@@ -37,7 +31,7 @@ import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
 import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
-import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer } from './framework';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
 
@@ -290,7 +284,7 @@ export class WindWakerRoomRenderer {
 
     public extraTextures: ZWWExtraTextures;
 
-    constructor(renderer: WindWakerRenderer, public roomNo: number) {
+    constructor(private renderer: WindWakerRenderer, public roomNo: number) {
         this.name = `Room ${roomNo}`;
 
         const resCtrl = renderer.globals.modelCache.resCtrl;
@@ -313,6 +307,15 @@ export class WindWakerRoomRenderer {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+
+        const globals = this.renderer.globals.frameworkGlobals;
+        for (let i = 0; i < globals.dwQueue.length; i++) {
+            for (let j = 0; j < globals.dwQueue[i].length; j++) {
+                const ac = globals.dwQueue[i][j];
+                if (ac instanceof fopAc_ac_c && ac.roomNo === this.roomNo)
+                    ac.visible = v;
+            }
+        }
     }
 
     public setVisibleLayerMask(m: number): void {
@@ -954,7 +957,9 @@ class SceneDesc {
             }
 
             // objectSetCheck
-            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, -1, null, null, 0xFF, -1);
+
+            // noclip modification: We pass in roomNo so it's attached to the room.
+            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
