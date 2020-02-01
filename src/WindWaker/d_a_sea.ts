@@ -527,7 +527,7 @@ export class d_a_sea extends fopAc_ac_c {
         // has giant collision triangles tagged as the individual room. Here, we special case the logic for rooms.
         const isFullSea = globals.renderer.roomRenderers.length > 1;
         if (globals.stageName === 'sea' && isFullSea) {
-            const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 0, 64);
+            const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 1, 49);
             globals.mStayNo = roomNo;
         }
 
