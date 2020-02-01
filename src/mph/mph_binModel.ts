@@ -39,7 +39,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
 
     const cullMode = view.getUint8(0x41);
     const alpha = view.getInt8(0x42);
-
+    const wireFrame = view.getInt8(0x43);
     const palID = view.getUint16(0x44, true);
     let palletIndex;
     if (palID == 0xFFFF) {
@@ -53,10 +53,11 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
         textureIndex = 0;
     } else {
         textureIndex = texID;
-    }    
+    }
 
     const texParams = view.getUint16(0x48, true);
-    const polyAttribs = view.getUint32(0x58, true);
+
+    const polyAttribs = view.getInt32(0x54, true);
 
     const texScaleS = view.getInt16(0x64, true);
     const texScaleT = view.getInt16(0x68, true);

@@ -277,12 +277,8 @@ class ShapeInstance {
         this.vertexData = new VertexData(device, nitroVertexData);
     }
 
-    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
-        if (isSkybox) {
-            computeViewMatrixSkybox(dst, viewerInput.camera);
-        } else {
-            computeViewMatrix(dst, viewerInput.camera);
-        }
+    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        computeViewMatrix(dst, viewerInput.camera);
 
         mat4.mul(dst, dst, this.node.modelMatrix);
 
@@ -292,14 +288,14 @@ class ShapeInstance {
             calcYBBoardMtx(dst, dst);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
         const packetParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
 
-        this.computeModelView(scratchMat4, viewerInput, isSkybox);
+        this.computeModelView(scratchMat4, viewerInput);
         offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
 
         this.materialInstance.setOnRenderInst(template, viewerInput);
@@ -348,9 +344,9 @@ export class MPHRenderer {
         this.gfxProgram = device.createProgram(program);
         let posScale;
         if (mphModel.mtx_shmat <= 0) {
-            posScale = 16;
+            posScale = 4;
         } else {
-            posScale = mphModel.mtx_shmat * 16;
+            posScale = mphModel.mtx_shmat * 4;
         }
         
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
@@ -386,7 +382,7 @@ export class MPHRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.filterKey = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
+        template.filterKey = G3DPass.MAIN;
         template.setGfxProgram(this.gfxProgram);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
@@ -394,7 +390,7 @@ export class MPHRenderer {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput, this.isSkybox);
+            this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
     }

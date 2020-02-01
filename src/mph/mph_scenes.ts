@@ -11,7 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MPHRenderer, G3DPass } from './render';
 import { assert, readString, assertExists } from '../util';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -100,14 +100,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
-        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
         this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
@@ -213,15 +206,16 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("gorea_b2_Model", "Oubliette", "Gorea_b2", "Gorea_b2_tex"),
     new MetroidPrimeHuntersSceneDesc("ad1_model", "Transfer Lock [Defence Mode]", "ad1", "ad1_tex"),
     "Celestial Archives,",
-    //new MetroidPrimeHuntersSceneDesc("unit2_c0_model", "Helm Room", "unit2_C0", "unit2_c0_tex"), //fail to load Texture
+    new MetroidPrimeHuntersSceneDesc("unit2_c0_model", "Helm Room", "unit2_C0", "unit2_c0_tex"), //fail to load Texture
     new MetroidPrimeHuntersSceneDesc("unit2_c1_model", "Meditation Room", "unit2_C1", "unit2_c1_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_c2_model", "Fan Room Alpha", "unit2_C2", "unit2_c2_tex"),
-    new MetroidPrimeHuntersSceneDesc("unit2_RM3_model", "Data Shrine 02", "unit2_RM3", "unit2_rm3_tex"),
+    new MetroidPrimeHuntersSceneDesc("unit2_RM3_model", "Data Shrine 03", "unit2_RM3", "unit2_rm3_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_c3_model", "Fan Room Beta", "unit2_C3", "unit2_c3_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_c4_model", "Synergy Core", "unit2_C4", "unit2_c4_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_rm4_model", "Transfer Lock", "unit2_RM4", "unit2_rm4_tex"),
     new MetroidPrimeHuntersSceneDesc("unit2_rm8_model", "Docking Bay", "unit2_RM8", "unit2_rm8_tex"),
-    //new MetroidPrimeHuntersSceneDesc("unit2_c6_model", "Tetra Vista", "unit2_C6", "unit2_c6_tex"), //fail to load Texture
+    new MetroidPrimeHuntersSceneDesc("unit2_c6_model", "Tetra Vista", "unit2_C6", "unit2_c6_tex"), //fail to load Texture
+    new MetroidPrimeHuntersSceneDesc("unit2_c7_model", "New Arrival Registration", "unit2_C7", "unit2_c7_tex"), //fail to load Texture
     new MetroidPrimeHuntersSceneDesc("unit2_cx_model", "1_CX", "unit2_CX", null),
     new MetroidPrimeHuntersSceneDesc("unit2_cz_model", "1_CZ", "unit2_CZ", null),
     "Alinos",
@@ -234,7 +228,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit1_rm2_model", "Alinos Perch", "unit1_RM2", "unit1_RM2_Tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_rm3_model", "Council Chamber", "unit1_RM3", "unit1_RM3_Tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_c3_model", "Crash Site", "unit1_C3", "unit1_c3_tex"),
-    //new MetroidPrimeHuntersSceneDesc("unit1_c4_model", "Magma Drop", "unit1_C4", "unit1_c4_tex"), //fail to load Texture
+    new MetroidPrimeHuntersSceneDesc("unit1_c4_model", "Magma Drop", "unit1_C4", "unit1_c4_tex"), //fail to load Texture
     new MetroidPrimeHuntersSceneDesc("unit1_c5_model", "Piston Cave", "unit1_C5", "unit1_c5_tex"),
     new MetroidPrimeHuntersSceneDesc("unit1_cx_model", "1_CX", "unit1_CX", null),
     new MetroidPrimeHuntersSceneDesc("unit1_cz_model", "1_CZ", "unit1_CZ", null),
@@ -255,7 +249,7 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit4_rm1_model", "Ice Hive", "unit4_rm1", "unit4_rm1_Tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_c0_model", "Frost Labyrinth", "unit4_C0", "unit4_c0_tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_rm5_model", "Subterranean", "unit4_rm5", "unit4_rm5_tex"),
-    //new MetroidPrimeHuntersSceneDesc("unit4_c1_model", "Drip Moat", "unit4_C1", "unit4_c1_tex"), //fail to load Texture
+    new MetroidPrimeHuntersSceneDesc("unit4_c1_model", "Drip Moat", "unit4_C1", "unit4_c1_tex"), //fail to load Texture
     new MetroidPrimeHuntersSceneDesc("unit4_rm2_model", "Fault Line", "unit4_rm2", "unit4_rm2_tex"),
     new MetroidPrimeHuntersSceneDesc("unit4_cx_model", "4_CX", "unit4_CX", null),
     new MetroidPrimeHuntersSceneDesc("unit4_cz_model", "4_CZ", "unit4_CZ", null),
@@ -278,6 +272,8 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit4_b1_model", "biodefense chamber 04", "unit4_b1", null),
     new MetroidPrimeHuntersSceneDesc("unit4_b2_model", "biodefense chamber 07", "unit4_b2", null),
     "Boss",
+    new MetroidPrimeHuntersSceneDesc("models/DripStank_lod0_Model", "Quadtroid", null, null),
+    new MetroidPrimeHuntersSceneDesc("models/Temroid_lod0_Model", "Temroid", null, null),
     new MetroidPrimeHuntersSceneDesc("models/CylinderBoss_Model", "Cretaphid", null, null),
     new MetroidPrimeHuntersSceneDesc("models/BigEyeBall_Model", "Slench", null, null),
     new MetroidPrimeHuntersSceneDesc("models/Gorea1A_lod0_Model", "Gorea", null, null),
