@@ -275,6 +275,8 @@ void main() {
             this.framePool[i].destroy(device);
         if (this.fullscreenCopyBindings !== null)
             device.destroyBindings(this.fullscreenCopyBindings);
+        if (this.fullscreenCopyProgram !== null)
+            device.destroyProgram(this.fullscreenCopyProgram);
         if (this.fullscreenCopyPipeline !== null)
             device.destroyRenderPipeline(this.fullscreenCopyPipeline);
         if (this.depthSampler !== null)

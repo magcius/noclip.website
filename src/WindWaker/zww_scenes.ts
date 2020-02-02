@@ -131,6 +131,10 @@ export class dDlst_list_c {
         for (let i = 0; i < this.effect.length; i++)
             this.effect[i].reset();
     }
+
+    public destroy(device: GfxDevice): void {
+        this.peekZ.destroy(device);
+    }
 }
 
 export class dGlobals {
@@ -189,6 +193,10 @@ export class dGlobals {
 
     public findExtraSymbolData(filename: string, symname: string): ArrayBufferSlice {
         return assertExists(this.extraSymbolData.SymbolData.find((e) => e.Filename === filename && e.SymbolName === symname)).Data;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.dlst.destroy(device);
     }
 }
 
@@ -645,6 +653,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
         this.renderTarget.destroy(device);
+        this.globals.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
@@ -750,15 +759,9 @@ export class ModelCache {
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
     }
 
-    // For compatibility.
-    public getModel(archive: RARC.JKRArchive, modelPath: string): J3DModelData {
-        const resInfo = assertExists(this.resCtrl.findResInfoByArchive(archive, this.resCtrl.resObj));
-        const resEntry = assertExists(resInfo.res.find((g) => modelPath.endsWith(g.file.name)));
-        return resEntry.res;
-    }
-
     public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
+        this.resCtrl.destroy(device);
     }
 }
 
@@ -811,6 +814,8 @@ class d_s_play extends fopScn {
         this.flowerPacket.destroy(device);
         this.treePacket.destroy(device);
         this.grassPacket.destroy(device);
+
+        console.log('delete scn!');
     }
 }
 

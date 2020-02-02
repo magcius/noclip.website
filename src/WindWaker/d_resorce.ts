@@ -117,7 +117,7 @@ export class dRes_control_c {
     }
 }
 
-interface ResEntry<T> {
+export interface ResEntry<T> {
     file: RARCFile;
     res: T;
 }

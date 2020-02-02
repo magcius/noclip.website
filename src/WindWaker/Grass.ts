@@ -280,9 +280,12 @@ class FlowerModel {
         this.shapeWhiteCut.destroy(device);
         this.shapePinkUncut.destroy(device);
         this.shapePinkCut.destroy(device);
+        this.shapeBessouUncut.destroy(device);
+        this.shapeBessouCut.destroy(device);
 
         this.whiteTextureData.destroy(device);
         this.pinkTextureData.destroy(device);
+        this.bessouTextureData.destroy(device);
     }
 }
 

@@ -4,12 +4,12 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, WindWakerRoomRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelInstanceSimple, BMDModelMaterialData, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BMT, LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as DZB from './DZB';
 import { assertExists, hexzero, leftPad, assert } from '../util';
-import { ResType } from './d_resorce';
+import { ResType, ResEntry, ResAssetType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
 import { computeModelMatrixSRT } from '../MathHelpers';
@@ -41,8 +41,14 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return modelCache.fetchObjectData(objArcName);
     }
 
+    function getResData<T extends ResType>(resType: T, archive: RARC.JKRArchive, modelPath: string) {
+        const resInfo = assertExists(resCtrl.findResInfoByArchive(archive, resCtrl.resObj));
+        const resEntry = assertExists(resInfo.res.find((g) => modelPath.endsWith(g.file.name))) as ResEntry<ResAssetType<T>>;
+        return resEntry.res;
+    }
+
     function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
-        const model = modelCache.getModel(rarc, modelPath);
+        const model = getResData(ResType.Model, rarc, modelPath);
         const modelInstance = new J3DModelInstanceSimple(model);
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actor.name;
@@ -76,12 +82,9 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         return objectRenderer;
     }
 
-
     function buildModelBMT(rarc: RARC.JKRArchive, modelPath: string, bmtPath: string): BMDObjectRenderer {
         const objectRenderer = buildModel(rarc, modelPath);
-        const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
-        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(renderer.device, cache, bmt));
+        objectRenderer.modelInstance.setModelMaterialData(getResData(ResType.Bmt, rarc, bmtPath));
         renderer.extraTextures.fillExtraTextures(objectRenderer.modelInstance);
         return objectRenderer;
     }
