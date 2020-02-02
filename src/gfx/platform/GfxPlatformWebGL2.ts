@@ -295,6 +295,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
     public o: (object | null)[] = [];
+    public descriptor: GfxRenderPassDescriptor;
 
     public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
 
@@ -304,7 +305,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public po(r: object | null) { this.o.push(r); }
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
-    public setRenderPassParameters(ca: GfxAttachment | null, dsa: GfxAttachment | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) this.po(ca); this.po(dsa); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
+    public setRenderPassParameters(ca: GfxAttachment | null, cr: GfxTexture | null, dsa: GfxAttachment | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) { this.po(ca); this.po(cr); } this.po(dsa); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
     public setViewport(x: number, y: number, w: number, h: number) { this.pcmd(RenderPassCmd.setViewport); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setScissor(x: number, y: number, w: number, h: number)  { this.pcmd(RenderPassCmd.setScissor); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
@@ -314,7 +315,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
-    public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
+    public endPass()                              { this.pcmd(RenderPassCmd.endPass); }
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
@@ -544,6 +545,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // Pass Execution
     private _currentColorAttachments: GfxAttachmentP_GL[] = [];
+    private _currentColorResolveTos: (GfxTextureP_GL | null)[] = [];
     private _currentDepthStencilAttachment: GfxAttachmentP_GL | null;
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
@@ -1191,9 +1193,12 @@ void main() {
         if (shouldClearStencil)
             clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
 
-        const { colorAttachment, depthStencilAttachment, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+        // TODO(jstpierre): This isn't kosher.
+        pass.descriptor = descriptor;
 
-        pass.setRenderPassParameters(colorAttachment, depthStencilAttachment, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
+        const { colorAttachment, colorResolveTo, depthStencilAttachment, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+
+        pass.setRenderPassParameters(colorAttachment, colorResolveTo, depthStencilAttachment, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
         return pass;
     }
 
@@ -1268,6 +1273,11 @@ void main() {
         return this;
     }
 
+    public queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor {
+        const pass = o as GfxRenderPassP_GL;
+        return pass.descriptor;
+    }
+
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
 
@@ -1320,7 +1330,7 @@ void main() {
 
             if (cmd === RenderPassCmd.setRenderPassParameters) {
                 const numColorAttachments = u32[iu32++];
-                igfxr += numColorAttachments;
+                igfxr += numColorAttachments * 2;
                 this.setRenderPassParameters(gfxr as GfxAttachment[], numColorAttachments, gfxr[igfxr++] as GfxAttachment, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setViewport) {
                 this.setViewport(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
@@ -1343,7 +1353,7 @@ void main() {
             } else if (cmd === RenderPassCmd.drawIndexedInstanced) {
                 this.drawIndexedInstanced(u32[iu32++], u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.endPass) {
-                this.endPass(gfxr[igfxr++] as GfxTexture | null);
+                this.endPass();
                 return;
             } else {
                 const m: RenderPassCmd.invalid = cmd;
@@ -1493,7 +1503,7 @@ void main() {
         program.bindDirty = true;
     }
 
-    private setRenderPassParameters(colorAttachments: GfxAttachment[], numColorAttachments: number, depthStencilAttachment: GfxAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
+    private setRenderPassParameters(colorResources: GfxResource[], numColorAttachments: number, depthStencilAttachment: GfxAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
@@ -1501,12 +1511,14 @@ void main() {
         for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++)
             gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
         this._currentColorAttachments.length = numColorAttachments;
-        for (let i = 0; i < numColorAttachments; i++) {
-            if (this._currentColorAttachments[i] !== colorAttachments[i]) {
-                this._currentColorAttachments[i] = colorAttachments[i] as GfxAttachmentP_GL;
+        for (let i = 0; i < numColorAttachments; i += 2) {
+            const colorAttachment = colorResources[i + 0] as GfxAttachmentP_GL, colorResolveTo = colorResources[i + 1] as GfxTextureP_GL;
+            if (this._currentColorAttachments[i] !== colorAttachment) {
+                this._currentColorAttachments[i] = colorAttachment;
                 const platformColorAttachment = this._currentColorAttachments[i] !== null ? this._currentColorAttachments[i].gl_renderbuffer : null;
                 gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, platformColorAttachment);
             }
+            this._currentColorResolveTos[i] = colorResolveTo;
         }
         if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
             this._currentDepthStencilAttachment = depthStencilAttachment as GfxAttachmentP_GL;
@@ -1692,24 +1704,25 @@ void main() {
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
 
-    private endPass(resolveColorTo_: GfxTexture | null): void {
-        if (resolveColorTo_ !== null) {
-            const gl = this.gl;
+    private endPass(): void {
+        const gl = this.gl;
+        for (let i = 0; i < this._currentColorAttachments.length; i++) {
+            const colorResolveFrom = this._currentColorAttachments[i];
+            const colorResolveTo = this._currentColorResolveTos[i];
 
-            const resolveColorTo = resolveColorTo_ as GfxTextureP_GL;
-            const resolveColorFrom = this._currentColorAttachments[0];
+            if (colorResolveTo !== null) {
+                assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
 
-            assert(resolveColorFrom.width === resolveColorTo.width && resolveColorFrom.height === resolveColorTo.height);
+                gl.disable(gl.SCISSOR_TEST);
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
+                gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorResolveFrom.gl_renderbuffer);
+                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
+                gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorResolveTo.gl_texture, 0);
+                gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
 
-            gl.disable(gl.SCISSOR_TEST);
-            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
-            gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, resolveColorFrom.gl_renderbuffer);
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
-            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, resolveColorTo.gl_texture, 0);
-            gl.blitFramebuffer(0, 0, resolveColorFrom.width, resolveColorFrom.height, 0, 0, resolveColorTo.width, resolveColorTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-
-            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+            }
         }
     }
 

@@ -1083,7 +1083,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearColorPassDescriptor);
             renderInstManager.setVisibleByFilterKeyExact(BFBBPass.SKYDOME);
             renderInstManager.drawOnPassRenderer(device, skydomePassRenderer);
-            skydomePassRenderer.endPass(null);
+            skydomePassRenderer.endPass();
             device.submitPass(skydomePassRenderer);
         }
 

@@ -596,7 +596,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         // Create render pass for skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, skyboxPassRenderer, RenderPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
+        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Create main render pass.
         const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);

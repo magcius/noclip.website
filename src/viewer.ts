@@ -5,12 +5,12 @@ import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 
 export interface Texture {
@@ -27,6 +27,7 @@ export interface ViewerRenderInput {
     backbufferWidth: number;
     backbufferHeight: number;
     viewport: NormalizedViewportCoords;
+    onscreenTexture: GfxTexture;
 }
 
 export interface SceneGfx {
@@ -102,6 +103,7 @@ export class Viewer {
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
     private clearScene: ClearScene = new ClearScene();
+    private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -116,6 +118,7 @@ export class Viewer {
             backbufferWidth: 0,
             backbufferHeight: 0,
             viewport: this.viewport,
+            onscreenTexture: null!,
         };
     }
 
@@ -146,6 +149,8 @@ export class Viewer {
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
+        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+
         let renderPass: GfxRenderPass | null = null;
         if (this.scene !== null)
             renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
@@ -156,9 +161,18 @@ export class Viewer {
             this.clearScene.minimize(this.gfxDevice);
         }
 
-        const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-        renderPass.endPass(onscreenTexture);
+        // TODO(jstpierre): Rework the render API eventually.
+        const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+
+        renderPass.endPass();
         this.gfxDevice.submitPass(renderPass);
+
+        // Resolve.
+        this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
+        this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+        const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+        resolvePass.endPass();
+        this.gfxDevice.submitPass(resolvePass);
 
         this.gfxSwapChain.present();
 

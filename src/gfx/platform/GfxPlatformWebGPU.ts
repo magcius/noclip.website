@@ -341,6 +341,7 @@ class GfxHostAccessPassP_WebGPU implements GfxHostAccessPass {
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public commandEncoder: GPUCommandEncoder | null = null;
+    public descriptor: GfxRenderPassDescriptor;
     private renderPassEncoder: GPURenderPassEncoder | null = null;
     private renderPassDescriptor: GPURenderPassDescriptor;
     private colorAttachments: GPURenderPassColorAttachmentDescriptor[];
@@ -366,41 +367,37 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         };
     }
 
-    private setRenderPassDescriptor(gfxPass: GfxRenderPassDescriptor): void {
-        if (gfxPass.colorAttachment !== null) {
-            const colorAttachment = gfxPass.colorAttachment as GfxAttachmentP_WebGPU;
+    private setRenderPassDescriptor(descriptor: GfxRenderPassDescriptor): void {
+        this.descriptor = descriptor;
+
+        if (descriptor.colorAttachment !== null) {
+            const colorAttachment = descriptor.colorAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.colorAttachments[0];
             dstAttachment.attachment = colorAttachment.gpuTextureView;
-            dstAttachment.loadValue = gfxPass.colorLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : gfxPass.colorClearColor;
+            dstAttachment.loadValue = descriptor.colorLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.colorClearColor;
             dstAttachment.storeOp = 'store';
             dstAttachment.resolveTarget = undefined;
             this.renderPassDescriptor.colorAttachments = this.colorAttachments;
+
+            const resolveTexture = descriptor.colorResolveTo as (GfxTextureP_WebGPU | null);
+            if (resolveTexture !== null)
+                dstAttachment.resolveTarget = resolveTexture.gpuTextureView;
         } else {
             this.renderPassDescriptor.colorAttachments = [];
         }
 
-        if (gfxPass.depthStencilAttachment !== null) {
-            const dsAttachment = gfxPass.depthStencilAttachment as GfxAttachmentP_WebGPU;
+        if (descriptor.depthStencilAttachment !== null) {
+            const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.depthStencilAttachment;
             dstAttachment.attachment = dsAttachment.gpuTextureView;
-            dstAttachment.depthLoadValue = gfxPass.depthLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : gfxPass.depthClearValue;
-            dstAttachment.stencilLoadValue = gfxPass.stencilLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : gfxPass.stencilClearValue;
+            dstAttachment.depthLoadValue = descriptor.depthLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.depthClearValue;
+            dstAttachment.stencilLoadValue = descriptor.stencilLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.stencilClearValue;
             dstAttachment.depthStoreOp = 'store';
             dstAttachment.stencilStoreOp = 'store';
             this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment;
         } else {
             this.renderPassDescriptor.depthStencilAttachment = undefined;
         }
-    }
-
-    private setRenderPassDescriptorResolve(resolveColorAttachmentTo: GfxTexture): void {
-        // Make sure that we started with a render pass...
-        assert(this.renderPassDescriptor.colorAttachments.length === 1);
-        this.renderPassDescriptor.depthStencilAttachment = undefined;
-        this.colorAttachments[0].loadValue = 'load';
-        this.colorAttachments[0].storeOp = 'store';
-        const resolveTexture = resolveColorAttachmentTo as GfxTextureP_WebGPU;
-        this.colorAttachments[0].resolveTarget = resolveTexture.gpuTextureView;
     }
 
     public beginRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): void {
@@ -457,15 +454,9 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.renderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
     }
 
-    public endPass(resolveColorAttachmentTo: GfxTexture | null): void {
+    public endPass(): void {
         this.renderPassEncoder!.endPass();
         this.renderPassEncoder = null;
-
-        if (resolveColorAttachmentTo !== null) {
-            this.setRenderPassDescriptorResolve(resolveColorAttachmentTo);
-            const resolvePass = this.commandEncoder!.beginRenderPass(this.renderPassDescriptor);
-            resolvePass.endPass();
-        }
     }
 }
 
@@ -852,6 +843,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public queryVendorInfo(): GfxVendorInfo {
         return this;
+    }
+
+    public queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor {
+        const pass = o as GfxRenderPassP_WebGPU;
+        return pass.descriptor;
     }
 
     public setResourceName(o: GfxResource, s: string): void {

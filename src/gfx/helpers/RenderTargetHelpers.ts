@@ -135,9 +135,10 @@ export class BasicRenderTarget {
         this.depthStencilAttachment.setParameters(device, width, height, numSamples);
     }
 
-    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
+        this.renderPassDescriptor.colorResolveTo = colorResolveTo;
         this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxAttachment;
         const passRenderer = device.createRenderPass(this.renderPassDescriptor);
         setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
@@ -159,9 +160,10 @@ export class PostFXRenderTarget {
         this.colorAttachment.setParameters(device, width, height, numSamples);
     }
 
-    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
+        this.renderPassDescriptor.colorResolveTo = colorResolveTo;
         this.renderPassDescriptor.depthStencilAttachment = null;
         const passRenderer = device.createRenderPass(this.renderPassDescriptor);
         setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
@@ -176,6 +178,7 @@ export class PostFXRenderTarget {
 export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Color): GfxRenderPassDescriptor {
     return {
         colorAttachment: null,
+        colorResolveTo: null,
         depthStencilAttachment: null,
         colorClearColor: clearColor,
         colorLoadDisposition: shouldClearColor ? GfxLoadDisposition.CLEAR : GfxLoadDisposition.LOAD,
@@ -191,6 +194,7 @@ export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPass
 export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(false, TransparentBlack);
 export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorAttachment: null,
+    colorResolveTo: null,
     depthStencilAttachment: null,
     colorClearColor: TransparentBlack,
     colorLoadDisposition: GfxLoadDisposition.LOAD,

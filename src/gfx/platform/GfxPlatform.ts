@@ -234,6 +234,7 @@ export interface GfxColor {
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
     colorAttachment: GfxAttachment | null;
+    colorResolveTo: GfxTexture | null;
     colorLoadDisposition: GfxLoadDisposition;
     colorClearColor: GfxColor;
     depthStencilAttachment: GfxAttachment | null;
@@ -299,7 +300,7 @@ export interface GfxRenderPass {
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 
     // Pass resolution.
-    endPass(resolveColorAttachmentTo: GfxTexture | null): void;
+    endPass(): void;
 };
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
@@ -337,6 +338,7 @@ export interface GfxDevice {
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
+    queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor;
 
     // Debugging and high-level queries.
     setResourceName(o: GfxResource, s: string): void;
