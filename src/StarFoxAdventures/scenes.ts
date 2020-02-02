@@ -26,6 +26,7 @@ class ModelInstance {
     shapeHelper: GXShapeHelperGfx | null = null;
     materialHelper: GXMaterialHelperGfx;
     textures: (DecodedTexture | null)[] = [];
+    modelMatrix: mat4 = mat4.create();
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, enableCull: boolean) {
         const mb = new GXMaterialBuilder('Basic');
@@ -48,16 +49,20 @@ class ModelInstance {
         // vtxArrays[GX.Attr.POS] = { buffer: vertsBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
         // this.loadedVertexData = vtxLoader.runVertices(vtxArrays, new ArrayBufferSlice(dl.buffer));
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
-        console.log(`loaded vertex data ${JSON.stringify(this.loadedVertexData, null, '\t')}`);
+        // console.log(`loaded vertex data ${JSON.stringify(this.loadedVertexData, null, '\t')}`);
     }
 
     public setTextures(textures: (DecodedTexture | null)[]) {
         this.textures = textures;
     }
 
+    public setModelMatrix(mtx: mat4) {
+        mat4.copy(this.modelMatrix, mtx);
+    }
+
     private computeModelView(dst: mat4, camera: Camera): void {
         computeViewMatrix(dst, camera);
-        // mat4.mul(dst, dst, this.sceneGraphNode.modelMatrix);
+        mat4.mul(dst, dst, this.modelMatrix);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -274,7 +279,7 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 }
 
 class BlockRenderer {
-    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
+    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice, modelMatrix: mat4) {
         let offs = 0;
         const uncomp = loadRes(blocksBin);
         const uncompDv = new DataView(uncomp);
@@ -352,7 +357,7 @@ class BlockRenderer {
             };
             console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
             const tex0Flag = uncompDv.getUint32(offs + 0x8);
-            console.log(`tex0Flag: ${tex0Flag}`);
+            // console.log(`tex0Flag: ${tex0Flag}`);
             // if (tex0Flag == 1) {
                 // FIXME: tex0Flag doesn't seem to be present...
                 polyType.hasTex0 = true;
@@ -360,7 +365,7 @@ class BlockRenderer {
                 // TODO: @offs+0x28: flags, including HasTransparency.
             // }
             const tex1Flag = uncompDv.getUint32(offs + 0x14);
-            console.log(`tex1Flag: ${tex1Flag}`);
+            // console.log(`tex1Flag: ${tex1Flag}`);
             // if (tex1Flag == 1) {
                 // FIXME: tex1Flag doesn't seem to be present...
                 polyType.hasTex1 = true;
@@ -369,7 +374,7 @@ class BlockRenderer {
                 // TODO: @offs+0x30: flags, including HasTransparency.
             // }
             const attrFlags = uncompDv.getUint8(offs + 0x40);
-            console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
+            // console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
             polyType.hasNormal = (attrFlags & 1) != 0;
             polyType.hasColor = (attrFlags & 2) != 0;
             polyType.numTexCoords = uncompDv.getUint8(offs + 0x41);
@@ -424,16 +429,16 @@ class BlockRenderer {
             switch (opcode) {
             case 1: // Set polygon type
                 curPolyType = bits.get(6);
-                console.log(`setting poly type ${curPolyType}`);
+                // console.log(`setting poly type ${curPolyType}`);
                 break;
             case 2: // Geometry
                 const chunkNum = bits.get(8);
-                console.log(`geometry chunk #${chunkNum}`);
+                // console.log(`geometry chunk #${chunkNum}`);
                 offs = chunkOffset + chunkNum * 0x1C;
                 const dlOffset = uncompDv.getUint32(offs);
                 const dlSize = uncompDv.getUint16(offs + 4);
                 displayList = new ArrayBufferSlice(uncompDv.buffer, dlOffset, dlSize);
-                console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
+                // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -445,6 +450,7 @@ class BlockRenderer {
                 try {
                     const polyType = polyTypes[curPolyType];
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, polyType.enableCull);
+                    newModel.setModelMatrix(modelMatrix);
                     if (polyType.numTexCoords == 2) {
                         newModel.setTextures([
                             polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null,
@@ -462,25 +468,25 @@ class BlockRenderer {
                 break;
             case 3: // Set vertex attributes
                 const posDesc = bits.get(1);
-                console.log(`posDesc ${posDesc}`);
+                // console.log(`posDesc ${posDesc}`);
                 vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                 if (polyTypes[curPolyType].hasNormal) {
                     const normalDesc = bits.get(1);
-                    console.log(`normalDesc ${normalDesc}`);
+                    // console.log(`normalDesc ${normalDesc}`);
                     vcd[GX.Attr.NRM].type = normalDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                 } else {
                     vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
                 }
                 if (polyTypes[curPolyType].hasColor) {
                     const colorDesc = bits.get(1);
-                    console.log(`colorDesc ${colorDesc}`);
+                    // console.log(`colorDesc ${colorDesc}`);
                     vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                 } else {
                     vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
                 }
                 if (polyTypes[curPolyType].hasTexCoord[0]) {
                     const texCoordDesc = bits.get(1);
-                    console.log(`texCoordDesc: ${texCoordDesc}`);
+                    // console.log(`texCoordDesc: ${texCoordDesc}`);
                     // Note: texCoordDesc applies to all texture coordinates in the vertex
                     for (let t = 0; t < 8; t++) {
                         if (polyTypes[curPolyType].hasTexCoord[t]) {
@@ -495,7 +501,7 @@ class BlockRenderer {
                 const numWeights = bits.get(4);
                 for (let i = 0; i < numWeights; i++) {
                     const weight = bits.get(8);
-                    console.log(`weight ${i}: ${weight}`);
+                    // console.log(`weight ${i}: ${weight}`);
                 }
                 break;
             case 5: // End
@@ -538,7 +544,11 @@ function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number,
     if (trkblk == 0xff) {
         block = -1;
     } else {
-        block = base + trkblkTab.getUint16(trkblk * 2); // ???
+        try {
+            block = base + trkblkTab.getUint16(trkblk * 2); // ???
+        } catch (e) {
+            block = -1
+        }
     }
     return {base, trkblk, block};
 }
@@ -586,7 +596,9 @@ class SFAMapDesc implements Viewer.SceneDesc {
         const sfaRenderer = new SFARenderer(device);
         for (let i = 0; i < blockOffsets.length; i++) {
             const blocksBinPart = blocksBin.slice(blockOffsets[i]);
-            const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin);
+            const modelMatrix: mat4 = mat4.create();
+            mat4.fromTranslation(modelMatrix, [5000 * i, 0, 0]);
+            const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin, modelMatrix);
         }
         return sfaRenderer;
     }
@@ -595,6 +607,14 @@ class SFAMapDesc implements Viewer.SceneDesc {
 const sceneDescs = [
     'Maps',
     new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
+    new SFAMapDesc(56, 'arwingtoplanet', 'Arwing To Planet'),
+    new SFAMapDesc(24, 'clouddungeon', 'Cloud Dungeon'),
+    new SFAMapDesc(63, 'greatfox', 'Great Fox'),
+    new SFAMapDesc(30, 'icemountain', 'Ice Mountain'),
+    new SFAMapDesc(64, 'linka', 'Link A'),
+    new SFAMapDesc(7, 'volcano', 'Volcano'),
+    new SFAMapDesc(28, 'desert', 'Desert'),
+    new SFAMapDesc(42, 'gpshrine', 'GP Shrine'),
     // new SFASceneDesc('arwing', 'mod3', 'Arwing'),
     // new SFASceneDesc('arwingcity', 'mod60', 'Arwing City'),
     // new SFASceneDesc('arwingtoplanet', 'mod57', 'Arwing To Planet'),
