@@ -340,12 +340,15 @@ function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColor
     setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
 }
 
+type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
+
 const materialParams = new MaterialParams();
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
 export class MaterialInstance {
     public colorCalc: (ColorCalc | null)[] = [];
     public texMtxCalc: (TexMtxCalc | null)[] = [];
     public texNoCalc: (TexNoCalc | null)[] = [];
+    public effectMtxCallback: EffectMtxCallback | null = null;
     public name: string;
     public materialData: MaterialData;
     public materialHelper: GXMaterialHelperGfx;
@@ -522,7 +525,14 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
         const flipYScale = flipY ? -1.0 : 1.0;
 
-        // Now apply effects.
+        // If this uses a custom effect matrix and we have a callback, give the user an opportunity to create one.
+        let effectMtx = texMtx.effectMatrix;
+
+        const hasCustomEffectMtx = matrixMode === TexMtxMapMode.EnvmapEffectMtx || matrixMode === TexMtxMapMode.EnvmapOldEffectMtx;
+        if (hasCustomEffectMtx && this.effectMtxCallback !== null) {
+            this.effectMtxCallback(matrixScratch4, texMtx);
+            effectMtx = matrixScratch4;
+        }
 
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
@@ -628,7 +638,7 @@ export class MaterialInstance {
                     mat43Concat(tmp2, tmp2, tmp1);
 
                     // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
-                    J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
+                    J3DMtxProjConcat(tmp1, tmp2, effectMtx);
                 }
 
                 // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
@@ -646,7 +656,7 @@ export class MaterialInstance {
                 mat43Concat(tmp2, tmp2, tmp1);
 
                 // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
-                J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
+                J3DMtxProjConcat(tmp1, tmp2, effectMtx);
 
                 // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
                 mat43Concat(dst, tmp1, dst);

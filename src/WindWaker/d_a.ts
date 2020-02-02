@@ -3,21 +3,21 @@ import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, 
 import { dGlobals } from "./zww_scenes";
 import { vec3, mat4, quat } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
-import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad, cLib_addCalcAngleRad2, cM_rndFX } from "./SComponent";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
-import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
-import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
-import { saturate } from "../MathHelpers";
+import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation } from "../MathHelpers";
 
 // Framework'd actors
 
@@ -50,9 +50,9 @@ export const calc_mtx = mat4.create();
 
 export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
     if (concat) {
-        mat4.translate(calc_mtx, calc_mtx, pos);
+        mat4.translate(m, m, pos);
     } else {
-        mat4.fromTranslation(calc_mtx, pos);
+        mat4.fromTranslation(m, pos);
     }
 }
 
@@ -583,10 +583,10 @@ class d_a_vrbox extends fopAc_ac_c {
         let skyboxOffsY = 0;
         const fili = globals.roomStatus[globals.mStayNo].fili;
         if (fili !== null)
-            skyboxOffsY = 0.09 * (globals.cameraPosition[1] - fili.skyboxY);
+            skyboxOffsY = fili.skyboxY;
 
         MtxTrans(globals.cameraPosition, false);
-        calc_mtx[13] -= skyboxOffsY;
+        calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
         dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
@@ -1014,9 +1014,6 @@ class d_a_obj_lpalm extends fopAc_ac_c {
     };
 
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        if (this.roomNo !== 44)
-            return;
-
         const envLight = globals.g_env_light;
 
         const windVec = dKyw_get_wind_vec(envLight);
@@ -1057,6 +1054,78 @@ class d_a_obj_lpalm extends fopAc_ac_c {
     }
 }
 
+function vecHalfAngle(dst: vec3, a: vec3, b: vec3): void {
+    vec3.negate(a, a);
+    vec3.negate(b, b);
+    vec3.normalize(a, a);
+    vec3.normalize(b, b);
+    vec3.add(dst, a, b);
+    if (vec3.dot(dst, dst) > 0.0)
+        vec3.normalize(dst, dst);
+    else
+        vec3.set(dst, 0, 0, 0);
+}
+
+class d_a_obj_zouK1 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK1;
+
+    private model: J3DModelInstance;
+    private effectMtx = mat4.create();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `VzouK`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `VzouK`, 0x08));
+
+        for (let i = 0; i < this.model.materialInstances.length; i++)
+            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+
+        return cPhs__Status.Next;
+    }
+
+    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
+        mat4.copy(dst, this.effectMtx);
+    }
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.set_mtx();
+    }
+
+    private setEffectMtx(globals: dGlobals, pos: vec3, refl: number): void {
+        const scale = 1.0 / refl;
+        computeModelMatrixS(this.effectMtx, scale, scale, 1.0);
+
+        // Remap.
+        buildEnvMtx(scratchMat4a, 1.0);
+        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
+
+        // Half-vector lookAt transform.
+        vec3.sub(scratchVec3a, pos, globals.cameraPosition);
+        dKyr_get_vectle_calc(this.tevStr.lightObj.Position, pos, scratchVec3b);
+        vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
+        mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
+        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
+
+        computeMatrixWithoutTranslation(this.effectMtx, this.effectMtx);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        this.setEffectMtx(globals, this.pos, 0.5);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -1076,4 +1145,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_kytag01);
     R(d_a_obj_Ygush00);
     R(d_a_obj_lpalm);
+    R(d_a_obj_zouK1);
 }

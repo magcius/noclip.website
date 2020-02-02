@@ -61,8 +61,6 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Raw ? ArrayBufferSlice :
     never;
 
-type OptionalGfx<T extends ResType> = T extends ResType.Bti ? true : false;
-
 export class dRes_control_c {
     public resObj: dRes_info_c[] = [];
     public resStg: dRes_info_c[] = [];
@@ -96,7 +94,7 @@ export class dRes_control_c {
 
     public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
-        return resInfo.getResByID(resType, resID);
+        return resInfo.getResByIndex(resType, resID);
     }
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
@@ -160,6 +158,14 @@ export class dRes_info_c {
         return resEntry.res;
     }
 
+    private getResEntryByIndex<T extends ResType>(resType: T, resIndex: number): ResEntry<ResAssetType<T>> {
+        const resList: ResEntry<ResAssetType<T>>[] = this.res;
+        for (let i = 0; i < resList.length; i++)
+            if (resList[i].file.index === resIndex)
+                return resList[i];
+        throw "whoops";
+    }
+
     private getResEntryByID<T extends ResType>(resType: T, resID: number): ResEntry<ResAssetType<T>> {
         const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++)
@@ -174,6 +180,10 @@ export class dRes_info_c {
             if (resList[i].file.name === resName)
                 return resList[i];
         return null;
+    }
+
+    public getResByIndex<T extends ResType>(resType: T, resIndex: number): ResAssetType<T> {
+        return this.lazyLoadResource(resType, this.getResEntryByIndex(resType, resIndex));
     }
 
     public getResByID<T extends ResType>(resType: T, resID: number): ResAssetType<T> {

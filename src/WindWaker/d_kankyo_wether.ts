@@ -1133,7 +1133,7 @@ export class dKankyo_wave_Packet {
     }
 }
 
-function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
+export function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
 }
@@ -1505,8 +1505,13 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
 function wether_move_windline(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
-    const windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
-    if (windlineCount <= 0.0)
+    let windlineCount = 0;
+    const fili = globals.roomStatus[globals.mStayNo].fili;
+    if (fili !== null && !!(fili.param & 0x100000) && globals.stageName !== 'GTower') {
+        windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
+    }
+
+    if (windlineCount <= 0)
         return;
 
     if (envLight.windline === null)

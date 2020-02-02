@@ -117,11 +117,13 @@ export class dStage_Multi_c {
 }
 
 export class dStage_FileList_dt_c {
+    public param: number;
     public skyboxY: number;
 
     public parse(buffer: ArrayBufferSlice): number {
         const view = buffer.createDataView();
 
+        this.param = view.getUint32(0x00);
         this.skyboxY = view.getFloat32(0x04);
         return 0x08;
     }

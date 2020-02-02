@@ -28,7 +28,7 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
-import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
+import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
@@ -889,8 +889,8 @@ class SceneDesc {
         const resCtrl = modelCache.resCtrl;
 
         const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
-        const ZAtoon   = sysRes.getResByID(ResType.Bti, 0x03);
-        const ZBtoonEX = sysRes.getResByID(ResType.Bti, 0x04);
+        const ZAtoon   = sysRes.getResByIndex(ResType.Bti, 0x03);
+        const ZBtoonEX = sysRes.getResByIndex(ResType.Bti, 0x04);
 
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
@@ -970,6 +970,8 @@ class SceneDesc {
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
             this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
+
+            dStage_dt_c_roomLoader(globals.roomStatus[roomNo], dzr);
         }
 
         // HACK(jstpierre): We spawn stage actors on the first room renderer.
