@@ -16,6 +16,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
 import { gx_texture_asExports } from '../wat_modules';
+import { AreaRenderer } from '../GrandTheftAuto3/render';
 
 const pathBase = 'sfa';
 
@@ -272,22 +273,10 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
     }
 }
 
-class SFASceneDesc implements Viewer.SceneDesc {
-    constructor(public subdir: string, public id: string, public name: string) {
-    }
-
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-        const sceneData = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/${this.id}`);
-        const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX0.tab`);
-        const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX0.bin`);
-        const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX1.tab`);
-        const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${this.subdir}/TEX1.bin`);
-
-        console.log(`Creating SFA scene for ${this.subdir}/${this.id} ...`);
-
+class BlockRenderer {
+    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
         let offs = 0;
-        const uncomp = loadRes(sceneData);
+        const uncomp = loadRes(blocksBin);
         const uncompDv = new DataView(uncomp);
 
         const modelType = uncompDv.getUint16(4);
@@ -313,15 +302,6 @@ class SFASceneDesc implements Viewer.SceneDesc {
             const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, entryNum);
             decodedTextures.push(tex1);
         }
-
-        // const decodedTextures0: (DecodedTexture | null)[] = [];
-        // const decodedTextures1: (DecodedTexture | null)[] = [];
-        // for (let i = 0; i < texIds.length; i++) {
-        //     const tex0 = loadTextureFromTable(device, tex0Tab, tex0Bin, texIds[i]);
-        //     const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, texIds[i]);
-        //     decodedTextures0.push(tex0);
-        //     decodedTextures1.push(tex1);
-        // }
 
         //////////////////////////
 
@@ -436,8 +416,6 @@ class SFASceneDesc implements Viewer.SceneDesc {
 
         let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
 
-        const renderer = new SFARenderer(device);
-
         const bits = new LowBitReader(uncompDv, bitsOffset);
         let done = false;
         let curPolyType = 0;
@@ -527,29 +505,112 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 throw Error(`Unknown model bits opcode ${opcode}`);
             }
         }
-        
-        return renderer;
+    }
+}
+
+interface MapInfo {
+    infoOffset: number;
+    blockTableOffset: number;
+    blockCols: number;
+    blockRows: number;
+}
+
+function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): MapInfo {
+    const offs = locationNum * 0x1c;
+    const infoOffset = mapsTab.getUint32(offs + 0x0);
+    const blockTableOffset = mapsTab.getUint32(offs + 0x4);
+    const blockCols = mapsBin.getUint16(infoOffset + 0x0);
+    const blockRows = mapsBin.getUint16(infoOffset + 0x2);
+    return { infoOffset, blockTableOffset, blockCols, blockRows };
+}
+
+interface BlockInfo {
+    base: number;
+    trkblk: number;
+    block: number;
+}
+
+function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView) {
+    const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * (y * mapInfo.blockRows + x));
+    const base = (blockInfo >>> 17) & 0x3F;
+    const trkblk = (blockInfo >>> 23);
+    let block;
+    if (trkblk == 0xff) {
+        block = -1;
+    } else {
+        block = base + trkblkTab.getUint16(trkblk * 2); // ???
+    }
+    return {base, trkblk, block};
+}
+
+class SFAMapDesc implements Viewer.SceneDesc {
+    constructor(public locationNum: number, public id: string, public name: string) {
+    }
+    
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const mapsTab = (await dataFetcher.fetchData(`${pathBase}/MAPS.tab`)).createDataView();
+        const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
+        const trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
+        const subdir = `${pathBase}/${this.id}`;
+        const blocksTab = (await dataFetcher.fetchData(`${subdir}/mod${this.locationNum + 1}.tab`)).createDataView();
+        const blocksBin = await dataFetcher.fetchData(`${subdir}/mod${this.locationNum + 1}.zlb.bin`);
+        const tex0Tab = await dataFetcher.fetchData(`${subdir}/TEX0.tab`);
+        const tex0Bin = await dataFetcher.fetchData(`${subdir}/TEX0.bin`);
+        const tex1Tab = await dataFetcher.fetchData(`${subdir}/TEX1.tab`);
+        const tex1Bin = await dataFetcher.fetchData(`${subdir}/TEX1.bin`);
+
+        console.log(`Creating scene for ${this.name} ...`);
+
+        // TODO: figure out how to correctly parse this information
+        const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
+        for (let y = 0; y < mapInfo.blockRows; y++) {
+            let line = '';
+            for (let x = 0; x < mapInfo.blockCols; x++) {
+                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab);
+                line += ` ${JSON.stringify(blockInfo)}`;
+            }
+            console.log(`${line}`);
+        }
+
+        const blockOffsets: number[] = [];
+        let offs = 0;
+        while (offs < blocksTab.byteLength) {
+            const loc = blocksTab.getUint32(offs);
+            if (loc != 0 && loc != 0xFFFFFFFF) {
+                blockOffsets.push(loc & 0xFFFFFF);
+            }
+            offs += 4;
+        }
+
+        const sfaRenderer = new SFARenderer(device);
+        for (let i = 0; i < blockOffsets.length; i++) {
+            const blocksBinPart = blocksBin.slice(blockOffsets[i]);
+            const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin);
+        }
+        return sfaRenderer;
     }
 }
 
 const sceneDescs = [
-    'Test',
-    new SFASceneDesc('arwing', 'mod3.zlb.bin', 'Arwing'),
-    new SFASceneDesc('arwingcity', 'mod60.zlb.bin', 'Arwing City'),
-    new SFASceneDesc('arwingtoplanet', 'mod57.zlb.bin', 'Arwing To Planet'),
-    new SFASceneDesc('bossdrakor', 'mod52.zlb.bin', 'Boss Drakor'),
-    new SFASceneDesc('bossgaldon', 'mod36.zlb.bin', 'Boss Galdon'),
-    new SFASceneDesc('bosstrex', 'mod54.zlb.bin', 'Boss T-rex'),
-    new SFASceneDesc('capeclaw', 'mod48.zlb.bin', 'Cape Claw'),
-    new SFASceneDesc('clouddungeon', 'mod25.zlb.bin', 'Cloud Dungeon'),
-    new SFASceneDesc('darkicemines', 'mod27.zlb.bin', 'Dark Ice Mines'),
-    new SFASceneDesc('desert', 'mod29.zlb.bin', 'Desert'),
-    new SFASceneDesc('dragrock', 'mod4.zlb.bin', 'Drag Rock'),
-    new SFASceneDesc('gpshrine', 'mod43.zlb.bin', 'GP Shrine'),
-    new SFASceneDesc('greatfox', 'mod64.zlb.bin', 'Great Fox'),
-    new SFASceneDesc('icemountain', 'mod31.zlb.bin', 'Ice Mountain'),
-    new SFASceneDesc('linka', 'mod65.zlb.bin', 'Link A'),
-    new SFASceneDesc('volcano', 'mod8.zlb.bin', 'Volcano'),
+    'Maps',
+    new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
+    // new SFASceneDesc('arwing', 'mod3', 'Arwing'),
+    // new SFASceneDesc('arwingcity', 'mod60', 'Arwing City'),
+    // new SFASceneDesc('arwingtoplanet', 'mod57', 'Arwing To Planet'),
+    // new SFASceneDesc('bossdrakor', 'mod52', 'Boss Drakor'),
+    // new SFASceneDesc('bossgaldon', 'mod36', 'Boss Galdon'),
+    // new SFASceneDesc('bosstrex', 'mod54', 'Boss T-rex'),
+    // new SFASceneDesc('capeclaw', 'mod48', 'Cape Claw'),
+    // new SFASceneDesc('clouddungeon', 'mod25', 'Cloud Dungeon'),
+    // new SFASceneDesc('darkicemines', 'mod27', 'Dark Ice Mines'),
+    // new SFASceneDesc('desert', 'mod29', 'Desert'),
+    // new SFASceneDesc('dragrock', 'mod4', 'Drag Rock'),
+    // new SFASceneDesc('gpshrine', 'mod43', 'GP Shrine'),
+    // new SFASceneDesc('greatfox', 'mod64', 'Great Fox'),
+    // new SFASceneDesc('icemountain', 'mod31', 'Ice Mountain'),
+    // new SFASceneDesc('linka', 'mod65', 'Link A'),
+    // new SFASceneDesc('volcano', 'mod8', 'Volcano'),
 ];
 
 const id = 'sfa';
