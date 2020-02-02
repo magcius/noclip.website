@@ -1382,9 +1382,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
         m.lightTevColorType = LightType.BG0;
         // TODO(jstpierre): ymnkz00
     });
-    else if (actor.name === 'Ygush00' || actor.name === 'Ygush01' || actor.name === 'Ygush02') fetchArchive(`Ygush00`).then((rarc) => buildModel(rarc, `bdlm/ygush00.bdl`).bindTTK1(parseBTK(rarc, `btk/ygush00.btk`)));
     else if (actor.name === 'Yboil00') fetchArchive(`Yboil`).then((rarc) => buildModel(rarc, `bdlm/yboil00.bdl`).bindTTK1(parseBTK(rarc, `btk/yboil00.btk`)));
-    else if (actor.name === 'Ygstp00') fetchArchive(`Ygush00`).then((rarc) => buildModel(rarc, `bdlm/ygstp00.bdl`).bindTTK1(parseBTK(rarc, `btk/ygstp00.btk`)));
     else if (actor.name === 'Ytrnd00') fetchArchive(`Trnd`).then((rarc) => {
         buildModel(rarc, `bdlm/ytrnd00.bdl`).bindTTK1(parseBTK(rarc, `btk/ytrnd00.btk`));
         buildModel(rarc, `bdlm/ywuwt00.bdl`).bindTTK1(parseBTK(rarc, `btk/ywuwt00.btk`));
@@ -1824,6 +1822,6 @@ export async function loadActor(globals: dGlobals, roomRenderer: WindWakerRoomRe
         // console.warn(`Legacy actor: ${actor.name} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.arg, 8)}`);
     } else {
         const dbgName = globals.objNameGetDbgName(objName);
-        // console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
+        console.warn(`Unknown obj: ${actor.name} / ${dbgName} / ${roomRenderer.name} Layer ${actor.layer}`);
     }
 }

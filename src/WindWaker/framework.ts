@@ -7,21 +7,22 @@ import { assertExists, nArray, arrayRemove, assert } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
 
 export const enum fpc__ProcessName {
-    d_s_play     = 0x0007,
-    d_kankyo     = 0x0015,
-    d_envse      = 0x0017,
-    d_a_sea      = 0x0028,
-    d_a_ep       = 0x00BA,
-    d_a_tbox     = 0x0126,
-    d_a_kytag00  = 0x0181,
-    d_a_kytag01  = 0x0182,
-    d_a_grass    = 0x01B8,
-    d_thunder    = 0x01B9,
-    d_a_vrbox    = 0x01BA,
-    d_a_vrbox2   = 0x01BB,
-    d_a_bg       = 0x01BC,
-    d_kyeff      = 0x01E4,
-    d_kyeff2     = 0x01E5,
+    d_s_play            = 0x0007,
+    d_kankyo            = 0x0015,
+    d_envse             = 0x0017,
+    d_a_sea             = 0x0028,
+    d_a_obj_Ygush00     = 0x0099,
+    d_a_ep              = 0x00BA,
+    d_a_tbox            = 0x0126,
+    d_a_kytag00         = 0x0181,
+    d_a_kytag01         = 0x0182,
+    d_a_grass           = 0x01B8,
+    d_thunder           = 0x01B9,
+    d_a_vrbox           = 0x01BA,
+    d_a_vrbox2          = 0x01BB,
+    d_a_bg              = 0x01BC,
+    d_kyeff             = 0x01E4,
+    d_kyeff2            = 0x01E5,
 };
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };

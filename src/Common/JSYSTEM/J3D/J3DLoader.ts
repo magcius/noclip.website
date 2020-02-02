@@ -1712,7 +1712,7 @@ export class BPK {
 //#endregion
 //#region J3DAnmTransformKey
 //#region ANK1
-interface JointAnimationEntry {
+interface ANK1JointAnimationEntry {
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
     translationX: AnimationTrack;
@@ -1725,7 +1725,7 @@ interface JointAnimationEntry {
 }
 
 export interface ANK1 extends AnimationBase {
-    jointAnimationEntries: JointAnimationEntry[];
+    jointAnimationEntries: ANK1JointAnimationEntry[];
 }
 
 function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
@@ -1757,7 +1757,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
-    const jointAnimationEntries: JointAnimationEntry[] = [];
+    const jointAnimationEntries: ANK1JointAnimationEntry[] = [];
     for (let i = 0; i < jointAnimationTableCount; i++) {
         const scaleX = readAnimationTrack(sTable, 1);
         const rotationX = readAnimationTrack(rTable, rotationScale);
@@ -1789,7 +1789,7 @@ export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Ani
     let translationY: number;
     let translationZ: number;
 
-    let entry: JointAnimationEntry | null = null;
+    let entry: ANK1JointAnimationEntry | null = null;
 
     if (ank1Animator !== null)
         entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;

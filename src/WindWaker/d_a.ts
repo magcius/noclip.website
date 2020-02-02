@@ -7,7 +7,7 @@ import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBa
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
@@ -907,6 +907,56 @@ class d_a_kytag01 extends fopAc_ac_c {
     }
 }
 
+class d_a_obj_Ygush00 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_Ygush00;
+
+    private type: number;
+    private model: J3DModelInstance;
+    private btkAnm = new mDoExt_btkAnm();
+    private bckAnm = new mDoExt_bckAnm();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Ygush00`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.type = this.parameters & 0x03;
+        const mdl_table = [0x0A, 0x09, 0x09, 0x09];
+        const btk_table = [0x0E, 0x0D, 0x0D, 0x0D];
+        const bck_table = [0x06, 0x05, 0x05, 0x05];
+
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Ygush00`, mdl_table[this.type]));
+        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
+        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
+
+        vec3.copy(this.model.baseScale, this.scale);
+        mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
+
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.type !== 3) {
+            this.btkAnm.play(deltaTimeInFrames);
+            this.bckAnm.play(deltaTimeInFrames);
+        }
+
+        if (this.type === 1) {
+            // Judge for Gryw00 nearby
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG1, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        this.btkAnm.entry(this.model);
+        this.bckAnm.entry(this.model);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -924,4 +974,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_sea);
     R(d_a_kytag00);
     R(d_a_kytag01);
+    R(d_a_obj_Ygush00);
 }
