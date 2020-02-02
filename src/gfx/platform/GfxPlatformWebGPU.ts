@@ -836,7 +836,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public submitReadback(o: GfxReadback): void {
     }
 
-    public queryReadbackFinished(dst: Float32Array, dstOffs: number, o: GfxReadback): boolean {
+    public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
         return true;
     }
 
