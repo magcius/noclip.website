@@ -189,6 +189,7 @@ const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorResolveTo: null,
     depthStencilAttachment: null,
     colorClearColor: TransparentBlack,
+    depthStencilResolveTo: null,
     colorLoadDisposition: GfxLoadDisposition.CLEAR,
     depthClearValue: 1.0,
     depthLoadDisposition: GfxLoadDisposition.LOAD,

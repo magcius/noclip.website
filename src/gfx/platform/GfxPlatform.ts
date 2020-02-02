@@ -238,6 +238,7 @@ export interface GfxRenderPassDescriptor {
     colorLoadDisposition: GfxLoadDisposition;
     colorClearColor: GfxColor;
     depthStencilAttachment: GfxAttachment | null;
+    depthStencilResolveTo: GfxTexture | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
     stencilLoadDisposition: GfxLoadDisposition;
