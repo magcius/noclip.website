@@ -9,7 +9,7 @@ import { CMDL } from './cmdl';
 import { ANCS } from './ancs';
 import { CHAR } from "./char";
 import { InputStream } from './stream';
-import { colorFromRGBA, colorNew, Color } from "../Color";
+import { colorFromRGBA, colorNewFromRGBA, Color } from "../Color";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 import { GameVersion, AreaVersion } from "./mrea";
 
@@ -90,7 +90,7 @@ export const enum WorldLightingOptions {
 }
 
 export class LightParameters {
-    public ambient: Color = colorNew(1, 1, 1, 1);
+    public ambient: Color = colorNewFromRGBA(1, 1, 1, 1);
     public options: WorldLightingOptions = WorldLightingOptions.NormalLighting;
     public layerIdx: number = 0;
     public maxAreaLights: Number = 4;

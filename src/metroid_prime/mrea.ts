@@ -17,7 +17,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { AABB } from '../Geometry';
-import { colorFromRGBA8, Color, colorNew, colorNewCopy, TransparentBlack } from '../Color';
+import { colorFromRGBA8, Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';
 
 export interface MREA {
@@ -245,14 +245,14 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
                 const g = stream.readUint8() / 255;
                 const b = stream.readUint8() / 255;
                 const a = stream.readUint8() / 255;
-                colorConstants.push(colorNew(r, g, b, a));
+                colorConstants.push(colorNewFromRGBA(r, g, b, a));
             }
         }
 
         for (let j = colorConstants.length; j < 4; j++) {
             // Push default colors.
             // XXX(jstpierre): Should this stuff be moved outside GXMaterial?
-            colorConstants.push(colorNew(0, 0, 0, 0));
+            colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
         }
 
         const blendDstFactor: GX.BlendFactor = stream.readUint16();
@@ -387,10 +387,10 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         const useAlphaTest = !!(flags & MaterialFlags.ALPHA_TEST);
 
         const colorRegisters: Color[] = [];
-        colorRegisters.push(colorNew(0, 0, 0, 0));
-        colorRegisters.push(colorNew(1, 1, 1, 0));
-        colorRegisters.push(colorNew(1, 1, 1, 0));
-        colorRegisters.push(colorNew(0, 0, 0, 0));
+        colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
+        colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
+        colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
+        colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,
@@ -1280,10 +1280,10 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
 
         let passIndex = 0;
         const colorConstants: Color[] = [];
-        colorConstants.push(colorNew(1, 1, 1, 1));
-        colorConstants.push(colorNew(0, 0, 0, 0));
-        colorConstants.push(colorNew(0, 0, 0, 0));
-        colorConstants.push(colorNew(0, 0, 0, 0));
+        colorConstants.push(colorNewFromRGBA(1, 1, 1, 1));
+        colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
+        colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
+        colorConstants.push(colorNewFromRGBA(0, 0, 0, 0));
 
         const texGens: GX_Material.TexGen[] = [];
         const tevStages: GX_Material.TevStage[] = [];
@@ -1425,10 +1425,10 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         });
 
         const colorRegisters: Color[] = [];
-        colorRegisters.push(colorNew(0, 0, 0, 0));
-        colorRegisters.push(colorNew(1, 1, 1, 0));
-        colorRegisters.push(colorNew(1, 1, 1, 0));
-        colorRegisters.push(colorNew(0, 0, 0, 0));
+        colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
+        colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
+        colorRegisters.push(colorNewFromRGBA(1, 1, 1, 0));
+        colorRegisters.push(colorNewFromRGBA(0, 0, 0, 0));
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,

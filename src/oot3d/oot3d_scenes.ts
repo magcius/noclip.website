@@ -17,7 +17,7 @@ import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { TransparentBlack, colorNew, White } from '../Color';
+import { TransparentBlack, colorNewFromRGBA, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
@@ -1813,15 +1813,15 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
             const whichPalette = actor.variable & 0x000F;
             if (whichPalette === 0x00) {
-                b.setConstantColor(1, colorNew(0.39216, 0.5098, 0.92157));
-                b.setConstantColor(2, colorNew(0.11765, 0.94118, 0.78431));
-                b.setConstantColor(3, colorNew(0.62745, 0.98039, 0.23529));
-                b.setConstantColor(4, colorNew(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(1, colorNewFromRGBA(0.39216, 0.5098, 0.92157));
+                b.setConstantColor(2, colorNewFromRGBA(0.11765, 0.94118, 0.78431));
+                b.setConstantColor(3, colorNewFromRGBA(0.62745, 0.98039, 0.23529));
+                b.setConstantColor(4, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
             } else if (whichPalette === 0x01) {
-                b.setConstantColor(1, colorNew(0.35294, 0.23529, 0.03992));
-                b.setConstantColor(2, colorNew(0.62745, 0.98039, 0.23529));
-                b.setConstantColor(3, colorNew(0.11765, 0.94118, 0.78431));
-                b.setConstantColor(4, colorNew(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(1, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(2, colorNewFromRGBA(0.62745, 0.98039, 0.23529));
+                b.setConstantColor(3, colorNewFromRGBA(0.11765, 0.94118, 0.78431));
+                b.setConstantColor(4, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
             } else {
                 throw "whoops";
             }
@@ -1856,7 +1856,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 // TODO(jstpierre): Animate on path
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(0.21568, 0.21568, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.21568, 0.21568, 1));
                 b.setConstantColor(4, White);
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_5.csab`));
                 b.setVertexColorScale(characterLightScale);
@@ -1868,7 +1868,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(1, 0, 0));
+                b.setConstantColor(3, colorNewFromRGBA(1, 0, 0));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
@@ -1876,8 +1876,8 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichNPC === 0x05) { // "Begging man"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(0.19608, 0.31373, 0));
-                b.setConstantColor(4, colorNew(0.19608, 0.31373, 0));
+                b.setConstantColor(3, colorNewFromRGBA(0.19608, 0.31373, 0));
+                b.setConstantColor(4, colorNewFromRGBA(0.19608, 0.31373, 0));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_9.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
@@ -1893,7 +1893,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji_matsu.csab`));
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0, 0.1968, 0.62745));
+                b.setConstantColor(4, colorNewFromRGBA(0, 0.1968, 0.62745));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[5].visible = false;
             } else if (whichNPC === 0x08) { // "Thin woman in lilac"
@@ -1901,15 +1901,15 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hylialady.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/cne_n_wait.csab`));
                 b.setVertexColorScale(characterLightScale);
-                b.setConstantColor(2, colorNew(0.62734, 0.70588, 1));
-                b.setConstantColor(3, colorNew(0.62734, 0.70588, 1));
-                b.setConstantColor(4, colorNew(0.62734, 0.70588, 1));
+                b.setConstantColor(2, colorNewFromRGBA(0.62734, 0.70588, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.62734, 0.70588, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.62734, 0.70588, 1));
                 b.shapeInstances[5].visible = false;
             } else if (whichNPC === 0x09) { // "Laughing man in red & white"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0.86275, 0, 0.31373));
+                b.setConstantColor(4, colorNewFromRGBA(0.86275, 0, 0.31373));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_13.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 6; i < 12; i++)
@@ -1918,7 +1918,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0, 0.5098, 0.86275));
+                b.setConstantColor(4, colorNewFromRGBA(0, 0.5098, 0.86275));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_14.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 6; i < 12; i++)
@@ -1929,14 +1929,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/cne2_15.csab`));
                 b.setVertexColorScale(characterLightScale);
                 b.setConstantColor(2, White);
-                b.setConstantColor(3, colorNew(1, 1, 0.39216));
-                b.setConstantColor(4, colorNew(0.27451, 0.62734, 0.90196));
+                b.setConstantColor(3, colorNewFromRGBA(1, 1, 0.39216));
+                b.setConstantColor(4, colorNewFromRGBA(0.27451, 0.62734, 0.90196));
                 b.shapeInstances[4].visible = false;
             } else if (whichNPC === 0x0C) { // "Looking man in crimson"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(1, 0.94118, 0.58824));
-                b.setConstantColor(4, colorNew(0.58824, 0.23529, 0.35294));
+                b.setConstantColor(3, colorNewFromRGBA(1, 0.94118, 0.58824));
+                b.setConstantColor(4, colorNewFromRGBA(0.58824, 0.23529, 0.35294));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_17.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
@@ -1946,8 +1946,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(0.78431, 0.70588, 1));
-                b.setConstantColor(4, colorNew(0.78431, 0.70588, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.78431, 0.70588, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.78431, 0.70588, 1));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
@@ -1957,7 +1957,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_19.csab`));
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0.54901, 1, 0.43137));
+                b.setConstantColor(4, colorNewFromRGBA(0.54901, 1, 0.43137));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
@@ -1966,8 +1966,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_bji.zar`);
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
-                b.setConstantColor(3, colorNew(0.50980, 0.70577, 1));
-                b.setConstantColor(4, colorNew(0.50980, 0.27450, 0.07843));
+                b.setConstantColor(3, colorNewFromRGBA(0.50980, 0.70577, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.50980, 0.27450, 0.07843));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1975,8 +1975,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_bji.zar`);
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
-                b.setConstantColor(3, colorNew(0.27450, 0.50980, 0.82352));
-                b.setConstantColor(4, colorNew(0.62754, 0, 0.39215));
+                b.setConstantColor(3, colorNewFromRGBA(0.27450, 0.50980, 0.82352));
+                b.setConstantColor(4, colorNewFromRGBA(0.62754, 0, 0.39215));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1984,8 +1984,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(0, 0.58823, 0.43137));
-                b.setConstantColor(4, colorNew(0.62745, 0.90196, 0));
+                b.setConstantColor(3, colorNewFromRGBA(0, 0.58823, 0.43137));
+                b.setConstantColor(4, colorNewFromRGBA(0.62745, 0.90196, 0));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;

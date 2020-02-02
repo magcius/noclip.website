@@ -4,7 +4,7 @@ import { BasicRenderTarget, makeClearRenderPassDescriptor, ColorTexture, noClear
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
-import { colorNew } from "../Color";
+import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
@@ -199,7 +199,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
 
 const enum Pass { MAIN, INDIRECT }
 
-const clearPass = makeClearRenderPassDescriptor(true, colorNew(0.2, 0.2, 0.2, 1.0));
+const clearPass = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {

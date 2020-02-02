@@ -17,7 +17,7 @@ import { getPointHermite } from '../../../Spline';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNew, colorCopy } from '../../../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 import { VAF1_getVisibility } from './J3DGraphAnimator';
 
@@ -615,11 +615,7 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
 }
 
 function readColorU8(view: DataView, srcOffs: number): Color {
-    const r = view.getUint8(srcOffs + 0x00) / 0xFF;
-    const g = view.getUint8(srcOffs + 0x01) / 0xFF;
-    const b = view.getUint8(srcOffs + 0x02) / 0xFF;
-    const a = view.getUint8(srcOffs + 0x03) / 0xFF;
-    return colorNew(r, g, b, a);
+    return colorNewFromRGBA8(view.getUint32(srcOffs + 0x00));
 }
 
 function readColorS16(view: DataView, srcOffs: number): Color {
@@ -627,7 +623,7 @@ function readColorS16(view: DataView, srcOffs: number): Color {
     const g = view.getInt16(srcOffs + 0x02) / 0xFF;
     const b = view.getInt16(srcOffs + 0x04) / 0xFF;
     const a = view.getInt16(srcOffs + 0x06) / 0xFF;
-    return colorNew(r, g, b, a);
+    return colorNewFromRGBA(r, g, b, a);
 }
 
 function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {

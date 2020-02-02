@@ -17,7 +17,7 @@ import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition } from "./item";
-import { colorNew, White, colorNewCopy, Color, colorCopy } from "../Color";
+import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -303,7 +303,7 @@ class RWMeshFragData implements MeshFragData {
         if (texture)
             this.texName = txdName + '/' + texture.name.toLowerCase();
         if (color)
-            this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
+            this.baseColor = colorNewFromRGBA(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
         for (let i = 0; i < 8; i++) {
             const ip = uvAnim.interp(i);
             if (ip === null) continue;

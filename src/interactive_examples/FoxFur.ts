@@ -6,7 +6,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, Gfx
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
+import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { TextureMapping } from '../TextureHolder';
 import { nArray, getTextDecoder } from '../util';
@@ -291,8 +291,8 @@ class FurObj {
     public poreInd = new IndSettings();
 
     // TODO(jstpierre): Color picker UI
-    public rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
-    public tipColor = colorNew(1.0, 1.0, 1.0, 0.2);
+    public rootColor = colorNewFromRGBA(0.2, 0.2, 0.2, 1.0);
+    public tipColor = colorNewFromRGBA(1.0, 1.0, 1.0, 0.2);
 
     constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
         this.bodyTex = makeTextureFromImageData(device, bodyImgData);

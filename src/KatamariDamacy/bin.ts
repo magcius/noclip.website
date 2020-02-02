@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists, readString } from "../util";
-import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
+import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
@@ -310,7 +310,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunFlags2 = 0;
         let vertexRunCount = 0;
         let vertexRunData: Float32Array | null = null;
-        let vertexRunColor = colorNew(1, 1, 1, 1);
+        let vertexRunColor = colorNewFromRGBA(1, 1, 1, 1);
         let currentTextureName: string | null = null;
         let currentGSConfiguration: GSConfiguration = {
             tex0_1_data0: -1, tex0_1_data1: -1,

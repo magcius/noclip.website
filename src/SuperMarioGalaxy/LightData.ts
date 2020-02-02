@@ -1,6 +1,6 @@
 
 import { vec3 } from "gl-matrix";
-import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
+import { colorNewFromRGBA, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -25,7 +25,7 @@ function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): vo
 
 class LightInfo {
     public Position = vec3.create();
-    public Color = colorNew(1, 1, 1, 1);
+    public Color = colorNewFromRGBA(1, 1, 1, 1);
     public FollowCamera: boolean = false;
 
     public copy(other: LightInfo): void {
@@ -63,7 +63,7 @@ class ActorLightInfo {
     public Light0 = new LightInfo();
     public Light1 = new LightInfo();
     public Alpha2: number = 0.0;
-    public Ambient = colorNew(1, 1, 1, 1);
+    public Ambient = colorNewFromRGBA(1, 1, 1, 1);
 
     public copy(other: ActorLightInfo): void {
         this.Light0.copy(other.Light0);

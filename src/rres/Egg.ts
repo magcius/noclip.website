@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
-import { Color, colorNewFromRGBA8, colorNew, colorNewCopy, White, colorCopy } from "../Color";
+import { Color, colorNewFromRGBA8, colorNewFromRGBA, colorNewCopy, White, colorCopy } from "../Color";
 
 import * as GX from '../gx/gx_enum';
 import { vec3 } from "gl-matrix";
@@ -191,7 +191,7 @@ export function parseBLIGHT(buffer: ArrayBufferSlice): EggBinaryLightResource {
         const colorG = view.getUint8(lightObjTableIdx + 0x35) / 0xFF;
         const colorB = view.getUint8(lightObjTableIdx + 0x36) / 0xFF;
         const colorA = view.getUint8(lightObjTableIdx + 0x37) / 0xFF;
-        const color = colorNew(
+        const color = colorNewFromRGBA(
             clamp(intensity * colorR, 0, 1),
             clamp(intensity * colorG, 0, 1),
             clamp(intensity * colorB, 0, 1),

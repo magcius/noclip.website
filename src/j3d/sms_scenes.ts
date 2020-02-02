@@ -15,7 +15,7 @@ import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoad
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { colorNew } from '../Color';
+import { colorNewFromRGBA } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 
@@ -268,7 +268,7 @@ export const enum SMSPass {
     TRANSPARENT = 1 << 3,
 }
 
-const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNew(0, 0, 0, 1));
+const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0, 0, 0, 1));
 
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
