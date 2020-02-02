@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -311,12 +311,14 @@ export interface GfxDevice {
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
     createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment;
+    createAttachmentFromTexture(texture: GfxTexture): GfxAttachment;
     createProgram(program: GfxProgramDescriptor): GfxProgram;
     createProgramSimple(program: GfxProgramDescriptorSimple): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
+    createReadback(elemCount: number): GfxReadback;
 
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
@@ -327,6 +329,7 @@ export interface GfxDevice {
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
+    destroyReadback(o: GfxReadback): void;
 
     // Command submission.
     createHostAccessPass(): GfxHostAccessPass;
@@ -334,6 +337,12 @@ export interface GfxDevice {
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
 
+    // Readback system.
+    readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
+    submitReadback(o: GfxReadback): void;
+    queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
+
+    // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
@@ -341,7 +350,7 @@ export interface GfxDevice {
     queryVendorInfo(): GfxVendorInfo;
     queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor;
 
-    // Debugging and high-level queries.
+    // Debugging.
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;

@@ -49,3 +49,17 @@ export function reverseDepthForDepthOffset(n: number, isDepthReversed = IS_DEPTH
         return n;
     }
 }
+
+export function compareDepthValues(a: number, b: number, op: GfxCompareMode, isDepthReversed = IS_DEPTH_REVERSED): boolean {
+    op = reverseDepthForCompareMode(op, isDepthReversed);
+    if (op === GfxCompareMode.LESS)
+        return a < b;
+    else if (op === GfxCompareMode.LEQUAL)
+        return a <= b;
+    else if (op === GfxCompareMode.GREATER)
+        return a > b;
+    else if (op === GfxCompareMode.GEQUAL)
+        return a >= b;
+    else
+        throw "whoops";
+}

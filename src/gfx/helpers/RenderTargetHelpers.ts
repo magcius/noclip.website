@@ -7,15 +7,18 @@ export const DEFAULT_NUM_SAMPLES = 4;
 
 export class ColorTexture {
     public gfxTexture: GfxTexture | null = null;
-    private width: number = 0;
-    private height: number = 0;
+    public width: number = 0;
+    public height: number = 0;
+
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    }
 
     public setParameters(device: GfxDevice, width: number, height: number): boolean {
         if (this.width !== width || this.height !== height) {
             this.destroy(device);
             this.width = width;
             this.height = height;
-            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.format, width, height, 1));
             return true;
         } else {
             return false;
@@ -34,8 +37,10 @@ export class ColorAttachment {
     public gfxAttachment: GfxAttachment | null = null;
     public width: number = 0;
     public height: number = 0;
-    public format = GfxFormat.U8_RGBA_NORM;
     public numSamples: number = 0;
+
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): boolean {
         if (this.width !== width || this.height !== height || this.numSamples !== numSamples) {

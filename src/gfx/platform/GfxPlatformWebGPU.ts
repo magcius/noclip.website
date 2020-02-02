@@ -1,6 +1,6 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor } from "./GfxPlatform";
-import { _T, GfxResource, GfxBugQuirksImpl } from "./GfxPlatformImpl";
+import { _T, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { assertExists, assert, leftPad, align } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 
@@ -51,6 +51,9 @@ interface GfxInputStateP_WebGPU extends GfxInputState {
 interface GfxRenderPipelineP_WebGPU extends GfxRenderPipeline {
     descriptor: GfxRenderPipelineDescriptor;
     gpuRenderPipeline: GPURenderPipeline | null;
+}
+
+interface GfxReadbackP_WebGPU extends GfxReadback {
 }
 
 function translateBufferUsage(usage: GfxBufferUsage): GPUBufferUsage {
@@ -571,6 +574,13 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return attachment;
     }
 
+    public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
+        const { gpuTexture } = gfxTexture as GfxTextureP_WebGPU;
+        const gpuTextureView = gpuTexture.createView();
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
+        return attachment;
+    }
+
     private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStageDescriptor> {
         let res: Uint32Array;
         try {
@@ -746,6 +756,11 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             renderPipeline.gpuRenderPipeline.label = renderPipeline.ResourceName;
     }
 
+    public createReadback(): GfxReadback {
+        const o: GfxReadbackP_WebGPU = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId() };
+        return o;
+    }
+
     public destroyBuffer(o: GfxBuffer): void {
         getPlatformBuffer(o).destroy();
     }
@@ -776,6 +791,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public destroyRenderPipeline(o: GfxRenderPipeline): void {
+    }
+
+    public destroyReadback(o: GfxReadback): void {
     }
 
     public createHostAccessPass(): GfxHostAccessPass {
@@ -810,6 +828,16 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else if (o instanceof GfxHostAccessPassP_WebGPU) {
             this._hostAccessPassPool.push(o);
         }
+    }
+
+    public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
+    }
+
+    public submitReadback(o: GfxReadback): void {
+    }
+
+    public queryReadbackFinished(dst: Float32Array, dstOffs: number, o: GfxReadback): boolean {
+        return true;
     }
 
     public queryLimits(): GfxDeviceLimits {

@@ -92,6 +92,8 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 `;
     }
 
+    const hasFragColor = rest.includes('gl_FragColor');
+
     return `
 ${vendorInfo.glslVersion}
 ${precision}
@@ -99,10 +101,12 @@ ${precision}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
+${hasFragColor ? `
 #define gl_FragColor o_color
+${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
+` : ``}
 ${matrixDefines}
 ${definesString}
-${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
 ${rest}
 `.trim();
 }

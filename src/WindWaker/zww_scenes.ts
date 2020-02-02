@@ -34,6 +34,7 @@ import { dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
+import { PeekZManager } from './d_dlst_peekZ';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -118,6 +119,7 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];
+    public peekZ = new PeekZManager();
 
     public reset(): void {
         this.sky[0].reset();
@@ -597,16 +599,17 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const dlst = this.globals.dlst;
+
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        dlst.peekZ.setParameters(device, this.renderTarget.depthStencilAttachment.width, this.renderTarget.depthStencilAttachment.height);
+
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
-
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
-        const dlst = this.globals.dlst;
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
@@ -623,6 +626,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
+
+        // Execute PeekZ.
+        dlst.peekZ.submitFrame(device, this.renderTarget.depthStencilAttachment.gfxAttachment!);
+        dlst.peekZ.peekData(device);
 
         // Now indirect stuff.
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);

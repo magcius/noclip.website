@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, Magenta } from "../Color";
+import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, Magenta, Yellow, Cyan } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -19,11 +19,13 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
 import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
+import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -213,6 +215,15 @@ export class dKankyo_sun_packet {
     public lenzflareAngle: number = 0.0;
     public distFalloff: number;
     public hideLenz: boolean = false;
+
+    public chkPoints: vec2[] = [
+        vec2.fromValues(  0,   0),
+        vec2.fromValues(-10, -20),
+        vec2.fromValues( 10,  20),
+        vec2.fromValues(-20,  10),
+        vec2.fromValues( 20, -10),
+    ];
+    public peekZResults = nArray(5, () => new PeekZResult());
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
@@ -1138,13 +1149,32 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec3.set(dst, v4[0], v4[1], v4[2]);
 }
 
-function shouldCull(p: vec3, offsX: number, offsY: number): boolean {
-    if (p[2] < -1 || p[2] > 1)
-        return true;
+const enum SunPeekZResult {
+    Visible, Obscured, Culled,
+}
 
-    const x = p[0] + offsX;
-    const y = p[1] + offsY;
-    return x < -1 || x > 1 || y < -1 || y > 1;
+function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, offs: vec2): SunPeekZResult {
+    // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
+    // This was meant to be used against a 640x480 FB space, so:
+    const scaleX = 1/640, scaleY = 1/480;
+    peekZ.newData(dst, v[0] + offs[0] * scaleX, v[1] + offs[1] * scaleY);
+
+    if (dst.triviallyCulled)
+        return SunPeekZResult.Culled;
+
+    // Value is not available yet; consider it visible.
+    if (dst.value === null)
+        return SunPeekZResult.Visible;
+
+    // Test if the depth buffer is less than our projected Z coordinate.
+    // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
+    // Put projected coordinate in 0-1 normalized space.
+    const projectedZ = v[2] * 0.5 + 0.5;
+
+    // Point is visible if our projected Z is in front of the depth buffer.
+    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.LESS);
+
+    return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }
 
 function dKyr_sun_move(globals: dGlobals): void {
@@ -1159,37 +1189,48 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
+    let sunCanGlare = true;
+    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
+        // Sun should not glare during non-sunny weather.
+        sunCanGlare = false;
+    } else if (roomType === 2) {
+        // Sun should not glare indoors.
+        sunCanGlare = false;
+    } else if (envLight.curTime < 120.0 || envLight.curTime > 270.0) {
+        // Sun should not glare during strange hours of night.
+        sunCanGlare = false;
+    }
+
+    let numCenterPointsVisible = 0, numPointsVisible = 0, numCulledPoints = 0;
+
     let staringAtSunAmount = 0.0;
-
-    let numPointsTested = 0, numPointsVisible = 0;
-
     if (dKyr__sun_arrival_check(envLight)) {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 1.0, 0.5, 0.1, 0.01);
-        // The game does a peek-Z visibility check to determine whether it can see the point.
-        // That's going to be royally slow to do a readback on WebGL (I think), so just do
-        // a geometric test for now. Maybe it's worth it to build a PBO-based depth readback
-        // system though, lol.
 
-        // Original game projects the vector into viewport space, and gets distance to 320, 240.
-        project(scratchVec3, pkt.sunPos, globals.camera);
+        if (sunCanGlare) {
+            // Original game projects the vector into viewport space, and gets distance to 320, 240.
+            project(scratchVec3, pkt.sunPos, globals.camera);
 
-        if (!shouldCull(scratchVec3, 0, 0))
-            numPointsVisible++;
+            const peekZ = globals.dlst.peekZ;
 
-        // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
-        // This was meant to be used against a 640x480 FB space, so:
-        const scaleX = 1/640, scaleY = 1/480;
+            for (let i = 0; i < pkt.chkPoints.length; i++) {
+                const res = dKyr_sun_move__PeekZ(pkt.peekZResults[i], peekZ, scratchVec3, pkt.chkPoints[i]);
 
-        if (!shouldCull(scratchVec3, -10*scaleX, -20*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3,  10*scaleX,  20*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3, -20*scaleX,  10*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3,  20*scaleX, -10*scaleY))
-            numPointsVisible++;
+                if (res === SunPeekZResult.Culled) {
+                    numCulledPoints++;
+                } else if (res === SunPeekZResult.Visible) {
+                    numPointsVisible++;
 
-        numPointsTested = 5;
+                    if (i === 0)
+                        numCenterPointsVisible++;
+                }
+            }
+
+            if (numCulledPoints !== 0 && numPointsVisible !== 0 && numCenterPointsVisible !== 0) {
+                numCenterPointsVisible = 1;
+                numPointsVisible = 5;
+            }
+        }
 
         scratchVec3[2] = 0.0;
         const distance = vec3.length(scratchVec3) * 320.0;
@@ -1202,22 +1243,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.5, 0.1, 0.01);
     }
 
-    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (roomType === 2) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (envLight.curTime < 120.0 || envLight.curTime > 270.0) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (numPointsTested === 0) {
+    if (numCenterPointsVisible === 0) {
         if (numPointsVisible >= 3)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
         else
