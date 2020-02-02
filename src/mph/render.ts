@@ -33,7 +33,7 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
 
 const scratchTexMatrix = mat2d.create();
 class MaterialInstance {
-    private texture: TEX0Texture;
+    private texture: TEX0Texture | null;
     private gfxTextures: GfxTexture[] = [];
     private textureNames: string[] = [];
     private gfxSampler: GfxSampler | null = null;
@@ -52,7 +52,11 @@ class MaterialInstance {
         }
 
 
-        this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
+        //this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
+        //this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
+
+        const texData = tex0.textures.find((t) => t.name === this.material.textureName);
+        this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: expand5to8(this.material.alpha) };
 

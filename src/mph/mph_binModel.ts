@@ -36,25 +36,11 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const view = buffer.createDataView();
 
     const name = readString(buffer, 0x00, 0x40, true);
-
     const cullMode = view.getUint8(0x41);
     const alpha = view.getInt8(0x42);
     const wireFrame = view.getInt8(0x43);
-    const palID = view.getUint16(0x44, true);
-    let palletIndex;
-    if (palID == 0xFFFF) {
-        palletIndex = 0;
-    } else {
-        palletIndex = palID;
-    }
-    const texID = view.getUint16(0x46, true);
-    let textureIndex;
-    if (texID == 0xFFFF) {
-        textureIndex = 0;
-    } else {
-        textureIndex = texID;
-    }
-
+    const palletIndex = view.getUint16(0x44, true);
+    const textureIndex = view.getUint16(0x46, true);
     const texParams = view.getUint16(0x48, true);
 
     const polyAttribs = view.getInt32(0x54, true);
@@ -66,10 +52,12 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const scaleHeight = view.getInt16(0x78, true);
     const rot_Z = view.getInt16(0x7C, true);
 
+    let textureName; 
+    let paletteName;
+
+    const texMatrix = mat2d.create();
+
     //const mat44 = mat4.create();
-
-
-
     //function setup_texcoord_matrix(dst: mat4, scale_s:number, scale_t:number, rot_z:number, scale_width:number, scale_height:number, width:number, height:number) {
     //    const scaled_width = width * scaleWidth;
     //    const scaled_height = height * scaleHeight;
@@ -81,18 +69,22 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     //    }
     //}
 
+    if (palletIndex == 0xFFFF || textureIndex == 0xFFFF) {
+        paletteName = null;
+        textureName = null;
+    } else {
+        paletteName = `pallet_${palletIndex}`;
+        textureName = `texture_${textureIndex}`;
 
-    const m00 = 1 / texs[textureIndex].width;
-    const m01 = 0;
-    const m10 = 0;
-    const m11 = 1 / texs[textureIndex].height;
-    const tx = 0;
-    const ty = 0;
-    const texMatrix = mat2d.create();
-    mat2d.set(texMatrix, m00, m01, m10, m11, tx, ty);
+        const m00 = 1 / texs[textureIndex].width;
+        const m01 = 0;
+        const m10 = 0;
+        const m11 = 1 / texs[textureIndex].height;
+        const tx = 0;
+        const ty = 0;
+        mat2d.set(texMatrix, m00, m01, m10, m11, tx, ty);
+    }
 
-    const textureName = `texture_${textureIndex}`; 
-    const paletteName = `pallet_${palletIndex}`;
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
