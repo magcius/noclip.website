@@ -26,7 +26,7 @@ class ModelInstance {
     materialHelper: GXMaterialHelperGfx;
     textures: (DecodedTexture | null)[] = [];
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, enableCull: boolean) {
         const mb = new GXMaterialBuilder('Basic');
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
         mb.setZMode(true, GX.CompareType.LESS, true);
@@ -35,6 +35,7 @@ class ModelInstance {
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
         mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setCullMode(enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
@@ -352,6 +353,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
             tex0Num: number;
             hasTex1: boolean;
             tex1Num: number;
+            enableCull: boolean;
         }
 
         const polyTypes: PolygonType[] = [];
@@ -366,6 +368,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 tex0Num: -1,
                 hasTex1: false,
                 tex1Num: -1,
+                enableCull: false,
             };
             console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
             const tex0Flag = uncompDv.getUint32(offs + 0x8);
@@ -399,6 +402,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
                 polyType.hasTex1 = false;
             }
             const unk42 = uncompDv.getUint8(offs + 0x42);
+            polyType.enableCull = (uncompDv.getUint32(offs + 0x3C) & 0x8) != 0;
             
             console.log(`PolyType: ${JSON.stringify(polyType)}`);
             console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
@@ -462,7 +466,7 @@ class SFASceneDesc implements Viewer.SceneDesc {
 
                 try {
                     const polyType = polyTypes[curPolyType];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, polyType.enableCull);
                     if (polyType.numTexCoords == 2) {
                         newModel.setTextures([
                             polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null,
