@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxColorAttachment, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxDepthStencilAttachment, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor } from "./GfxPlatform";
 import { _T, GfxResource, GfxBugQuirksImpl } from "./GfxPlatformImpl";
 import { assertExists, assert, leftPad, align } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
@@ -17,12 +17,7 @@ interface GfxTextureP_WebGPU extends GfxTexture {
     gpuTextureView: GPUTextureView;
 }
 
-interface GfxColorAttachmentP_WebGPU extends GfxColorAttachment {
-    gpuTexture: GPUTexture;
-    gpuTextureView: GPUTextureView;
-}
-
-interface GfxDepthStencilAttachmentP_WebGPU extends GfxDepthStencilAttachment {
+interface GfxAttachmentP_WebGPU extends GfxAttachment {
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
 }
@@ -105,6 +100,8 @@ function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
+    else if (format === GfxFormat.D24_S8)
+        return 'depth24plus-stencil8';
     else
         throw "whoops";
 }
@@ -371,7 +368,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     private setRenderPassDescriptor(gfxPass: GfxRenderPassDescriptor): void {
         if (gfxPass.colorAttachment !== null) {
-            const colorAttachment = gfxPass.colorAttachment as GfxColorAttachmentP_WebGPU;
+            const colorAttachment = gfxPass.colorAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.colorAttachments[0];
             dstAttachment.attachment = colorAttachment.gpuTextureView;
             dstAttachment.loadValue = gfxPass.colorLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : gfxPass.colorClearColor;
@@ -383,7 +380,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         }
 
         if (gfxPass.depthStencilAttachment !== null) {
-            const dsAttachment = gfxPass.depthStencilAttachment as GfxDepthStencilAttachmentP_WebGPU;
+            const dsAttachment = gfxPass.depthStencilAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.depthStencilAttachment;
             dstAttachment.attachment = dsAttachment.gpuTextureView;
             dstAttachment.depthLoadValue = gfxPass.depthLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : gfxPass.depthClearValue;
@@ -569,30 +566,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return sampler;
     }
 
-    public createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment {
+    public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
+        const width = descriptor.width, height = descriptor.height, format = descriptor.format, numSamples = descriptor.numSamples;
         const gpuTexture = this.device.createTexture({
             size: [width, height, 1],
             sampleCount: numSamples,
-            format: 'bgra8unorm',
+            format: translateTextureFormat(format),
             usage: GPUTextureUsage.OUTPUT_ATTACHMENT,
         });
         const gpuTextureView = gpuTexture.createView();
 
-        const colorAttachment: GfxColorAttachmentP_WebGPU = { _T: _T.ColorAttachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
-        return colorAttachment;
-    }
-
-    public createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment {
-        const gpuTexture = this.device.createTexture({
-            size: [width, height, 1],
-            sampleCount: numSamples,
-            format: 'depth24plus-stencil8',
-            usage: GPUTextureUsage.OUTPUT_ATTACHMENT,
-        });
-        const gpuTextureView = gpuTexture.createView();
-
-        const depthStencilAttachment: GfxDepthStencilAttachmentP_WebGPU = { _T: _T.DepthStencilAttachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
-        return depthStencilAttachment;
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
+        return attachment;
     }
 
     private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStageDescriptor> {
@@ -782,14 +767,9 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public destroySampler(o: GfxSampler): void {
     }
 
-    public destroyColorAttachment(o: GfxColorAttachment): void {
-        const colorAttachment = o as GfxColorAttachmentP_WebGPU;
-        colorAttachment.gpuTexture.destroy();
-    }
-
-    public destroyDepthStencilAttachment(o: GfxDepthStencilAttachment): void {
-        const depthStencilAttachment = o as GfxDepthStencilAttachmentP_WebGPU;
-        depthStencilAttachment.gpuTexture.destroy();
+    public destroyAttachment(o: GfxAttachment): void {
+        const attachment = o as GfxAttachmentP_WebGPU;
+        attachment.gpuTexture.destroy();
     }
 
     public destroyProgram(o: GfxProgram): void {
@@ -883,12 +863,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else if (o._T === _T.Texture) {
             const r = o as GfxTextureP_WebGPU;
             r.gpuTexture.label = s;
-        } else if (o._T === _T.ColorAttachment) {
-            const r = o as GfxColorAttachmentP_WebGPU;
-            r.gpuTexture.label = s;
-            r.gpuTextureView.label = s;
-        } else if (o._T === _T.DepthStencilAttachment) {
-            const r = o as GfxDepthStencilAttachmentP_WebGPU;
+        } else if (o._T === _T.Attachment) {
+            const r = o as GfxAttachmentP_WebGPU;
             r.gpuTexture.label = s;
             r.gpuTextureView.label = s;
         } else if (o._T === _T.Sampler) {

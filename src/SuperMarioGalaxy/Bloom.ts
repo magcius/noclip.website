@@ -175,8 +175,8 @@ export class WeirdFancyRenderTarget {
 
     public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
-        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxDepthStencilAttachment;
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
+        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxAttachment;
         const passRenderer = device.createRenderPass(this.renderPassDescriptor);
         setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
         return passRenderer;

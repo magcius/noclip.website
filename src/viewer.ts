@@ -63,12 +63,12 @@ class ClearScene {
 
     public minimize(device: GfxDevice): void {
         this.colorAttachment.setParameters(device, 1, 1, 1);
-        device.setResourceLeakCheck(this.colorAttachment.gfxColorAttachment!, false);
+        device.setResourceLeakCheck(this.colorAttachment.gfxAttachment!, false);
     }
 
     public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass {
         this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
         return device.createRenderPass(this.renderPassDescriptor);
     }
 

@@ -11,10 +11,14 @@ export const enum FormatTypeFlags {
     F16,
     F32,
 
-    // Special texture formats.
+    // Compressed texture formats.
     BC1 = 0x41,
     BC2,
     BC3,
+
+    // Depth/stencil texture formats.
+    D24S8 = 0x81,
+    D32S8,
 };
 
 export const enum FormatCompFlags {
@@ -75,12 +79,20 @@ export enum GfxFormat {
     S16_RGBA      = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     S16_RGBA_NORM = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S32_R         = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+
+    // Compressed
     BC1           = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC1_SRGB      = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
     BC2           = makeFormat(FormatTypeFlags.BC2, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC2_SRGB      = makeFormat(FormatTypeFlags.BC2, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
     BC3           = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC3_SRGB      = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+
+    // Depth/Stencil
+    D24            = makeFormat(FormatTypeFlags.D24S8, FormatCompFlags.COMP_R,  FormatFlags.NONE),
+    D24_S8         = makeFormat(FormatTypeFlags.D24S8, FormatCompFlags.COMP_RG, FormatFlags.NONE),
+    D32F           = makeFormat(FormatTypeFlags.D32S8, FormatCompFlags.COMP_R,  FormatFlags.NONE),
+    D32F_S8        = makeFormat(FormatTypeFlags.D32S8, FormatCompFlags.COMP_RG, FormatFlags.NONE),
 }
 
 export function getFormatCompFlags(fmt: GfxFormat): FormatCompFlags {
