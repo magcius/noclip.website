@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
@@ -984,6 +984,8 @@ export class JointMatrixCalcNoAnm {
     }
 }
 
+export type JointMatrixCalcCallback = (dst: mat4, i: number, jnt1: Joint) => void;
+
 const bboxScratch = new AABB();
 const scratchViewMatrix = mat4.create();
 export class J3DModelInstance {
@@ -995,6 +997,7 @@ export class J3DModelInstance {
     public baseScale = vec3.fromValues(1, 1, 1);
 
     public jointMatrixCalc: JointMatrixCalc;
+    public jointMatrixCalcCallback: JointMatrixCalcCallback | null = null;
     public materialInstanceState = new MaterialInstanceState();
     public shapeInstances: ShapeInstance[] = [];
     public materialInstances: MaterialInstance[] = [];
@@ -1319,6 +1322,8 @@ export class J3DModelInstance {
             const jointIndex = joint.jointIndex;
             const jointEntry = this.modelData.bmd.jnt1.joints[jointIndex];
             this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
+            if (this.jointMatrixCalcCallback !== null)
+                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
         }
     }
 

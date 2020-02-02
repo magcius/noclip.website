@@ -1,7 +1,7 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
 import { dGlobals } from "./zww_scenes";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, quat } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -9,7 +9,7 @@ import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2, cLib_addCalc } from "./SComponent";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad, cLib_addCalcAngleRad2, cM_rndFX } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
@@ -21,16 +21,29 @@ import { saturate } from "../MathHelpers";
 
 // Framework'd actors
 
+const kUshortTo2PI = Math.PI / 0x7FFF;
+
 export function mDoMtx_XrotM(dst: mat4, n: number): void {
-    mat4.rotateX(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateX(dst, dst, n * kUshortTo2PI);
+}
+
+export function mDoMtx_YrotS(dst: mat4, n: number): void {
+    mat4.identity(dst);
+    mat4.rotateY(dst, dst, n * kUshortTo2PI);
 }
 
 export function mDoMtx_YrotM(dst: mat4, n: number): void {
-    mat4.rotateY(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateY(dst, dst, n * kUshortTo2PI);
 }
 
 export function mDoMtx_ZrotM(dst: mat4, n: number): void {
-    mat4.rotateZ(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateZ(dst, dst, n * kUshortTo2PI);
+}
+
+export function mDoMtx_ZYXrotM(dst: mat4, v: vec3): void {
+    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
+    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
+    mat4.rotateZ(dst, dst, v[0] * kUshortTo2PI);
 }
 
 export const calc_mtx = mat4.create();
@@ -45,6 +58,11 @@ export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
 
 export function MtxPosition(dst: vec3, src: vec3 = dst, m: mat4 = calc_mtx): void {
     vec3.transformMat4(dst, src, m);
+}
+
+export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
+    mat4.fromQuat(scratch, q);
+    mat4.mul(dst, dst, scratch);
 }
 
 const scratchMat4a = mat4.create();
@@ -774,7 +792,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private raincnt_set(globals: dGlobals, target: number): void {
         const envLight = globals.g_env_light;
 
-        let newRainCount = (target * target * target) * 250.0;
+        let newRainCount = saturate(target * target * target) * 250.0;
 
         if (dKy_checkEventNightStop(globals)) {
             if (newRainCount < envLight.rainCount)
@@ -920,12 +938,12 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        const resCtrl = globals.resCtrl;
         this.type = this.parameters & 0x03;
         const mdl_table = [0x0A, 0x09, 0x09, 0x09];
         const btk_table = [0x0E, 0x0D, 0x0D, 0x0D];
         const bck_table = [0x06, 0x05, 0x05, 0x05];
 
+        const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Ygush00`, mdl_table[this.type]));
         this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
         this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
@@ -957,6 +975,88 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
     }
 }
 
+class d_a_obj_lpalm extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_lpalm;
+
+    private model: J3DModelInstance;
+
+    private baseQuat = quat.create();
+    private baseQuatTarget = quat.create();
+    private animDir = nArray(2, () => 0);
+    private animWave = nArray(2, () => 0);
+    private animMtxQuat = nArray(2, () => quat.create());
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Oyashi`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Oyashi`, 0x04));
+        this.model.jointMatrixCalcCallback = this.nodeCallBack;
+
+        mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
+        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+
+        return cPhs__Status.Next;
+    }
+
+    private nodeCallBack = (dst: mat4, i: number): void => {
+        if (i === 2 || i === 3) {
+            mDoMtx_ZrotM(dst, -0x4000);
+            quatM(this.baseQuat, dst);
+            if (i === 2)
+                quatM(this.animMtxQuat[0], dst);
+            else
+                quatM(this.animMtxQuat[1], dst);
+            mDoMtx_ZrotM(dst, 0x4000);
+        }
+    };
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.roomNo !== 44)
+            return;
+
+        const envLight = globals.g_env_light;
+
+        const windVec = dKyw_get_wind_vec(envLight);
+        const windPow = dKyw_get_wind_pow(envLight);
+
+        mDoMtx_YrotS(calc_mtx, -this.rot[1]);
+        MtxPosition(scratchVec3a, windVec);
+
+        vec3.set(scratchVec3b, 0, 1, 0);
+        vec3.cross(scratchVec3b, scratchVec3b, scratchVec3a);
+
+        if (vec3.length(scratchVec3b) >= 0.00000001) {
+            vec3.normalize(scratchVec3b, scratchVec3b);
+            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * (0x600 * kUshortTo2PI));
+        } else {
+            quat.identity(this.baseQuatTarget);
+        }
+
+        quat.slerp(this.baseQuat, this.baseQuat, this.baseQuatTarget, 0.25);
+
+        for (let i = 0; i < 2; i++) {
+            const animDirTarget = Math.min(windPow * 0x180, 0x100);
+            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], animDirTarget * kUshortTo2PI, 0x04 * kUshortTo2PI, 0x20 * kUshortTo2PI);
+
+            // Rock back and forth.
+            this.animWave[i] += ((windPow * 0x800) + cM_rndFX(0x80)) * kUshortTo2PI * deltaTimeInFrames;
+            const wave = Math.sin(this.animWave[i]);
+
+            vec3.set(scratchVec3a, wave, 0, wave);
+            quat.setAxisAngle(this.animMtxQuat[i], scratchVec3a, this.animDir[i]);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -975,4 +1075,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_kytag00);
     R(d_a_kytag01);
     R(d_a_obj_Ygush00);
+    R(d_a_obj_lpalm);
 }

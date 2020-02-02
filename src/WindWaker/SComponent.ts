@@ -28,6 +28,16 @@ export function cLib_addCalcAngleRad(src: number, target: number, speed: number,
         return src + vel;
 }
 
+export function cLib_addCalcAngleRad2(src: number, target: number, speed: number, maxVel: number): number {
+    const da = (target - src) % MathConstants.TAU;
+    const delta = (2*da) % MathConstants.TAU - da;
+    const vel = clampAbs(delta / speed, 0.0, maxVel);
+    if (Math.abs(vel) > Math.abs(delta))
+        return target;
+    else
+        return src + vel;
+}
+
 export function cM_rndF(max: number): number {
     return Math.random() * max;
 }
