@@ -1331,8 +1331,6 @@ class d_kyeff extends kankyo_class {
             envLight.sunPacket.destroy(device);
         if (envLight.rainPacket !== null)
             envLight.rainPacket.destroy(device);
-        if (envLight.vrkumoPacket !== null)
-            envLight.vrkumoPacket.destroy(device);
         if (envLight.wavePacket !== null)
             envLight.wavePacket.destroy(device);
     }
