@@ -279,7 +279,7 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 class BlockRenderer {
     models: ModelInstance[] = [];
 
-    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
+    constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
         let offs = 0;
         const uncomp = loadRes(blocksBin);
         const uncompDv = new DataView(uncomp);
@@ -542,7 +542,7 @@ interface BlockInfo {
     block: number;
 }
 
-function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number) {
+function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number): BlockInfo {
     const blockIndex = y * mapInfo.blockCols + x;
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const base = (blockInfo >>> 17) & 0x3F;
@@ -568,9 +568,68 @@ function getModNumber(locationNum: number): number {
         return locationNum + 1
 }
 
-class BlockMaster {
-    public async create() {
-        
+function getSubdir(locationNum: number): string {
+    const SUBDIRS: {[key: number]: string} = {
+        0: 'animtest',
+        2: 'animtest',
+        5: 'animtest',
+        7: 'volcano',
+        9: 'mazecave',
+        12: 'swaphol',
+        16: 'shop',
+        26: 'darkicemines',
+        28: 'desert',
+        31: 'animtest',
+        34: 'darkicemines2',
+        35: 'bossgaldon',
+        37: 'insidegal',
+        39: 'dfshrine',
+        42: 'gpshrine',
+        57: 'arwingdarkice',
+        61: 'gamefront',
+        62: 'linklevel',
+        63: 'greatfox',
+    };
+    
+    if (SUBDIRS[locationNum] === undefined) {
+        throw Error(`Subdirectory for location ${locationNum} unknown`);
+    }
+    return SUBDIRS[locationNum];
+}
+
+class BlockCollection {
+    blockRenderers: BlockRenderer[] = [];
+    blocksTab: DataView;
+    blocksBin: ArrayBufferSlice;
+    tex1Tab: ArrayBufferSlice;
+    tex1Bin: ArrayBufferSlice;
+
+    public async create(device: GfxDevice, context: SceneContext, trkblk: number) {
+        const dataFetcher = context.dataFetcher;
+        const subdir = getSubdir(trkblk);
+        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(trkblk)}.tab`)).createDataView();
+        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(trkblk)}.zlb.bin`);
+        // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
+        // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
+        this.tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
+        this.tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
+    }
+
+    public getBlockRenderer(device: GfxDevice, blockNum: number): BlockRenderer | null {
+        if (this.blockRenderers[blockNum] === undefined) {
+            if (blockNum < 0 || blockNum * 4 >= this.blocksTab.byteLength) {
+                return null;
+            }
+            const tabValue = this.blocksTab.getUint32(blockNum * 4);
+            if (!(tabValue & 0x10000000)) {
+                return null;
+            }
+            const blockOffset = tabValue & 0xFFFFFF;
+            const blocksBinPart = this.blocksBin.slice(blockOffset);
+            this.blockRenderers[blockNum] = new BlockRenderer(device, blocksBinPart, this.tex1Tab, this.tex1Bin);
+        }
+
+        return this.blockRenderers[blockNum];
     }
 }
 
@@ -583,13 +642,6 @@ class SFAMapDesc implements Viewer.SceneDesc {
         const mapsTab = (await dataFetcher.fetchData(`${pathBase}/MAPS.tab`)).createDataView();
         const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
         const trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
-        const subdir = `${pathBase}/${this.id}`;
-        const blocksTab = (await dataFetcher.fetchData(`${subdir}/mod${getModNumber(this.locationNum)}.tab`)).createDataView();
-        const blocksBin = await dataFetcher.fetchData(`${subdir}/mod${getModNumber(this.locationNum)}.zlb.bin`);
-        const tex0Tab = await dataFetcher.fetchData(`${subdir}/TEX0.tab`);
-        const tex0Bin = await dataFetcher.fetchData(`${subdir}/TEX0.bin`);
-        const tex1Tab = await dataFetcher.fetchData(`${subdir}/TEX1.tab`);
-        const tex1Bin = await dataFetcher.fetchData(`${subdir}/TEX1.bin`);
 
         console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
@@ -604,40 +656,39 @@ class SFAMapDesc implements Viewer.SceneDesc {
             console.log(`${line}`);
         }
 
-        const blockOffsets: number[] = [];
-        let offs = 0;
-        while (offs < blocksTab.byteLength) {
-            const loc = blocksTab.getUint32(offs);
-            if (loc != 0 && loc != 0xFFFFFFFF) {
-                blockOffsets.push(loc & 0xFFFFFF);
-            }
-            offs += 4;
-        }
-
         const sfaRenderer = new SFARenderer(device);
-        const blockRenderers: BlockRenderer[] = [];
+        const blockCollections: BlockCollection[] = [];
         for (let y = 0; y < mapInfo.blockRows; y++) {
             for (let x = 0; x < mapInfo.blockCols; x++) {
                 const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab, this.locationNum);
-                if (blockInfo.block < 0 || blockInfo.block * 4 >= blocksTab.byteLength) {
+                if (blockInfo.block == -1)
                     continue;
-                }
-                if (blockRenderers[blockInfo.block] === undefined) {
-                    const tabValue = blocksTab.getUint32(blockInfo.block * 4);
-                    if (!(tabValue & 0x10000000)) {
+
+                if (blockCollections[blockInfo.trkblk] === undefined) {
+                    const blockColl = new BlockCollection();
+                    try {
+                        await blockColl.create(device, context, blockInfo.trkblk);
+                    } catch (e) {
+                        console.error(e);
+                        console.warn(`Block collection ${blockInfo.trkblk} could not be loaded.`);
                         continue;
                     }
-                    const blockOffset = tabValue & 0xFFFFFF;
-                    const blocksBinPart = blocksBin.slice(blockOffset);
-                    blockRenderers[blockInfo.block] = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin);
+                    blockCollections[blockInfo.trkblk] = blockColl;
+                }
+
+                const blockColl = blockCollections[blockInfo.trkblk];
+                const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block);
+                if (!blockRenderer) {
+                    console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} base ${blockInfo.base}) not found`);
+                    continue;
                 }
 
                 const modelMatrix: mat4 = mat4.create();
                 mat4.fromTranslation(modelMatrix, [5500 * x, 0, 5500 * y]);
-                blockRenderers[blockInfo.block].addToRenderer(sfaRenderer, modelMatrix);
+                blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
             }
         }
-        if (blockRenderers.length == 0)
+        if (blockCollections.length == 0)
             console.warn(`No blocks could be rendered.`);
 
         return sfaRenderer;
