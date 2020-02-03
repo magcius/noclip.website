@@ -263,7 +263,7 @@ function decodeTex(device: GfxDevice, tex: GX_Texture.Texture): DecodedTexture {
 function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number): (DecodedTexture | null) {
     const tabDv = tab.createDataView();
     const tab0 = tabDv.getUint32(id * 4);
-    console.log(`tex ${id} tab 0x${hexzero(tab0, 8)}`);
+    // console.log(`tex ${id} tab 0x${hexzero(tab0, 8)}`);
     if (tab0 & 0x80000000) {
         // Loadable texture (?)
         const binOffs = (tab0 & 0x00FFFFFF) * 2;
@@ -293,13 +293,13 @@ class BlockRenderer {
 
         const texOffset = uncompDv.getUint32(0x54);
         const texCount = uncompDv.getUint8(0xA0);
-        console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
+        // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = uncompDv.getUint32(texOffset + i * 4);
             texIds.push(-(texIdFromFile | 0x8000)); // wtf??? based on decompilation...
         }
-        console.log(`tex ids: ${JSON.stringify(texIds)}`);
+        // console.log(`tex ids: ${JSON.stringify(texIds)}`);
 
         const decodedTextures: (DecodedTexture | null)[] = [];
         for (let i = 0; i < texIds.length; i++) {
@@ -312,22 +312,22 @@ class BlockRenderer {
 
         const posOffset = uncompDv.getUint32(0x58);
         const posCount = uncompDv.getUint16(0x90);
-        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = new ArrayBufferSlice(uncompDv.buffer, posOffset, posCount * 3*2);
 
         const clrOffset = uncompDv.getUint32(0x5C);
         const clrCount = uncompDv.getUint16(0x94);
-        console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
+        // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
 
         const coordOffset = uncompDv.getUint32(0x60);
         const coordCount = uncompDv.getUint16(0x96);
-        console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
+        // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
         const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
 
         const polyOffset = uncompDv.getUint32(0x64);
         const polyCount = uncompDv.getUint8(0xA2);
-        console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
+        // console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
 
         interface PolygonType {
             hasNormal: boolean;
@@ -355,7 +355,7 @@ class BlockRenderer {
                 tex1Num: -1,
                 enableCull: false,
             };
-            console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
+            // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
             const tex0Flag = uncompDv.getUint32(offs + 0x8);
             // console.log(`tex0Flag: ${tex0Flag}`);
             // if (tex0Flag == 1) {
@@ -389,8 +389,8 @@ class BlockRenderer {
             const unk42 = uncompDv.getUint8(offs + 0x42);
             polyType.enableCull = (uncompDv.getUint32(offs + 0x3C) & 0x8) != 0;
             
-            console.log(`PolyType: ${JSON.stringify(polyType)}`);
-            console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
+            // console.log(`PolyType: ${JSON.stringify(polyType)}`);
+            // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
             polyTypes.push(polyType);
             offs += 0x44;
         }
@@ -413,11 +413,11 @@ class BlockRenderer {
         }
 
         const chunkOffset = uncompDv.getUint32(0x68);
-        console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
+        // console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
 
         const bitsOffset = uncompDv.getUint32(0x78);
         const bitsCount = uncompDv.getUint16(0x84);
-        console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
+        // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
         let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
 
@@ -537,7 +537,8 @@ interface BlockInfo {
 }
 
 function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView) {
-    const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * (y * mapInfo.blockRows + x));
+    const blockIndex = y * mapInfo.blockRows + x;
+    const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const base = (blockInfo >>> 17) & 0x3F;
     const trkblk = (blockInfo >>> 23);
     let block;
@@ -553,6 +554,13 @@ function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number,
     return {base, trkblk, block};
 }
 
+function getModNumber(locationNum: number): number {
+    if (locationNum < 5) // This is strange, but it matches the decompilation.
+        return locationNum
+    else
+        return locationNum + 1
+}
+
 class SFAMapDesc implements Viewer.SceneDesc {
     constructor(public locationNum: number, public id: string, public name: string) {
     }
@@ -563,8 +571,8 @@ class SFAMapDesc implements Viewer.SceneDesc {
         const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
         const trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
         const subdir = `${pathBase}/${this.id}`;
-        const blocksTab = (await dataFetcher.fetchData(`${subdir}/mod${this.locationNum + 1}.tab`)).createDataView();
-        const blocksBin = await dataFetcher.fetchData(`${subdir}/mod${this.locationNum + 1}.zlb.bin`);
+        const blocksTab = (await dataFetcher.fetchData(`${subdir}/mod${getModNumber(this.locationNum)}.tab`)).createDataView();
+        const blocksBin = await dataFetcher.fetchData(`${subdir}/mod${getModNumber(this.locationNum)}.zlb.bin`);
         const tex0Tab = await dataFetcher.fetchData(`${subdir}/TEX0.tab`);
         const tex0Bin = await dataFetcher.fetchData(`${subdir}/TEX0.bin`);
         const tex1Tab = await dataFetcher.fetchData(`${subdir}/TEX1.tab`);
@@ -594,27 +602,41 @@ class SFAMapDesc implements Viewer.SceneDesc {
         }
 
         const sfaRenderer = new SFARenderer(device);
-        for (let i = 0; i < blockOffsets.length; i++) {
-            const blocksBinPart = blocksBin.slice(blockOffsets[i]);
-            const modelMatrix: mat4 = mat4.create();
-            mat4.fromTranslation(modelMatrix, [5000 * i, 0, 0]);
-            const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin, modelMatrix);
+        for (let y = 0; y < mapInfo.blockRows; y++) {
+            for (let x = 0; x < mapInfo.blockCols; x++) {
+                const blockIndex = y * mapInfo.blockCols + x;
+                if (blockIndex >= blockOffsets.length)
+                    break;
+                const blocksBinPart = blocksBin.slice(blockOffsets[blockIndex]);
+                const modelMatrix: mat4 = mat4.create();
+                mat4.fromTranslation(modelMatrix, [5500 * x, 0, 5500 * y]);
+                const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin, modelMatrix);
+
+            }
         }
+
         return sfaRenderer;
     }
 }
 
 const sceneDescs = [
     'Maps',
-    new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
+    new SFAMapDesc(3, 'arwing', 'Arwing'),
+    new SFAMapDesc(59, 'arwingcity', 'Arwing City'),
     new SFAMapDesc(56, 'arwingtoplanet', 'Arwing To Planet'),
+    new SFAMapDesc(51, 'bossdrakor', 'Boss Drakor'),
+    new SFAMapDesc(35, 'bossgaldon', 'Boss Galdon'),
+    new SFAMapDesc(53, 'bosstrex', 'Boss T-rex'),
+    new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
     new SFAMapDesc(24, 'clouddungeon', 'Cloud Dungeon'),
+    new SFAMapDesc(26, 'darkicemines', 'Dark Ice Mines'),
+    new SFAMapDesc(28, 'desert', 'Desert'),
+    new SFAMapDesc(4, 'dragrock', 'Drag Rock'),
+    new SFAMapDesc(42, 'gpshrine', 'GP Shrine'),
     new SFAMapDesc(63, 'greatfox', 'Great Fox'),
     new SFAMapDesc(30, 'icemountain', 'Ice Mountain'),
     new SFAMapDesc(64, 'linka', 'Link A'),
     new SFAMapDesc(7, 'volcano', 'Volcano'),
-    new SFAMapDesc(28, 'desert', 'Desert'),
-    new SFAMapDesc(42, 'gpshrine', 'GP Shrine'),
     // new SFASceneDesc('arwing', 'mod3', 'Arwing'),
     // new SFASceneDesc('arwingcity', 'mod60', 'Arwing City'),
     // new SFASceneDesc('arwingtoplanet', 'mod57', 'Arwing To Planet'),
