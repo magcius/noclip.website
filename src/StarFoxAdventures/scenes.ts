@@ -209,16 +209,17 @@ function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
     return data.copyToBuffer(0x20, size);
 }
 
-function loadRes(data: ArrayBufferSlice): ArrayBuffer {
+function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
     const dv = data.createDataView();
     const magic = dv.getUint32(0);
     switch (magic) {
     case stringToFourCC('ZLB\0'):
-        return loadZLB(data);
+        return new ArrayBufferSlice(loadZLB(data));
     case stringToFourCC('DIRn'):
-        return loadDIRn(data);
+        return new ArrayBufferSlice(loadDIRn(data));
     default:
-        throw Error(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
+        console.warn(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
+        return data;
     }
 }
 
@@ -267,7 +268,7 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
         const binOffs = (tab0 & 0x00FFFFFF) * 2;
         const compData = bin.slice(binOffs);
         const uncompData = loadRes(compData);
-        const loaded = loadTex(new ArrayBufferSlice(uncompData));
+        const loaded = loadTex(uncompData);
         const decoded = decodeTex(device, loaded);
         return decoded;
     } else {
@@ -282,12 +283,12 @@ class BlockRenderer {
     constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
         let offs = 0;
         const uncomp = loadRes(blocksBin);
-        const uncompDv = new DataView(uncomp);
+        const uncompDv = uncomp.createDataView();
 
-        const modelType = uncompDv.getUint16(4);
-        if (modelType != 8) {
-            throw Error(`Model type ${modelType} not implemented`);
-        }
+        // const modelType = uncompDv.getUint16(4);
+        // if (modelType != 8) {
+        //     throw Error(`Model type ${modelType} not implemented`);
+        // }
 
         //////////// TEXTURE STUFF TODO: move somewhere else
 
@@ -572,23 +573,60 @@ function getSubdir(locationNum: number): string {
     const SUBDIRS: {[key: number]: string} = {
         0: 'animtest',
         2: 'animtest',
+        3: 'arwing', // ???
         5: 'animtest',
+        6: 'dfptop',
         7: 'volcano',
         9: 'mazecave',
+        10: 'dragrockbot',
+        11: 'crfort', // ???
         12: 'swaphol',
+        14: 'nwastes',
+        15: 'warlock',
         16: 'shop',
+        18: 'crfort',
+        19: 'swapholbot',
+        20: 'wallcity',
+        21: 'lightfoot',
+        24: 'clouddungeon',
+        25: 'mmpass',
         26: 'darkicemines',
         28: 'desert',
+        29: 'shipbattle', // ???
+        30: 'icemountain',
         31: 'animtest',
         34: 'darkicemines2',
         35: 'bossgaldon',
         37: 'insidegal',
+        38: 'magiccave',
         39: 'dfshrine',
+        40: 'mmshrine',
+        41: 'ecshrine',
         42: 'gpshrine',
+        43: 'dbshrine',
+        44: 'nwshrine',
+        45: 'worldmap',
+        50: 'cloudrace',
+        51: 'bossdrakor',
+        53: 'bosstrex',
+        54: 'linkb',
+        56: 'arwingtoplanet',
         57: 'arwingdarkice',
+        58: 'arwingcloud',
+        59: 'arwingcity',
+        60: 'arwingdragon',
         61: 'gamefront',
         62: 'linklevel',
         63: 'greatfox',
+        64: 'linka',
+        65: 'linkc',
+        66: 'linkd',
+        67: 'linke',
+        68: 'linkf',
+        69: 'linkg',
+        70: 'linkh',
+        71: 'linkj',
+        72: 'linki',
     };
     
     if (SUBDIRS[locationNum] === undefined) {
@@ -697,42 +735,109 @@ class SFAMapDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     'Maps',
-    new SFAMapDesc(5, 'animtest', 'Animtest (common blocks?)'),
-    new SFAMapDesc(3, 'arwing', 'Arwing'),
-    new SFAMapDesc(59, 'arwingcity', 'Arwing City'),
-    new SFAMapDesc(58, 'arwingcloud', 'Arwing Cloud'),
-    new SFAMapDesc(56, 'arwingtoplanet', 'Arwing To Planet'),
-    new SFAMapDesc(51, 'bossdrakor', 'Boss Drakor'),
-    new SFAMapDesc(35, 'bossgaldon', 'Boss Galdon'),
-    new SFAMapDesc(53, 'bosstrex', 'Boss T-rex'),
-    new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
-    new SFAMapDesc(24, 'clouddungeon', 'Cloud Dungeon'),
-    new SFAMapDesc(26, 'darkicemines', 'Dark Ice Mines'),
-    new SFAMapDesc(34, 'darkicemines2', 'Dark Ice Mines 2'),
-    new SFAMapDesc(28, 'desert', 'Desert'),
-    new SFAMapDesc(4, 'dragrock', 'Drag Rock'),
-    new SFAMapDesc(42, 'gpshrine', 'GP Shrine'),
-    new SFAMapDesc(63, 'greatfox', 'Great Fox'),
-    new SFAMapDesc(30, 'icemountain', 'Ice Mountain'),
-    new SFAMapDesc(64, 'linka', 'Link A'),
-    new SFAMapDesc(9, 'mazecave', 'Maze Cave'),
-    new SFAMapDesc(7, 'volcano', 'Volcano'),
-    // new SFASceneDesc('arwing', 'mod3', 'Arwing'),
-    // new SFASceneDesc('arwingcity', 'mod60', 'Arwing City'),
-    // new SFASceneDesc('arwingtoplanet', 'mod57', 'Arwing To Planet'),
-    // new SFASceneDesc('bossdrakor', 'mod52', 'Boss Drakor'),
-    // new SFASceneDesc('bossgaldon', 'mod36', 'Boss Galdon'),
-    // new SFASceneDesc('bosstrex', 'mod54', 'Boss T-rex'),
-    // new SFASceneDesc('capeclaw', 'mod48', 'Cape Claw'),
-    // new SFASceneDesc('clouddungeon', 'mod25', 'Cloud Dungeon'),
-    // new SFASceneDesc('darkicemines', 'mod27', 'Dark Ice Mines'),
-    // new SFASceneDesc('desert', 'mod29', 'Desert'),
-    // new SFASceneDesc('dragrock', 'mod4', 'Drag Rock'),
-    // new SFASceneDesc('gpshrine', 'mod43', 'GP Shrine'),
-    // new SFASceneDesc('greatfox', 'mod64', 'Great Fox'),
-    // new SFASceneDesc('icemountain', 'mod31', 'Ice Mountain'),
-    // new SFASceneDesc('linka', 'mod65', 'Link A'),
-    // new SFASceneDesc('volcano', 'mod8', 'Volcano'),
+    new SFAMapDesc(1, 'loc1', 'Location 1'),
+    new SFAMapDesc(2, 'loc2', 'Location'),
+    new SFAMapDesc(3, 'loc3', 'Location'),
+    new SFAMapDesc(4, 'loc4', 'Location'),
+    new SFAMapDesc(5, 'loc5', 'Location'),
+    new SFAMapDesc(6, 'loc6', 'Location'),
+    new SFAMapDesc(7, 'loc7', 'Location'),
+    new SFAMapDesc(8, 'loc8', 'Location'),
+    new SFAMapDesc(9, 'loc9', 'Location'),
+    new SFAMapDesc(10, 'loc10', 'Location 10'),
+    new SFAMapDesc(11, 'loc11', 'Location'),
+    new SFAMapDesc(12, 'loc12', 'Location'),
+    new SFAMapDesc(13, 'loc13', 'Location'),
+    new SFAMapDesc(14, 'loc14', 'Location'),
+    new SFAMapDesc(15, 'loc15', 'Location'),
+    new SFAMapDesc(16, 'loc16', 'Location'),
+    new SFAMapDesc(17, 'loc17', 'Location'),
+    new SFAMapDesc(18, 'loc18', 'Location'),
+    new SFAMapDesc(19, 'loc19', 'Location'),
+    new SFAMapDesc(20, 'loc20', 'Location 20'),
+    new SFAMapDesc(21, 'loc21', 'Location'),
+    new SFAMapDesc(22, 'loc22', 'Location'),
+    new SFAMapDesc(23, 'loc23', 'Location'),
+    new SFAMapDesc(24, 'loc24', 'Location'),
+    new SFAMapDesc(25, 'loc25', 'Location'),
+    new SFAMapDesc(26, 'loc26', 'Location'),
+    new SFAMapDesc(27, 'loc27', 'Location'),
+    new SFAMapDesc(28, 'loc28', 'Location'),
+    new SFAMapDesc(29, 'loc29', 'Location'),
+    new SFAMapDesc(30, 'loc30', 'Location 30'),
+    new SFAMapDesc(31, 'loc31', 'Location'),
+    new SFAMapDesc(32, 'loc32', 'Location'),
+    new SFAMapDesc(33, 'loc33', 'Location'),
+    new SFAMapDesc(34, 'loc34', 'Location'),
+    new SFAMapDesc(35, 'loc35', 'Location'),
+    new SFAMapDesc(36, 'loc36', 'Location'),
+    new SFAMapDesc(37, 'loc37', 'Location'),
+    new SFAMapDesc(38, 'loc38', 'Location'),
+    new SFAMapDesc(39, 'loc39', 'Location'),
+    new SFAMapDesc(40, 'loc40', 'Location 40'),
+    new SFAMapDesc(41, 'loc41', 'Location'),
+    new SFAMapDesc(42, 'loc42', 'Location'),
+    new SFAMapDesc(43, 'loc43', 'Location'),
+    new SFAMapDesc(44, 'loc44', 'Location'),
+    new SFAMapDesc(45, 'loc45', 'Location'),
+    new SFAMapDesc(46, 'loc46', 'Location'),
+    new SFAMapDesc(47, 'loc47', 'Location'),
+    new SFAMapDesc(48, 'loc48', 'Location'),
+    new SFAMapDesc(49, 'loc49', 'Location'),
+    new SFAMapDesc(50, 'loc50', 'Location 50'),
+    new SFAMapDesc(51, 'loc51', 'Location'),
+    new SFAMapDesc(52, 'loc52', 'Location'),
+    new SFAMapDesc(53, 'loc53', 'Location'),
+    new SFAMapDesc(54, 'loc54', 'Location'),
+    new SFAMapDesc(55, 'loc55', 'Location'),
+    new SFAMapDesc(56, 'loc56', 'Location'),
+    new SFAMapDesc(57, 'loc57', 'Location'),
+    new SFAMapDesc(58, 'loc58', 'Location'),
+    new SFAMapDesc(59, 'loc59', 'Location'),
+    new SFAMapDesc(60, 'loc60', 'Location 60'),
+    new SFAMapDesc(61, 'loc61', 'Location'),
+    new SFAMapDesc(62, 'loc62', 'Location'),
+    new SFAMapDesc(63, 'loc63', 'Location'),
+    new SFAMapDesc(64, 'loc64', 'Location'),
+    new SFAMapDesc(65, 'loc65', 'Location'),
+    new SFAMapDesc(66, 'loc66', 'Location'),
+    new SFAMapDesc(67, 'loc67', 'Location'),
+    new SFAMapDesc(68, 'loc68', 'Location'),
+    new SFAMapDesc(69, 'loc69', 'Location'),
+    new SFAMapDesc(70, 'loc70', 'Location 70'),
+    new SFAMapDesc(71, 'loc71', 'Location'),
+    new SFAMapDesc(72, 'loc72', 'Location'),
+    new SFAMapDesc(73, 'loc73', 'Location'),
+    new SFAMapDesc(74, 'loc74', 'Location'),
+    new SFAMapDesc(75, 'loc75', 'Location'),
+    new SFAMapDesc(76, 'loc76', 'Location'),
+    new SFAMapDesc(77, 'loc77', 'Location'),
+    new SFAMapDesc(78, 'loc78', 'Location'),
+    new SFAMapDesc(79, 'loc79', 'Location'),
+    new SFAMapDesc(80, 'loc80', 'Location 80'),
+    new SFAMapDesc(81, 'loc81', 'Location'),
+    new SFAMapDesc(82, 'loc82', 'Location'),
+    new SFAMapDesc(83, 'loc83', 'Location'),
+    new SFAMapDesc(84, 'loc84', 'Location'),
+    new SFAMapDesc(85, 'loc85', 'Location'),
+    new SFAMapDesc(86, 'loc86', 'Location'),
+    new SFAMapDesc(87, 'loc87', 'Location'),
+    new SFAMapDesc(88, 'loc88', 'Location'),
+    new SFAMapDesc(89, 'loc89', 'Location'),
+    new SFAMapDesc(90, 'loc90', 'Location 90'),
+    new SFAMapDesc(91, 'loc91', 'Location'),
+    new SFAMapDesc(92, 'loc92', 'Location'),
+    new SFAMapDesc(93, 'loc93', 'Location'),
+    new SFAMapDesc(94, 'loc94', 'Location'),
+    new SFAMapDesc(95, 'loc95', 'Location'),
+    new SFAMapDesc(96, 'loc96', 'Location'),
+    new SFAMapDesc(97, 'loc97', 'Location'),
+    new SFAMapDesc(98, 'loc98', 'Location'),
+    new SFAMapDesc(99, 'loc99', 'Location'),
+    // The maps around this number seem to be empty data
+    new SFAMapDesc(110, 'loc110', 'Location 110'),
+    new SFAMapDesc(115, 'loc115', 'Location 115'),
+    new SFAMapDesc(116, 'loc116', 'Location 116'),
 ];
 
 const id = 'sfa';
