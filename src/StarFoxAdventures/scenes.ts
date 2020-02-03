@@ -44,12 +44,7 @@ class ModelInstance {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
-        // const vtxArrays: GX_Array[] = [];
-        // const vertsBuffer = new ArrayBufferSlice(verts.buffer);
-        // vtxArrays[GX.Attr.POS] = { buffer: vertsBuffer, offs: 0, stride: getAttributeByteSize(vat[0], GX.Attr.POS) };
-        // this.loadedVertexData = vtxLoader.runVertices(vtxArrays, new ArrayBufferSlice(dl.buffer));
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
-        // console.log(`loaded vertex data ${JSON.stringify(this.loadedVertexData, null, '\t')}`);
     }
 
     public setTextures(textures: (DecodedTexture | null)[]) {
@@ -66,21 +61,6 @@ class ModelInstance {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
         }
-
-        // const template = renderInstManager.pushTemplateRenderInst();
-        // this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        // const materialParams = new MaterialParams();
-        // this.materialHelper.fillMaterialParamsDataOnInst(template, 0, materialParams);
-        //this.materialHelper.fillMaterialParamsData(renderInstManager, 0, materialParams);
-
-        // const packetParams = new PacketParams();
-        // packetParams.clear();
-        // for (let p = 0; p < this.shapeHelper.loadedVertexData.packets.length; p++) {
-        //     const packet = this.shapeHelper.loadedVertexData.packets[p];
-
-        //     const renderInst = this.shapeHelper.pushRenderInst(renderInstManager, packet);
-        //     this.shapeHelper.fillPacketParams(packetParams, renderInst);
-        // }
         
         const materialParams = new MaterialParams();
         const packetParams = new PacketParams();
@@ -277,10 +257,25 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
     }
 }
 
+class TextureCollection {
+    decodedTextures: (DecodedTexture | null)[] = [];
+
+    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice) {
+    }
+
+    public getTexture(device: GfxDevice, textureNum: number) {
+        if (this.decodedTextures[textureNum] === undefined) {
+            this.decodedTextures[textureNum] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, textureNum);
+        }
+
+        return this.decodedTextures[textureNum];
+    }
+}
+
 class BlockRenderer {
     models: ModelInstance[] = [];
 
-    constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
+    constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, texColl: TextureCollection) {
         let offs = 0;
         const uncomp = loadRes(blocksBin);
         const uncompDv = uncomp.createDataView();
@@ -298,16 +293,9 @@ class BlockRenderer {
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = uncompDv.getUint32(texOffset + i * 4);
-            texIds.push(-(texIdFromFile | 0x8000)); // wtf??? based on decompilation...
+            texIds.push(texIdFromFile);
         }
         // console.log(`tex ids: ${JSON.stringify(texIds)}`);
-
-        const decodedTextures: (DecodedTexture | null)[] = [];
-        for (let i = 0; i < texIds.length; i++) {
-            const entryNum = (-texIds[i] & 0x7FFF);
-            const tex1 = loadTextureFromTable(device, tex1Tab, tex1Bin, entryNum);
-            decodedTextures.push(tex1);
-        }
 
         //////////////////////////
 
@@ -453,12 +441,12 @@ class BlockRenderer {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, polyType.enableCull);
                     if (polyType.numTexCoords == 2) {
                         newModel.setTextures([
-                            polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null,
-                            polyType.hasTex1 ? decodedTextures[polyType.tex1Num] : null,
+                            polyType.hasTex0 ? texColl.getTexture(device, texIds[polyType.tex0Num]) : null,
+                            polyType.hasTex1 ? texColl.getTexture(device, texIds[polyType.tex1Num]) : null,
                         ]);
                     } else if (polyType.numTexCoords == 1) {
                         newModel.setTextures([
-                            polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null, // ???
+                            polyType.hasTex0 ? texColl.getTexture(device, texIds[polyType.tex0Num]) : null, // ???
                         ]);
                     }
                     this.models.push(newModel);
@@ -553,8 +541,7 @@ function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number,
         block = -1;
     } else {
         try {
-            block = base + trkblkTab.getUint16(trkblk * 2); // ???
-            // block = base + trkblkTab.getUint16(locationNum * 2); // ?????!!!! WTF IS GOING ON?
+            block = base + trkblkTab.getUint16(trkblk * 2);
         } catch (e) {
             block = -1
         }
@@ -641,6 +628,7 @@ class BlockCollection {
     blocksBin: ArrayBufferSlice;
     tex1Tab: ArrayBufferSlice;
     tex1Bin: ArrayBufferSlice;
+    texColl: TextureCollection;
 
     public async create(device: GfxDevice, context: SceneContext, trkblk: number) {
         const dataFetcher = context.dataFetcher;
@@ -651,6 +639,7 @@ class BlockCollection {
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
         this.tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
         this.tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
+        this.texColl = new TextureCollection(this.tex1Tab, this.tex1Bin);
     }
 
     public getBlockRenderer(device: GfxDevice, blockNum: number): BlockRenderer | null {
@@ -664,7 +653,7 @@ class BlockCollection {
             }
             const blockOffset = tabValue & 0xFFFFFF;
             const blocksBinPart = this.blocksBin.slice(blockOffset);
-            this.blockRenderers[blockNum] = new BlockRenderer(device, blocksBinPart, this.tex1Tab, this.tex1Bin);
+            this.blockRenderers[blockNum] = new BlockRenderer(device, blocksBinPart, this.texColl);
         }
 
         return this.blockRenderers[blockNum];
