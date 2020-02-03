@@ -2472,6 +2472,7 @@ class RecordingBranding {
 
     public v(): void {
         this.elem.style.visibility = '';
+        ((window.main.ui) as UI).toggleUI(false);
     }
 }
 
@@ -2702,12 +2703,15 @@ export class UI {
         return this.debugFloater;
     }
 
-    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, labelName: string = paramName): void {
+    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, labelName: string, parentMetadata: any | null): void {
         let value = obj[paramName];
         assert(typeof value === "number");
 
-        const range = Reflect.getMetadata('df:range', obj, paramName);
         let min: number = 0, max: number = 1, step: number = 0.01;
+
+        let range = Reflect.getMetadata('df:range', obj, paramName);
+        if (range === undefined && parentMetadata !== undefined)
+            range = parentMetadata.range;
         if (range !== undefined) {
             min = range.min;
             max = range.max;
@@ -2746,28 +2750,35 @@ export class UI {
         panel.contents.appendChild(slider.elem);
     }
 
-    private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, keys: string[]): void {
+    private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
+        // Children are by default invisible, unless we're in a color, or some sort of number array.
+        const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
+
+        const keys = Object.keys(obj);
+
         for (let i = 0; i < keys.length; i++) {
             const keyName = keys[i];
-            const visibility = Reflect.getMetadata('df:visibility', obj, keyName);
-            if (visibility === false)
+            if (!(childDefaultVisible || dfShouldShowOwn(obj, keyName)))
                 continue;
             const v = obj[keyName];
+
             if (typeof v === "number")
-                this.bindSlider(obj, panel, keyName, `${parentName}.${keyName}`);
-            if (visibility === true || v instanceof Float32Array || objIsColor(v))
-                this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, Object.keys(v));
+                this.bindSlider(obj, panel, keyName, `${parentName}.${keyName}`, parentMetadata);
+
+            this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, {
+                range: Reflect.getMetadata('df:range', obj, keyName),
+            });
         }
     }
 
-    public bindSliders(obj: { [k: string]: any }, keys: string[] = Object.keys(obj), panel: FloatingPanel | null = null): void {
+    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this.bindSlidersRecurse(obj, panel, '', keys);
+        this.bindSlidersRecurse(obj, panel, '');
     }
 
     public toggleUI(visible: boolean | undefined): void {
@@ -2779,8 +2790,20 @@ export class UI {
     }
 }
 
-export function dfRange(min: number = 0, max: number = 1, step: number = (max - min) / 100) {
-    return Reflect.metadata('df:range', { min, max, step });
+function dfShouldShowOwn(obj: any, keyName: string): boolean {
+    const visibility = Reflect.getMetadata('df:visibility', obj, keyName);
+    if (visibility === false)
+        return false;
+
+    // Look for a sign that the user wants to show it.
+    if (visibility === true)
+        return true;
+    if (Reflect.hasMetadata('df:range', obj, keyName))
+        return true;
+    if (Reflect.hasMetadata('df:sigfigs', obj, keyName))
+        return true;
+
+    return false;
 }
 
 export function dfShow() {
@@ -2789,6 +2812,10 @@ export function dfShow() {
 
 export function dfHide() {
     return Reflect.metadata('df:visibility', false);
+}
+
+export function dfRange(min: number = 0, max: number = 1, step: number = (max - min) / 100) {
+    return Reflect.metadata('df:range', { min, max, step });
 }
 
 export function dfSigFigs(v: number = 2) {

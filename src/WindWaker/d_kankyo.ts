@@ -116,6 +116,7 @@ export class dScnKy_env_light_c {
     // TODO(jstpierre): Move these weather states to their own structs?
 
     // Dice weather system
+    public diceWeatherStop: boolean = false;
     public diceWeatherMode: DiceWeatherMode = DiceWeatherMode.Sunny;
     public diceWeatherChangeTime: number;
     public diceWeatherState: DiceWeatherState = DiceWeatherState.Uninitialized;
@@ -762,7 +763,7 @@ function dKy_event_proc(globals: dGlobals): void {
         // Game also checks whether the player has collected the Wind Waker.
         const timePass = GetTimePass(globals);
 
-        if (!timePass) {
+        if (envLight.diceWeatherStop || !timePass) {
             // Time stopped weather code.
 
             if (dKy_pship_existence_chk(globals)) {

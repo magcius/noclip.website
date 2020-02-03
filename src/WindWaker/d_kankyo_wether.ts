@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, Magenta, Yellow, Cyan } from "../Color";
+import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, White } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -26,6 +26,7 @@ import { uShortTo2PI } from "./Grass";
 import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
+import { dfRange, dfShow } from "../ui";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -200,11 +201,11 @@ export class dKankyo_sun_packet {
     private moonTextures: BTIData[] = [];
     private sunTexture: BTIData;
     private materialHelperSunMoon: GXMaterialHelperGfx;
+    public sunPos = vec3.create();
     private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
     public visibility: number = 1.0;
-    public sunPos = vec3.create();
 
     // Lenzflare
     private lensHalfTexture: BTIData;
@@ -213,7 +214,7 @@ export class dKankyo_sun_packet {
     private materialHelperLenzflareSolid: GXMaterialHelperGfx;
     public lenzflarePos = nArray(6, () => vec3.create());
     public lenzflareAngle: number = 0.0;
-    public distFalloff: number;
+    public distFalloff: number = 0.0;
     public hideLenz: boolean = false;
 
     public chkPoints: vec2[] = [
@@ -409,6 +410,21 @@ export class dKankyo_sun_packet {
         }
     }
 
+    @dfShow()
+    private lensflareColor = colorNewCopy(White, 0x50/0xFF);
+    @dfRange(0, 1600, 1)
+    private lensflareBaseSize: number = 960.0;
+    @dfRange(0, 32, 1)
+    private lensflareCount: number = 16.0;
+    @dfRange(0.0, MathConstants.TAU, 0.0001)
+    private lensflareAngles: number[] = [uShortTo2PI(0xf80a), uShortTo2PI(0x416b)];
+    @dfRange(0.0, 0.8, 0.0001)
+    private lensflareAngleSteps: number[] = [uShortTo2PI(0x1000), uShortTo2PI(0x1C71)];
+    @dfRange(-5, 5)
+    private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
+    @dfRange(0, MathConstants.TAU, 0.0001)
+    private lensflareWidth: number = uShortTo2PI(1600.0);
+
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
             return;
@@ -426,11 +442,12 @@ export class dKankyo_sun_packet {
         const invDist = 1.0 - this.distFalloff;
         const flareViz = (0.6 + (0.8 * this.visibility * sqr(invDist)));
         const innerRad = 300 * flareViz;
-        const flareScale = 960 * flareViz * (3.0 + invDist);
+        const flareScale = this.lensflareBaseSize * flareViz * (3.0 + invDist);
         const vizSq = sqr(this.visibility);
-        let angle0 = uShortTo2PI(0xf80a);
-        let angle1 = uShortTo2PI(0x416b);
-        for (let i = 0; i < 16; i++) {
+
+        let angle0 = this.lensflareAngles[0];
+        let angle1 = this.lensflareAngles[1];
+        for (let i = 0; i < this.lensflareCount; i++) {
             ddraw.begin(GX.Command.DRAW_TRIANGLES);
 
             let baseAngle: number;
@@ -440,9 +457,10 @@ export class dKankyo_sun_packet {
                 baseAngle = angle1;
             }
 
-            const arcSize = Math.abs(Math.sin(34.0 * baseAngle));
-            const arcAngleSize = uShortTo2PI(1600.0) * (0.5 + arcSize);
-            const arcAngle0 = baseAngle + arcAngleSize;
+            const flicker = Math.abs(Math.sin(34.0 * baseAngle));
+            const arcSize = this.lensflareWidth * (0.5 + flicker);
+
+            const arcAngle0 = baseAngle + arcSize;
             vec3.set(scratchVec3, innerRad * Math.sin(arcAngle0), innerRad * Math.cos(arcAngle0), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
@@ -450,21 +468,11 @@ export class dKankyo_sun_packet {
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
             const whichScale = i & 3;
-            let outerRadScale = ((0.6 + (0.4 * arcSize)) * flareScale) * (1.5 * this.visibility);
+            let outerRadScale = ((0.6 + (0.4 * flicker)) * flareScale) * (1.5 * this.visibility);
             if (whichScale !== 0)
                 outerRadScale *= 0.2;
 
-            let outerRadScale2: number;
-            if (whichScale === 0)
-                outerRadScale2 = 0.1;
-            else if (whichScale === 1)
-                outerRadScale2 = 1.1;
-            else if (whichScale === 2)
-                outerRadScale2 = 0.2;
-            else if (whichScale === 3)
-                outerRadScale2 = 0.4;
-            else
-                throw "whoops";
+            const outerRadScale2: number = this.lensflareSizes[whichScale];
 
             const outerRad = outerRadScale * (this.visibility * (sqr(this.visibility) + outerRadScale2));
             vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
@@ -473,10 +481,10 @@ export class dKankyo_sun_packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
-            angle0 += uShortTo2PI(0x1000);
-            angle1 += uShortTo2PI(0x1C71);
+            angle0 += this.lensflareAngleSteps[0];
+            angle1 += this.lensflareAngleSteps[1];
 
-            const arcAngle2 = baseAngle - arcAngleSize;
+            const arcAngle2 = baseAngle - arcSize;
             vec3.set(scratchVec3, innerRad * Math.sin(arcAngle2), innerRad * Math.cos(arcAngle2), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
@@ -485,7 +493,7 @@ export class dKankyo_sun_packet {
 
             ddraw.end();
         }
-        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 80/0xFF * vizSq * sqr(vizSq));
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor);
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
