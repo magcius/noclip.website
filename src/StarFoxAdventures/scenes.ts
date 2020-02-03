@@ -26,7 +26,7 @@ class ModelInstance {
     shapeHelper: GXShapeHelperGfx | null = null;
     materialHelper: GXMaterialHelperGfx;
     textures: (DecodedTexture | null)[] = [];
-    modelMatrix: mat4 = mat4.create();
+    // modelMatrix: mat4 = mat4.create();
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, enableCull: boolean) {
         const mb = new GXMaterialBuilder('Basic');
@@ -56,16 +56,12 @@ class ModelInstance {
         this.textures = textures;
     }
 
-    public setModelMatrix(mtx: mat4) {
-        mat4.copy(this.modelMatrix, mtx);
-    }
-
-    private computeModelView(dst: mat4, camera: Camera): void {
+    private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
         computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, this.modelMatrix);
+        mat4.mul(dst, dst, modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4) {
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
@@ -109,7 +105,7 @@ class ModelInstance {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, materialParams);
-        this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
+        this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera, modelMatrix);
         this.shapeHelper.fillPacketParams(packetParams, renderInst);
 
         // renderInstManager.popTemplateRenderInst();
@@ -118,9 +114,11 @@ class ModelInstance {
 
 class SFARenderer extends BasicGXRendererHelper {
     models: ModelInstance[] = [];
+    modelMatrices: mat4[] = [];
 
-    public addModel(model: ModelInstance) {
+    public addModel(model: ModelInstance, modelMatrix: mat4) {
         this.models.push(model);
+        this.modelMatrices.push(modelMatrix);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -128,7 +126,7 @@ class SFARenderer extends BasicGXRendererHelper {
         
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
         for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.models[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.modelMatrices[i]);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -279,7 +277,9 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 }
 
 class BlockRenderer {
-    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice, modelMatrix: mat4) {
+    models: ModelInstance[] = [];
+
+    constructor(renderer: SFARenderer, device: GfxDevice, blocksBin: ArrayBufferSlice, tex1Tab: ArrayBufferSlice, tex1Bin: ArrayBufferSlice) {
         let offs = 0;
         const uncomp = loadRes(blocksBin);
         const uncompDv = new DataView(uncomp);
@@ -450,7 +450,6 @@ class BlockRenderer {
                 try {
                     const polyType = polyTypes[curPolyType];
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, polyType.enableCull);
-                    newModel.setModelMatrix(modelMatrix);
                     if (polyType.numTexCoords == 2) {
                         newModel.setTextures([
                             polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null,
@@ -461,7 +460,7 @@ class BlockRenderer {
                             polyType.hasTex0 ? decodedTextures[polyType.tex0Num] : null, // ???
                         ]);
                     }
-                    renderer.addModel(newModel);
+                    this.models.push(newModel);
                 } catch (e) {
                     console.error(e);
                 }
@@ -512,6 +511,12 @@ class BlockRenderer {
             }
         }
     }
+
+    public addToRenderer(renderer: SFARenderer, modelMatrix: mat4) {
+        for (let i = 0; i < this.models.length; i++) {
+            renderer.addModel(this.models[i], modelMatrix);
+        }
+    }
 }
 
 interface MapInfo {
@@ -527,6 +532,7 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
     const blockTableOffset = mapsTab.getUint32(offs + 0x4);
     const blockCols = mapsBin.getUint16(infoOffset + 0x0);
     const blockRows = mapsBin.getUint16(infoOffset + 0x2);
+    console.log(`block table offset: 0x${hexzero(blockTableOffset, 8)}`);
     return { infoOffset, blockTableOffset, blockCols, blockRows };
 }
 
@@ -536,8 +542,8 @@ interface BlockInfo {
     block: number;
 }
 
-function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView) {
-    const blockIndex = y * mapInfo.blockRows + x;
+function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number) {
+    const blockIndex = y * mapInfo.blockCols + x;
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const base = (blockInfo >>> 17) & 0x3F;
     const trkblk = (blockInfo >>> 23);
@@ -547,6 +553,7 @@ function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number,
     } else {
         try {
             block = base + trkblkTab.getUint16(trkblk * 2); // ???
+            // block = base + trkblkTab.getUint16(locationNum * 2); // ?????!!!! WTF IS GOING ON?
         } catch (e) {
             block = -1
         }
@@ -559,6 +566,12 @@ function getModNumber(locationNum: number): number {
         return locationNum
     else
         return locationNum + 1
+}
+
+class BlockMaster {
+    public async create() {
+        
+    }
 }
 
 class SFAMapDesc implements Viewer.SceneDesc {
@@ -578,14 +591,14 @@ class SFAMapDesc implements Viewer.SceneDesc {
         const tex1Tab = await dataFetcher.fetchData(`${subdir}/TEX1.tab`);
         const tex1Bin = await dataFetcher.fetchData(`${subdir}/TEX1.bin`);
 
-        console.log(`Creating scene for ${this.name} ...`);
+        console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
         // TODO: figure out how to correctly parse this information
         const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
         for (let y = 0; y < mapInfo.blockRows; y++) {
             let line = '';
             for (let x = 0; x < mapInfo.blockCols; x++) {
-                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab);
+                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab, this.locationNum);
                 line += ` ${JSON.stringify(blockInfo)}`;
             }
             console.log(`${line}`);
@@ -602,18 +615,30 @@ class SFAMapDesc implements Viewer.SceneDesc {
         }
 
         const sfaRenderer = new SFARenderer(device);
+        const blockRenderers: BlockRenderer[] = [];
         for (let y = 0; y < mapInfo.blockRows; y++) {
             for (let x = 0; x < mapInfo.blockCols; x++) {
-                const blockIndex = y * mapInfo.blockCols + x;
-                if (blockIndex >= blockOffsets.length)
-                    break;
-                const blocksBinPart = blocksBin.slice(blockOffsets[blockIndex]);
+                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab, this.locationNum);
+                if (blockInfo.block < 0 || blockInfo.block * 4 >= blocksTab.byteLength) {
+                    continue;
+                }
+                if (blockRenderers[blockInfo.block] === undefined) {
+                    const tabValue = blocksTab.getUint32(blockInfo.block * 4);
+                    if (!(tabValue & 0x10000000)) {
+                        continue;
+                    }
+                    const blockOffset = tabValue & 0xFFFFFF;
+                    const blocksBinPart = blocksBin.slice(blockOffset);
+                    blockRenderers[blockInfo.block] = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin);
+                }
+
                 const modelMatrix: mat4 = mat4.create();
                 mat4.fromTranslation(modelMatrix, [5500 * x, 0, 5500 * y]);
-                const renderer = new BlockRenderer(sfaRenderer, device, blocksBinPart, tex1Tab, tex1Bin, modelMatrix);
-
+                blockRenderers[blockInfo.block].addToRenderer(sfaRenderer, modelMatrix);
             }
         }
+        if (blockRenderers.length == 0)
+            console.warn(`No blocks could be rendered.`);
 
         return sfaRenderer;
     }
@@ -621,8 +646,10 @@ class SFAMapDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     'Maps',
+    new SFAMapDesc(5, 'animtest', 'Animtest (common blocks?)'),
     new SFAMapDesc(3, 'arwing', 'Arwing'),
     new SFAMapDesc(59, 'arwingcity', 'Arwing City'),
+    new SFAMapDesc(58, 'arwingcloud', 'Arwing Cloud'),
     new SFAMapDesc(56, 'arwingtoplanet', 'Arwing To Planet'),
     new SFAMapDesc(51, 'bossdrakor', 'Boss Drakor'),
     new SFAMapDesc(35, 'bossgaldon', 'Boss Galdon'),
@@ -630,12 +657,14 @@ const sceneDescs = [
     new SFAMapDesc(47, 'capeclaw', 'Cape Claw'),
     new SFAMapDesc(24, 'clouddungeon', 'Cloud Dungeon'),
     new SFAMapDesc(26, 'darkicemines', 'Dark Ice Mines'),
+    new SFAMapDesc(34, 'darkicemines2', 'Dark Ice Mines 2'),
     new SFAMapDesc(28, 'desert', 'Desert'),
     new SFAMapDesc(4, 'dragrock', 'Drag Rock'),
     new SFAMapDesc(42, 'gpshrine', 'GP Shrine'),
     new SFAMapDesc(63, 'greatfox', 'Great Fox'),
     new SFAMapDesc(30, 'icemountain', 'Ice Mountain'),
     new SFAMapDesc(64, 'linka', 'Link A'),
+    new SFAMapDesc(9, 'mazecave', 'Maze Cave'),
     new SFAMapDesc(7, 'volcano', 'Volcano'),
     // new SFASceneDesc('arwing', 'mod3', 'Arwing'),
     // new SFASceneDesc('arwingcity', 'mod60', 'Arwing City'),
