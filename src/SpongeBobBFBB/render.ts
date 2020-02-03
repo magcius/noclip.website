@@ -80,7 +80,8 @@ export class TextureData {
     constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
 
     public setup(device: GfxDevice) {
-        if (this.isSetup) return;
+        if (this.isSetup)
+            return;
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
         const hostAccessPass = device.createHostAccessPass();
@@ -108,6 +109,9 @@ export class TextureData {
     }
 
     public destroy(device: GfxDevice): void {
+        if (!this.isSetup)
+            return;
+
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
         if (this.gfxSampler !== null)
@@ -706,6 +710,8 @@ export class FragRenderer extends BaseRenderer {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         device.destroyProgram(this.gfxProgram);
+        if (this.frag.textureData !== undefined)
+            this.frag.textureData.destroy(device);
     }
 }
 
@@ -725,7 +731,7 @@ export class MeshRenderer extends BaseRenderer {
                 frag.textureData.setup(device);
                 fragDefines.USE_TEXTURE = '1';
             }
-            
+
             this.addRenderer(new FragRenderer(this, device, cache, fragDefines, frag, pipeInfo, subObject));
         }
 

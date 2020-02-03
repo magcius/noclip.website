@@ -619,9 +619,8 @@ export class d_a_sea extends fopAc_ac_c {
         this.animCounter += deltaTimeInFrames;
     }
 
-    public destroy(device: GfxDevice): void {
-        this.texSeaBTI.destroy(device);
-        this.texWyurayura.destroy(device);
+    public delete(globals: dGlobals): void {
+        const device = globals.modelCache.device;
         this.ddraw.destroy(device);
     }
 }

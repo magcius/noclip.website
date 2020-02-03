@@ -7,7 +7,7 @@ import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gf
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec2, vec4, quat } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
-import { nArray, assertExists, assert } from "../util";
+import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
 import { TrilesetData } from "./TrileData";

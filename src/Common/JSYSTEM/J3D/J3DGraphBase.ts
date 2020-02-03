@@ -1404,6 +1404,13 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
     public vaf1Animator: VAF1Animator | null = null;
     public passMask: number = 0x01;
+    public ownedModelMaterialData: BMDModelMaterialData | null = null;
+
+    public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
+        this.setModelMaterialData(modelMaterialData);
+        assert(this.ownedModelMaterialData === null);
+        this.ownedModelMaterialData = modelMaterialData;
+    }
 
     public calcAnim(camera: Camera): void {
         super.calcAnim(camera);
@@ -1492,5 +1499,11 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        if (this.ownedModelMaterialData !== null)
+            this.ownedModelMaterialData.destroy(device);
     }
 }

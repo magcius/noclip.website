@@ -14,6 +14,7 @@ const pathBase = `zelview`;
 class ZelviewRenderer implements Viewer.SceneGfx {
     private clearRenderPassDescriptor: GfxRenderPassDescriptor;
 
+    public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
 
     private renderTarget = new BasicRenderTarget();
@@ -50,6 +51,8 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
+        for (let i = 0; i < this.meshDatas.length; i++)
+            this.meshDatas[i].destroy(device);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].destroy(device);
     }
@@ -80,8 +83,10 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
                 rspState: new RSPState(headers.rom, zelview.sharedOutput),
                 rspOutput: rspOutput,
             }
+
             const meshData = new MeshData(device, cache, mesh);
             const meshRenderer = new RootMeshRenderer(device, cache, meshData);
+            renderer.meshDatas.push(meshData);
             renderer.meshRenderers.push(meshRenderer);
         }
 

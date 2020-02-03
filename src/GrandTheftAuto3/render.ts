@@ -170,6 +170,8 @@ export class TextureArray extends TextureMapping {
     }
 
     public destroy(device: GfxDevice): void {
+        if (this.gfxTexture !== null)
+            device.destroyTexture(this.gfxTexture);
         if (this.gfxSampler !== null)
             device.destroySampler(this.gfxSampler);
     }

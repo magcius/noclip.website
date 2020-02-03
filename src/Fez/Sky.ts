@@ -106,6 +106,7 @@ export class SkyData {
     }
 
     public destroy(device: GfxDevice): void {
+        device.destroyProgram(this.backgroundProgram);
         device.destroyTexture(this.backgroundTexture);
         if (this.starsTexture !== null)
             device.destroyTexture(this.starsTexture);

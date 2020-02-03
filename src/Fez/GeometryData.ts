@@ -62,6 +62,7 @@ export class GeometryData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.positionBuffer);
+        device.destroyBuffer(this.normalBuffer);
         device.destroyBuffer(this.texcoordBuffer);
         device.destroyInputState(this.inputState);
     }

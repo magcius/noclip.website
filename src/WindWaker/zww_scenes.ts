@@ -814,8 +814,6 @@ class d_s_play extends fopScn {
         this.flowerPacket.destroy(device);
         this.treePacket.destroy(device);
         this.grassPacket.destroy(device);
-
-        console.log('delete scn!');
     }
 }
 

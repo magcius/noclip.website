@@ -94,7 +94,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     const bmdModel = new J3DModelData(device, cache, bmd);
     const scene = new J3DModelInstanceSimple(bmdModel, materialHacks);
     if (bmt !== null)
-        scene.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
+        scene.setModelMaterialDataOwned(new BMDModelMaterialData(device, cache, bmt));
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);

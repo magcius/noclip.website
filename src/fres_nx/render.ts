@@ -312,19 +312,19 @@ in vec4 v_NormalWorld;
 in vec4 v_TangentWorld;
 
 void main() {
-    o_color = vec4(0.0);
+    gl_FragColor = vec4(0.0);
 
 ${this.condShaderOption(`enable_base_color`, () => `
     vec4 o_base_color = ${this.genOutput(`o_base_color`)};
-    o_color += o_base_color;
+    gl_FragColor += o_base_color;
 `)}
 
     // TODO(jstpierre): When should o_alpha be used?
-    o_color.a = ${this.genOutput(`o_alpha`)}${this.genOutputCompMask(`alpha_component`)};
+    gl_FragColor.a = ${this.genOutput(`o_alpha`)}${this.genOutputCompMask(`alpha_component`)};
 
 // TODO(jstpierre): How does this interact with enable_base_color_mul_color
 #ifdef OPT_vtxcolor
-    o_color.rgb *= v_VtxColor.rgb;
+    gl_FragColor.rgb *= v_VtxColor.rgb;
 #endif
 
 ${this.condShaderOption(`enable_normal`, () => `
@@ -343,22 +343,22 @@ ${this.condShaderOption(`enable_normal`, () => `
     // Don't perturb that much.
     t_LightIntensity = mix(0.6, 1.0, t_LightIntensity);
 
-    o_color.rgb *= t_LightIntensity;
+    gl_FragColor.rgb *= t_LightIntensity;
 `)}
 
 ${this.condShaderOption(`enable_alphamask`, () => `
     // TODO(jstpierre): Dynamic alpha reference value (it should be in the shader params)
-    if (o_color.a <= 0.5)
+    if (gl_FragColor.a <= 0.5)
         discard;
 `)}
 
 ${this.condShaderOption(`enable_emission`, () => `
     vec4 o_emission = ${this.genOutput(`o_emission`)};
-    // o_color.rgb += o_emission.rgb;
+    // gl_FragColor.rgb += o_emission.rgb;
 `)}
 
     // Gamma correction.
-    o_color.rgb = pow(o_color.rgb, vec3(1.0 / 2.2));
+    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / 2.2));
 }
 `;
     }
@@ -488,8 +488,7 @@ class FMATInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.gfxSamplers.length; i++)
-            device.destroySampler(this.gfxSamplers[i]);
+        device.destroyProgram(this.gfxProgram);
     }
 }
 

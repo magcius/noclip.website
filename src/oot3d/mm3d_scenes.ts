@@ -880,7 +880,10 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
 
         const textureHolder = new CtrTextureHolder();
+        context.destroyablePool.push(textureHolder);
+
         const modelCache = new ModelCache(dataFetcher);
+        context.destroyablePool.push(modelCache);
 
         const gar = ZAR.parse(maybeDecompress(zarBuffer));
 

@@ -544,6 +544,12 @@ class DrawCallInstance {
         comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
         offs++;
     }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureMappings.length; i++)
+            if (this.textureMappings[i].gfxTexture !== null)
+                device.destroyTexture(this.textureMappings[i].gfxTexture!);
+    }
 }
 
 export const enum BKPass {
@@ -563,8 +569,13 @@ export interface Mesh {
 
 export class MeshData {
     public renderData: RenderData;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh.sharedOutput, false);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderData.destroy(device);
     }
 }
 
@@ -599,6 +610,11 @@ class MeshRenderer {
     public setAlphaVisualizerEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].destroy(device);
     }
 }
 
@@ -700,6 +716,6 @@ export class RootMeshRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO
+        this.rootNodeRenderer.destroy(device);
     }
 }

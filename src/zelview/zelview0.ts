@@ -125,6 +125,7 @@ enum HeaderCommands {
 
 function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput: RSPSharedOutput): Headers {
     const headers = new Headers();
+    headers.filename = rom.sceneFile.filename;
 
     function lookupAddress(addr: number): { buffer: ArrayBufferSlice, offs: number } {
         const bankIdx = addr >>> 24;
@@ -343,8 +344,6 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
     headers.rooms = [];
     headers.mesh = null;
 
-    const startOffs = offs;
-
     console.log(`Starting parsing at 0x${offs.toString(16)}`);
 
     while (true) {
@@ -371,6 +370,7 @@ function readHeaders(rom: ZELVIEW0, offs: number, banks: RomBanks, sharedOutput:
                 break;
         }
     }
+
     return headers;
 }
 
