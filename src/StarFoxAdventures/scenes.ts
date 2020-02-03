@@ -711,7 +711,7 @@ class SFAMapDesc implements Viewer.SceneDesc {
                 }
 
                 const modelMatrix: mat4 = mat4.create();
-                mat4.fromTranslation(modelMatrix, [5500 * x, 0, 5500 * y]);
+                mat4.fromTranslation(modelMatrix, [5120 * x, 0, 5120 * y]);
                 blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
             }
         }
