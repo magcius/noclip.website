@@ -10,7 +10,7 @@ import * as GX_Texture from '../gx/gx_texture';
 
 import { hexzero, nArray } from '../util';
 import * as GX from '../gx/gx_enum';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -73,8 +73,8 @@ class ModelInstance {
                 const tex = this.textures[i]!;
                 materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
                 materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
-                materialParams.m_TextureMapping[i].width = 32;
-                materialParams.m_TextureMapping[i].height = 32;
+                materialParams.m_TextureMapping[i].width = tex.loadedTexture.texture.width;
+                materialParams.m_TextureMapping[i].height = tex.loadedTexture.texture.height;
                 materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else {
                 materialParams.m_TextureMapping[i].reset();
@@ -195,7 +195,7 @@ function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
     switch (magic) {
     case stringToFourCC('ZLB\0'):
         return new ArrayBufferSlice(loadZLB(data));
-    case stringToFourCC('DIRn'):
+    case stringToFourCC('DIRn'): // FIXME: actually just "DIR"
         return new ArrayBufferSlice(loadDIRn(data));
     default:
         console.warn(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
@@ -203,40 +203,55 @@ function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
     }
 }
 
-function loadTex(texData: ArrayBufferSlice): GX_Texture.Texture {
+interface LoadedTexture {
+    texture: GX_Texture.Texture;
+    wrapS: number;
+    wrapT: number;
+    minFilt: number;
+    magFilt: number;
+}
+
+function loadTex(texData: ArrayBufferSlice): LoadedTexture {
     const dv = texData.createDataView();
     const result = {
-        name: `Texture`,
-        width: dv.getUint16(0x0A),
-        height: dv.getUint16(0x0C),
-        format: dv.getUint8(22), // GX.TexFormat.RGB565, // TODO
-        data: texData.slice(96),
-        mipCount: 1,
+        texture: {
+            name: `Texture`,
+            width: dv.getUint16(0x0A),
+            height: dv.getUint16(0x0C),
+            format: dv.getUint8(0x16),
+            data: texData.slice(0x60),
+            mipCount: 1,
+        },
+        wrapS: dv.getUint8(0x17),
+        wrapT: dv.getUint8(0x18),
+        minFilt: dv.getUint8(0x19),
+        magFilt: dv.getUint8(0x1A),
     };
     return result;
 }
 
 interface DecodedTexture {
+    loadedTexture: LoadedTexture;
     gfxTexture: GfxTexture;
     gfxSampler: GfxSampler;
 }
 
-function decodeTex(device: GfxDevice, tex: GX_Texture.Texture): DecodedTexture {
-    const mipChain = GX_Texture.calcMipChain(tex, 1);
+function decodeTex(device: GfxDevice, loaded: LoadedTexture): DecodedTexture {
+    const mipChain = GX_Texture.calcMipChain(loaded.texture, 1);
     const gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
     
     // GL texture is bound by loadTextureFromMipChain.
     const gfxSampler = device.createSampler({
-        wrapS: GfxWrapMode.REPEAT, // TODO
-        wrapT: GfxWrapMode.REPEAT, // TODO
-        minFilter: GfxTexFilterMode.BILINEAR,
-        magFilter: GfxTexFilterMode.BILINEAR,
+        wrapS: translateWrapModeGfx(loaded.wrapS),
+        wrapT: translateWrapModeGfx(loaded.wrapT),
+        minFilter: translateTexFilterGfx(loaded.minFilt)[0], // TODO: implement mip filters
+        magFilter: translateTexFilterGfx(loaded.magFilt)[0],
         mipFilter: GfxMipFilterMode.NO_MIP,
         minLOD: 0,
         maxLOD: 100,
     });
 
-    return { gfxTexture, gfxSampler };
+    return { loadedTexture: loaded, gfxTexture, gfxSampler };
 }
 
 function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number): (DecodedTexture | null) {
@@ -389,17 +404,70 @@ class BlockRenderer {
         for (let i = 0; i <= GX.Attr.MAX; i++) {
             vcd[i] = { type: GX.AttrType.NONE };
             for (let j = 0; j < 8; j++) {
-                vat[j][i] = { compType: GX.CompType.F32, compShift: 0, compCnt: 0 };
+                vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
             }
         }
-        vcd[GX.Attr.POS].type = GX.AttrType.INDEX16;
-        for (let i = 0; i < 8; i++) {
-            vat[i][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-            vat[i][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGB };
-            for (let t = 0; t < 8; t++) {
-                vat[i][GX.Attr.TEX0 + t] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-            }
-        }
+
+        // vcd[GX.Attr.POS].type = GX.AttrType.INDEX16;
+        // // TODO: remove this for loop; set up all vats manually
+        // for (let i = 0; i < 8; i++) {
+        //     vat[i][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        //     vat[i][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        //     for (let t = 0; t < 8; t++) {
+        //         vat[i][GX.Attr.TEX0 + t] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        //     }
+        // }
+
+        // vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
+        vcd[GX.Attr.POS].type = GX.AttrType.DIRECT;
+        vcd[GX.Attr.CLR0].type = GX.AttrType.DIRECT;
+        vcd[GX.Attr.TEX0].type = GX.AttrType.DIRECT;
+
+        // TODO: Implement normals and lighting
+        vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+        
+        vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
+        vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+        
+        vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+        vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+
+        vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        
+        vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+
+        vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 3, compCnt: GX.CompCnt.POS_XYZ };
+        vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+        vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+        vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+        vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+
+        vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+        vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+        vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
         const chunkOffset = uncompDv.getUint32(0x68);
         // console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
@@ -712,7 +780,7 @@ class SFAMapDesc implements Viewer.SceneDesc {
                 }
 
                 const modelMatrix: mat4 = mat4.create();
-                mat4.fromTranslation(modelMatrix, [5120 * x, 0, 5120 * y]);
+                mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
                 blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
             }
         }
@@ -824,7 +892,7 @@ const sceneDescs = [
     new SFAMapDesc(97, 'loc97', 'Location'),
     new SFAMapDesc(98, 'loc98', 'Location'),
     new SFAMapDesc(99, 'loc99', 'Location'),
-    // The maps around this number seem to be empty data
+    // FIXME: Many of these maps contain empty or broken data.
     new SFAMapDesc(110, 'loc110', 'Location 110'),
     new SFAMapDesc(115, 'loc115', 'Location 115'),
     new SFAMapDesc(116, 'loc116', 'Location 116'),
