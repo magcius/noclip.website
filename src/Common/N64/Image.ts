@@ -1,5 +1,6 @@
 
 import { assert } from "../../util";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 
 export const enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,
@@ -94,8 +95,9 @@ export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: numbe
     }
 }
 
-export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
+export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, line = 0): void {
     let dstIdx = 0;
+    const padW = (line !== 0) ? (((line << 1) - tileW) << 2) : 0x00;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const p = view.getUint32(srcIdx);
@@ -106,11 +108,13 @@ export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number
             srcIdx += 0x04;
             dstIdx += 0x04;
         }
+        srcIdx += padW;
     }
 }
 
-export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
+export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0): void {
     let dstIdx = 0;
+    const padW = (line !== 0) ? (((line << 4) - tileW) >>> 1) : 0x00;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x += 2) {
             const b = view.getUint8(srcIdx);
@@ -119,11 +123,13 @@ export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, t
             srcIdx += 0x01;
             dstIdx += 0x08;
         }
+        srcIdx += padW;
     }
 }
 
-export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
+export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0): void {
     let dstIdx = 0;
+    const padW = (line !== 0) ? ((line << 3) - tileW) : 0x00;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const b = view.getUint8(srcIdx);
@@ -131,6 +137,7 @@ export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, t
             srcIdx += 0x01;
             dstIdx += 0x04;
         }
+        srcIdx += padW;
     }
 }
 

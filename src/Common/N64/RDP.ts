@@ -1,5 +1,7 @@
-import { assert } from "../../util";
+import { assert, hexzero } from "../../util";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT } from "./Image";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -112,4 +114,145 @@ function alphaCombinePassUsesT1(acp: AlphaCombinePass) {
 export function combineParamsUsesT1(cp: CombineParams) {
     return colorCombinePassUsesT1(cp.c0) || colorCombinePassUsesT1(cp.c1) ||
         alphaCombinePassUsesT1(cp.a0) || alphaCombinePassUsesT1(cp.a1);
+}
+
+export class Texture {
+    public name: string;
+    public format = 'rgba8';
+    public tile = new TileState();
+
+    constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
+        this.tile.copy(tile);
+        this.name = hexzero(this.dramAddr, 8);
+    }
+}
+
+export class TileState {
+    public fmt: number = 0;
+    public siz: number = 0;
+    public line: number = 0;
+    public tmem: number = 0;
+    public palette: number = 0;
+    public cmt: number = 0;
+    public maskt: number = 0;
+    public shiftt: number = 0;
+    public cms: number = 0;
+    public masks: number = 0;
+    public shifts: number = 0;
+    public uls: number = 0;
+    public ult: number = 0;
+    public lrs: number = 0;
+    public lrt: number = 0;
+
+    public set(fmt: number, siz: number, line: number, tmem: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
+        this.fmt = fmt; this.siz = siz; this.line = line; this.tmem = tmem; this.palette = palette; this.cmt = cmt; this.maskt = maskt; this.shiftt = shiftt; this.cms = cms; this.masks = masks; this.shifts = shifts;
+    }
+
+    public setSize(uls: number, ult: number, lrs: number, lrt: number): void {
+        this.uls = uls; this.ult = ult; this.lrs = lrs; this.lrt = lrt;
+    }
+
+    public copy(o: TileState): void {
+        this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
+        this.setSize(o.uls, o.ult, o.lrs, o.lrt);
+    }
+}
+
+function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
+    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
+}
+
+const tlutColorTable = new Uint8Array(256 * 4);
+
+function getTileWidth(tile: TileState): number {
+    const coordWidth = ((tile.lrs - tile.uls) >>> 2) + 1;
+    if (tile.masks !== 0)
+        return Math.min(1 << tile.masks, coordWidth)
+    else
+        return coordWidth;
+}
+
+function getTileHeight(tile: TileState): number {
+    const coordHeight = ((tile.lrt - tile.ult) >>> 2) + 1;
+    if (tile.maskt !== 0)
+        return Math.min(1 << tile.maskt, coordHeight)
+    else
+        return coordHeight;
+}
+
+function getMaskedCMS(tile: TileState): number {
+    const coordWidth = ((tile.lrs - tile.uls) >>> 2) + 1;
+    if (tile.masks !== 0 && (1 << tile.masks) <= coordWidth/2)
+        return tile.cms & 1;
+    return tile.cms;
+}
+
+function getMaskedCMT(tile: TileState): number {
+    const coordHeight = ((tile.lrt - tile.ult) >>> 2) + 1;
+    if (tile.maskt !== 0 && (1 << tile.maskt) <= coordHeight/2)
+        return tile.cmt & 1;
+    return tile.cmt;
+}
+
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
+    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
+    if (tile.fmt === ImageFormat.G_IM_FMT_CI)
+        translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
+
+    const tileW = getTileWidth(tile);
+    const tileH = getTileHeight(tile);
+
+
+    // TODO(jstpierre): Support more tile parameters
+    // assert(tile.shifts === 0); // G_TX_NOLOD
+    // assert(tile.shiftt === 0); // G_TX_NOLOD
+
+    const dst = new Uint8Array(tileW * tileH * 4);
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    switch ((tile.fmt << 4) | tile.siz) {
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH); break;
+    default:
+        throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
+    }
+    const out = new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
+
+    // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
+    // the real behavior (repeating within the coordinate range, clamping outside) is tricky to reproduce
+    // we use a heuristic to tell if the clamping behavior should be ignored and remove the clamp bit in that case
+    // TODO: for smaller texture repeats, build the full texture and leave clamping as is
+    out.tile.cms = getMaskedCMS(tile);
+    out.tile.cmt = getMaskedCMT(tile);
+
+    return out;
+}
+
+// figure out if two textures with the same underlying data can reuse the same texture
+// we assume that a texture has only one real size, so just match on the eventual CM flags
+function textureMatch(a: TileState, b: TileState): boolean {
+    return getMaskedCMS(a) === getMaskedCMS(b) && getMaskedCMT(a) === getMaskedCMT(b);
+}
+
+export class TextureCache {
+    public textures: Texture[] = [];
+
+    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
+        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && t.dramPalAddr === dramPalAddr && textureMatch(t.tile, tile));
+        if (existingIndex >= 0) {
+            return existingIndex;
+        } else {
+            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
+            const index = this.textures.length;
+            this.textures.push(texture);
+            return index;
+        }
+    }
 }

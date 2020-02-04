@@ -1,7 +1,8 @@
 import * as Viewer from '../viewer';
+import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
 import {ACMUX, CCMUX, CombineParams, fillCombineParams} from '../Common/N64/RDP';
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, OtherModeH_Layout } from "./f3dex";
+import { getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, OtherModeH_Layout } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -32,8 +33,10 @@ precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-#ifdef TEXTURE_GEN
-    vec4 u_LookAtVectors[2];
+#ifdef LIGHTING
+    #ifdef TEXTURE_GEN
+        vec4 u_LookAtVectors[2];
+    #endif
 #endif
 };
 
@@ -82,12 +85,16 @@ void main() {
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
     v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
 
-#ifdef TEXTURE_GEN
-    // generate texture coordinates based on the vertex normal in screen space
-
+#ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+
+    // TODO: find and pass in lighting data
+    v_Color = vec4(vec3(.6 + .4*t_Normal.y), 1.0);
+
+#ifdef TEXTURE_GEN
+    // generate texture coordinates based on the vertex normal in screen space
     t_Normal.xy = vec2(dot(t_Normal, u_LookAtVectors[0]), dot(t_Normal, u_LookAtVectors[1]));
 
     // shift and rescale to tex coordinates - straight towards the camera is the center
@@ -98,6 +105,8 @@ void main() {
 #   endif
 
     v_TexCoord.zw = v_TexCoord.xy;
+#endif
+
 #endif
 }
 `;
@@ -258,7 +267,7 @@ ${this.generateAlphaTest()}
     }
 }
 
-export function textureToCanvas(texture: Texture): Viewer.Texture {
+export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
@@ -275,7 +284,7 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
 }
 
 const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
+    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
 }
 
 function translateCM(cm: TexCM): GfxWrapMode {
@@ -283,6 +292,7 @@ function translateCM(cm: TexCM): GfxWrapMode {
     case TexCM.WRAP:   return GfxWrapMode.REPEAT;
     case TexCM.MIRROR: return GfxWrapMode.MIRROR;
     case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
     }
 }
 
@@ -471,7 +481,7 @@ export class RenderData {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
-    private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
+    private translateTexture(device: GfxDevice, texture: RDP.Texture): GfxTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
@@ -480,7 +490,7 @@ export class RenderData {
         return gfxTexture;
     }
 
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
+    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: RDP.Texture): GfxSampler {
         return cache.createSampler(device, {
             wrapS: translateCM(texture.tile.cms),
             wrapT: translateCM(texture.tile.cmt),
@@ -522,7 +532,7 @@ const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 class DrawCallInstance {
-    private textureEntry: Texture[] = [];
+    private textureEntry: RDP.Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
@@ -561,6 +571,9 @@ class DrawCallInstance {
         const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
+
+        if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING)
+            program.defines.set('LIGHTING', '1');
 
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
             program.defines.set('TEXTURE_GEN', '1');
@@ -1472,7 +1485,7 @@ interface FlipbookAnimationParams {
 const texMappingScratch = nArray(1, () => new TextureMapping());
 const flipbookScratch = nArray(2, () => vec3.create());
 export class FlipbookRenderer {
-    private textureEntry: Texture[] = [];
+    private textureEntry: RDP.Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;

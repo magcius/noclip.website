@@ -2,7 +2,7 @@ import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt, decodeTex_I8, decodeTex_I4 } from "../Common/N64/Image";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt, decodeTex_I8, decodeTex_I4, decodeTex_IA16 } from "../Common/N64/Image";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
@@ -32,37 +32,6 @@ export class TextureImageState {
 
     public set(fmt: number, siz: number, w: number, addr: number) {
         this.fmt = fmt; this.siz = siz; this.w = w; this.addr = addr;
-    }
-}
-
-export class TileState {
-    public fmt: number = 0;
-    public siz: number = 0;
-    public line: number = 0;
-    public tmem: number = 0;
-    public palette: number = 0;
-    public cmt: number = 0;
-    public maskt: number = 0;
-    public shiftt: number = 0;
-    public cms: number = 0;
-    public masks: number = 0;
-    public shifts: number = 0;
-    public uls: number = 0;
-    public ult: number = 0;
-    public lrs: number = 0;
-    public lrt: number = 0;
-
-    public set(fmt: number, siz: number, line: number, tmem: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
-        this.fmt = fmt; this.siz = siz; this.line = line; this.tmem = tmem; this.palette = palette; this.cmt = cmt; this.maskt = maskt; this.shiftt = shiftt; this.cms = cms; this.masks = masks; this.shifts = shifts;
-    }
-
-    public setSize(uls: number, ult: number, lrs: number, lrt: number): void {
-        this.uls = uls; this.ult = ult; this.lrs = lrs; this.lrt = lrt;
-    }
-
-    public copy(o: TileState): void {
-        this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
-        this.setSize(o.uls, o.ult, o.lrs, o.lrt);
     }
 }
 
@@ -109,17 +78,6 @@ export class StagingVertex extends Vertex {
     }
 }
 
-export class Texture {
-    public name: string;
-    public format = 'rgba8';
-    public tile = new TileState();
-
-    constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
-        this.tile.copy(tile);
-        this.name = hexzero(this.dramAddr, 8);
-    }
-}
-
 export function getImageFormatString(fmt: ImageFormat, siz: ImageSize): string {
     return `${getImageFormatName(fmt)}${getImageSizeName(siz)}`;
 }
@@ -139,7 +97,7 @@ export class DrawCall {
 }
 
 export class RSPSharedOutput {
-    public textureCache: TextureCache = new TextureCache();
+    public textureCache: RDP.TextureCache = new RDP.TextureCache();
     public vertices: Vertex[] = [];
     public indices: number[] = [];
 
@@ -365,211 +323,6 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
     return out;
 }
 
-function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
-}
-
-const tlutColorTable = new Uint8Array(256 * 4);
-
-function getTileWidth(tile: TileState): number {
-    if (tile.masks !== 0)
-        return 1 << tile.masks;
-    else
-        return ((tile.lrs - tile.uls) >>> 2) + 1;
-}
-
-function getTileHeight(tile: TileState): number {
-    if (tile.maskt !== 0)
-        return 1 << tile.maskt;
-    else
-        return ((tile.lrt - tile.ult) >>> 2) + 1;
-}
-
-function translateTile_CI4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_4b);
-
-    const tileW = getTileWidth(tile);
-    const tileH = getTileHeight(tile);
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable);
-    return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
-}
-
-function translateTile_CI8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_8b);
-
-    const tileW = getTileWidth(tile);
-    const tileH = getTileHeight(tile);
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
-    return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
-}
-
-function translateTile_RGBA16(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    let tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    let tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    if (tile.shiftt !== 0)
-        console.warn("ignoring texture LOD shift"); // one pokemon snap texture
-    let truncated = false;
-    if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-        tileW = (1 << tile.masks);
-        truncated = true;
-    }
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
-        tileH = (1 << tile.maskt);
-        truncated = true;
-    }
-    if (truncated)
-        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTile_IA8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-
-function translateTile_I4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    let tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    let tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    let truncated = false;
-    if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-        tileW = (1 << tile.masks);
-        truncated = true;
-    }
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
-        tileH = (1 << tile.maskt);
-        truncated = true;
-    }
-    if (truncated)
-        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_I4(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTile_I8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    let tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    let tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    let truncated = false;
-    if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-        tileW = (1 << tile.masks);
-        truncated = true;
-    }
-    if (tile.maskt !== 0 && (1 << tile.maskt) !== tileH) {
-        tileH = (1 << tile.maskt);
-        truncated = true;
-    }
-    if (truncated)
-        console.warn('truncated texture', tile.masks, tile.cms, ((tile.lrs - tile.uls) >>> 2) + 1, tile.maskt, tile.cmt, ((tile.lrt - tile.ult) >>> 2) + 1);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_I8(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTile_RGBA32(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    switch ((tile.fmt << 4) | tile.siz) {
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_CI4(segmentBuffers, dramAddr, dramPalAddr, tile);
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_CI8(segmentBuffers, dramAddr, dramPalAddr, tile);
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_IA8(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_I4(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_I8(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_RGBA16(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): return translateTile_RGBA32(segmentBuffers, dramAddr, tile);
-    default:
-        throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
-    }
-}
-
-export class TextureCache {
-    public textures: Texture[] = [];
-
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
-        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && t.dramPalAddr === dramPalAddr);
-        if (existingIndex >= 0) {
-            return existingIndex;
-        } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
-            const index = this.textures.length;
-            this.textures.push(texture);
-            return index;
-        }
-    }
-}
-
 function getSizBitsPerPixel(siz: ImageSize): number {
     switch (siz) {
     case ImageSize.G_IM_SIZ_4b:  return 4;
@@ -594,7 +347,7 @@ export class RSPState {
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new TextureImageState();
-    private DP_TileState = nArray(8, () => new TileState());
+    private DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[], public sharedOutput: RSPSharedOutput) {
@@ -655,7 +408,7 @@ export class RSPState {
         let dramPalAddr: number;
         if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
             const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-            // assert(textlut === TextureLUT.G_TT_RGBA16);
+            // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
 
             const palTmem = 0x100 + (tile.palette << 4);
             dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
@@ -680,22 +433,10 @@ export class RSPState {
             const cycletype = getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === OtherModeH_CycleType.G_CYC_2CYCLE);
 
-            // XXX(jstpierre): Hack for Banjo-Kazooie mipmaps. If we want to use mipmaps,
-            // use G_TX_LOADTILE, which we just loaded into TMEM from. I assume the game
-            // uses the G_DL call to 0x30000000 with DL generated by e.g. guLoadTextureBlockMipMap
-            // to set up the mipmap tiles in practice. Will have to figure out how to emulate that...
-            if (this.SP_TextureState.level === 2) {
-                assert(this.SP_TextureState.tile === 2);
-                this.DP_TileState[2].copy(this.DP_TileState[7]);
-                assert(this.DP_TileState[2].lrs === (31 << 2));
-                assert(this.DP_TileState[2].lrt === (47 << 2));
-                this.DP_TileState[2].lrt = this.DP_TileState[2].lrs;
-                this.DP_TileState[0].copy(this.DP_TileState[2]);
-            }
-
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level > 0) {
+            if (this.SP_TextureState.level == 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+                // if tex1 is used, and it isn't a mipmap, load it
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             }
@@ -707,12 +448,12 @@ export class RSPState {
             this.stateChanged = false;
 
             const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
-            this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
             dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            this._flushTextures(dc);
         }
     }
 

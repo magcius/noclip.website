@@ -19,7 +19,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, TileState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -378,7 +378,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     let pairedTile = -1;
 
     const textureState = new TextureState();
-    const tiles: TileState[] = nArray(8, () => new TileState());
+    const tiles: RDP.TileState[] = nArray(8, () => new RDP.TileState());
     const levels: UVTX_Level[] = [];
 
     const addr = 0x14 + dataSize;

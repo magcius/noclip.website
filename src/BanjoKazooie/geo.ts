@@ -4,6 +4,7 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
+import { ImageFormat, ImageSize } from "../Common/N64/Image";
 
 // Banjo-Kazooie Geometry
 
@@ -248,6 +249,7 @@ function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoN
         F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
         F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
     );
+    setMipmapTiles(rspState);
     const geoNode: GeoNode = {
         boneIndex,
         parentIndex,
@@ -275,6 +277,19 @@ function popGeoNode(context: GeoContext): GeoNode {
     geoNode.rspOutput = geoNode.rspState.finish();
 
     return geoNode;
+}
+
+function setMipmapTiles(rspState: F3DEX.RSPState): void {
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 2, 0, 0, 5, 0, 0, 5, 0);
+    rspState.gDPSetTileSize(2, 0, 0, 0x7C, 0x7C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x100, 3, 0, 0, 4, 0, 0, 4, 0);
+    rspState.gDPSetTileSize(3, 0, 0, 0x3C, 0x3C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x104, 4, 0, 0, 3, 0, 0, 3, 0);
+    rspState.gDPSetTileSize(4, 0, 0, 0x1C, 0x1C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x106, 5, 0, 0, 2, 0, 0, 2, 0);
+    rspState.gDPSetTileSize(5, 0, 0, 0x0C, 0x0C);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x107, 6, 0, 0, 1, 0, 0, 1, 0);
+    rspState.gDPSetTileSize(6, 0, 0, 0x04, 0x04);
 }
 
 function runDL(context: GeoContext, addr: number): void {
@@ -425,10 +440,10 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             // Conditionally run geolist.
             runGeoLayout(context, geoIdx + view.getUint16(geoIdx + 0x08));
         } else if (cmd === 0x10) {
-            // set mipmaps. Skip.
-            const contFlag = view.getUint32(geoIdx + 0x04);
             // 1 for clamp, 2 for wrap
             const wrapMode = view.getInt32(geoIdx + 0x08);
+            const node = peekGeoNode(context);
+            setMipmapTiles(node.rspState);
         } else {
             throw `whoops ${cmd}`;
         }
