@@ -6,24 +6,26 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
 import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
+import { DataMap } from './room';
 
 // Interpreter for N64 F3DEX2 microcode.
 
 export const enum RSP_Geometry {
-    G_ZBUFFER = 1 << 0,
-    G_SHADE = 1 << 2,
-    G_CULL_FRONT = 1 << 9,
-    G_CULL_BACK = 1 << 10,
-    G_FOG = 1 << 16,
-    G_LIGHTING = 1 << 17,
-    G_TEXTURE_GEN = 1 << 18,
+    G_ZBUFFER            = 1 << 0,
+    G_SHADE              = 1 << 2,
+    G_CULL_FRONT         = 1 << 9,
+    G_CULL_BACK          = 1 << 10,
+    G_FOG                = 1 << 16,
+    G_LIGHTING           = 1 << 17,
+    G_TEXTURE_GEN        = 1 << 18,
     G_TEXTURE_GEN_LINEAR = 1 << 19,
-    G_SHADING_SMOOTH = 1 << 21,
-    G_CLIPPING = 1 << 23,
+    G_SHADING_SMOOTH     = 1 << 21,
+    G_CLIPPING           = 1 << 23,
 }
 
 export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
+    public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
 }
 
@@ -55,19 +57,36 @@ export class RSPState {
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new F3DEX.TextureImageState();
-    private DP_TileState = nArray(8, () => new F3DEX.TileState());
+    private DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
-    private DP_primColor = vec4.create();
+    private DP_PrimColor = vec4.create();
+    private DP_EnvColor = vec4.create();
     private DP_PrimLOD = 0;
 
-    constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataStart: number) {
+    public SP_MatrixIndex = 0;
+    public DP_Half1 = 0;
+
+    constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
     }
 
     public finish(): RSPOutput | null {
         if (this.output.drawCalls.length === 0)
             return null;
         return this.output;
+    }
+
+    // partially reset the state to prepare for a new node
+    public clear(): void {
+        this.SP_MatrixIndex = 0;
+        // start a new collection of drawcalls
+        this.output = new RSPOutput();
+        this.stateChanged = true;
+        // mark any existing vertices as belonging to the parent
+        for (let i = 0; i < this.vertexCache.length; i++) {
+            this.vertexCache[i].matrixIndex = 1;
+            this.vertexCache[i].outputIndex = -1;
+        }
     }
 
     private _setGeometryMode(newGeometryMode: number) {
@@ -93,17 +112,31 @@ export class RSPState {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
-        const addr = dramAddr - this.dataStart;
-        const view = this.segments[0].createDataView(addr);
+        const view = this.dataMap.getView(dramAddr);
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
+            this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
         }
+    }
+
+    public gSPModifyVertex(w: number, n: number, upper: number, lower: number): void {
+        const vtx = this.vertexCache[n];
+        switch (w) {
+            case 0x14: {
+                // the provided values are already scaled, so undo that
+                // to match the other values
+                vtx.tx = (upper / 0x20 / this.SP_TextureState.s) + 0.5;
+                vtx.ty = (lower / 0x20 / this.SP_TextureState.t) + 0.5;
+            } break;
+            default:
+                console.warn("new modifyvtx", w, upper, lower);
+        }
+        vtx.outputIndex = -1;
     }
 
     private _translateTileTexture(tileIndex: number): number {
         const tile = this.DP_TileState[tileIndex];
-
-        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem)) - this.dataStart;
+        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
 
         let dramPalAddr: number;
         if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
@@ -111,12 +144,13 @@ export class RSPState {
             // assert(textlut === TextureLUT.G_TT_RGBA16);
 
             const palTmem = 0x100 + (tile.palette << 4);
-            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem)) - this.dataStart;
+            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
         } else {
             dramPalAddr = 0;
         }
 
-        return this.sharedOutput.textureCache.translateTileTexture(this.segments, dramAddr, dramPalAddr, tile);
+        const range = this.dataMap.getRange(dramAddr);
+        return this.sharedOutput.textureCache.translateTileTexture([range.data], dramAddr - range.start, dramPalAddr - range.start, tile);
     }
 
     private _flushTextures(dc: F3DEX.DrawCall): void {
@@ -152,7 +186,8 @@ export class RSPState {
             dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
-            vec4.copy(dc.DP_PrimColor, this.DP_primColor);
+            vec4.copy(dc.DP_PrimColor, this.DP_PrimColor);
+            vec4.copy(dc.DP_EnvColor, this.DP_EnvColor);
             dc.DP_PrimLOD = this.DP_PrimLOD;
             this._flushTextures(dc);
         }
@@ -160,7 +195,6 @@ export class RSPState {
 
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
-
         this.sharedOutput.loadVertex(this.vertexCache[i0]);
         this.sharedOutput.loadVertex(this.vertexCache[i1]);
         this.sharedOutput.loadVertex(this.vertexCache[i2]);
@@ -201,6 +235,7 @@ export class RSPState {
 
     public gDPSetTileSize(tile: number, uls: number, ult: number, lrs: number, lrt: number): void {
         this.DP_TileState[tile].setSize(uls, ult, lrs, lrt);
+        this.stateChanged = true;
     }
 
     public gDPSetOtherModeL(sft: number, len: number, w1: number): void {
@@ -230,8 +265,13 @@ export class RSPState {
     }
 
     public gSPSetPrimColor(lod: number, r: number, g: number, b: number, a: number) {
-        vec4.set(this.DP_primColor, r/0xFF, g/0xFF, b/0xFF, a/0xFF);
-        this.DP_PrimLOD = lod/0xFF;
+        vec4.set(this.DP_PrimColor, r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
+        this.DP_PrimLOD = lod / 0xFF;
+        this.stateChanged = true;
+    }
+
+    public gSPSetEnvColor(r: number, g: number, b: number, a: number) {
+        vec4.set(this.DP_EnvColor, r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
         this.stateChanged = true;
     }
 }
@@ -251,6 +291,7 @@ enum F3DEX2_GBI {
     G_POPMTX            = 0xD8,
     G_GEOMETRYMODE      = 0xD9,
     G_MTX               = 0xDA,
+    G_MOVEWORD          = 0XDB,
     G_DL                = 0xDE,
     G_ENDDL             = 0xDF,
 
@@ -284,13 +325,14 @@ enum F3DEX2_GBI {
     G_TEXRECT           = 0xE4,
     G_SETOTHERMODE_H    = 0xE3,
     G_SETOTHERMODE_L    = 0xE2,
+    G_RDPHALF_1         = 0XE1,
 }
 
 export type dlRunner = (state: RSPState, addr: number) => void;
 
 export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunner = runDL_F3DEX2): void {
-    const view = state.segments[0].createDataView();
-    for (let i = addr - state.dataStart; i < view.byteLength; i += 0x08) {
+    const view = state.dataMap.getView(addr);
+    for (let i = 0; i < view.byteLength; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
@@ -321,10 +363,10 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
                 const tmem = (w0 >>> 0) & 0x1FF;
                 const tile = (w1 >>> 24) & 0x07;
                 const palette = (w1 >>> 20) & 0x0F;
-                const cmt = (w1 >>> 18) & 0x01;
+                const cmt = (w1 >>> 18) & 0x03;
                 const maskt = (w1 >>> 14) & 0x0F;
                 const shiftt = (w1 >>> 10) & 0x0F;
-                const cms = (w1 >>> 8) & 0x01;
+                const cms = (w1 >>> 8) & 0x03;
                 const masks = (w1 >>> 4) & 0x0F;
                 const shifts = (w1 >>> 0) & 0x0F;
                 state.gDPSetTile(fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts);
@@ -375,7 +417,11 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             } break;
 
             case F3DEX2_GBI.G_DL: {
-                subDLHandler(state, w1);
+                const segment = (w1 >>> 24) & 0xFF;
+                if (segment === 0x80)
+                    runDL_F3DEX2(state, w1, subDLHandler);
+                else
+                    subDLHandler(state, w1);
                 if ((w0 >>> 16) & 0xFF)
                     return;
             } break;
@@ -438,6 +484,35 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
                 const b = (w1 >>> 8) & 0xFF;
                 const a = (w1 >>> 0) & 0xFF;
                 //state.gSPSetBlendColor(r, g, b, a);
+            } break;
+
+            case F3DEX2_GBI.G_SETENVCOLOR: {
+                const r = (w1 >>> 24) & 0xFF;
+                const g = (w1 >>> 16) & 0xFF;
+                const b = (w1 >>> 8) & 0xFF;
+                const a = (w1 >>> 0) & 0xFF;
+                state.gSPSetEnvColor(r, g, b, a);
+            } break;
+
+            case F3DEX2_GBI.G_BRANCH_Z: {
+                runDL_F3DEX2(state, state.DP_Half1, subDLHandler);
+                return; // assume this DL is just for selecting LOD
+            } break;
+
+
+            case F3DEX2_GBI.G_RDPHALF_1: {
+                state.DP_Half1 = w1;
+            } break;
+
+            case F3DEX2_GBI.G_MODIFYVTX: {
+                const w = (w0 >>> 16) & 0xFF;
+                const n = (w0 >>> 1) & 0x7FFF;
+                const upper = w1 >> 16; // preserve sign
+                const lower = w1 % 0x1000; // preserve sign
+                state.gSPModifyVertex(w, n, upper, lower);
+            } break;
+
+            case F3DEX2_GBI.G_MOVEWORD: {
             } break;
 
             case F3DEX2_GBI.G_CULLDL:

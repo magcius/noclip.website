@@ -1,15 +1,23 @@
 import * as F3DEX2 from "./f3dex2";
+import * as RDP from "../Common/N64/RDP";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import {  RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType, TextureCache } from "../BanjoKazooie/f3dex";
+import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
-import { assert, hexzero, assertExists } from "../util";
+import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 
 
+export interface Level {
+    sharedCache: RDP.TextureCache;
+    skybox: GFXNode | null;
+    rooms: Room[];
+    objectInfo: ObjectDef[];
+}
+
 export interface Room {
-    nodes: GFXNode[];
-    isSkybox: boolean;
+    graph: GFXNode;
+    objects: ObjectSpawn[];
 }
 
 export interface Model {
@@ -18,59 +26,229 @@ export interface Model {
     rspOutput: F3DEX2.RSPOutput | null;
 }
 
-export interface MapArchive {
-    Data: ArrayBufferSlice,
-    StartAddress: number,
-    Rooms: number,
-};
-
-export function parseMap(map: MapArchive): Room[] {
-    const view = map.Data.createDataView();
-
-    const rooms: Room[] = [];
-    let offs = map.Rooms - map.StartAddress;
-    const staticRooms = view.getUint32(offs + 0x00);
-    const dynamicRooms = view.getUint32(offs + 0x04);
-    const skyboxDescriptor = view.getUint32(offs + 0x08);
-
-    const sharedCache = new TextureCache();
-
-    if (skyboxDescriptor > 0) {
-        const skyboxDL = view.getUint32(skyboxDescriptor - map.StartAddress);
-        const skyboxMats = view.getUint32(skyboxDescriptor + 0x08 - map.StartAddress)
-        const materials = skyboxMats !== 0 ? parseMaterialData(view, map.StartAddress, skyboxMats) : [];
-        const model = runRoomDL(map.Data, map.StartAddress, skyboxDL, sharedCache, materials);
-        const nodes = [{
-            model,
-            children: [],
-            translation: vec3.create(),
-            axis: vec3.create(),
-            scale: vec3.create(),
-        }]
-        rooms.push({nodes, isSkybox: true});
-    }
-
-    offs = staticRooms - map.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(map.Data, map.StartAddress, view.getUint32(offs), sharedCache));
-        offs += 4;
-    }
-
-    offs = dynamicRooms - map.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(map.Data, map.StartAddress, view.getUint32(offs), sharedCache));
-        offs += 4;
-    }
-
-    return rooms;
+export interface ObjectSpawn {
+    id: number;
+    pos: vec3;
+    euler: vec3;
+    scale: vec3;
 }
 
+export interface ObjectDef {
+    id: number;
+    graph: GFXNode;
+    sharedOutput: RSPSharedOutput;
+    scale: vec3;
+    flags: number;
+    flying: boolean;
+}
 
-interface GFXNode {
+export interface LevelArchive {
+    Name: number,
+    Data: ArrayBufferSlice,
+    Code: ArrayBufferSlice,
+    StartAddress: number,
+    CodeStartAddress: number,
+    Rooms: number,
+    Objects: number,
+};
+
+export interface DataRange {
+    data: ArrayBufferSlice;
+    start: number;
+}
+
+export class DataMap {
+    constructor(public ranges: DataRange[]) { }
+
+    public getView(addr: number): DataView {
+        const range = this.getRange(addr);
+        return range.data.createDataView(addr - range.start);
+    }
+
+    public getRange(addr: number): DataRange {
+        for (let i = 0; i < this.ranges.length; i++) {
+            const offset = addr - this.ranges[i].start;
+            if (0 <= offset && offset < this.ranges[i].data.byteLength)
+                return this.ranges[i];
+        }
+        throw `no matching range for ${hexzero(addr, 8)}`;
+    }
+
+    public deref(addr: number): number {
+        return this.getView(addr).getUint32(0);
+    }
+}
+
+const groundSpawn = 0x80362EE0;
+const flyingSpawn = 0x802C7E38;
+
+export function parseLevel(archives: LevelArchive[]): Level {
+    const level = archives[0];
+    const view = level.Data.createDataView();
+
+    const rooms: Room[] = [];
+    let offs = level.Rooms - level.StartAddress;
+    const pathRooms = view.getUint32(offs + 0x00);
+    const nonPathRooms = view.getUint32(offs + 0x04);
+    const skyboxDescriptor = view.getUint32(offs + 0x08);
+
+    const sharedCache = new RDP.TextureCache();
+
+    let skybox: GFXNode | null = null;
+
+    const dataMap = new DataMap([
+        { data: level.Data, start: level.StartAddress },
+        { data: level.Code, start: level.CodeStartAddress },
+    ]);
+    for (let i = 1; i < archives.length; i++) {
+        dataMap.ranges.push(
+            { data: archives[i].Data, start: archives[i].StartAddress },
+            { data: archives[i].Code, start: archives[i].CodeStartAddress },
+        );
+    }
+
+    if (skyboxDescriptor > 0) {
+        const skyboxDL = view.getUint32(skyboxDescriptor - level.StartAddress);
+        const skyboxMats = view.getUint32(skyboxDescriptor + 0x08 - level.StartAddress);
+        const materials = skyboxMats !== 0 ? parseMaterialData(dataMap, dataMap.deref(skyboxMats)) : [];
+        const skyboxState = new F3DEX2.RSPState([], new RSPSharedOutput(), dataMap);
+        const skyboxModel = runRoomDL(dataMap, skyboxDL, skyboxState, materials);
+        skybox = {
+            model: skyboxModel,
+            translation: vec3.create(),
+            euler: vec3.create(),
+            scale: vec3.fromValues(1, 1, 1),
+            children: [],
+        };
+    }
+
+    offs = pathRooms - level.StartAddress;
+    while (view.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+        offs += 4;
+    }
+
+    offs = nonPathRooms - level.StartAddress;
+    while (view.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+        offs += 4;
+    }
+
+    if (level.Name === 0x1C)
+        // rainbow cloud spawns things dynamically
+        rooms[0].objects.push(
+            {
+                id: 0x97,
+                pos: vec3.fromValues(0, 100, 500),
+                euler: vec3.create(),
+                scale: vec3.fromValues(1, 1, 1)
+            },
+            {
+                id: 0x3e9,
+                pos: vec3.fromValues(0, 0, 10000),
+                euler: vec3.fromValues(0, Math.PI, 0),
+                scale: vec3.fromValues(1, 1, 1)
+            },
+        );
+
+    const objectInfo: ObjectDef[] = [];
+    if (level.Objects !== 0) {
+        const objFunctionView = dataMap.getView(level.Objects);
+        offs = 0;
+        while (objFunctionView.getInt32(offs) !== 0) {
+            const id = objFunctionView.getInt32(offs + 0x00);
+            const initFunc = objFunctionView.getUint32(offs + 0x04);
+            offs += 0x10;
+
+            const initData = findObjectData(dataMap, initFunc);
+            const objectView = dataMap.getView(initData.address);
+
+            const graphStart = objectView.getUint32(0x00);
+            const materials = objectView.getUint32(0x04);
+            const renderer = objectView.getUint32(0x08);
+            const scale = getVec3(objectView, 0x10);
+            vec3.scale(scale, scale, 0.1);
+            // four floats
+            const flags = objectView.getUint16(0x2C);
+            const extraTransforms = objectView.getUint32(0x2E) >>> 8;
+
+            const sharedOutput = new RSPSharedOutput();
+            const objectState = new F3DEX2.RSPState([], sharedOutput, dataMap);
+            try {
+                const graph = parseGraph(dataMap, graphStart, materials, renderer, objectState);
+                objectInfo.push({ id, flags, graph, scale, sharedOutput, flying: initData.address === flyingSpawn });
+            } catch (e) {
+                console.warn("failed parse", e);
+            }
+
+        }
+    }
+
+    return { rooms, skybox, sharedCache, objectInfo };
+}
+
+const enum MIPSOpcode {
+    JAL     = 0X03,
+    BEQ     = 0x04,
+    BNE     = 0x05,
+    ADDIU   = 0x09,
+    ANDI    = 0x0C,
+    LUI     = 0x0F,
+    LW      = 0x23,
+    SW      = 0x2B,
+}
+
+interface InitParams {
+    address: number;
+    spawnFunc: number;
+}
+
+function findObjectData(dataMap: DataMap, addr: number): InitParams {
+    const view = dataMap.getView(addr);
+    // registers to keep track of
+    const regs = nArray(32, () => 0);
+    let LUIReg = -1;
+    let address = -1;
+    let spawnFunc = -1;
+    let offs = 0;
+    while (true) {
+        const instr = view.getUint32(offs + 0x00);
+        const rs = (instr >>> 21) & 0x1f;
+        const rt = (instr >>> 16) & 0x1f;
+        const imm = (instr >>> 0) & 0xffff;
+        switch (instr >>> 26) {
+            case MIPSOpcode.BEQ:
+            case MIPSOpcode.BNE:
+            case MIPSOpcode.ANDI:
+            case MIPSOpcode.SW:
+            case MIPSOpcode.LW:
+                break;
+            case MIPSOpcode.ADDIU:
+                regs[rt] = regs[rs] + view.getInt16(offs + 0x02);
+                if (rt === rs && rs === LUIReg)
+                    address = regs[rt];
+                break;
+            case MIPSOpcode.LUI:
+                regs[rt] = (imm << 16) >>> 0;
+                LUIReg = rt;
+                break;
+            case MIPSOpcode.JAL:
+                spawnFunc = 4 * ((instr >>> 0) & 0xFFFFFF);
+                break;
+            default:
+                throw `couldn't find data ${hexzero(instr, 8)} ${hexzero(addr, 8)}`;
+        }
+        if (spawnFunc >= 0 && address >= 0)
+            return { spawnFunc, address };
+        offs += 4;
+    }
+}
+
+export interface GFXNode {
     model?: Model;
     children: GFXNode[];
     translation: vec3;
-    axis: vec3;
+    euler: vec3;
     scale: vec3;
 }
 
@@ -127,6 +305,14 @@ const enum UVScrollFlags {
     Ambient = 0x2000,
 }
 
+function getVec3(view: DataView, offs: number): vec3 {
+    return vec3.fromValues(
+        view.getFloat32(offs + 0x00),
+        view.getFloat32(offs + 0x04),
+        view.getFloat32(offs + 0x08),
+    );
+}
+
 function getColor(view: DataView, offs: number): vec4 {
     return vec4.fromValues(
         view.getUint8(offs + 0x00),
@@ -136,28 +322,33 @@ function getColor(view: DataView, offs: number): vec4 {
     );
 }
 
-function parseMaterialData(view: DataView, startAddress: number, matStart: number): Material[] {
+function parseMaterialData(dataMap: DataMap, listStart: number): Material[] {
+    if (listStart === 0)
+        return [];
+
     const materialList: Material[] = [];
-    let offs = matStart - startAddress;
-    const matList = view.getUint32(offs);
-    offs = matList - startAddress;
+    const range = dataMap.getRange(listStart);
+    const listView = range.data.createDataView();
+    let offs = listStart - range.start;
     while (true) {
-        const scrollEntry = view.getUint32(offs) - startAddress;
-        if (scrollEntry < 0)
+        const scrollEntry = listView.getUint32(offs);
+        if (scrollEntry === 0)
             break;
         offs += 4;
+        const scrollView = dataMap.getView(scrollEntry);
 
-        const flags = view.getUint16(scrollEntry + 0x30);
+        const flags = scrollView.getUint16(0x30);
 
-        const textureStart = view.getUint32(scrollEntry + 0x04);
-        const paletteStart = view.getUint32(scrollEntry + 0x2C);
+        const textureStart = scrollView.getUint32(0x04);
+        const paletteStart = scrollView.getUint32(0x2C);
         const textureAddresses: number[] = [];
         const paletteAddresses: number[] = [];
 
-        let textureOffs = textureStart - startAddress;
-        if (textureOffs > 0) { // only missing in rainbow cloud skybox?
+        if (textureStart > 0) { // only missing in rainbow cloud skybox?
+            const textureView = dataMap.getView(textureStart);
+            let textureOffs = 0;
             while (true) {
-                const addr = view.getUint32(textureOffs);
+                const addr = textureView.getUint32(textureOffs);
                 if (addr === 0)
                     break;
                 textureAddresses.push(addr);
@@ -166,55 +357,56 @@ function parseMaterialData(view: DataView, startAddress: number, matStart: numbe
         }
 
         if (paletteStart > 0) {
-            textureOffs = paletteStart - startAddress;
+            const paletteView = dataMap.getView(paletteStart);
+            let paletteOffs = 0;
             while (true) {
-                const addr = view.getUint32(textureOffs);
+                const addr = paletteView.getUint32(paletteOffs);
                 if (addr === 0)
                     break;
                 paletteAddresses.push(addr);
-                textureOffs += 4;
+                paletteOffs += 4;
             }
         }
-        const scale = view.getUint16(scrollEntry + 0x08);
-        const shift = view.getUint16(scrollEntry + 0x0A);
-        const halve = view.getUint32(scrollEntry + 0x10);
-        const xScale = view.getFloat32(scrollEntry + 0x1C);
-        const yScale = view.getFloat32(scrollEntry + 0x20);
+        const scale = scrollView.getUint16(0x08);
+        const shift = scrollView.getUint16(0x0A);
+        const halve = scrollView.getUint32(0x10);
+        const xScale = scrollView.getFloat32(0x1C);
+        const yScale = scrollView.getFloat32(0x20);
 
-        const primColor = getColor(view, scrollEntry + 0x50);
-        const envColor = getColor(view, scrollEntry + 0x58);
-        const blendColor = getColor(view, scrollEntry + 0x5C);
-        const diffuse = getColor(view, scrollEntry + 0x60);
-        const ambient = getColor(view, scrollEntry + 0x64);
+        const primColor = getColor(scrollView, 0x50);
+        const envColor = getColor(scrollView, 0x58);
+        const blendColor = getColor(scrollView, 0x5C);
+        const diffuse = getColor(scrollView, 0x60);
+        const ambient = getColor(scrollView, 0x64);
 
-        const primLOD = view.getUint8(scrollEntry + 0x54);
+        const primLOD = scrollView.getUint8(0x54);
 
         const tiles: TileParams[] = [];
         tiles.push({
-            width: view.getUint16(scrollEntry + 0x0C),
-            height: view.getUint16(scrollEntry + 0x0E),
-            xShift: view.getFloat32(scrollEntry + 0x14),
-            yShift: Math.random(),//view.getFloat32(scrollEntry + 0x18),
+            width: scrollView.getUint16(0x0C),
+            height: scrollView.getUint16(0x0E),
+            xShift: scrollView.getFloat32(0x14),
+            yShift: scrollView.getFloat32(0x18),
         });
         tiles.push({
-            width: view.getUint16(scrollEntry + 0x38),
-            height: view.getUint16(scrollEntry + 0x3A),
-            xShift: Math.random(),// view.getFloat32(scrollEntry + 0x3C),
-            yShift: view.getFloat32(scrollEntry + 0x40),
+            width: scrollView.getUint16(0x38),
+            height: scrollView.getUint16(0x3A),
+            xShift: scrollView.getFloat32(0x3C),
+            yShift: scrollView.getFloat32(0x40),
         });
 
         const textures: TextureParams[] = [];
         textures.push({
-            fmt: view.getUint8(scrollEntry + 0x02),
-            siz: view.getUint8(scrollEntry + 0x03),
+            fmt: scrollView.getUint8(0x02),
+            siz: scrollView.getUint8(0x03),
             width: 0, // dimensions of first texture are set elsewhere
             height: 0,
         });
         textures.push({
-            fmt: view.getUint8(scrollEntry + 0x32),
-            siz: view.getUint8(scrollEntry + 0x33),
-            width: view.getUint16(scrollEntry + 0x34),
-            height: view.getUint16(scrollEntry + 0x36),
+            fmt: scrollView.getUint8(0x32),
+            siz: scrollView.getUint8(0x33),
+            width: scrollView.getUint16(0x34),
+            height: scrollView.getUint16(0x36),
         });
 
         materialList.push({
@@ -228,102 +420,190 @@ function parseMaterialData(view: DataView, startAddress: number, matStart: numbe
     return materialList;
 }
 
-function parseRoom(data: ArrayBufferSlice, startAddress: number, roomStart: number, sharedCache: TextureCache): Room {
-    const view = data.createDataView();
+type graphRenderer = (dataMap: DataMap, displayList: number, state: F3DEX2.RSPState, materials?: Material[]) => Model;
 
-    let offs = roomStart - startAddress;
-    const roomGeoStart = view.getUint32(offs + 0x00);
-    const pos = vec3.fromValues(
-        view.getFloat32(offs + 0x04),
-        view.getFloat32(offs + 0x08),
-        view.getFloat32(offs + 0x0C),
-    );
-    const yaw = view.getFloat32(offs + 0x10);
-    assert(yaw === 0);
-    const objectSpawns = view.getUint32(offs + 0x1C); // other lists before and after
+function selectRenderer(addr: number): graphRenderer | null {
+    switch (addr) {
+        case 0x800a15D8:
+        case 0x803594DC: // object
+            return runRoomDL;
+        case 0x8035942C: // object, fog
+        case 0x8035958C: // object
+        case 0X802DE26C: // moltres: set 2 cycle and no Z update
+            return runSplitDL;
+        case 0x80359534: // object
+        case 0x800A1608: // maybe XLU?
+        case 0x802DFAE4: // volcano smoke: disable TLUT, set xlu
+            return runMultiDL;
+        case 0x80359484: // object
+            return runMultiSplitDL;
 
-    vec3.scale(pos, pos, 100);
-    const roomOffs = roomGeoStart - startAddress;
-    const dlStart = view.getUint32(roomOffs + 0x00);
-    const materialData = view.getUint32(roomOffs + 0x04);
-    const renderer = view.getUint32(roomOffs + 0x0C);
-    const graph = view.getUint32(roomOffs + 0x10);
-    const animData = view.getUint32(roomOffs + 0x18);
-    const animTimeScale = view.getUint32(roomOffs + 0x1C);
-
-    const materials: Material[] = materialData !== 0 ? parseMaterialData(view, startAddress, materialData) : [];
-    // for now, materials are just handled statically, using their initial state
-    const model = runRoomDL(data, startAddress, dlStart, sharedCache, materials);
-    const nodes: GFXNode[] = [{
-        model,
-        translation: pos,
-        axis: vec3.create(),
-        scale: vec3.fromValues(1, 1, 1),
-        children: [],
-    }];
-
-    // scene graph is pointless right now
-    if (graph > 0) {
-        offs = graph - startAddress;
-        while (true) {
-            const id = view.getUint32(offs + 0x00);
-            if (id === 0x12)
-                break;
-            const dl = view.getUint32(offs + 0x04);
-            const translation = vec3.fromValues(
-                view.getFloat32(offs + 0x08),
-                view.getFloat32(offs + 0x0C),
-                view.getFloat32(offs + 0x10),
-            );
-            const axis = vec3.fromValues(
-                view.getFloat32(offs + 0x14),
-                view.getFloat32(offs + 0x18),
-                view.getFloat32(offs + 0x1C),
-            );
-            const scale = vec3.fromValues(
-                view.getFloat32(offs + 0x20),
-                view.getFloat32(offs + 0x24),
-                view.getFloat32(offs + 0x28),
-            );
-            const node: GFXNode = { translation, axis, scale, children: [] };
-            if (dl > 0)
-                node.model = runRoomDL(data, startAddress, dl, sharedCache);
-            if (id === 0)
-                nodes.push(node);
-            else {
-                const parent = assertExists(nodes[id - 1]);
-                parent.children.push(node);
-            }
-            offs += 0x2c;
-        }
+        default: console.warn('unknown renderfunc', hexzero(addr, 8));
     }
-
-    return { nodes, isSkybox: false };
+    return null;
 }
 
-function runRoomDL(data: ArrayBufferSlice, dataStart: number, dlStart: number, sharedCache: TextureCache, materials: Material[] = []): Model {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, state: F3DEX2.RSPState, rootNode: GFXNode | null = null): GFXNode {
+    const view = dataMap.getView(graphStart);
+    const parentList: GFXNode[] = [];
+
+    let currIndex = 0;
+    let offs = 0;
+    while (true) {
+        const id = view.getUint32(offs + 0x00) & 0xFFF;
+        if (id === 0x12)
+            break;
+        let dl = view.getUint32(offs + 0x04);
+        const translation = getVec3(view, offs + 0x08);
+        const euler = getVec3(view, offs + 0x14);
+        const scale = getVec3(view, offs + 0x20);
+        const node: GFXNode = { translation, euler, scale, children: [] };
+        if (dl > 0) {
+            const materials = materialList === 0 ? [] : parseMaterialData(dataMap, dataMap.deref(materialList + currIndex));
+            const renderer = selectRenderer(renderFunc);
+            if (renderer !== null) {
+                node.model = renderer(dataMap, dl, state, materials);
+            }
+            state.clear();
+
+        }
+        if (id === 0) {
+            assert(rootNode === null);
+            rootNode = node;
+        } else {
+            const parent = assertExists(parentList[id - 1]);
+            parent.children.push(node);
+        }
+        parentList[id] = node;
+        offs += 0x2c;
+        currIndex += 4;
+    }
+    if (rootNode === null)
+        throw `empty graph`;
+    else
+        return rootNode;
+}
+
+function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.TextureCache): Room {
+    const view = dataMap.getView(roomStart);
+
+    const roomGeoStart = view.getUint32(0x00);
+    const pos = getVec3(view, 0x04);
+    const yaw = view.getFloat32(0x10);
+    assert(yaw === 0);
+    const objectSpawns = view.getUint32(0x1C); // other lists before and after
+
+    vec3.scale(pos, pos, 100);
+    const roomView = dataMap.getView(roomGeoStart);
+    const dlStart = roomView.getUint32(0x00);
+    const materialData = roomView.getUint32(0x04);
+    const renderer = roomView.getUint32(0x0C);
+    const graphStart = roomView.getUint32(0x10);
+    const animData = roomView.getUint32(0x18);
+    const animTimeScale = roomView.getUint32(0x1C);
+
     const sharedOutput = new RSPSharedOutput();
     sharedOutput.textureCache = sharedCache;
-    const rspState = new F3DEX2.RSPState([data], sharedOutput, dataStart);
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE);
+    const rspState = new F3DEX2.RSPState([], sharedOutput, dataMap);
+
+    const materials: Material[] = materialData !== 0 ? parseMaterialData(dataMap, dataMap.deref(materialData)) : [];
+    // for now, materials are just handled statically, using their initial state
+    const model = runRoomDL(dataMap, dlStart, rspState, materials);
+    const graph: GFXNode = {
+        model,
+        translation: pos,
+        euler: vec3.create(),
+        scale: vec3.fromValues(1, 1, 1),
+        children: [],
+    };
+
+    const objects: ObjectSpawn[] = [];
+    if (objectSpawns > 0) {
+        const objView = dataMap.getView(objectSpawns);
+        let offs = 0;
+        while (true) {
+            const id = objView.getInt32(offs + 0x00);
+            if (id === -1)
+                break;
+            const objPos = getVec3(objView, offs + 0x08);
+            vec3.scale(objPos, objPos, 100);
+            vec3.add(objPos, objPos, pos);
+            const euler = getVec3(objView, offs + 0x14);
+            const scale = getVec3(objView, offs + 0x20);
+            const path = objView.getUint32(offs + 0x2c);
+            objects.push({ id, pos: objPos, euler, scale });
+            offs += 0x30;
+        }
+    }
+    return { graph, objects };
+}
+
+function runOpaqueDL(dataMap: DataMap, dlStart: number, rspState: F3DEX2.RSPState, materials: Material[] = []): F3DEX2.RSPState {
+    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE | F3DEX2.RSP_Geometry.G_LIGHTING);
     rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
+    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
     // initially 2-cycle, though this can change
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    const texs = [];
-    if (materials.length > 0) {
-        texs.push(materials[0].textureAddresses[0]);
-        if (materials[0].paletteAddresses.length > 0)
-            texs.push(materials[0].paletteAddresses[0]);
-    }
+    // some objects seem to assume this gets set, might rely on stage rendering first
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
     F3DEX2.runDL_F3DEX2(rspState, dlStart, materialDLHandler(materials));
+    return rspState;
+}
+
+function runRoomDL(dataMap: DataMap, displayList: number, state: F3DEX2.RSPState, materials: Material[] = []): Model {
+    const rspState = runOpaqueDL(dataMap, displayList, state, materials);
     const rspOutput = rspState.finish();
-    return { sharedOutput, rspState, rspOutput };
+    return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
+}
+
+// run two display lists, before and after pushing a matrix
+function runSplitDL(dataMap: DataMap, dlPair: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+    const view = dataMap.getView(dlPair);
+    const firstDL = view.getUint32(0x00);
+    const secondDL = view.getUint32(0x04);
+    rspState.SP_MatrixIndex = 1;
+    if (firstDL !== 0)
+        runOpaqueDL(dataMap, firstDL, rspState, materials);
+    rspState.SP_MatrixIndex = 0;
+    if (secondDL !== 0)
+        if (firstDL === 0)
+            rspState = runOpaqueDL(dataMap, secondDL, rspState, materials);
+        else
+            F3DEX2.runDL_F3DEX2(rspState, secondDL, materialDLHandler(materials));
+    const rspOutput = rspState.finish();
+    return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
+}
+
+function runMultiDL(dataMap: DataMap, dlList: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+    const view = dataMap.getView(dlList);
+    let offs = 0;
+    let model: Model;
+    while (true) {
+        const index = view.getUint32(offs + 0x00);
+        const dlStart = view.getUint32(offs + 0x04);
+        // TODO: figure out what the display lists referenced by the indices mean. transparency?
+        if (index !== 4) {
+            return runRoomDL(dataMap, dlStart, rspState, materials);
+        }
+        offs += 8;
+    }
+}
+
+function runMultiSplitDL(dataMap: DataMap, dlList: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+    const view = dataMap.getView(dlList);
+    let offs = 0;
+    while (true) {
+        const index = view.getUint32(offs);
+        if (index !== 4) {
+            return runSplitDL(dataMap, dlList + offs + 4, rspState, materials);
+        }
+        offs += 0xC;
+    }
 }
 
 function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
     return function (state: F3DEX2.RSPState, addr: number): void {
-        assert((addr >>> 24) === 0x0E);
+        assert((addr >>> 24) === 0x0E, `bad dl jump address ${hexzero(addr, 8)}`);
         // insert the display list that would be generated
         const scroll = assertExists(scrollData[(addr >>> 3) & 0xFF]);
         if (scroll.flags & UVScrollFlags.Palette) {
@@ -352,6 +632,7 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
                 state.gDPLoadBlock(6, 0, 0, texels, dxt);
             }
         }
+
         if (scroll.flags & (UVScrollFlags.Tex1 | UVScrollFlags.Special))
             state.gDPSetTextureImage(scroll.textures[0].fmt, scroll.textures[0].siz, 0, scroll.textureAddresses[0]);
 
@@ -359,12 +640,12 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
         if (scroll.flags & UVScrollFlags.Scroll0) {
             const uls = (scroll.tiles[0].width * scroll.tiles[0].xShift + scroll.shift) / adjXScale;
             const ult = (scroll.tiles[0].height * (1 - scroll.tiles[0].yShift) + scroll.shift) / scroll.yScale - scroll.tiles[0].height;
-            state.gDPSetTileSize(0, (uls - 1) << 2, (ult - 1) << 2, (scroll.tiles[0].width - 1), 4 * (scroll.tiles[0].height - 1) << 2);
+            state.gDPSetTileSize(0, uls << 2, ult << 2, (scroll.tiles[0].width + uls - 1) << 2, (scroll.tiles[0].height + ult - 1) << 2);
         }
         if (scroll.flags & UVScrollFlags.Scroll1) {
             const uls = (scroll.tiles[1].width * scroll.tiles[1].xShift + scroll.shift) / adjXScale;
             const ult = (scroll.tiles[1].height * (1 - scroll.tiles[1].yShift) + scroll.shift) / scroll.yScale - scroll.tiles[1].height;
-            state.gDPSetTileSize(0, (uls - 1) << 2, (ult - 1) << 2, (scroll.tiles[1].width + uls - 1) << 2, (scroll.tiles[1].height + ult - 1) << 2);
+            state.gDPSetTileSize(1, uls << 2, ult << 2, (scroll.tiles[1].width + uls - 1) << 2, (scroll.tiles[1].height + ult - 1) << 2);
         }
         if (scroll.flags & UVScrollFlags.Scale)
             state.gSPTexture(true, 0, 0, (1 << 21) / scroll.scale / adjXScale, (1 << 21) / scroll.scale / scroll.yScale);

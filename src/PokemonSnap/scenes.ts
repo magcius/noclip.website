@@ -7,15 +7,17 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { ModelRenderer as ModelRenderer, SnapPass } from './render';
-import { MapArchive, parseMap } from './room';
+import { ModelRenderer, SnapPass, buildTransform } from './render';
+import { LevelArchive, parseLevel, Model } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
+import { hexzero } from '../util';
 
 const pathBase = `PokemonSnap`;
 
 class SnapRenderer implements Viewer.SceneGfx {
+    public renderData: RenderData[] = [];
     public modelRenderers: ModelRenderer[] = [];
 
     public renderTarget = new BasicRenderTarget();
@@ -97,32 +99,78 @@ class SnapRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
+        for (let i = 0; i < this.renderData.length; i++)
+            this.renderData[i].destroy(device);
     }
 
 }
 
+const transformScratch = mat4.create();
+const scaleScratch = vec3.create();
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) { }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        return context.dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`).then((data) => {
-            const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
+        const fileList = [this.id, '0E', 'magikarp'];
+        switch (this.id) {
+            case '10': // beach
+                fileList.push('pikachu'); break;
+            case '12': // tunnel
+                fileList.push('pikachu', 'zubat'); break;
+            case '16': // river
+                fileList.push('pikachu', 'bulbasaur'); break;
+            case '14': // cave
+                fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
+        }
+        return Promise.all(fileList.map((name) =>
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=1`))
+        ).then((files) => {
+            const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
             const viewerTextures: Viewer.Texture[] = [];
             const holder = new FakeTextureHolder(viewerTextures);
 
             const sceneRenderer = new SnapRenderer(device, holder);
-            const rooms = parseMap(obj as MapArchive);
-            const cache = rooms[0].nodes[0].model!.sharedOutput.textureCache;
-            for (let i = 0; i < cache.textures.length; i++)
-                viewerTextures.push(textureToCanvas(cache.textures[i]));
+            const level = parseLevel(archives);
+            for (let i = 0; i < level.sharedCache.textures.length; i++)
+                viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
-            for (let i = 0; i < rooms.length; i++) {
-                const model = rooms[i].nodes[0].model!;
-                const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), model.sharedOutput);
-                const roomRenderer = new ModelRenderer(renderData, model.rspOutput!, rooms[i].isSkybox);
-                mat4.fromTranslation(roomRenderer.modelMatrix, rooms[i].nodes[0].translation);
+            if (level.skybox !== null) {
+                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.model!.sharedOutput);
+                const skyboxRenderer = new ModelRenderer(skyboxData, level.skybox, undefined, true);
+                sceneRenderer.renderData.push(skyboxData);
+                sceneRenderer.modelRenderers.push(skyboxRenderer);
+            }
+
+            const objectDatas: RenderData[] = [];
+            for (let i = 0; i < level.objectInfo.length; i++) {
+                const data = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.objectInfo[i].sharedOutput);
+                objectDatas.push(data);
+                sceneRenderer.renderData.push(data);
+                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
+                    viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
+            }
+
+            for (let i = 0; i < level.rooms.length; i++) {
+                const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].graph.model!.sharedOutput);
+                const roomRenderer = new ModelRenderer(renderData, level.rooms[i].graph);
+                sceneRenderer.renderData.push(renderData);
                 sceneRenderer.modelRenderers.push(roomRenderer);
+                const objects = level.rooms[i].objects;
+                for (let j = 0; j < objects.length; j++) {
+                    const objIndex = level.objectInfo.findIndex((def) => def.id === objects[j].id);
+                    if (objIndex === -1) {
+                        console.warn('missing object', hexzero(objects[j].id, 3));
+                        continue;
+                    }
+                    const objectRenderer = new ModelRenderer(objectDatas[objIndex], level.objectInfo[objIndex].graph);
+                    if (level.objectInfo[objIndex].flying)
+                        vec3.sub(objects[j].pos, objects[j].pos, level.rooms[i].graph.translation);
+                    vec3.mul(scaleScratch, objects[j].scale, level.objectInfo[objIndex].scale);
+                    buildTransform(transformScratch, objects[j].pos, objects[j].euler, scaleScratch);
+                    mat4.mul(objectRenderer.modelMatrix, transformScratch, objectRenderer.transform);
+                    sceneRenderer.modelRenderers.push(objectRenderer);
+                }
             }
             return sceneRenderer;
         });
