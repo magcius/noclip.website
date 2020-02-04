@@ -27,6 +27,7 @@ import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../ui";
+import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -191,6 +192,7 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
 const scratchVec4 = vec4.create();
 
 export class dKankyo_sun_Packet {
@@ -1239,6 +1241,9 @@ export class dKankyo_star_Packet {
         vec3.transformMat4(scratchVec3c, scratchVec3c, scratchMatrix);
         vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
+        // Projected moon position.
+        mDoLib_project(scratchVec3e, envLight.moonPos, viewerInput);
+
         let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
         for (let i = 0; i < envLight.starCount; i++) {
             let scale: number;
@@ -1267,6 +1272,11 @@ export class dKankyo_star_Packet {
             }
 
             vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
+
+            mDoLib_project(scratchVec3, scratchVec3a, viewerInput);
+            const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
+            if (distToMoon < 80.0)
+                continue;
 
             let whichColor: number;
             if (i === 6 || i === 8) {
@@ -1333,6 +1343,14 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
     divideByW(v4, v4);
     vec3.set(dst, v4[0], v4[1], v4[2]);
+}
+
+function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
+    project(dst, v, viewerInput.camera);
+    // Put in viewport framebuffer space.
+    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
+    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[2] = 0.0;
 }
 
 const enum SunPeekZResult {
@@ -1797,7 +1815,7 @@ function wether_move_snow(globals: dGlobals): void {
 function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
-    const isName = globals.stageName !== 'Name';
+    const isName = globals.stageName === 'Name';
     if (!isName && (envLight.vrboxInvisible || globals.stageName === 'M_DragB'))
         return;
 
@@ -1809,11 +1827,11 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
         starAmount = 1.0;
     } else {
         if (curTime >= 60.0 && curTime < 75.0)
-            starAmount = invlerp(60.0, 75.0, curTime);
+            starAmount = 1.0 - invlerp(60.0, 75.0, curTime);
         else if (curTime >= 75.0 && curTime < 270.0)
             starAmount = 0.0;
         else if (curTime >= 270.0 && curTime < 315.0)
-            starAmount = 1.0 - invlerp(270.0, 315.0, curTime);
+            starAmount = invlerp(270.0, 315.0, curTime);
         else
             starAmount = 1.0;
     }
