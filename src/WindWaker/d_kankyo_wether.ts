@@ -3,8 +3,8 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, White } from "../Color";
-import { computeMatrixWithoutTranslation, MathConstants, saturate } from "../MathHelpers";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
+import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
@@ -193,7 +193,7 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 const scratchVec4 = vec4.create();
 
-export class dKankyo_sun_packet {
+export class dKankyo_sun_Packet {
     // Shared
     private ddraw = new TDDraw();
 
@@ -582,7 +582,7 @@ class VRKUMO_EFF {
     }
 }
 
-export class dKankyo_vrkumo_packet {
+export class dKankyo_vrkumo_Packet {
     public enabled: boolean = false;
     public count: number = 0;
     public strength: number = 0;
@@ -768,7 +768,7 @@ class RAIN_EFF {
     public minY: number = 0.0;
 }
 
-export class dKankyo_rain_packet {
+export class dKankyo_rain_Packet {
     private ringTexture: BTIData;
     private ddraw = new TDDraw();
     private materialHelperRain: GXMaterialHelperGfx;
@@ -1126,6 +1126,184 @@ export class dKankyo_wave_Packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, txc1);
+        }
+
+        ddraw.end();
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+
+        this.ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class STAR_EFF {
+    public animCounter: number = 0;
+    public animWave: number = 0.0;
+}
+
+export class dKankyo_star_Packet {
+    public instances = nArray(1, () => new STAR_EFF());
+    public rot: number = 0.0;
+
+    private hokuto_pos = [
+        vec3.fromValues(13000, 10500, -16000),
+        vec3.fromValues(9400, 9800, -12646),
+        vec3.fromValues(10200, 11800, -13525),
+        vec3.fromValues(10300, 13450, -13525),
+        vec3.fromValues(15000, 18400, -16162),
+        vec3.fromValues(12500, 19800, -15000),
+        vec3.fromValues(9179, 17200, -14404),
+        vec3.fromValues(9500, 9800, -12646),
+        vec3.fromValues(-7421, 31005, 18798),
+        vec3.fromValues(-10937, 28000, 15000),
+        vec3.fromValues(-10000, 24902, 18400),
+        vec3.fromValues(-9400, 22500, 15900),
+        vec3.fromValues(-9179, 21300, 14300),
+        vec3.fromValues(-10300, 22000, 21000),
+        vec3.fromValues(-16000, 25500, 20000),
+        vec3.fromValues(0, 30000, 19000),        
+    ];
+
+    private star_col: Color[] = [
+        colorNewFromRGBA8(0xDCE8FFFF),
+        colorNewFromRGBA8(0xFFC8C8FF),
+        colorNewFromRGBA8(0xFFFFC8FF),
+        colorNewFromRGBA8(0xC8C8FFFF),
+    ];
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    public renderInMain = false;
+
+    constructor(globals: dGlobals) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+
+        const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the alpha.
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_star_Packet'));
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        const envLight = globals.g_env_light;
+
+        if (envLight.starCount === 0)
+            return;
+
+        const ddraw = this.ddraw;
+
+        if (this.renderInMain)
+            renderInstManager.setCurrentRenderInstList(globals.dlst.main[1]);
+        else
+            renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+
+        this.ddraw.beginDraw();
+        ddraw.begin(GX.Command.DRAW_TRIANGLES, 4 * envLight.waveCount);
+
+        const star = this.instances[0];
+
+        const fovYAdj = 0.0;
+
+        // Compute star points.
+        const starSize = 0.9 - (fovYAdj * 0.6);
+        vec3.set(scratchVec3b, 0.0, starSize, 0.0);
+        vec3.set(scratchVec3c, starSize, -0.5 * starSize, 0.0);
+        vec3.set(scratchVec3d, -starSize, -0.5 * starSize, 0.0);
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
+
+        vec3.transformMat4(scratchVec3b, scratchVec3b, scratchMatrix);
+        vec3.transformMat4(scratchVec3c, scratchVec3c, scratchMatrix);
+        vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
+
+        let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
+        for (let i = 0; i < envLight.starCount; i++) {
+            let scale: number;
+            if (i < this.hokuto_pos.length) {
+                // Orion.
+                const baseScale = (i < 8 ? 190.0 : 290.0) + star.animWave;
+                scale = baseScale - (fovYAdj * 0.5 * baseScale);
+
+                vec3.copy(scratchVec3a, this.hokuto_pos[i]);
+            } else {
+                scale = star.animWave + (0.066 * (i & 0x0F));
+                if (scale > 1.0)
+                    scale = (1.0 - (scale - 1.0));
+
+                const radiusXZ = 1.0 - (radius / 202.0);
+                scratchVec3a[0] = radiusXZ * -300.0 * Math.sin(angle);
+                scratchVec3a[1] = radius + 45.0;
+                scratchVec3a[2] = radiusXZ * 300.0 * Math.cos(angle);
+
+                angle += angleIncr;
+                angleIncr += uShortTo2PI(0x09C4);
+
+                radius += (1.0 + 3.0 * Math.pow(radius / 200.0, 3.0));
+                if (radius > 200.0)
+                    radius = (20.0 * i) / 1000.0;
+            }
+
+            vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
+
+            let whichColor: number;
+            if (i === 6 || i === 8) {
+                whichColor = 1;
+            } else if ((i & 0x3F) === 0) {
+                whichColor = (i >>> 4) & 0x03;
+            } else {
+                whichColor = 0;
+            }
+
+            const color = this.star_col[whichColor];
+
+            // Triangle 1.
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3b, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3c, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3d, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            // Triangle 2.
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3b, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3c, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3d, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
         }
 
         ddraw.end();
@@ -1542,7 +1720,7 @@ function wether_move_sun(globals: dGlobals): void {
         return;
 
     if (envLight.sunPacket === null)
-        envLight.sunPacket = new dKankyo_sun_packet(globals);
+        envLight.sunPacket = new dKankyo_sun_Packet(globals);
 
     dKyr_sun_move(globals);
     dKyr_lenzflare_move(globals);
@@ -1555,7 +1733,7 @@ function wether_move_rain(globals: dGlobals): void {
         return;
 
     if (envLight.rainPacket === null)
-        envLight.rainPacket = new dKankyo_rain_packet(globals);
+        envLight.rainPacket = new dKankyo_rain_Packet(globals);
 
     const pkt = envLight.rainPacket;
 
@@ -1616,7 +1794,53 @@ function wether_move_rain(globals: dGlobals): void {
 function wether_move_snow(globals: dGlobals): void {
 }
 
-function wether_move_star(globals: dGlobals): void {
+function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    const isName = globals.stageName !== 'Name';
+    if (!isName && (envLight.vrboxInvisible || globals.stageName === 'M_DragB'))
+        return;
+
+    let starAmount = 1.0;
+
+    const curTime = envLight.curTime;
+    if (isName) {
+        // TODO(jstpierre): Name
+        starAmount = 1.0;
+    } else {
+        if (curTime >= 60.0 && curTime < 75.0)
+            starAmount = invlerp(60.0, 75.0, curTime);
+        else if (curTime >= 75.0 && curTime < 270.0)
+            starAmount = 0.0;
+        else if (curTime >= 270.0 && curTime < 315.0)
+            starAmount = 1.0 - invlerp(270.0, 315.0, curTime);
+        else
+            starAmount = 1.0;
+    }
+
+    if (envLight.weatherPselIdx !== 0)
+        starAmount = 0.0;
+    else if (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)
+        starAmount = 0.0;
+
+    envLight.starAmount = cLib_addCalc(envLight.starAmount, starAmount, 0.1, 0.01, 0.000001);
+    envLight.starCount = (envLight.starAmount * 1000.0) | 0;
+
+    if (envLight.starCount === 0)
+        return;
+
+    if (envLight.starPacket === null)
+        envLight.starPacket = new dKankyo_star_Packet(globals);
+
+    const pkt = envLight.starPacket;
+
+    const star = pkt.instances[0];
+    star.animCounter += 0.01 * deltaTimeInFrames;
+    star.animWave = Math.sin(star.animCounter);
+
+    // cLib_addCalc here for no reason?
+
+    pkt.rot += deltaTimeInFrames;
 }
 
 function wether_move_poison(globals: dGlobals): void {
@@ -1769,7 +1993,7 @@ export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: numb
         wether_move_rain(globals);
         wether_move_snow(globals);
     }
-    wether_move_star(globals);
+    wether_move_star(globals, deltaTimeInFrames);
     if (globals.stageName !== 'Name') {
         wether_move_poison(globals);
         wether_move_housi(globals);
@@ -1876,7 +2100,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     const envLight = globals.g_env_light;
 
     if (envLight.vrkumoPacket === null) {
-        envLight.vrkumoPacket = new dKankyo_vrkumo_packet(globals);
+        envLight.vrkumoPacket = new dKankyo_vrkumo_Packet(globals);
 
         // envcolor_init has this
         if (dKy_checkEventNightStop(globals))
@@ -1932,6 +2156,9 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
     }
+
+    if (envLight.starPacket !== null)
+        envLight.starPacket.draw(globals, renderInstManager, viewerInput);
 
     if (globals.stageName !== 'Name') {
         if (envLight.rainPacket !== null)

@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -135,6 +135,10 @@ export class dScnKy_env_light_c {
     public thunderFlashTimer: number = 0;
     public thunderLightInfluence = new LIGHT_INFLUENCE();
 
+    // Stars.
+    public starAmount = 0.0;
+    public starCount = 0;
+
     // Wave.
     public waveCount = 0;
     public waveFlatInter = 0.0;
@@ -149,11 +153,12 @@ export class dScnKy_env_light_c {
 
     // Wether packets
     public wetherCommonTextures: dKankyo__CommonTextures;
-    public sunPacket: dKankyo_sun_packet | null = null;
-    public vrkumoPacket: dKankyo_vrkumo_packet | null = null;
-    public rainPacket: dKankyo_rain_packet | null = null;
+    public sunPacket: dKankyo_sun_Packet | null = null;
+    public vrkumoPacket: dKankyo_vrkumo_Packet | null = null;
+    public rainPacket: dKankyo_rain_Packet | null = null;
     public windline: dKankyo__Windline | null = null;
     public wavePacket: dKankyo_wave_Packet | null = null;
+    public starPacket: dKankyo_star_Packet | null = null;
 
     public eventNightStop: boolean = false;
 }
@@ -1334,6 +1339,8 @@ class d_kyeff extends kankyo_class {
             envLight.rainPacket.destroy(device);
         if (envLight.wavePacket !== null)
             envLight.wavePacket.destroy(device);
+        if (envLight.starPacket !== null)
+            envLight.starPacket.destroy(device);
     }
 }
 

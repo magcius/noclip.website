@@ -544,6 +544,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
+    // For people to play around with.
+    public cameraFrozen = false;
+
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -551,11 +554,14 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.time = viewerInput.time;
         this.frameCount = viewerInput.time / 1000.0 * 30;
 
-        mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-        getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
-        vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
-        // Update the "player position" from the camera.
-        vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
+        if (!this.cameraFrozen) {
+            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
+            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
+            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
+            // Update the "player position" from the camera.
+            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
+        }
+
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -627,11 +633,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
-        this.executeList(device, renderInstManager, skyboxPassRenderer, dlst.sea);
+        this.executeList(device, renderInstManager, mainPassRenderer, dlst.sea);
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
-
         mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
 
