@@ -50,11 +50,6 @@ class MaterialInstance {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
-
-
-        //this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
-        //this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
-
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);

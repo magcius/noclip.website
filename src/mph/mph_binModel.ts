@@ -1,8 +1,9 @@
 ﻿import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D";
+import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model, calcTexMtx, fx16 } from "../nns_g3d/NNS_G3D";
 import { mat4, mat2d, mat2 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
+import { colorNew } from "../Color";
 
 export interface MPHbin {
     models: MDL0Model[];
@@ -25,6 +26,7 @@ interface MPHTex {
     tex: ArrayBufferSlice;
     width: number;
     height: number;
+    color0: boolean;
 }
 
 export interface MPHTexture {
@@ -42,49 +44,70 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const palletIndex = view.getUint16(0x44, true);
     const textureIndex = view.getUint16(0x46, true);
     const texParams = view.getUint16(0x48, true);
-
+    const diffuse = colorNew(view.getInt8(0x4A), view.getInt8(0x4B), view.getInt8(0x4C));
+    const ambient = colorNew(view.getInt8(0x4D), view.getInt8(0x4E), view.getInt8(0x4F));
+    const specular = colorNew(view.getInt8(0x50), view.getInt8(0x51), view.getInt8(0x52));
+    const field_0x53 = view.getInt8(0x53);
     const polyAttribs = view.getInt32(0x54, true);
 
-    const texScaleS = view.getInt16(0x64, true);
-    const texScaleT = view.getInt16(0x68, true);
+    const texcoord_transform_mode = view.getInt32(0x5C, true);
+    const texcoord_animation_id = view.getInt32(0x60, true);
+    const matrix_id = view.getInt32(0x64, true);
+    const scaleS = fx32(view.getInt32(0x68, true));
+    const scaleT = fx32(view.getInt32(0x6C, true));
+    const rot_Z = view.getUint16(0x70, true);
+    const field_0x72 = view.getInt16(0x72, true);
+    const scaleWidth = view.getInt32(0x74, true);
+    const scaleHeight = view.getInt32(0x78, true);
+    const material_animation_id = 0;
+    const field_0x7E = view.getInt16(0x7E, true);
+    const packed_repeat_mode = view.getInt8(0x80);
+    const field_0x81 = view.getInt8(0x81);
+    const field_0x82 = view.getInt16(0x82, true);
 
-    const scaleWidth = view.getInt16(0x74, true);
-    const scaleHeight = view.getInt16(0x78, true);
-    const rot_Z = view.getInt16(0x7C, true);
 
     let textureName; 
     let paletteName;
 
     const texMatrix = mat2d.create();
 
-    //const mat44 = mat4.create();
-    //function setup_texcoord_matrix(dst: mat4, scale_s:number, scale_t:number, rot_z:number, scale_width:number, scale_height:number, width:number, height:number) {
-    //    const scaled_width = width * scaleWidth;
-    //    const scaled_height = height * scaleHeight;
 
-    //    if (rot_z) {
 
-    //    } else {
+    function fx32_const(x: number): number {
+        return x > 0 ? x * fx32(1) + 0.5: x * fx32(1) - 0.5;
+    }
 
-    //    }
-    //}
+    function fx32_mul(v1: number, v2: number): number {
+        return fx32(v1 * v2 + 0x800);
+    }
 
+    let width;
+    let height;
     if (palletIndex == 0xFFFF || textureIndex == 0xFFFF) {
         paletteName = null;
         textureName = null;
+        width = 1;
+        height = 1;
     } else {
+        //texs[textureIndex].color0 = true;
         paletteName = `pallet_${palletIndex}`;
         textureName = `texture_${textureIndex}`;
+        width = texs[textureIndex].width;
+        height = texs[textureIndex].height;
+    }
+    let cosR = 1.0;
+    let sinR = 0.0;
 
-        const m00 = 1 / texs[textureIndex].width;
-        const m01 = 0;
-        const m10 = 0;
-        const m11 = 1 / texs[textureIndex].height;
-        const tx = 0;
-        const ty = 0;
-        mat2d.set(texMatrix, m00, m01, m10, m11, tx, ty);
+    if (Math.abs(rot_Z) > 0) {
+        const theta = 2 * Math.PI / 65536.0 * rot_Z;
+        sinR = Math.sin(theta);
+        cosR = Math.cos(theta);
     }
 
+    const texScaleS = 1 / width;
+    const texScaleT = 1 / height;
+
+    calcTexMtx(texMatrix, 0, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, 0, 0);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -241,7 +264,8 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         const tex = buffer.slice(texDataStart, texDataEnd);
         const width = view.getInt16(texDataStart+0x2, true);
         const height = view.getInt16(texDataStart + 0x4, true);
-        texs.push({ tex, width, height });
+        const color0 = false;
+        texs.push({ tex, width, height, color0 });
     }
 
     // MPH_Pallet
@@ -299,6 +323,7 @@ export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX
     const textures: TEX0Texture[] = [];
     for (let i = 0; i < tex.texs.length; i++) {
         textures.push(parseTexture(tex.texs[i].tex, buffer, i));
+        textures[i].color0 = !!tex.texs[i].color0;
     }
 
     return { textures, palettes };
