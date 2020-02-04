@@ -593,6 +593,7 @@ function getSubdir(locationNum: number): string {
         43: 'dbshrine',
         44: 'nwshrine',
         45: 'worldmap',
+        47: 'capeclaw',
         50: 'cloudrace',
         51: 'bossdrakor',
         53: 'bosstrex',
