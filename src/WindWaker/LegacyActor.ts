@@ -1060,7 +1060,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
     // Phantom Ganon
     else if (actor.name === 'Fganon') fetchArchive(`Fganon`).then((rarc) => buildModel(rarc, `bdlm/bpg.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
     // Gohma
-    else if (actor.name === 'Btd') fetchArchive(`btd`).then((rarc) => {
+    else if (actor.name === 'Btd') fetchArchive(`Btd`).then((rarc) => {
         const m = buildModel(rarc, `bmdm/btd.bmd`);
         m.bindANK1(parseBCK(rarc, `bck/btd_pose.bck`));
         m.bindTRK1(parseBRK(rarc, `brk/btd.brk`));
