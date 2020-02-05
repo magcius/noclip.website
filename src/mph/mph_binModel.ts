@@ -1,9 +1,10 @@
 ﻿import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model, calcTexMtx, fx16 } from "../nns_g3d/NNS_G3D";
-import { mat4, mat2d, mat2 } from "gl-matrix";
+import { mat4, mat2d, mat2, mat3, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
 import { colorNew } from "../Color";
+import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 
 export interface MPHbin {
     models: MDL0Model[];
@@ -16,6 +17,15 @@ export interface MPHbin {
 interface MPHMesh {
     matID: number;
     shapeID: number;
+}
+
+interface MPHNode {
+    name: string;
+    parent: number;
+    child: number;
+    next: number;
+    meshID: number;
+    node_transform: mat4;
 }
 
 interface MPHPal {
@@ -130,13 +140,71 @@ function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index
     return({ name, dlBuffer });
 }
 
-function parseNode(buffer: ArrayBufferSlice): MDL0Node {
+function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const view = buffer.createDataView();
 
+    let vec1 = vec3.create();
+    let vec2 = vec3.create();
+    const node_transform = mat4.create();
     const name = readString(buffer, 0x00, 0x40, true);
-    const jointMatrix = mat4.create();
+    const parent = view.getInt16(0x40, true);
+    const child = view.getInt16(0x42, true);
+    const next = view.getInt16(0x44, true);
+    const field_0x46 = view.getInt16(0x46, true);
+    const enabled = view.getInt32(0x48, true);
+    const mesh_count = view.getInt16(0x4C, true);
+    const meshID = view.getInt16(0x4E, true);
+    const field_0x50 = view.getInt32(0x50, true);
+    const field_0x54 = view.getInt32(0x54, true);
+    const field_0x58 = view.getInt32(0x58, true);
+    const field_0x5C = view.getInt16(0x54, true);
+    const field_0x5E = view.getInt16(0x5E, true);
+    const field_0x60 = view.getInt16(0x60, true);
+    const field_0x62 = view.getInt16(0x62, true);
+    const field_0x64 = view.getInt32(0x64, true);
+    const field_0x68 = view.getInt32(0x68, true);
+    const field_0x6C = view.getInt32(0x6C, true);
+    const field_0x70 = view.getInt32(0x70, true);
 
-    return { name, jointMatrix, };
+    vec3.set(vec1, fx32(view.getInt32(0x74, true)), fx32(view.getInt32(0x78, true)), fx32(view.getInt32(0x7C, true)));
+    vec3.set(vec2, fx32(view.getInt32(0x80, true)), fx32(view.getInt32(0x84, true)), fx32(view.getInt32(0x88, true)));
+
+    const type = view.getUint8(0x8C);
+    const field_8D = view.getInt8(0x8D);
+    const field_8E = view.getInt16(0x8E, true);
+
+    node_transform[15] = 1;
+
+    node_transform[0] = fx32(view.getInt32(0x90, true));
+    node_transform[4] = fx32(view.getInt32(0x94, true));
+    node_transform[8] = fx32(view.getInt32(0x98, true));
+
+    node_transform[1] = fx32(view.getInt32(0x9C, true));
+    node_transform[5] = fx32(view.getInt32(0xA0, true));
+    node_transform[9] = fx32(view.getInt32(0xA4, true));
+
+    node_transform[2] = fx32(view.getInt32(0xA8, true));
+    node_transform[6] = fx32(view.getInt32(0xAC, true));
+    node_transform[10] = fx32(view.getInt32(0xB0, true));
+
+    node_transform[3] = fx32(view.getInt32(0xB4, true));
+    node_transform[7] = fx32(view.getInt32(0xB8, true));
+    node_transform[11] = fx32(view.getInt32(0xBC, true));
+
+    const field_0xC0 = view.getInt32(0xC0, true);
+    const field_0xC4 = view.getInt32(0xC4, true);
+    const field_0xC8 = view.getInt32(0xC8, true);
+    const field_0xCC = view.getInt32(0xCC, true);
+    const field_0xD0 = view.getInt32(0xD0, true);
+    const field_0xD4 = view.getInt32(0xD4, true);
+    const field_0xD8 = view.getInt32(0xD8, true);
+    const field_0xDC = view.getInt32(0xDC, true);
+    const field_0xE0 = view.getInt32(0xE0, true);
+    const field_0xE4 = view.getInt32(0xE4, true);
+    const field_0xE8 = view.getInt32(0xE8, true);
+    const field_0xEC = view.getInt32(0xEC, true);
+
+    return { name, parent, child, next, meshID, node_transform };
 }
 
 function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
@@ -166,20 +234,23 @@ function parseTexture(buffer: ArrayBufferSlice, TexBuffer: ArrayBufferSlice, ind
     const view = buffer.createDataView();
 
     const name = `texture_${index}`;
-    const mph_format = view.getUint16(0x00, true);
-    const format = convertMPHTexToNitroTex(mph_format);
+    const mph_format = view.getInt8(0x00);
+    const field_0x01 = view.getInt8(0x01);
     const width = view.getUint16(0x02, true);
     const height = view.getUint16(0x04, true);
-    const unk_0x06 = view.getUint16(0x06, true);
+    const field_0x06 = view.getUint16(0x06, true);
     const textureDataOffs = view.getUint32(0x08, true);
     const textureDataSize = view.getInt32(0x0C, true);
-    const unk_0x10 = view.getUint32(0x10, true);
-    const unk_0x14 = view.getUint32(0x14, true);
-    const unk_0x18 = view.getUint32(0x18, true);
-    const unk_0x1C = view.getUint32(0x1C, true);
-    const unk_0x20 = view.getUint32(0x20, true);
-    const unk_0x24 = view.getUint32(0x24, true);
+    const field_0x10 = view.getUint32(0x10, true);
+    const field_0x14 = view.getUint32(0x14, true);
+    const vram_offset = view.getInt32(0x18, true);
+    const opaque = view.getInt32(0x1C, true);
+    const some_value = view.getInt32(0x20, true);
+    const packed_size = view.getUint8(0x24);
+    const native_texture_format = view.getUint8(0x25);
+    const texture_obj_ref = view.getInt16(0x26, true);
 
+    const format = convertMPHTexToNitroTex(mph_format);
     const color0 = false;
 
     const textureDataStart = textureDataOffs;
@@ -293,11 +364,13 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     }
 
     // Node
-    const nodes: MDL0Node[] = [];
+    const MPHNode: MPHNode[] = [];
     for (let i = 0; i < nodeCount; i++) {
         const nodeOffs = i * 0xF0 + nodeOffset;
-        nodes.push( parseNode(buffer.slice(nodeOffs)) );
+        MPHNode.push( parseNode(buffer.slice(nodeOffs)) );
     }
+    const nodes: MDL0Node[] = [];
+
     const mphTex = { pals, texs };
 
     let tex0: TEX0 | null = null;

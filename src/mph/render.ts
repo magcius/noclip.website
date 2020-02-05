@@ -14,6 +14,7 @@ import { nArray, assertExists } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MPHbin } from "./mph_binModel";
+import { MDL0_ShapeEntry } from "../rres/brres";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -363,12 +364,20 @@ export class MPHRenderer {
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
 
+        function getNodeIndex(shape: MDL0Shape): number{
+            const view = shape.dlBuffer.createDataView();
+            const nodeIndex = view.getInt8(0x04);
+            return nodeIndex;
+        }
+
         for (let i = 0; i < mphModel.meshs.length; i++) {
 
             const matIndex = mphModel.meshs[i].matID;
             const shapeIndex = mphModel.meshs[i].shapeID;
+            const shape = model.shapes[shapeIndex];
+            const nodeIndex = getNodeIndex(shape);
 
-            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[0], model.shapes[shapeIndex], posScale));
+            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
 
     }
