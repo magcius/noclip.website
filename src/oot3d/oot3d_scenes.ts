@@ -2387,7 +2387,7 @@ class SceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "oot3d";
-const name = "Ocarina of Time 3D";
+const name = "The Legend of Zelda: Ocarina of Time 3D";
 // Courses organized by Starschulz
 const sceneDescs = [
     "Kokiri Forest",

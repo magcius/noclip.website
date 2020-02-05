@@ -115,7 +115,7 @@ class ZelviewSceneDesc implements Viewer.SceneDesc {
 }
 
 const id = 'zelview';
-const name = 'Ocarina of Time';
+const name = 'The Legend of Zelda: Ocarina of Time';
 const sceneDescs = [
     // TODO: Implement scenes with JFIF backgrounds. They are commented out.
     "Kokiri Forest",

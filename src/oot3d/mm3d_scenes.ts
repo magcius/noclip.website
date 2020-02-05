@@ -938,7 +938,7 @@ class SceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "mm3d";
-const name = "Majora's Mask 3D";
+const name = "The Legend of Zelda: Majora's Mask 3D";
 // Names graciously provided by James Knight on Twitter, and organized by Starschulz. Thanks!
 const sceneDescs = [
     "Intro",
