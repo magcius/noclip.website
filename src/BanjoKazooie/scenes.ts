@@ -281,10 +281,7 @@ class ObjectData {
                 // Z and opacity modes can be set dynamically,
                 // but most objects support switching beteween opaque and translucent,
                 // so setting translucent by default seems safe
-                if (geoFileID === 749)
-                    window.debug = true
                 const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, false);
-                window.debug = false
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);

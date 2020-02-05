@@ -85,6 +85,8 @@ void main() {
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
     v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
 
+    ${this.generateClamp()}
+
 #ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
     vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
@@ -111,11 +113,33 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private tiles: RDP.TileState[] = []) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
+    }
+
+    private generateClamp(): string {
+        let out = "";
+        for (let i = 0; i < this.tiles.length; i++) {
+            const tile = this.tiles[i];
+            if (tile.cms & 0x2) {
+                const coordRatio = (((tile.lrs - tile.uls) >>> 2) + 1) / RDP.getTileWidth(tile);
+                const comp = i === 0 ? 'x' : 'z';
+                if (coordRatio > 1) {
+                    console.log(coordRatio, tile)
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio - .05).toFixed(1)});\n`
+                }
+            }
+            if (tile.cmt & 0x2) {
+                const coordRatio = (((tile.lrt - tile.ult) >>> 2) + 1) / RDP.getTileHeight(tile);
+                const comp = i === 0 ? 'y' : 'w';
+                if (coordRatio > 1)
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio-.05).toFixed(1)});\n`
+            }
+        }
+        return out;
     }
 
     private generateAlphaTest(): string {
@@ -492,8 +516,11 @@ export class RenderData {
 
     private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: RDP.Texture): GfxSampler {
         return cache.createSampler(device, {
-            wrapS: translateCM(texture.tile.cms),
-            wrapT: translateCM(texture.tile.cmt),
+            // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
+            // it should repeat within the coordinate range, and clamp outside
+            // then ignore clamping here, and handle it in the shader
+            wrapS: translateCM(RDP.getMaskedCMS(texture.tile)),
+            wrapT: translateCM(RDP.getMaskedCMT(texture.tile)),
             minFilter: GfxTexFilterMode.POINT,
             magFilter: GfxTexFilterMode.POINT,
             mipFilter: GfxMipFilterMode.NO_MIP,

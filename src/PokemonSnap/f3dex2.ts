@@ -115,6 +115,9 @@ export class RSPState {
         const view = this.dataMap.getView(dramAddr);
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
+            // scale texture coordinates by *current* texture state
+            this.vertexCache[v0 + i].tx *= this.SP_TextureState.s;
+            this.vertexCache[v0 + i].ty *= this.SP_TextureState.t;
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
         }
     }
@@ -123,10 +126,9 @@ export class RSPState {
         const vtx = this.vertexCache[n];
         switch (w) {
             case 0x14: {
-                // the provided values are already scaled, so undo that
-                // to match the other values
-                vtx.tx = (upper / 0x20 / this.SP_TextureState.s) + 0.5;
-                vtx.ty = (lower / 0x20 / this.SP_TextureState.t) + 0.5;
+                // the provided values are already scaled, no need to adjust
+                vtx.tx = (upper / 0x20) + 0.5;
+                vtx.ty = (lower / 0x20) + 0.5;
             } break;
             default:
                 console.warn("new modifyvtx", w, upper, lower);
@@ -507,8 +509,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             case F3DEX2_GBI.G_MODIFYVTX: {
                 const w = (w0 >>> 16) & 0xFF;
                 const n = (w0 >>> 1) & 0x7FFF;
-                const upper = w1 >> 16; // preserve sign
-                const lower = w1 % 0x1000; // preserve sign
+                const upper = view.getInt16(i + 0x04);
+                const lower = view.getInt16(i + 0x06);
                 state.gSPModifyVertex(w, n, upper, lower);
             } break;
 

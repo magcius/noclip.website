@@ -52,7 +52,10 @@ class DrawCallInstance {
     private createProgram(): void {
         const combParams = vec4.create();
         RDP.fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
+        const tiles: RDP.TileState[] = [];
+        for (let i = 0; i < this.textureEntry.length; i++)
+            tiles.push(this.textureEntry[i].tile);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -109,10 +112,8 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = this.drawCall.SP_TextureState.s / (entry.width);
-            const st = this.drawCall.SP_TextureState.t / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            m[0] = 1/entry.width;
+            m[5] = 1/entry.height;
 
             // shift by 10.2 UL coords, rescaled by texture size
             m[12] = -entry.tile.uls/4/entry.width;

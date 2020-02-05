@@ -166,7 +166,7 @@ function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dram
 
 const tlutColorTable = new Uint8Array(256 * 4);
 
-function getTileWidth(tile: TileState): number {
+export function getTileWidth(tile: TileState): number {
     const coordWidth = ((tile.lrs - tile.uls) >>> 2) + 1;
     if (tile.masks !== 0)
         return Math.min(1 << tile.masks, coordWidth)
@@ -174,7 +174,7 @@ function getTileWidth(tile: TileState): number {
         return coordWidth;
 }
 
-function getTileHeight(tile: TileState): number {
+export function getTileHeight(tile: TileState): number {
     const coordHeight = ((tile.lrt - tile.ult) >>> 2) + 1;
     if (tile.maskt !== 0)
         return Math.min(1 << tile.maskt, coordHeight)
@@ -182,16 +182,16 @@ function getTileHeight(tile: TileState): number {
         return coordHeight;
 }
 
-function getMaskedCMS(tile: TileState): number {
+export function getMaskedCMS(tile: TileState): number {
     const coordWidth = ((tile.lrs - tile.uls) >>> 2) + 1;
-    if (tile.masks !== 0 && (1 << tile.masks) <= coordWidth/2)
+    if (tile.masks !== 0 && (1 << tile.masks) < coordWidth)
         return tile.cms & 1;
     return tile.cms;
 }
 
-function getMaskedCMT(tile: TileState): number {
+export function getMaskedCMT(tile: TileState): number {
     const coordHeight = ((tile.lrt - tile.ult) >>> 2) + 1;
-    if (tile.maskt !== 0 && (1 << tile.maskt) <= coordHeight/2)
+    if (tile.maskt !== 0 && (1 << tile.maskt) < coordHeight)
         return tile.cmt & 1;
     return tile.cmt;
 }
@@ -225,20 +225,13 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     }
     const out = new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 
-    // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
-    // the real behavior (repeating within the coordinate range, clamping outside) is tricky to reproduce
-    // we use a heuristic to tell if the clamping behavior should be ignored and remove the clamp bit in that case
-    // TODO: for smaller texture repeats, build the full texture and leave clamping as is
-    out.tile.cms = getMaskedCMS(tile);
-    out.tile.cmt = getMaskedCMT(tile);
-
     return out;
 }
 
-// figure out if two textures with the same underlying data can reuse the same texture
-// we assume that a texture has only one real size, so just match on the eventual CM flags
+// figure out if two textures with the same underlying data can reuse the same texture object
+// we assume that a texture has only one real size/tiling behavior, so just match on coords
 function textureMatch(a: TileState, b: TileState): boolean {
-    return getMaskedCMS(a) === getMaskedCMS(b) && getMaskedCMT(a) === getMaskedCMT(b);
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt;
 }
 
 export class TextureCache {
