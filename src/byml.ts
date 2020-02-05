@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align, getTextDecoder } from "./util";
+import { assert, readString, align } from "./util";
 import { Endianness } from "./endian";
 
 export const enum FileType {
@@ -9,20 +9,20 @@ export const enum FileType {
 }
 
 const enum NodeType {
-    STRING       = 0xA0,
-    ARRAY        = 0xC0,
-    DICT         = 0xC1,
-    STRING_TABLE = 0xC2,
-    BINARY_DATA  = 0xCB, // CRG1 extension.
-    BOOL         = 0xD0,
-    INT          = 0xD1,
-    FLOAT        = 0xD2,
-    UINT         = 0xD3,
-    INT64        = 0xE4,
-    UINT64       = 0xE5,
-    FLOAT64      = 0xE6,
-    FLOAT_ARRAY  = 0xE2, // CRG1 extension.
-    NULL         = 0xFF,
+    String       = 0xA0,
+    Array        = 0xC0,
+    Dictionary   = 0xC1,
+    StringTable  = 0xC2,
+    BinaryData   = 0xCB, // CRG1 extension.
+    Bool         = 0xD0,
+    Int          = 0xD1,
+    Float        = 0xD2,
+    UInt         = 0xD3,
+    Int64        = 0xE4,
+    UInt64       = 0xE5,
+    Float64      = 0xE6,
+    FloatArray   = 0xE2, // CRG1 extension.
+    Null         = 0xFF,
 }
 
 interface FileDescription {
@@ -33,17 +33,19 @@ interface FileDescription {
 const fileDescriptions: { [key: number]: FileDescription } = {
     [FileType.BYML]: {
         magics: ['BY\0\x01', 'BY\0\x02', 'YB\x03\0'],
-        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.UINT, NodeType.FLOAT, NodeType.NULL ],
+        allowedNodeTypes: [ NodeType.String, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null ],
     },
     [FileType.CRG1]: {
         magics: ['CRG1'],
-        allowedNodeTypes: [ NodeType.STRING, NodeType.ARRAY, NodeType.DICT, NodeType.STRING_TABLE, NodeType.BOOL, NodeType.INT, NodeType.UINT, NodeType.FLOAT, NodeType.NULL, NodeType.FLOAT_ARRAY, NodeType.BINARY_DATA ],
+        allowedNodeTypes: [ NodeType.String, NodeType.Array, NodeType.Dictionary, NodeType.StringTable, NodeType.Bool, NodeType.Int, NodeType.UInt, NodeType.Float, NodeType.Null, NodeType.FloatArray, NodeType.BinaryData ],
     },
 }
 
 function decodeUTF8(buffer: Uint8Array): string {
+    // @ts-ignore
     if (typeof TextDecoder !== 'undefined') {
-        return getTextDecoder('utf8')!.decode(buffer);
+        // @ts-ignore
+        return new TextDecoder('utf8')!.decode(buffer);
     // @ts-ignore
     } else if (typeof require !== 'undefined') {
         // @ts-ignore
@@ -94,7 +96,7 @@ function parseStringTable(context: ParseContext, buffer: ArrayBufferSlice, offs:
     const view = buffer.createDataView();
     const nodeType: NodeType = view.getUint8(offs + 0x00);
     const numValues = getUint24(view, offs + 0x01, context.littleEndian);
-    assert(nodeType === NodeType.STRING_TABLE);
+    assert(nodeType === NodeType.StringTable);
 
     let stringTableIdx: number = offs + 0x04;
     const strings: StringTable = [];
@@ -110,7 +112,7 @@ function parseDict(context: ParseContext, buffer: ArrayBufferSlice, offs: number
     const view = buffer.createDataView();
     const nodeType: NodeType = view.getUint8(offs + 0x00);
     const numValues = getUint24(view, offs + 0x01, context.littleEndian);
-    assert(nodeType === NodeType.DICT);
+    assert(nodeType === NodeType.Dictionary);
 
     const result: NodeDict = {};
     let dictIdx = offs + 0x04;
@@ -129,7 +131,7 @@ function parseArray(context: ParseContext, buffer: ArrayBufferSlice, offs: numbe
     const view = buffer.createDataView();
     const nodeType: NodeType = view.getUint8(offs + 0x00);
     const numValues = getUint24(view, offs + 0x01, context.littleEndian);
-    assert(nodeType === NodeType.ARRAY);
+    assert(nodeType === NodeType.Array);
 
     const result: NodeArray = [];
     let entryTypeIdx = offs + 0x04;
@@ -150,20 +152,20 @@ function parseComplexNode(context: ParseContext, buffer: ArrayBufferSlice, offs:
     if (expectedNodeType !== undefined)
         assert(expectedNodeType === nodeType);
     switch(nodeType) {
-    case NodeType.DICT:
+    case NodeType.Dictionary:
         return parseDict(context, buffer, offs);
-    case NodeType.ARRAY:
+    case NodeType.Array:
         return parseArray(context, buffer, offs);
-    case NodeType.STRING_TABLE:
+    case NodeType.StringTable:
         return parseStringTable(context, buffer, offs);
-    case NodeType.BINARY_DATA:
+    case NodeType.BinaryData:
         if (numValues == 0x00FFFFFF) {
             const numValues2 = view.getUint32(offs + 0x04, context.littleEndian);
             return buffer.subarray(offs + 0x08, numValues + numValues2);
         } else {
             return buffer.subarray(offs + 0x04, numValues);
         }
-    case NodeType.FLOAT_ARRAY:
+    case NodeType.FloatArray:
         return buffer.createTypedArray(Float32Array, offs + 0x04, numValues, context.endianness);
     default:
         throw new Error("whoops");
@@ -179,37 +181,37 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     validateNodeType(context, nodeType);
 
     switch (nodeType) {
-    case NodeType.ARRAY:
-    case NodeType.DICT:
-    case NodeType.STRING_TABLE:
-    case NodeType.BINARY_DATA:
-    case NodeType.FLOAT_ARRAY: {
+    case NodeType.Array:
+    case NodeType.Dictionary:
+    case NodeType.StringTable:
+    case NodeType.BinaryData:
+    case NodeType.FloatArray: {
         const complexOffs = view.getUint32(offs, context.littleEndian);
         return parseComplexNode(context, buffer, complexOffs, nodeType);
     }
-    case NodeType.STRING: {
+    case NodeType.String: {
         const idx = view.getUint32(offs, context.littleEndian);
         return context.strValueTable![idx];
     }
-    case NodeType.BOOL: {
+    case NodeType.Bool: {
         const value = view.getUint32(offs, context.littleEndian);
         assert(value === 0 || value === 1);
         return !!value;
     }
-    case NodeType.INT:
+    case NodeType.Int:
         return view.getInt32(offs, context.littleEndian);
-    case NodeType.UINT:
+    case NodeType.UInt:
         return view.getUint32(offs, context.littleEndian);
-    case NodeType.FLOAT:
+    case NodeType.Float:
         return view.getFloat32(offs, context.littleEndian);
     // TODO(jstpierre): we need a BigInt?
-    case NodeType.INT64:
+    case NodeType.Int64:
         return view.getInt32(offs, context.littleEndian);
-    case NodeType.UINT64:
+    case NodeType.UInt64:
         return view.getUint32(offs, context.littleEndian);
-    case NodeType.FLOAT64:
+    case NodeType.Float64:
         return view.getFloat64(offs, context.littleEndian);
-    case NodeType.NULL:
+    case NodeType.Null:
         return null;
     default:
         throw new Error();
@@ -393,26 +395,26 @@ function writeHeader(w: WriteContext, nodeType: NodeType, numEntries: number): v
 
 function classifyNodeValue(w: WriteContext, v: Node): NodeType {
     if (v === undefined || v === null) {
-        return NodeType.NULL;
+        return NodeType.Null;
     } if (typeof v === 'boolean') {
-        return NodeType.BOOL;
+        return NodeType.Bool;
     } else if (typeof v === 'string') {
-        return NodeType.STRING;
+        return NodeType.String;
     } else if (typeof v === 'number') {
         if ((v >>> 0) === v)
-            return NodeType.UINT;
+            return NodeType.UInt;
         else if ((v | 0) === v)
-            return NodeType.INT;
+            return NodeType.Int;
         else
-            return NodeType.FLOAT;
-    } else if (w.canUseNodeType(NodeType.FLOAT_ARRAY) && v instanceof Float32Array) {
-        return NodeType.FLOAT_ARRAY;
-    } else if (w.canUseNodeType(NodeType.BINARY_DATA) && v instanceof ArrayBufferSlice) {
-        return NodeType.BINARY_DATA;
+            return NodeType.Float;
+    } else if (w.canUseNodeType(NodeType.FloatArray) && v instanceof Float32Array) {
+        return NodeType.FloatArray;
+    } else if (w.canUseNodeType(NodeType.BinaryData) && v instanceof ArrayBufferSlice) {
+        return NodeType.BinaryData;
     } else if (v instanceof Array) {
-        return NodeType.ARRAY;
+        return NodeType.Array;
     } else if (v.constructor === Object) {
-        return NodeType.DICT;
+        return NodeType.Dictionary;
     } else {
         throw "whoops";
     }
@@ -422,7 +424,7 @@ function writeComplexValueArray(w: WriteContext, v: NodeArray): void {
     const stream = w.stream;
 
     const numEntries = v.length;
-    writeHeader(w, NodeType.ARRAY, numEntries);
+    writeHeader(w, NodeType.Array, numEntries);
     // First up is child value types.
     for (let i = 0; i < v.length; i++)
         stream.writeUint8(classifyNodeValue(w, v[i]));
@@ -444,7 +446,7 @@ function writeComplexValueDict(w: WriteContext, v: NodeDict): void {
     const keys = Object.keys(v);
     const numEntries = keys.length;
 
-    writeHeader(w, NodeType.DICT, numEntries);
+    writeHeader(w, NodeType.Dictionary, numEntries);
     // Write our children values, then go back and write our header.
     // Each header item is 0x08 bytes.
     let headerIdx = stream.offs;
@@ -467,7 +469,7 @@ function writeComplexValueDict(w: WriteContext, v: NodeDict): void {
 
 function writeComplexValueFloatArray(w: WriteContext, v: Float32Array): void {
     const stream = w.stream;
-    writeHeader(w, NodeType.FLOAT64, v.length);
+    writeHeader(w, NodeType.Float64, v.length);
     for (let i = 0; i < v.length; i++)
         stream.writeFloat32(v[i], w.littleEndian);
 }
@@ -475,12 +477,12 @@ function writeComplexValueFloatArray(w: WriteContext, v: Float32Array): void {
 function writeComplexValueBinary(w: WriteContext, v: ArrayBufferSlice): void {
     const stream = w.stream;
     if (v.byteLength >= 0x00FFFFFF) {
-        writeHeader(w, NodeType.BINARY_DATA, 0x00FFFFFF);
+        writeHeader(w, NodeType.BinaryData, 0x00FFFFFF);
         const numValues2 = v.byteLength - 0x00FFFFFF;
         assert(numValues2 <= 0xFFFFFFFF);
         stream.writeUint32(numValues2, w.littleEndian);
     } else {
-        writeHeader(w, NodeType.BINARY_DATA, v.byteLength);
+        writeHeader(w, NodeType.BinaryData, v.byteLength);
     }
     stream.writeBufferSlice(v);
     stream.align(0x04);
@@ -496,16 +498,16 @@ function writeValue(w: WriteContext, nodeType: NodeType, v: Node, valueOffs: num
     } else if (typeof v === 'string') {
         stream.setUint32(valueOffs, strTableIndex(w.strValueTable, v), w.littleEndian);
     } else if (typeof v === 'number') {
-        if (nodeType === NodeType.FLOAT)
+        if (nodeType === NodeType.Float)
             stream.setFloat32(valueOffs, v, w.littleEndian);
-        else if (nodeType === NodeType.UINT)
+        else if (nodeType === NodeType.UInt)
             stream.setUint32(valueOffs, v, w.littleEndian);
         else
             stream.setInt32(valueOffs, v, w.littleEndian);
-    } else if (w.canUseNodeType(NodeType.FLOAT_ARRAY) && v instanceof Float32Array) {
+    } else if (w.canUseNodeType(NodeType.FloatArray) && v instanceof Float32Array) {
         stream.setUint32(valueOffs, stream.offs, w.littleEndian);
         writeComplexValueFloatArray(w, v);
-    } else if (w.canUseNodeType(NodeType.BINARY_DATA) && v instanceof ArrayBufferSlice) {
+    } else if (w.canUseNodeType(NodeType.BinaryData) && v instanceof ArrayBufferSlice) {
         stream.setUint32(valueOffs, stream.offs, w.littleEndian);
         writeComplexValueBinary(w, v);
     } else if (v instanceof Array) {
@@ -555,7 +557,7 @@ function writeStringTable(w: WriteContext, v: StringTable): void {
     // A string table contains at least one entry, so this field is the number of entries minus one.
     const numEntries = v.length - 1;
 
-    writeHeader(w, NodeType.STRING_TABLE, numEntries);
+    writeHeader(w, NodeType.StringTable, numEntries);
 
     // Strings should already be sorted.
     let strDataIdx = 0x04 // Header

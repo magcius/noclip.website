@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { decompressArbitraryFile } from "../Scenes_FileDrops";
-import { readString, getTextDecoder } from "../util";
+import { readString } from "../util";
 import { SceneContext } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
@@ -175,7 +175,7 @@ export async function createScene(context: SceneContext, param: string): Promise
     }
 
     const renderer = new ScriptRenderer(context, basedir(scriptURL), args);
-    const decoder = getTextDecoder('utf8')!;
+    const decoder = new TextDecoder('utf8');
     const data = await dataFetcher.fetchURL(scriptURL);
     const source = decoder.decode(data.arrayBuffer);
     runScript(renderer, source);

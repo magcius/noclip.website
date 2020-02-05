@@ -5,10 +5,10 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, getTextDecoder, assertExists } from '../util';
+import { readString, assert, assertExists } from '../util';
 
 import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -19,7 +19,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { createModelInstance } from './scenes';
 
-const sjisDecoder = getTextDecoder('sjis')!;
+const sjisDecoder = new TextDecoder('sjis')!;
 
 function unpack(buffer: ArrayBufferSlice, sig: string): any[] {
     const view = buffer.createDataView();

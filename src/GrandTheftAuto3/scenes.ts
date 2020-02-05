@@ -9,7 +9,7 @@ import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
-import { getTextDecoder, assert, assertExists, leftPad } from '../util';
+import { assert, assertExists, leftPad } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item';
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
@@ -25,7 +25,7 @@ import { decompressBC } from '../Common/bc_texture';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
-    return getTextDecoder('utf8')!.decode(array.subarray(0, length));
+    return new TextDecoder('utf8').decode(array.subarray(0, length));
 }
 
 class AssetCache extends Map<string, ArrayBufferSlice> implements Destroyable {
@@ -131,7 +131,7 @@ export class GTA3SceneDesc implements SceneDesc {
 
     private async fetchText(dataFetcher: DataFetcher, path:string): Promise<string> {
         const buffer = await this.fetch(dataFetcher, path);
-        return getTextDecoder('utf8')!.decode(buffer!.createDataView());
+        return new TextDecoder('utf8').decode(buffer!.createDataView());
     }
 
     private async fetchIDE(dataFetcher: DataFetcher, id: string): Promise<ItemDefinition> {

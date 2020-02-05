@@ -9,7 +9,7 @@ import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { TextureMapping } from '../TextureHolder';
-import { nArray, getTextDecoder } from '../util';
+import { nArray } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { DeviceProgram } from '../Program';
 import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -477,7 +477,7 @@ export class FoxFur implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
-        const foxFurObjText = getTextDecoder('utf8')!.decode(foxFurObjBuffer.arrayBuffer);
+        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer);
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);

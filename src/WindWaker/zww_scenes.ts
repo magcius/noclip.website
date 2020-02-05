@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assertExists, assert, nArray, hexzero, getTextDecoder } from '../util';
+import { readString, assertExists, assert, nArray, hexzero } from '../util';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
@@ -13,7 +13,7 @@ import * as UI from '../ui';
 
 import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
-import { J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -49,7 +49,7 @@ type dStage__ObjectNameTable = { [name: string]: dStage__ObjectNameTableEntry };
 function createRelNameTable(symbolMap: SymbolMap) {
     const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
     const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
-    const textDecoder = getTextDecoder('utf8') as TextDecoder;
+    const textDecoder = new TextDecoder('utf8') as TextDecoder;
 
     const nameTableView = nameTableBuf.Data.createDataView();
     const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
