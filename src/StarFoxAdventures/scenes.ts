@@ -17,6 +17,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
 import { gx_texture_asExports } from '../wat_modules';
 import { AreaRenderer } from '../GrandTheftAuto3/render';
+import { matrixHasUniformScale } from '../MathHelpers';
 
 const pathBase = 'sfa';
 
@@ -289,6 +290,7 @@ class TextureCollection {
 
 class BlockRenderer {
     models: ModelInstance[] = [];
+    yTranslate: number = 0;
 
     constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, texColl: TextureCollection) {
         let offs = 0;
@@ -300,10 +302,16 @@ class BlockRenderer {
         //     throw Error(`Model type ${modelType} not implemented`);
         // }
 
+        // @0x8: data size
+        // @0xc: 4x3 matrix (placeholder; always zeroed in files)
+        // @0x8e: y translation (up/down)
+
+        this.yTranslate = uncompDv.getInt16(0x8e);
+
         //////////// TEXTURE STUFF TODO: move somewhere else
 
         const texOffset = uncompDv.getUint32(0x54);
-        const texCount = uncompDv.getUint8(0xA0);
+        const texCount = uncompDv.getUint8(0xa0);
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
@@ -319,7 +327,7 @@ class BlockRenderer {
         // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = new ArrayBufferSlice(uncompDv.buffer, posOffset, posCount * 3*2);
 
-        const clrOffset = uncompDv.getUint32(0x5C);
+        const clrOffset = uncompDv.getUint32(0x5c);
         const clrCount = uncompDv.getUint16(0x94);
         // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
@@ -330,7 +338,7 @@ class BlockRenderer {
         const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
 
         const polyOffset = uncompDv.getUint32(0x64);
-        const polyCount = uncompDv.getUint8(0xA2);
+        const polyCount = uncompDv.getUint8(0xa2);
         // console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
 
         interface PolygonType {
@@ -391,7 +399,7 @@ class BlockRenderer {
                 polyType.hasTex1 = false;
             }
             const unk42 = uncompDv.getUint8(offs + 0x42);
-            polyType.enableCull = (uncompDv.getUint32(offs + 0x3C) & 0x8) != 0;
+            polyType.enableCull = (uncompDv.getUint32(offs + 0x3c) & 0x8) != 0;
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
@@ -571,7 +579,11 @@ class BlockRenderer {
 
     public addToRenderer(renderer: SFARenderer, modelMatrix: mat4) {
         for (let i = 0; i < this.models.length; i++) {
-            renderer.addModel(this.models[i], modelMatrix);
+            const trans = mat4.create();
+            mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
+            const matrix = mat4.create();
+            mat4.mul(matrix, modelMatrix, trans);
+            renderer.addModel(this.models[i], matrix);
         }
     }
 }
@@ -793,6 +805,10 @@ class SFAMapDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     'Maps',
+    // Dinosaur Planet contains many maps. During the transition to the GameCube
+    // when the game became Star Fox Adventures, many of these locations were
+    // dropped. Their data remains, but it references missing and/or broken data
+    // and thus cannot be loaded.
     new SFAMapDesc(1, 'loc1', 'Location 1'),
     new SFAMapDesc(2, 'loc2', 'Location'),
     new SFAMapDesc(3, 'loc3', 'Location'),
@@ -852,7 +868,7 @@ const sceneDescs = [
     new SFAMapDesc(57, 'loc57', 'Location'),
     new SFAMapDesc(58, 'loc58', 'Location'),
     new SFAMapDesc(59, 'loc59', 'Location'),
-    new SFAMapDesc(60, 'loc60', 'Location 60'),
+    // new SFAMapDesc(60, 'loc60', 'Location 60'),
     new SFAMapDesc(61, 'loc61', 'Location'),
     new SFAMapDesc(62, 'loc62', 'Location'),
     new SFAMapDesc(63, 'loc63', 'Location'),
@@ -867,35 +883,37 @@ const sceneDescs = [
     new SFAMapDesc(72, 'loc72', 'Location'),
     new SFAMapDesc(73, 'loc73', 'Location'),
     new SFAMapDesc(74, 'loc74', 'Location'),
-    new SFAMapDesc(75, 'loc75', 'Location'),
-    new SFAMapDesc(76, 'loc76', 'Location'),
-    new SFAMapDesc(77, 'loc77', 'Location'),
-    new SFAMapDesc(78, 'loc78', 'Location'),
-    new SFAMapDesc(79, 'loc79', 'Location'),
-    new SFAMapDesc(80, 'loc80', 'Location 80'),
-    new SFAMapDesc(81, 'loc81', 'Location'),
-    new SFAMapDesc(82, 'loc82', 'Location'),
-    new SFAMapDesc(83, 'loc83', 'Location'),
-    new SFAMapDesc(84, 'loc84', 'Location'),
-    new SFAMapDesc(85, 'loc85', 'Location'),
-    new SFAMapDesc(86, 'loc86', 'Location'),
-    new SFAMapDesc(87, 'loc87', 'Location'),
-    new SFAMapDesc(88, 'loc88', 'Location'),
-    new SFAMapDesc(89, 'loc89', 'Location'),
-    new SFAMapDesc(90, 'loc90', 'Location 90'),
-    new SFAMapDesc(91, 'loc91', 'Location'),
-    new SFAMapDesc(92, 'loc92', 'Location'),
-    new SFAMapDesc(93, 'loc93', 'Location'),
-    new SFAMapDesc(94, 'loc94', 'Location'),
-    new SFAMapDesc(95, 'loc95', 'Location'),
-    new SFAMapDesc(96, 'loc96', 'Location'),
-    new SFAMapDesc(97, 'loc97', 'Location'),
-    new SFAMapDesc(98, 'loc98', 'Location'),
-    new SFAMapDesc(99, 'loc99', 'Location'),
-    // FIXME: Many of these maps contain empty or broken data.
-    new SFAMapDesc(110, 'loc110', 'Location 110'),
-    new SFAMapDesc(115, 'loc115', 'Location 115'),
-    new SFAMapDesc(116, 'loc116', 'Location 116'),
+    // new SFAMapDesc(75, 'loc75', 'Location'),
+    // new SFAMapDesc(76, 'loc76', 'Location'),
+    // new SFAMapDesc(77, 'loc77', 'Location'),
+    // new SFAMapDesc(78, 'loc78', 'Location'),
+    // new SFAMapDesc(79, 'loc79', 'Location'),
+    // new SFAMapDesc(80, 'loc80', 'Location 80'),
+    // new SFAMapDesc(81, 'loc81', 'Location'),
+    // new SFAMapDesc(82, 'loc82', 'Location'),
+    // new SFAMapDesc(83, 'loc83', 'Location'),
+    // new SFAMapDesc(84, 'loc84', 'Location'),
+    // new SFAMapDesc(85, 'loc85', 'Location'),
+    // new SFAMapDesc(86, 'loc86', 'Location'),
+    // new SFAMapDesc(87, 'loc87', 'Location'),
+    // new SFAMapDesc(88, 'loc88', 'Location'),
+    // new SFAMapDesc(89, 'loc89', 'Location'),
+    // new SFAMapDesc(90, 'loc90', 'Location 90'),
+    // new SFAMapDesc(91, 'loc91', 'Location'),
+    // new SFAMapDesc(92, 'loc92', 'Location'),
+    // new SFAMapDesc(93, 'loc93', 'Location'),
+    // new SFAMapDesc(94, 'loc94', 'Location'),
+    // new SFAMapDesc(95, 'loc95', 'Location'),
+    // new SFAMapDesc(96, 'loc96', 'Location'),
+    // new SFAMapDesc(97, 'loc97', 'Location'),
+    // new SFAMapDesc(98, 'loc98', 'Location'),
+    // new SFAMapDesc(99, 'loc99', 'Location'),
+    // ... (Many maps contain empty or broken data) ...
+    // new SFAMapDesc(110, 'loc110', 'Location 110'),
+    // ...
+    // new SFAMapDesc(115, 'loc115', 'Location 115'),
+    // new SFAMapDesc(116, 'loc116', 'Location 116'), 
+    // (end)
 ];
 
 const id = 'sfa';
