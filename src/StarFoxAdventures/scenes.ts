@@ -8,6 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX_Texture from '../gx/gx_texture';
 
+import { DataFetcher } from '../DataFetcher';
 import { hexzero, nArray } from '../util';
 import * as GX from '../gx/gx_enum';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
@@ -19,7 +20,149 @@ import { gx_texture_asExports } from '../wat_modules';
 import { AreaRenderer } from '../GrandTheftAuto3/render';
 import { matrixHasUniformScale } from '../MathHelpers';
 
-const pathBase = 'sfa';
+
+abstract class BlockFetcher {
+    public abstract getBlock(num: number): ArrayBufferSlice | null;
+}
+
+interface GameInfo {
+    pathBase: string;
+    subdirs: {[key: number]: string};
+    makeBlockFetcher: (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => Promise<BlockFetcher>;
+}
+
+class SFABlockFetcher implements BlockFetcher {
+    blocksTab: DataView;
+    blocksBin: ArrayBufferSlice;
+
+    public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
+        const pathBase = gameInfo.pathBase;
+        const subdir = getSubdir(locationNum, gameInfo);
+        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
+        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
+    }
+
+    public getBlock(num: number): ArrayBufferSlice | null {
+        if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
+            return null;
+        }
+        const tabValue = this.blocksTab.getUint32(num * 4);
+        if (!(tabValue & 0x10000000)) {
+            return null;
+        }
+        const blockOffset = tabValue & 0xFFFFFF;
+        const blocksBinPart = this.blocksBin.slice(blockOffset);
+        const uncomp = loadRes(blocksBinPart);
+        return uncomp;
+    }
+}
+
+const SFA_GAME_INFO: GameInfo = {
+    pathBase: 'sfa',
+    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
+        const result = new SFABlockFetcher();
+        await result.create(locationNum, dataFetcher, gameInfo);
+        return result;
+    },
+    subdirs: {
+        0: 'animtest',
+        2: 'animtest',
+        3: 'arwing', // ???
+        5: 'animtest',
+        6: 'dfptop',
+        7: 'volcano',
+        9: 'mazecave',
+        10: 'dragrockbot',
+        11: 'crfort', // ???
+        12: 'swaphol',
+        14: 'nwastes',
+        15: 'warlock',
+        16: 'shop',
+        18: 'crfort',
+        19: 'swapholbot',
+        20: 'wallcity',
+        21: 'lightfoot',
+        24: 'clouddungeon',
+        25: 'mmpass',
+        26: 'darkicemines',
+        28: 'desert',
+        29: 'shipbattle', // ???
+        30: 'icemountain',
+        31: 'animtest',
+        34: 'darkicemines2',
+        35: 'bossgaldon',
+        37: 'insidegal',
+        38: 'magiccave',
+        39: 'dfshrine',
+        40: 'mmshrine',
+        41: 'ecshrine',
+        42: 'gpshrine',
+        43: 'dbshrine',
+        44: 'nwshrine',
+        45: 'worldmap',
+        47: 'capeclaw',
+        50: 'cloudrace',
+        51: 'bossdrakor',
+        53: 'bosstrex',
+        54: 'linkb',
+        56: 'arwingtoplanet',
+        57: 'arwingdarkice',
+        58: 'arwingcloud',
+        59: 'arwingcity',
+        60: 'arwingdragon',
+        61: 'gamefront',
+        62: 'linklevel',
+        63: 'greatfox',
+        64: 'linka',
+        65: 'linkc',
+        66: 'linkd',
+        67: 'linke',
+        68: 'linkf',
+        69: 'linkg',
+        70: 'linkh',
+        71: 'linkj',
+        72: 'linki',
+    },
+}
+
+class SFADemoBlockFetcher {
+    public getBlock(num: number): ArrayBufferSlice {
+        return new ArrayBufferSlice(new ArrayBuffer(1)); // TODO
+    }
+}
+
+const SFADEMO_GAME_INFO = {
+    pathBase: 'sfademo',
+    subdirs: {
+        0: 'animtest',
+        1: 'dragrock',
+        2: 'dragrockbot',
+        3: 'swapholbot',
+        4: 'wallcity',
+        5: 'lightfoot',
+        6: 'cloudtreasure',
+        7: 'clouddungeon',
+        8: 'darkicemines',
+        //9: 'icemountain',
+        9: 'mazecave', // ????
+        10: 'darkicemines2',
+        11: 'bossgaldon',
+        12: 'insidegal',
+        //13: 'magiccave',
+        13: 'swaphol', // ???
+        14: 'dfshrine',
+        15: 'mmshrine',
+        16: 'ecshrine',
+        17: 'gpshrine',
+        18: 'dbshrine',
+        19: 'nwshrine',
+        20: 'worldmap',
+        21: 'capeclaw',
+        22: 'cloudrace',
+        23: 'bossdrakor',
+        24: 'bosstrex',
+    }
+}
 
 class ModelInstance {
     loadedVertexLayout: LoadedVertexLayout;
@@ -292,10 +435,9 @@ class BlockRenderer {
     models: ModelInstance[] = [];
     yTranslate: number = 0;
 
-    constructor(device: GfxDevice, blocksBin: ArrayBufferSlice, texColl: TextureCollection) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection) {
         let offs = 0;
-        const uncomp = loadRes(blocksBin);
-        const uncompDv = uncomp.createDataView();
+        const blockDv = blockData.createDataView();
 
         // const modelType = uncompDv.getUint16(4);
         // if (modelType != 8) {
@@ -306,40 +448,36 @@ class BlockRenderer {
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
 
-        this.yTranslate = uncompDv.getInt16(0x8e);
+        this.yTranslate = blockDv.getInt16(0x8e);
 
         //////////// TEXTURE STUFF TODO: move somewhere else
 
-        const texOffset = uncompDv.getUint32(0x54);
-        const texCount = uncompDv.getUint8(0xa0);
+        const texOffset = blockDv.getUint32(0x54);
+        const texCount = blockDv.getUint8(0xa0);
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
-            const texIdFromFile = uncompDv.getUint32(texOffset + i * 4);
+            const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
             texIds.push(texIdFromFile);
         }
         // console.log(`tex ids: ${JSON.stringify(texIds)}`);
 
         //////////////////////////
 
-        const posOffset = uncompDv.getUint32(0x58);
-        const posCount = uncompDv.getUint16(0x90);
-        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-        const vertBuffer = new ArrayBufferSlice(uncompDv.buffer, posOffset, posCount * 3*2);
+        const posOffset = blockDv.getUint32(0x58);
+        const posCount = blockDv.getUint16(0x90);
+        const vertBuffer = blockData.subarray(posOffset, posCount * 3 * 2);
 
-        const clrOffset = uncompDv.getUint32(0x5c);
-        const clrCount = uncompDv.getUint16(0x94);
-        // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
-        const clrBuffer = new ArrayBufferSlice(uncompDv.buffer, clrOffset, clrCount * 2);
+        const clrOffset = blockDv.getUint32(0x5c);
+        const clrCount = blockDv.getUint16(0x94);
+        const clrBuffer = blockData.subarray(clrOffset, clrCount * 2);
 
-        const coordOffset = uncompDv.getUint32(0x60);
-        const coordCount = uncompDv.getUint16(0x96);
-        // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
-        const coordBuffer = new ArrayBufferSlice(uncompDv.buffer, coordOffset, coordCount * 2 * 2);
+        const coordOffset = blockDv.getUint32(0x60);
+        const coordCount = blockDv.getUint16(0x96);
+        const coordBuffer = blockData.subarray(coordOffset, coordCount * 2 * 2);
 
-        const polyOffset = uncompDv.getUint32(0x64);
-        const polyCount = uncompDv.getUint8(0xa2);
-        // console.log(`Loading ${polyCount} polygon types from 0x${polyOffset.toString(16)}`);
+        const polyOffset = blockDv.getUint32(0x64);
+        const polyCount = blockDv.getUint8(0xa2);
 
         interface PolygonType {
             hasNormal: boolean;
@@ -368,28 +506,28 @@ class BlockRenderer {
                 enableCull: false,
             };
             // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
-            const tex0Flag = uncompDv.getUint32(offs + 0x8);
+            const tex0Flag = blockDv.getUint32(offs + 0x8);
             // console.log(`tex0Flag: ${tex0Flag}`);
             // if (tex0Flag == 1) {
                 // FIXME: tex0Flag doesn't seem to be present...
                 polyType.hasTex0 = true;
-                polyType.tex0Num = uncompDv.getUint32(offs + 0x24);
+                polyType.tex0Num = blockDv.getUint32(offs + 0x24);
                 // TODO: @offs+0x28: flags, including HasTransparency.
             // }
-            const tex1Flag = uncompDv.getUint32(offs + 0x14);
+            const tex1Flag = blockDv.getUint32(offs + 0x14);
             // console.log(`tex1Flag: ${tex1Flag}`);
             // if (tex1Flag == 1) {
                 // FIXME: tex1Flag doesn't seem to be present...
                 polyType.hasTex1 = true;
-                //polyType.tex1Num = uncompDv.getUint32(offs + 0x2C);
-                polyType.tex1Num = uncompDv.getUint32(offs + 0x34); // According to decompilation
+                //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
+                polyType.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
                 // TODO: @offs+0x30: flags, including HasTransparency.
             // }
-            const attrFlags = uncompDv.getUint8(offs + 0x40);
+            const attrFlags = blockDv.getUint8(offs + 0x40);
             // console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
             polyType.hasNormal = (attrFlags & 1) != 0;
             polyType.hasColor = (attrFlags & 2) != 0;
-            polyType.numTexCoords = uncompDv.getUint8(offs + 0x41);
+            polyType.numTexCoords = blockDv.getUint8(offs + 0x41);
             if (attrFlags & 4) {
                 for (let j = 0; j < polyType.numTexCoords; j++) {
                     polyType.hasTexCoord[j] = true;
@@ -398,8 +536,8 @@ class BlockRenderer {
             if (polyType.numTexCoords == 1) {
                 polyType.hasTex1 = false;
             }
-            const unk42 = uncompDv.getUint8(offs + 0x42);
-            polyType.enableCull = (uncompDv.getUint32(offs + 0x3c) & 0x8) != 0;
+            const unk42 = blockDv.getUint8(offs + 0x42);
+            polyType.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
@@ -477,16 +615,16 @@ class BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const chunkOffset = uncompDv.getUint32(0x68);
+        const chunkOffset = blockDv.getUint32(0x68);
         // console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
 
-        const bitsOffset = uncompDv.getUint32(0x78);
-        const bitsCount = uncompDv.getUint16(0x84);
+        const bitsOffset = blockDv.getUint32(0x78);
+        const bitsCount = blockDv.getUint16(0x84);
         // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
         let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
 
-        const bits = new LowBitReader(uncompDv, bitsOffset);
+        const bits = new LowBitReader(blockDv, bitsOffset);
         let done = false;
         let curPolyType = 0;
         while (!done) {
@@ -500,9 +638,9 @@ class BlockRenderer {
                 const chunkNum = bits.get(8);
                 // console.log(`geometry chunk #${chunkNum}`);
                 offs = chunkOffset + chunkNum * 0x1C;
-                const dlOffset = uncompDv.getUint32(offs);
-                const dlSize = uncompDv.getUint16(offs + 4);
-                displayList = new ArrayBufferSlice(uncompDv.buffer, dlOffset, dlSize);
+                const dlOffset = blockDv.getUint32(offs);
+                const dlSize = blockDv.getUint16(offs + 4);
+                displayList = blockData.subarray(dlOffset, dlSize);
                 // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
 
                 const vtxArrays: GX_Array[] = [];
@@ -636,86 +774,25 @@ function getModNumber(locationNum: number): number {
         return locationNum + 1
 }
 
-function getSubdir(locationNum: number): string {
-    const SUBDIRS: {[key: number]: string} = {
-        0: 'animtest',
-        2: 'animtest',
-        3: 'arwing', // ???
-        5: 'animtest',
-        6: 'dfptop',
-        7: 'volcano',
-        9: 'mazecave',
-        10: 'dragrockbot',
-        11: 'crfort', // ???
-        12: 'swaphol',
-        14: 'nwastes',
-        15: 'warlock',
-        16: 'shop',
-        18: 'crfort',
-        19: 'swapholbot',
-        20: 'wallcity',
-        21: 'lightfoot',
-        24: 'clouddungeon',
-        25: 'mmpass',
-        26: 'darkicemines',
-        28: 'desert',
-        29: 'shipbattle', // ???
-        30: 'icemountain',
-        31: 'animtest',
-        34: 'darkicemines2',
-        35: 'bossgaldon',
-        37: 'insidegal',
-        38: 'magiccave',
-        39: 'dfshrine',
-        40: 'mmshrine',
-        41: 'ecshrine',
-        42: 'gpshrine',
-        43: 'dbshrine',
-        44: 'nwshrine',
-        45: 'worldmap',
-        47: 'capeclaw',
-        50: 'cloudrace',
-        51: 'bossdrakor',
-        53: 'bosstrex',
-        54: 'linkb',
-        56: 'arwingtoplanet',
-        57: 'arwingdarkice',
-        58: 'arwingcloud',
-        59: 'arwingcity',
-        60: 'arwingdragon',
-        61: 'gamefront',
-        62: 'linklevel',
-        63: 'greatfox',
-        64: 'linka',
-        65: 'linkc',
-        66: 'linkd',
-        67: 'linke',
-        68: 'linkf',
-        69: 'linkg',
-        70: 'linkh',
-        71: 'linkj',
-        72: 'linki',
-    };
-    
-    if (SUBDIRS[locationNum] === undefined) {
+function getSubdir(locationNum: number, gameInfo: GameInfo): string {
+    if (gameInfo.subdirs[locationNum] === undefined) {
         throw Error(`Subdirectory for location ${locationNum} unknown`);
     }
-    return SUBDIRS[locationNum];
+    return gameInfo.subdirs[locationNum];
 }
 
 class BlockCollection {
     blockRenderers: BlockRenderer[] = [];
-    blocksTab: DataView;
-    blocksBin: ArrayBufferSlice;
+    blockFetcher: BlockFetcher;
     tex1Tab: ArrayBufferSlice;
     tex1Bin: ArrayBufferSlice;
     texColl: TextureCollection;
 
-    public async create(device: GfxDevice, context: SceneContext, trkblk: number) {
+    public async create(device: GfxDevice, context: SceneContext, trkblk: number, gameInfo: GameInfo) {
         const dataFetcher = context.dataFetcher;
-        const subdir = getSubdir(trkblk);
-        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(trkblk)}.tab`)).createDataView();
-        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(trkblk)}.zlb.bin`);
+        const pathBase = gameInfo.pathBase;
+        const subdir = getSubdir(trkblk, gameInfo);
+        this.blockFetcher = await gameInfo.makeBlockFetcher(trkblk, dataFetcher, gameInfo);
         // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
         this.tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
@@ -725,16 +802,10 @@ class BlockCollection {
 
     public getBlockRenderer(device: GfxDevice, blockNum: number): BlockRenderer | null {
         if (this.blockRenderers[blockNum] === undefined) {
-            if (blockNum < 0 || blockNum * 4 >= this.blocksTab.byteLength) {
+            const uncomp = this.blockFetcher.getBlock(blockNum);
+            if (uncomp === null)
                 return null;
-            }
-            const tabValue = this.blocksTab.getUint32(blockNum * 4);
-            if (!(tabValue & 0x10000000)) {
-                return null;
-            }
-            const blockOffset = tabValue & 0xFFFFFF;
-            const blocksBinPart = this.blocksBin.slice(blockOffset);
-            this.blockRenderers[blockNum] = new BlockRenderer(device, blocksBinPart, this.texColl);
+            this.blockRenderers[blockNum] = new BlockRenderer(device, uncomp, this.texColl);
         }
 
         return this.blockRenderers[blockNum];
@@ -742,10 +813,11 @@ class BlockCollection {
 }
 
 class SFAMapDesc implements Viewer.SceneDesc {
-    constructor(public locationNum: number, public id: string, public name: string) {
+    constructor(public locationNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const mapsTab = (await dataFetcher.fetchData(`${pathBase}/MAPS.tab`)).createDataView();
         const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
@@ -753,7 +825,6 @@ class SFAMapDesc implements Viewer.SceneDesc {
 
         console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
-        // TODO: figure out how to correctly parse this information
         const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
         for (let y = 0; y < mapInfo.blockRows; y++) {
             let line = '';
@@ -775,7 +846,7 @@ class SFAMapDesc implements Viewer.SceneDesc {
                 if (blockCollections[blockInfo.trkblk] === undefined) {
                     const blockColl = new BlockCollection();
                     try {
-                        await blockColl.create(device, context, blockInfo.trkblk);
+                        await blockColl.create(device, context, blockInfo.trkblk, this.gameInfo);
                     } catch (e) {
                         console.error(e);
                         console.warn(`Block collection ${blockInfo.trkblk} could not be loaded.`);
@@ -914,6 +985,9 @@ const sceneDescs = [
     // new SFAMapDesc(115, 'loc115', 'Location 115'),
     // new SFAMapDesc(116, 'loc116', 'Location 116'), 
     // (end)
+
+    'Demo',
+    // new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
 ];
 
 const id = 'sfa';
