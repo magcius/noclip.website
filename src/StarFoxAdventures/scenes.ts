@@ -22,7 +22,7 @@ import { matrixHasUniformScale } from '../MathHelpers';
 
 
 abstract class BlockFetcher {
-    public abstract getBlock(num: number): ArrayBufferSlice | null;
+    public abstract getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null;
 }
 
 interface GameInfo {
@@ -34,15 +34,48 @@ interface GameInfo {
 class SFABlockFetcher implements BlockFetcher {
     blocksTab: DataView;
     blocksBin: ArrayBufferSlice;
+    isDeletedMap: boolean;
 
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
+        if (subdir == 'linklevel' || subdir == 'insidegal') {
+            console.log(`Holy smokes! Loading a deleted map!`);
+            this.isDeletedMap = true;
+        }
         this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
+        if (this.isDeletedMap) {
+            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
+        } else {
+            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
+        }
     }
 
-    public getBlock(num: number): ArrayBufferSlice | null {
+    public getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null {
+        if (this.isDeletedMap) {
+            // Different handling for blocks from the demo version's deleted maps
+            // Find a workable block number...
+            let firstBlockNum = 0;
+            for (let i = 0; i < this.blocksTab.byteLength/4; i++) {
+                if (this.blocksTab.getUint32(i * 4) == 0x10000000)
+                    break;
+                firstBlockNum++;
+            }
+
+            const num = firstBlockNum + subnum;
+            if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
+                return null;
+            }
+            const tabValue = this.blocksTab.getUint32(num * 4);
+            if (!(tabValue & 0x10000000)) {
+                return null;
+            }
+            const blockOffset = tabValue & 0xFFFFFF;
+            console.log(`Loading deleted block from offset 0x${blockOffset.toString(16)}`);
+            const blocksBinPart = this.blocksBin.slice(blockOffset);
+            return blocksBinPart;
+        }
+
         if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
             return null;
         }
@@ -126,13 +159,33 @@ const SFA_GAME_INFO: GameInfo = {
 }
 
 class SFADemoBlockFetcher {
-    public getBlock(num: number): ArrayBufferSlice {
-        return new ArrayBufferSlice(new ArrayBuffer(1)); // TODO
+    blocksTab: DataView;
+    blocksBin: ArrayBufferSlice;
+
+    public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
+        const pathBase = gameInfo.pathBase;
+        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/BLOCKS.tab`)).createDataView();
+        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/BLOCKS.bin`);
+    }
+
+    public getBlock(num: number): ArrayBufferSlice | null {
+        if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
+            return null;
+        }
+        const blockOffset = this.blocksTab.getUint32(num * 4);
+        console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
+        const blocksBinPart = this.blocksBin.slice(blockOffset);
+        return blocksBinPart;
     }
 }
 
-const SFADEMO_GAME_INFO = {
+const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'sfademo',
+    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
+        const result = new SFADemoBlockFetcher();
+        await result.create(locationNum, dataFetcher, gameInfo);
+        return result;
+    },
     subdirs: {
         0: 'animtest',
         1: 'dragrock',
@@ -439,10 +492,47 @@ class BlockRenderer {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
-        // const modelType = uncompDv.getUint16(4);
-        // if (modelType != 8) {
-        //     throw Error(`Model type ${modelType} not implemented`);
-        // }
+        const modelType = blockDv.getUint16(4);
+        let fields;
+        switch (modelType) {
+        case 0:
+            fields = {
+                // FIXME: these offsets are ALL broken.
+                texOffset: 0x54,
+                texCount: 0xa0,
+                posOffset: 0x58,
+                posCount: 0x90,
+                clrOffset: 0x5c,
+                clrCount: 0x94,
+                coordOffset: 0x60,
+                coordCount: 0x96,
+                polyOffset: 0x68,
+                polyCount: 0x9a,
+                chunkOffset: 0x68,
+                bitsOffset: 0x54,
+                bitsCount: 0x84,
+            };
+            break;
+        case 8:
+            fields = {
+                texOffset: 0x54,
+                texCount: 0xa0,
+                posOffset: 0x58,
+                posCount: 0x90,
+                clrOffset: 0x5c,
+                clrCount: 0x94,
+                coordOffset: 0x60,
+                coordCount: 0x96,
+                polyOffset: 0x64,
+                polyCount: 0xa2,
+                chunkOffset: 0x68,
+                bitsOffset: 0x78,
+                bitsCount: 0x84,
+            };
+            break;
+        default:
+            throw Error(`Model type ${modelType} not implemented`);
+        }
 
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
@@ -452,9 +542,9 @@ class BlockRenderer {
 
         //////////// TEXTURE STUFF TODO: move somewhere else
 
-        const texOffset = blockDv.getUint32(0x54);
-        const texCount = blockDv.getUint8(0xa0);
-        // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
+        const texOffset = blockDv.getUint32(fields.texOffset);
+        const texCount = blockDv.getUint8(fields.texCount);
+        console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
@@ -464,20 +554,21 @@ class BlockRenderer {
 
         //////////////////////////
 
-        const posOffset = blockDv.getUint32(0x58);
-        const posCount = blockDv.getUint16(0x90);
+        const posOffset = blockDv.getUint32(fields.posOffset);
+        const posCount = blockDv.getUint16(fields.posCount);
         const vertBuffer = blockData.subarray(posOffset, posCount * 3 * 2);
 
-        const clrOffset = blockDv.getUint32(0x5c);
-        const clrCount = blockDv.getUint16(0x94);
+        const clrOffset = blockDv.getUint32(fields.clrOffset);
+        const clrCount = blockDv.getUint16(fields.clrCount);
         const clrBuffer = blockData.subarray(clrOffset, clrCount * 2);
 
-        const coordOffset = blockDv.getUint32(0x60);
-        const coordCount = blockDv.getUint16(0x96);
+        const coordOffset = blockDv.getUint32(fields.coordOffset);
+        const coordCount = blockDv.getUint16(fields.coordCount);
         const coordBuffer = blockData.subarray(coordOffset, coordCount * 2 * 2);
 
-        const polyOffset = blockDv.getUint32(0x64);
-        const polyCount = blockDv.getUint8(0xa2);
+        const polyOffset = blockDv.getUint32(fields.polyOffset);
+        const polyCount = blockDv.getUint8(fields.polyCount);
+        console.log(`Loading ${polyCount} polytypes from 0x${polyOffset.toString(16)}`);
 
         interface PolygonType {
             hasNormal: boolean;
@@ -615,12 +706,12 @@ class BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const chunkOffset = blockDv.getUint32(0x68);
+        const chunkOffset = blockDv.getUint32(fields.chunkOffset);
         // console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
 
-        const bitsOffset = blockDv.getUint32(0x78);
-        const bitsCount = blockDv.getUint16(0x84);
-        // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
+        const bitsOffset = blockDv.getUint32(fields.bitsOffset);
+        const bitsCount = blockDv.getUint16(fields.bitsCount);
+        console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
         let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
 
@@ -800,9 +891,9 @@ class BlockCollection {
         this.texColl = new TextureCollection(this.tex1Tab, this.tex1Bin);
     }
 
-    public getBlockRenderer(device: GfxDevice, blockNum: number): BlockRenderer | null {
+    public getBlockRenderer(device: GfxDevice, blockNum: number, trkblk: number, subnum: number): BlockRenderer | null {
         if (this.blockRenderers[blockNum] === undefined) {
-            const uncomp = this.blockFetcher.getBlock(blockNum);
+            const uncomp = this.blockFetcher.getBlock(blockNum, trkblk, subnum);
             if (uncomp === null)
                 return null;
             this.blockRenderers[blockNum] = new BlockRenderer(device, uncomp, this.texColl);
@@ -856,7 +947,7 @@ class SFAMapDesc implements Viewer.SceneDesc {
                 }
 
                 const blockColl = blockCollections[blockInfo.trkblk];
-                const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block);
+                const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.base);
                 if (!blockRenderer) {
                     console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} base ${blockInfo.base}) not found`);
                     continue;
@@ -987,7 +1078,7 @@ const sceneDescs = [
     // (end)
 
     'Demo',
-    // new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
+    new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
 ];
 
 const id = 'sfa';
