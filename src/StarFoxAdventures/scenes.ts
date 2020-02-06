@@ -505,18 +505,19 @@ class BlockRenderer {
                 posCount: 0x90,
                 clrOffset: 0x5c,
                 clrCount: 0x94,
-                coordOffset: 0x60,
-                coordCount: 0x96,
-                polyOffset: 0x64,
-                polyCount: 0xa0, // NOTE: "polys" are polygon attributes and shading information.
-                                 // Rareware called these "shaders".
+                texcoordOffset: 0x60,
+                texcoordCount: 0x96,
+                shaderOffset: 0x64,
+                shaderCount: 0xa0, // Polygon attributes and material information
                 shaderSize: 0x40,
-                chunkOffset: 0x68, // NOTE: "chunks" are display lists. Rareware called these "lists".
-                chunkCount: 0x9f,
-                chunkEntrySize: 0x34,
+                listOffset: 0x68,
+                listCount: 0x9f,
+                listSize: 0x34,
                 numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                bitsOffset: 0x74, // Whoa...
-                bitsCount: 0x84,
+                numLayersOffset: 0x3b,
+                bitstreamOffset: 0x74, // Whoa...
+                // FIXME: There are three bitstreams, probably for opaque and transparent objects
+                bitstreamByteCount: 0x84,
             };
             break;
         case 8:
@@ -528,17 +529,18 @@ class BlockRenderer {
                 posCount: 0x90,
                 clrOffset: 0x5c,
                 clrCount: 0x94,
-                coordOffset: 0x60,
-                coordCount: 0x96,
-                polyOffset: 0x64,
-                polyCount: 0xa2,
+                texcoordOffset: 0x60,
+                texcoordCount: 0x96,
+                shaderOffset: 0x64,
+                shaderCount: 0xa2,
                 shaderSize: 0x44,
-                chunkOffset: 0x68,
-                chunkCount: 0xa1, // TODO
-                chunkEntrySize: 0x1c,
+                listOffset: 0x68,
+                listCount: 0xa1, // TODO
+                listSize: 0x1c,
                 numListBits: 8,
-                bitsOffset: 0x78,
-                bitsCount: 0x84,
+                numLayersOffset: 0x41,
+                bitstreamOffset: 0x78,
+                bitstreamByteCount: 0x84,
             };
             break;
         default:
@@ -578,91 +580,49 @@ class BlockRenderer {
         // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = blockData.subarray(clrOffset, clrCount * 2);
 
-        const coordOffset = blockDv.getUint32(fields.coordOffset);
-        const coordCount = blockDv.getUint16(fields.coordCount);
+        const texcoordOffset = blockDv.getUint32(fields.texcoordOffset);
+        const texcoordCount = blockDv.getUint16(fields.texcoordCount);
         // const coordCount = 3200;
         // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
-        const coordBuffer = blockData.subarray(coordOffset, coordCount * 2 * 2);
+        const texcoordBuffer = blockData.subarray(texcoordOffset, texcoordCount * 2 * 2);
 
-        const polyOffset = blockDv.getUint32(fields.polyOffset);
-        const polyCount = blockDv.getUint8(fields.polyCount);
+        const shaderOffset = blockDv.getUint32(fields.shaderOffset);
+        const shaderCount = blockDv.getUint8(fields.shaderCount);
         // console.log(`Loading ${polyCount} polytypes from 0x${polyOffset.toString(16)}`);
 
-        interface PolygonType {
-            hasNormal: boolean;
-            hasColor: boolean;
-            hasTexCoord: boolean[];
-            numTexCoords: number;
-            hasTex0: boolean;
-            tex0Num: number;
-            hasTex1: boolean;
-            tex1Num: number;
+        interface Shader {
             numLayers: number;
+            tex0Num: number;
+            tex1Num: number;
+            hasTexCoord: boolean[];
             enableCull: boolean;
         }
 
-        const polyTypes: PolygonType[] = [];
-        offs = polyOffset;
-        for (let i = 0; i < polyCount; i++) {
-            const polyType = {
-                hasNormal: false,
-                hasColor: false,
-                hasTexCoord: nArray(8, () => false),
-                numTexCoords: 0,
-                hasTex0: false,
-                tex0Num: -1,
-                hasTex1: false,
-                tex1Num: -1,
+        const shaders: Shader[] = [];
+        offs = shaderOffset;
+        for (let i = 0; i < shaderCount; i++) {
+            const shader = {
                 numLayers: 0,
+                hasTexCoord: nArray(8, () => false),
+                tex0Num: -1,
+                tex1Num: -1,
                 enableCull: false,
             };
             // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
-            const tex0Flag = blockDv.getUint32(offs + 0x8);
-            // console.log(`tex0Flag: ${tex0Flag}`);
-            // if (tex0Flag == 1) {
-                // FIXME: tex0Flag doesn't seem to be present...
-                polyType.hasTex0 = true;
-                polyType.tex0Num = blockDv.getUint32(offs + 0x24);
-                // TODO: @offs+0x28: flags, including HasTransparency.
-            // }
-            const tex1Flag = blockDv.getUint32(offs + 0x14);
-            // console.log(`tex1Flag: ${tex1Flag}`);
-            // if (tex1Flag == 1) {
-                // FIXME: tex1Flag doesn't seem to be present...
-                polyType.hasTex1 = true;
-                //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
-                polyType.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
-                // TODO: @offs+0x30: flags, including HasTransparency.
-            // }
-
-            // TODO: This offset is valid for the demo; what about final?
-            polyType.numLayers = blockDv.getUint8(offs + 0x3b);
-
-            // console.log(`numLayers: ${polyType.numLayers}`);
-            const attrFlags = blockDv.getUint8(offs + 0x40);
-            // console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
-            polyType.hasNormal = (attrFlags & 1) != 0;
-            polyType.hasColor = (attrFlags & 2) != 0;
-            polyType.numTexCoords = blockDv.getUint8(offs + 0x41);
-            // if (attrFlags & 4) {
-            //     for (let j = 0; j < polyType.numTexCoords; j++) {
-            //         polyType.hasTexCoord[j] = true;
-            //     }
-            // }
-            // if (polyType.numTexCoords == 1) {
-            //     polyType.hasTex1 = false;
-            // }
-            // polyType.numTexCoords = polyType.numLayers;
-            for (let j = 0; j < polyType.numTexCoords; j++) {
-                polyType.hasTexCoord[j] = true;
+            shader.tex0Num = blockDv.getUint32(offs + 0x24);
+            //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
+            shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
+            shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
+            for (let j = 0; j < shader.numLayers; j++) {
+                shader.hasTexCoord[j] = true;
             }
-            const unk42 = blockDv.getUint8(offs + 0x42);
-            polyType.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
+            // FIXME: find this field's offset for demo files
+            shader.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
             // polyType.enableCull = false;
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
-            polyTypes.push(polyType);
+            shaders.push(shader);
             offs += fields.shaderSize;
         }
         
@@ -726,57 +686,55 @@ class BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const chunkOffset = blockDv.getUint32(fields.chunkOffset);
-        const chunkCount = blockDv.getUint8(fields.chunkCount);
+        const listOffset = blockDv.getUint32(fields.listOffset);
+        const listCount = blockDv.getUint8(fields.listCount);
         // console.log(`Loading ${chunkCount} display lists from 0x${chunkOffset.toString(16)}`);
 
-        const bitsOffset = blockDv.getUint32(fields.bitsOffset);
-        const bitsCount = blockDv.getUint16(fields.bitsCount);
+        const bitstreamOffset = blockDv.getUint32(fields.bitstreamOffset);
+        const bitstreamCount = blockDv.getUint16(fields.bitstreamByteCount);
         // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
-        let displayList = new ArrayBufferSlice(new ArrayBuffer(1));
-
-        const bits = new LowBitReader(blockDv, bitsOffset);
+        const bits = new LowBitReader(blockDv, bitstreamOffset);
         let done = false;
-        let curPolyType = 0;
+        let curShader = 0;
         while (!done) {
             const opcode = bits.get(4);
             switch (opcode) {
             case 1: // Set polygon type
-                curPolyType = bits.get(6);
+                curShader = bits.get(6);
                 // console.log(`setting poly type ${curPolyType}`);
                 break;
             case 2: // Geometry
-                const chunkNum = bits.get(fields.numListBits);
+                const listNum = bits.get(fields.numListBits);
                 // console.log(`Drawing display list #${chunkNum}`);
-                if (chunkNum >= chunkCount) {
-                    console.warn(`Can't draw display list #${chunkNum} (out of range)`);
+                if (listNum >= listCount) {
+                    console.warn(`Can't draw display list #${listNum} (out of range)`);
                     continue;
                 }
-                offs = chunkOffset + chunkNum * fields.chunkEntrySize;
+                offs = listOffset + listNum * fields.listSize;
                 const dlOffset = blockDv.getUint32(offs);
                 const dlSize = blockDv.getUint16(offs + 4);
                 // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
-                displayList = blockData.subarray(dlOffset, dlSize);
+                const displayList = blockData.subarray(dlOffset, dlSize);
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
                 vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
                 for (let t = 0; t < 8; t++) {
-                    vtxArrays[GX.Attr.TEX0 + t] = { buffer: coordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+                    vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
                 }
 
                 try {
-                    const polyType = polyTypes[curPolyType];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, polyType.enableCull);
-                    if (polyType.numTexCoords == 2) {
+                    const shader = shaders[curShader];
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, shader.enableCull);
+                    if (shader.numLayers == 2) {
                         newModel.setTextures([
-                            polyType.hasTex0 ? texColl.getTexture(device, texIds[polyType.tex0Num]) : null,
-                            polyType.hasTex1 ? texColl.getTexture(device, texIds[polyType.tex1Num]) : null,
+                            texColl.getTexture(device, texIds[shader.tex0Num]),
+                            texColl.getTexture(device, texIds[shader.tex1Num]),
                         ]);
-                    } else if (polyType.numTexCoords == 1) {
+                    } else if (shader.numLayers == 1) {
                         newModel.setTextures([
-                            polyType.hasTex0 ? texColl.getTexture(device, texIds[polyType.tex0Num]) : null, // ???
+                            texColl.getTexture(device, texIds[shader.tex0Num]), // ???
                         ]);
                     }
                     this.models.push(newModel);
@@ -786,29 +744,15 @@ class BlockRenderer {
                 break;
             case 3: // Set vertex attributes
                 const posDesc = bits.get(1);
-                // Normal is not used in Star Fox Adventures (?)
-                // const normalDesc = bits.get(1);
                 const colorDesc = bits.get(1);
                 const texCoordDesc = bits.get(1);
-                // console.log(`posDesc ${posDesc}`);
                 vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                // if (polyTypes[curPolyType].hasNormal) {
-                //     // console.log(`normalDesc ${normalDesc}`);
-                //     vcd[GX.Attr.NRM].type = normalDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                // } else {
-                    vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                // }
-                // if (polyTypes[curPolyType].hasColor) {
-                    // console.log(`colorDesc ${colorDesc}`);
-                    vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                // } else {
-                    // vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-                // }
-                if (polyTypes[curPolyType].hasTexCoord[0]) {
-                    // console.log(`texCoordDesc: ${texCoordDesc}`);
+                vcd[GX.Attr.NRM].type = GX.AttrType.NONE; // Normal is not used in Star Fox Adventures (?)
+                vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                if (shaders[curShader].hasTexCoord[0]) {
                     // Note: texCoordDesc applies to all texture coordinates in the vertex
                     for (let t = 0; t < 8; t++) {
-                        if (polyTypes[curPolyType].hasTexCoord[t]) {
+                        if (shaders[curShader].hasTexCoord[t]) {
                             vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                         } else {
                             vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
@@ -819,8 +763,7 @@ class BlockRenderer {
             case 4: // Set weights (skipped by SFA block renderer)
                 const numWeights = bits.get(4);
                 for (let i = 0; i < numWeights; i++) {
-                    const weight = bits.get(8);
-                    // console.log(`weight ${i}: ${weight}`);
+                    bits.get(8);
                 }
                 break;
             case 5: // End
