@@ -492,6 +492,8 @@ class BlockRenderer {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
+        // FIXME: This field is NOT a model type and doesn't reliably indicate
+        // the type of model.
         const modelType = blockDv.getUint16(4);
         let fields;
         switch (modelType) {
@@ -518,6 +520,7 @@ class BlockRenderer {
             };
             break;
         case 8:
+        case 264:
             fields = {
                 texOffset: 0x54,
                 texCount: 0xa0,
