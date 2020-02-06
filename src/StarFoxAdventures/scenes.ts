@@ -39,7 +39,7 @@ class SFABlockFetcher implements BlockFetcher {
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
-        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'crfort') {
+        if (subdir == 'linklevel' || subdir == 'insidegal') {
             console.log(`Holy smokes! Loading a deleted map!`);
             this.isDeletedMap = true;
         }
@@ -634,7 +634,7 @@ class BlockRenderer {
 
             // TODO: This offset is valid for the demo; what about final?
             polyType.numLayers = blockDv.getUint8(offs + 0x3b);
-            
+
             // console.log(`numLayers: ${polyType.numLayers}`);
             const attrFlags = blockDv.getUint8(offs + 0x40);
             // console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
