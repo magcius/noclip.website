@@ -39,7 +39,7 @@ class SFABlockFetcher implements BlockFetcher {
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
-        if (subdir == 'linklevel' || subdir == 'insidegal') {
+        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'crfort') {
             console.log(`Holy smokes! Loading a deleted map!`);
             this.isDeletedMap = true;
         }
@@ -497,7 +497,6 @@ class BlockRenderer {
         switch (modelType) {
         case 0:
             fields = {
-                // FIXME: these offsets are ALL broken.
                 texOffset: 0x54,
                 texCount: 0xa0,
                 posOffset: 0x58,
@@ -506,10 +505,15 @@ class BlockRenderer {
                 clrCount: 0x94,
                 coordOffset: 0x60,
                 coordCount: 0x96,
-                polyOffset: 0x68,
-                polyCount: 0x9a,
-                chunkOffset: 0x68,
-                bitsOffset: 0x54,
+                polyOffset: 0x64,
+                polyCount: 0xa0, // NOTE: "polys" are polygon attributes and shading information.
+                                 // Rareware called these "shaders".
+                shaderSize: 0x40,
+                chunkOffset: 0x68, // NOTE: "chunks" are display lists. Rareware called these "lists".
+                chunkCount: 0x9f,
+                chunkEntrySize: 0x34,
+                numListBits: 8, // ??? should be 6????
+                bitsOffset: 0x74, // Whoa...
                 bitsCount: 0x84,
             };
             break;
@@ -525,7 +529,11 @@ class BlockRenderer {
                 coordCount: 0x96,
                 polyOffset: 0x64,
                 polyCount: 0xa2,
+                shaderSize: 0x44,
                 chunkOffset: 0x68,
+                chunkCount: 0xa1, // TODO
+                chunkEntrySize: 0x1c,
+                numListBits: 8,
                 bitsOffset: 0x78,
                 bitsCount: 0x84,
             };
@@ -543,7 +551,8 @@ class BlockRenderer {
         //////////// TEXTURE STUFF TODO: move somewhere else
 
         const texOffset = blockDv.getUint32(fields.texOffset);
-        const texCount = blockDv.getUint8(fields.texCount);
+        // const texCount = blockDv.getUint8(fields.texCount);
+        const texCount = 8; // XXX: can't find the damn field...
         console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
@@ -555,15 +564,21 @@ class BlockRenderer {
         //////////////////////////
 
         const posOffset = blockDv.getUint32(fields.posOffset);
-        const posCount = blockDv.getUint16(fields.posCount);
+        //const posCount = blockDv.getUint16(fields.posCount);
+        const posCount = 3200; // XXX: can't find the damn field...
+        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = blockData.subarray(posOffset, posCount * 3 * 2);
 
         const clrOffset = blockDv.getUint32(fields.clrOffset);
-        const clrCount = blockDv.getUint16(fields.clrCount);
+        //const clrCount = blockDv.getUint16(fields.clrCount);
+        const clrCount = 3200;
+        console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = blockData.subarray(clrOffset, clrCount * 2);
 
         const coordOffset = blockDv.getUint32(fields.coordOffset);
-        const coordCount = blockDv.getUint16(fields.coordCount);
+        //const coordCount = blockDv.getUint16(fields.coordCount);
+        const coordCount = 3200;
+        console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
         const coordBuffer = blockData.subarray(coordOffset, coordCount * 2 * 2);
 
         const polyOffset = blockDv.getUint32(fields.polyOffset);
@@ -579,6 +594,7 @@ class BlockRenderer {
             tex0Num: number;
             hasTex1: boolean;
             tex1Num: number;
+            numLayers: number;
             enableCull: boolean;
         }
 
@@ -594,6 +610,7 @@ class BlockRenderer {
                 tex0Num: -1,
                 hasTex1: false,
                 tex1Num: -1,
+                numLayers: 0,
                 enableCull: false,
             };
             // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
@@ -614,26 +631,34 @@ class BlockRenderer {
                 polyType.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
                 // TODO: @offs+0x30: flags, including HasTransparency.
             // }
+            // TODO: This offset is valid for the demo; what about final?
+            polyType.numLayers = blockDv.getUint8(offs + 0x3b);
+            console.log(`numLayers: ${polyType.numLayers}`);
             const attrFlags = blockDv.getUint8(offs + 0x40);
             // console.log(`attrFlags: 0x${hexzero(attrFlags, 2)}`)
             polyType.hasNormal = (attrFlags & 1) != 0;
             polyType.hasColor = (attrFlags & 2) != 0;
-            polyType.numTexCoords = blockDv.getUint8(offs + 0x41);
-            if (attrFlags & 4) {
-                for (let j = 0; j < polyType.numTexCoords; j++) {
-                    polyType.hasTexCoord[j] = true;
-                }
-            }
-            if (polyType.numTexCoords == 1) {
-                polyType.hasTex1 = false;
+            // polyType.numTexCoords = blockDv.getUint8(offs + 0x41);
+            // if (attrFlags & 4) {
+            //     for (let j = 0; j < polyType.numTexCoords; j++) {
+            //         polyType.hasTexCoord[j] = true;
+            //     }
+            // }
+            // if (polyType.numTexCoords == 1) {
+            //     polyType.hasTex1 = false;
+            // }
+            polyType.numTexCoords = polyType.numLayers;
+            for (let j = 0; j < polyType.numTexCoords; j++) {
+                polyType.hasTexCoord[j] = true;
             }
             const unk42 = blockDv.getUint8(offs + 0x42);
-            polyType.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
+            // polyType.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
+            polyType.enableCull = false;
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
             polyTypes.push(polyType);
-            offs += 0x44;
+            offs += fields.shaderSize;
         }
         
         const vcd: GX_VtxDesc[] = [];
@@ -707,7 +732,8 @@ class BlockRenderer {
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
         const chunkOffset = blockDv.getUint32(fields.chunkOffset);
-        // console.log(`chunkOffset 0x${chunkOffset.toString(16)}`);
+        const chunkCount = blockDv.getUint8(fields.chunkCount);
+        console.log(`Loading ${chunkCount} display lists from 0x${chunkOffset.toString(16)}`);
 
         const bitsOffset = blockDv.getUint32(fields.bitsOffset);
         const bitsCount = blockDv.getUint16(fields.bitsCount);
@@ -723,16 +749,20 @@ class BlockRenderer {
             switch (opcode) {
             case 1: // Set polygon type
                 curPolyType = bits.get(6);
-                // console.log(`setting poly type ${curPolyType}`);
+                console.log(`setting poly type ${curPolyType}`);
                 break;
             case 2: // Geometry
-                const chunkNum = bits.get(8);
-                // console.log(`geometry chunk #${chunkNum}`);
-                offs = chunkOffset + chunkNum * 0x1C;
+                const chunkNum = bits.get(fields.numListBits);
+                console.log(`Drawing display list #${chunkNum}`);
+                if (chunkNum >= chunkCount) {
+                    console.warn(`Can't draw display list #${chunkNum}`);
+                    continue;
+                }
+                offs = chunkOffset + chunkNum * fields.chunkEntrySize;
                 const dlOffset = blockDv.getUint32(offs);
                 const dlSize = blockDv.getUint16(offs + 4);
+                console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
                 displayList = blockData.subarray(dlOffset, dlSize);
-                // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -761,24 +791,25 @@ class BlockRenderer {
                 break;
             case 3: // Set vertex attributes
                 const posDesc = bits.get(1);
+                // Normal is not used in Star Fox Adventures (?)
+                // const normalDesc = bits.get(1);
+                const colorDesc = bits.get(1);
+                const texCoordDesc = bits.get(1);
                 // console.log(`posDesc ${posDesc}`);
                 vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                if (polyTypes[curPolyType].hasNormal) {
-                    const normalDesc = bits.get(1);
-                    // console.log(`normalDesc ${normalDesc}`);
-                    vcd[GX.Attr.NRM].type = normalDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                } else {
+                // if (polyTypes[curPolyType].hasNormal) {
+                //     // console.log(`normalDesc ${normalDesc}`);
+                //     vcd[GX.Attr.NRM].type = normalDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                // } else {
                     vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                }
-                if (polyTypes[curPolyType].hasColor) {
-                    const colorDesc = bits.get(1);
+                // }
+                // if (polyTypes[curPolyType].hasColor) {
                     // console.log(`colorDesc ${colorDesc}`);
                     vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                } else {
-                    vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-                }
+                // } else {
+                    // vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
+                // }
                 if (polyTypes[curPolyType].hasTexCoord[0]) {
-                    const texCoordDesc = bits.get(1);
                     // console.log(`texCoordDesc: ${texCoordDesc}`);
                     // Note: texCoordDesc applies to all texture coordinates in the vertex
                     for (let t = 0; t < 8; t++) {
@@ -790,7 +821,7 @@ class BlockRenderer {
                     }
                 }
                 break;
-            case 4: // Set weights
+            case 4: // Set weights (skipped by SFA block renderer)
                 const numWeights = bits.get(4);
                 for (let i = 0; i < numWeights; i++) {
                     const weight = bits.get(8);
@@ -801,7 +832,8 @@ class BlockRenderer {
                 done = true;
                 break;
             default:
-                throw Error(`Unknown model bits opcode ${opcode}`);
+                console.warn(`Skipping unknown model bits opcode ${opcode}`);
+                break;
             }
         }
     }
@@ -947,15 +979,20 @@ class SFAMapDesc implements Viewer.SceneDesc {
                 }
 
                 const blockColl = blockCollections[blockInfo.trkblk];
-                const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.base);
-                if (!blockRenderer) {
-                    console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} base ${blockInfo.base}) not found`);
-                    continue;
-                }
+                try {
+                    const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.base);
+                    if (!blockRenderer) {
+                        console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} base ${blockInfo.base}) not found`);
+                        continue;
+                    }
 
-                const modelMatrix: mat4 = mat4.create();
-                mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
+                    const modelMatrix: mat4 = mat4.create();
+                    mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
+                    blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
+                } catch (e) {
+                    console.warn(`Skipped block at ${x},${y} due to exception:`);
+                    console.error(e);
+                }
             }
         }
         if (blockCollections.length == 0)
