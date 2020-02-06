@@ -158,7 +158,7 @@ const SFA_GAME_INFO: GameInfo = {
     },
 }
 
-class SFADemoBlockFetcher {
+class SFADemoBlockFetcher implements BlockFetcher {
     blocksTab: DataView;
     blocksBin: ArrayBufferSlice;
 
@@ -906,7 +906,7 @@ class BlockCollection {
     tex1Bin: ArrayBufferSlice;
     texColl: TextureCollection;
 
-    public async create(device: GfxDevice, context: SceneContext, trkblk: number, gameInfo: GameInfo) {
+    public async create(device: GfxDevice, context: SceneContext,  trkblk: number, gameInfo: GameInfo) {
         const dataFetcher = context.dataFetcher;
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(trkblk, gameInfo);
@@ -992,6 +992,103 @@ class SFAMapDesc implements Viewer.SceneDesc {
         }
         if (blockCollections.length == 0)
             console.warn(`No blocks could be rendered.`);
+
+        return sfaRenderer;
+    }
+}
+
+class BlockExhibitFetcher implements BlockFetcher {
+    blocksTab: DataView;
+    blocksBin: ArrayBufferSlice;
+    public blockOffsets: number[] = [];
+
+    constructor(public useCompression: boolean) {
+    }
+
+    public async create(dataFetcher: DataFetcher, directory: string, blocksTabName: string, blocksBinName: string) {
+        this.blocksTab = (await dataFetcher.fetchData(`${directory}/${blocksTabName}`)).createDataView();
+        this.blocksBin = await dataFetcher.fetchData(`${directory}/${blocksBinName}`);
+        let offs = 0;
+        while (offs < this.blocksTab.byteLength) {
+            const tabValue = this.blocksTab.getUint32(offs);
+            if (tabValue == 0xFFFFFFFF) {
+                break;
+            }
+            if ((tabValue >> 24) == 0x10) {
+                this.blockOffsets.push(tabValue & 0xFFFFFF);
+            }
+            offs += 4;
+        }
+        console.log(`Loaded ${this.blockOffsets.length} blocks`)
+    }
+
+    public getBlock(num: number): ArrayBufferSlice | null {
+        if (num < 0 || num >= this.blockOffsets.length) {
+            return null;
+        }
+        const blockOffset = this.blockOffsets[num];
+        // console.log(`Loading block from offset 0x${blockOffset.toString(16)}`);
+        const blocksBinPart = this.blocksBin.slice(blockOffset);
+        if (this.useCompression) {
+            const uncomp = loadRes(blocksBinPart);
+            return uncomp;
+        } else {
+            return blocksBinPart;
+        }
+    }
+}
+
+class SFABlockExhibitDesc implements Viewer.SceneDesc {
+    public id: string;
+    texColl: TextureCollection;
+
+    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+        this.id = `${subdir}blocks`;
+    }
+    
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const pathBase = this.gameInfo.pathBase;
+        const directory = `${pathBase}/${this.subdir}`;
+        const dataFetcher = context.dataFetcher;
+        console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
+
+        const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
+        const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
+        this.texColl = new TextureCollection(tex1Tab, tex1Bin);
+        const blockFetcher = new BlockExhibitFetcher(true); // FIXME: Demo files don't use compression...
+        await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}.zlb.bin`);
+
+        const sfaRenderer = new SFARenderer(device);
+        const X_BLOCKS = 10;
+        let done = false;
+        for (let y = 0; !done; y++) {
+            for (let x = 0; x < X_BLOCKS && !done; x++) {
+                const blockNum = y * X_BLOCKS + x;
+                if (blockNum >= blockFetcher.blockOffsets.length) {
+                    done = true;
+                    continue;
+                }
+                try {
+                    const blockData = blockFetcher.getBlock(blockNum);
+                    if (!blockData) {
+                        console.warn(`Failed to load data for block ${blockNum}`);
+                        continue;
+                    }
+                    const blockRenderer = new BlockRenderer(device, blockData, this.texColl);
+                    if (!blockRenderer) {
+                        console.warn(`Block ${blockNum} not found`);
+                        continue;
+                    }
+
+                    const modelMatrix: mat4 = mat4.create();
+                    mat4.fromTranslation(modelMatrix, [960 * x, 0, 960 * y]);
+                    blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
+                } catch (e) {
+                    console.warn(`Skipped block at ${x},${y} due to exception:`);
+                    console.error(e);
+                }
+            }
+        }
 
         return sfaRenderer;
     }
@@ -1108,6 +1205,11 @@ const sceneDescs = [
     // new SFAMapDesc(115, 'loc115', 'Location 115'),
     // new SFAMapDesc(116, 'loc116', 'Location 116'), 
     // (end)
+
+    'Block Exhibits',
+    new SFABlockExhibitDesc('capeclaw', 'mod48', 'Cape Claw Blocks'),
+    new SFABlockExhibitDesc('crfort', 'mod19', 'Cloudrunner Fort Blocks'),
+    new SFABlockExhibitDesc('desert', 'mod29', 'Desert Blocks'),
 
     'Demo',
     new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
