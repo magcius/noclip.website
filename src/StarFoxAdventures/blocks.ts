@@ -9,6 +9,8 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
 import { hexzero, nArray } from '../util';
 import * as GX from '../gx/gx_enum';
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { GXMaterial } from '../gx/gx_material';
 
 export abstract class BlockFetcher {
     public abstract getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null;
@@ -218,6 +220,7 @@ export class BlockRenderer {
             tex1Num: number;
             hasTexCoord: boolean[];
             enableCull: boolean;
+            flags: number;
         }
 
         const shaders: Shader[] = [];
@@ -229,25 +232,27 @@ export class BlockRenderer {
                 tex0Num: -1,
                 tex1Num: -1,
                 enableCull: false,
+                flags: 0,
             };
             // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
             shader.tex0Num = blockDv.getUint32(offs + 0x24);
             //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
             //XXX: for demo
-            // shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
-            shader.tex1Num = blockDv.getUint32(offs + 0x2c); // ???
+            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
+            // shader.tex1Num = blockDv.getUint32(offs + 0x2c); // ???
             // shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
             shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
             }
+            shader.flags = blockDv.getUint32(offs + 0x3c);
             // FIXME: find this field's offset for demo files
             if (fields.oldShaders) {
                 // FIXME: this is from decompilation but it doesn't seem to work in cloudtreasure...
                 // shader.enableCull = (blockDv.getUint8(offs + 0x38) & 0x4) != 0;
                 shader.enableCull = true;
             } else {
-                shader.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
+                shader.enableCull = (shader.flags & 0x8) != 0;
             }
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
@@ -286,7 +291,7 @@ export class BlockRenderer {
 
         vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
         vat[3][GX.Attr.NBT] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_NBT };
-        vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -297,21 +302,21 @@ export class BlockRenderer {
         vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
 
         vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: fields.oldVat ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
-        vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
         vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
         vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
         vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
 
         vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
         vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+        vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGB565, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -364,17 +369,54 @@ export class BlockRenderer {
                 try {
                     const shader = shaders[curShader];
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, shader.enableCull);
-                    if (shader.numLayers == 2) {
-                        newModel.setTextures([
-                            texColl.getTexture(device, texIds[shader.tex0Num]),
-                            null,
-                            // texColl.getTexture(device, texIds[shader.tex0Num]),
-                        ]);
-                    } else if (shader.numLayers == 1) {
-                        newModel.setTextures([
-                            texColl.getTexture(device, texIds[shader.tex0Num]), // ???
-                        ]);
+
+                    const mb = new GXMaterialBuilder('Basic');
+                    mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
+                    mb.setZMode(true, GX.CompareType.LESS, true);
+                    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                    mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
+                    let tevStage = 0;
+                    let texcoordId = GX.TexCoordID.TEXCOORD0;
+                    let texmapId = GX.TexMapID.TEXMAP0;
+                    let texGenSrc = GX.TexGenSrc.TEX0;
+                    for (let i = 0; i < shader.numLayers; i++) {
+                        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
+
+                        // mb.setTevKColor (does not exist)
+                        // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
+                        mb.setTevDirect(tevStage);
+                        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+                        mb.setTevColorIn(tevStage, GX.CombineColorInput.ZERO, GX.CombineColorInput.ONE /*GX.CombineColorInput.KONST*/, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
+                        mb.setTevAlphaIn(tevStage, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+                        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+                        mb.setTevDirect(tevStage + 1);
+                        mb.setTevOrder(tevStage + 1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+                        mb.setTevColorIn(tevStage + 1, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.RASA, GX.CombineColorInput.ZERO);
+                        mb.setTevAlphaIn(tevStage + 1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+                        mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+                        mb.setTevDirect(tevStage + 2);
+                        mb.setTevOrder(tevStage + 2, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
+                        mb.setTevColorIn(tevStage + 2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+                        mb.setTevAlphaIn(tevStage + 2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
+                        mb.setTevColorOp(tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+                        tevStage += 3;
+                        texcoordId++;
+                        texmapId++;
+                        texGenSrc++;
                     }
+                    newModel.setMaterial(mb.finish());
+
+                    newModel.setTextures([
+                        texColl.getTexture(device, texIds[shader.tex0Num]),
+                        texColl.getTexture(device, texIds[shader.tex1Num]),
+                    ]);
+
                     this.models.push(newModel);
                 } catch (e) {
                     console.error(e);
