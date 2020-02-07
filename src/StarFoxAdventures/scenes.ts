@@ -286,7 +286,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
     public id: string;
     texColl: TextureCollection;
 
-    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useVeryOldBlocks = false) {
+    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useVeryOldBlocks = false, private useAncientTextures = false) {
         this.id = `${subdir}blocks`;
     }
     
@@ -296,15 +296,21 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
 
-        const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
-        const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
-        this.texColl = new TextureCollection(tex1Tab, tex1Bin);
+        if (this.useAncientTextures) {
+            const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
+            const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
+            this.texColl = new TextureCollection(texTab, texBin, true);
+        } else {
+            const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
+            const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
+            this.texColl = new TextureCollection(tex1Tab, tex1Bin, false);
+        }
         const blockFetcher = new BlockExhibitFetcher(this.useCompression);
         await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}${this.useCompression ? '.zlb' : ''}.bin`);
 
         const sfaRenderer = new SFARenderer(device);
         const X_BLOCKS = 10;
-        const Y_BLOCKS = 1;
+        const Y_BLOCKS = 10;
         let done = false;
         for (let y = 0; y < Y_BLOCKS && !done; y++) {
             for (let x = 0; x < X_BLOCKS && !done; x++) {
@@ -510,7 +516,7 @@ const sceneDescs = [
     new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
 
     'Demo Block Exhibits',
-    new SFABlockExhibitDesc('', 'BLOCKS', 'Demo Blocks', SFADEMO_GAME_INFO, false, true),
+    new SFABlockExhibitDesc('', 'BLOCKS', 'Demo Blocks', SFADEMO_GAME_INFO, false, true, true),
 ];
 
 const id = 'sfa';

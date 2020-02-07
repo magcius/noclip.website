@@ -63,56 +63,69 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture): DecodedTexture {
     return { loadedTexture: loaded, gfxTexture, gfxSampler };
 }
 
-function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number): (DecodedTexture | null) {
+function isValidTextureTabValue(tabValue: number, isAncient: boolean) {
+    if (isAncient) {
+        return tabValue != 0xFFFFFFFF;
+    } else {
+        return tabValue != 0xFFFFFFFF && (tabValue & 0x80000000) != 0;
+    }
+}
+
+function loadFirstValidTexture(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, isAncient: boolean): DecodedTexture | null {
+    const tabDv = tab.createDataView();
+    let firstValidId = 0;
+    let found = false;
+    for (let i = 0; i < tab.byteLength; i += 4) {
+        const tabValue = tabDv.getUint32(i);
+        if (tabValue == 0xFFFFFFFF) {
+            console.log(`no valid id found`);
+            break;
+        }
+        if (isValidTextureTabValue(tabValue, isAncient)) {
+            found = true;
+            break;
+        }
+        ++firstValidId;
+    }
+    if (!found) {
+        return null;
+    }
+    console.log(`loading first valid id ${firstValidId}`);
+    return loadTextureFromTable(device, tab, bin, firstValidId);
+}
+
+function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number, isAncient: boolean = false): (DecodedTexture | null) {
     const tabDv = tab.createDataView();
     const idOffs = id * 4;
     if (idOffs < 0 || idOffs + 4 >= tabDv.byteLength) {
         console.warn(`Texture id 0x${id.toString(16)} out of range; using first valid texture!`);
-        let firstValidId = 0;
-        for (let i = 0; i < tab.byteLength; i += 4) {
-            if (tabDv.getUint32(i) & 0x80000000) {
-                break;
-            }
-            ++firstValidId;
-        }
-        return loadTextureFromTable(device, tab, bin, firstValidId);
-        // return null;
-        // return null;
+        return loadFirstValidTexture(device, tab, bin, isAncient);
     }
     const tab0 = tabDv.getUint32(id * 4);
-    // console.log(`tex ${id} tab 0x${hexzero(tab0, 8)}`);
-    if (tab0 & 0x80000000) {
+    if (isValidTextureTabValue(tab0, isAncient)) {
         // Loadable texture (?)
-        const binOffs = (tab0 & 0x00FFFFFF) * 2;
+        const binOffs = isAncient ? tab0 : ((tab0 & 0x00FFFFFF) * 2);
         const compData = bin.slice(binOffs);
-        const uncompData = loadRes(compData);
+        const uncompData = isAncient ? compData : loadRes(compData);
         const loaded = loadTex(uncompData);
         const decoded = decodeTex(device, loaded);
         return decoded;
     } else {
         // TODO: also seen is value 0x01000000
         console.warn(`Texture id 0x${id.toString(16)} not found in table; using first valid texture!`);
-        let firstValidId = 0;
-        for (let i = 0; i < tab.byteLength; i += 4) {
-            if (tabDv.getUint32(i) & 0x80000000) {
-                break;
-            }
-            ++firstValidId;
-        }
-        return loadTextureFromTable(device, tab, bin, firstValidId);
-        // return null;
+        return loadFirstValidTexture(device, tab, bin, isAncient);
     }
 }
 
 export class TextureCollection {
     decodedTextures: (DecodedTexture | null)[] = [];
 
-    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice) {
+    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean) {
     }
 
     public getTexture(device: GfxDevice, textureNum: number) {
         if (this.decodedTextures[textureNum] === undefined) {
-            this.decodedTextures[textureNum] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, textureNum);
+            this.decodedTextures[textureNum] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, textureNum, this.isAncient);
         }
 
         return this.decodedTextures[textureNum];
