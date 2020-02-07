@@ -61,9 +61,9 @@ function createRelNameTable(symbolMap: SymbolMap) {
 
     for (let i = 0; i < entryCount; i++) {
         const offset = i * 8;
-        const id = nameTableView.getUint16(offset + 0);
-        const ptr = nameTableView.getUint32(offset + 4);
-        const strOffset = ptr - 0x8033a648;
+        const id = nameTableView.getUint16(offset + 0x00);
+        const ptr = nameTableView.getUint32(offset + 0x04);
+        const strOffset = ptr - 0x8033A648;
         const endOffset = stringsBytes.indexOf(0, strOffset);
         const relName = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
         relTable[id] = relName;

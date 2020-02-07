@@ -598,6 +598,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox2;
     private backCloud: J3DModelInstance;
     private kasumiMae: J3DModelInstance | null = null;
+    private kasumiMaeC0 = colorNewCopy(TransparentBlack);
     private kasumiMaeK0 = colorNewCopy(TransparentBlack);
     private usoUmi: J3DModelInstance | null = null;
 
@@ -674,8 +675,9 @@ class d_a_vrbox2 extends fopAc_ac_c {
         this.backCloud.setColorOverride(ColorKind.K0, envLight.vrKumoCol);
 
         if (this.kasumiMae !== null) {
-            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeCol);
-            this.kasumiMaeK0.r = envLight.vrKumoCol.r;
+            colorCopy(this.kasumiMaeC0, envLight.vrKasumiMaeCol, 0.0);
+            this.kasumiMaeK0.r = envLight.vrKumoCol.a;
+            this.kasumiMae.setColorOverride(ColorKind.C0, this.kasumiMaeC0);
             this.kasumiMae.setColorOverride(ColorKind.K0, this.kasumiMaeK0);
         }
 

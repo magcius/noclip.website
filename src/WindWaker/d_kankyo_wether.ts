@@ -606,16 +606,20 @@ export class dKankyo_vrkumo_Packet {
         this.enabled = true;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the color.
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
@@ -630,7 +634,9 @@ export class dKankyo_vrkumo_Packet {
 
         const envLight = globals.g_env_light;
 
-        const farPlane = globals.dStage_dt.stag.farPlane - 10000.0;
+        // Clouds are projected onto a dome that hovers around the camera.
+
+        const domeRadius = globals.dStage_dt.stag.farPlane - 10000.0;
         const ddraw = this.ddraw;
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
@@ -643,114 +649,116 @@ export class dKankyo_vrkumo_Packet {
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-            for (let i = 0; i < 100; i++) {
+            ddraw.begin(GX.Command.DRAW_QUADS);
+
+            for (let i = 0; i < this.instances.length; i++) {
                 const kumo = this.instances[i];
 
                 if (kumo.alpha <= 0.000001)
                     continue;
 
-                const baseAngle = ((textureIdx + i) & 0x0F) * 1/16;
-                const theta_01 = kumo.distFalloff * (1.0 - Math.pow(baseAngle, 3)) * (0.45 + (this.strength * 0.55));
+                const size = kumo.distFalloff * (1.0 - Math.pow(((textureIdx + i) & 0x0F) * 1/16, 3)) * (0.45 + (this.strength * 0.55));
 
                 const bounceAnim = Math.sin(textureIdx + 0.0001 * this.bounceAnimTimer);
-                const sizeAnim = theta_01 + (0.06 * theta_01) * bounceAnim * kumo.distFalloff;
+                const sizeAnim = size + (0.06 * size) * bounceAnim * kumo.distFalloff;
                 const height = sizeAnim + sizeAnim * kumo.height;
-                if (height < 0)
-                    debugger;
                 const m0 = 0.15 * sizeAnim;
                 const m1 = 0.65 * sizeAnim;
 
-                let out0 = 0, out1 = 0;
+                let polarOffs = 0, azimuthalOffs = 0;
                 if (textureIdx !== 0) {
-                    const cloudRep = 0;
+                    const cloudRep = i & 3;
                     if (cloudRep === 0) {
                         if (textureIdx === 2) {
-                            out0 = m1;
-                            out1 = m0;
+                            polarOffs = m1;
+                            azimuthalOffs = m0;
                         }
                     } else if (cloudRep === 1) {
                         if (textureIdx === 1) {
-                            out0 = -m0;
-                            out1 = m0;
+                            polarOffs = -m0;
+                            azimuthalOffs = m0;
                         } else if (textureIdx === 2) {
-                            out0 = -m1;
-                            out1 = m1;
+                            polarOffs = -m1;
+                            azimuthalOffs = m1;
                         }
                     } else if (cloudRep === 2) {
                         if (textureIdx === 1) {
-                            out0 = m1;
-                            out1 = -m1;
+                            polarOffs = m1;
+                            azimuthalOffs = -m1;
                         } else if (textureIdx === 2) {
-                            out0 = m0;
-                            out1 = -m1;
+                            polarOffs = m0;
+                            azimuthalOffs = -m1;
                         }
                     } else if (cloudRep === 3) {
                         if (textureIdx === 1) {
-                            out0 = -m1;
+                            polarOffs = -m1;
                         } else if (textureIdx === 2) {
-                            out0 = -m0;
-                            out1 = m0;
+                            polarOffs = -m0;
+                            azimuthalOffs = m0;
                         }
                     }
                 }
 
-                const rot = Math.atan2(kumo.position[0], kumo.position[2]) + out1;
-                const pitchBottom = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + out0;
-                const normalPitch = Math.pow(Math.min(pitchBottom / 1.9, 1.0), 3);
-                const offs0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
-                const offs1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
+                const polarY1 = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + polarOffs;
+                const normalPitch = Math.pow(Math.min(polarY1 / 1.9, 1.0), 3);
 
-                const pitchTop = Math.min(pitchBottom + 0.9 * height * (1.0 + -4.0 * normalPitch), 1.21);
+                const azimuthal = Math.atan2(kumo.position[0], kumo.position[2]) + azimuthalOffs;
+                const azimuthalOffsY0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
+                const azimuthalOffsY1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
+
+                const polarY0 = Math.min(polarY1 + 0.9 * height * (1.0 + -4.0 * normalPitch), 1.21);
 
                 let x = 0, y = 0, z = 0;
-
-                ddraw.begin(GX.Command.DRAW_QUADS);
-
-                // Generate a quad along a sphere around the player.
-                x = Math.cos(pitchTop) * Math.sin(rot + offs0);
-                y = Math.sin(pitchTop);
-                z = Math.cos(pitchTop) * Math.cos(rot + offs0);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-
-                x = Math.cos(pitchTop) * Math.sin(rot - offs0);
-                y = Math.sin(pitchTop);
-                z = Math.cos(pitchTop) * Math.cos(rot - offs0);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-
-                x = Math.cos(pitchBottom) * Math.sin(rot - offs1);
-                y = Math.sin(pitchBottom);
-                z = Math.cos(pitchBottom) * Math.cos(rot - offs1);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-
-                x = Math.cos(pitchBottom) * Math.sin(rot + offs1);
-                y = Math.sin(pitchBottom);
-                z = Math.cos(pitchBottom) * Math.cos(rot + offs1);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-
-                ddraw.end();
 
                 colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.vrKumoCenterCol, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
 
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-                submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+                // Project onto sphere.
+                x = Math.cos(polarY0) * Math.sin(azimuthal + azimuthalOffsY0);
+                y = Math.sin(polarY0);
+                z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+                x = Math.cos(polarY0) * Math.sin(azimuthal - azimuthalOffsY0);
+                y = Math.sin(polarY0);
+                z = Math.cos(polarY0) * Math.cos(azimuthal - azimuthalOffsY0);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+                x = Math.cos(polarY1) * Math.sin(azimuthal - azimuthalOffsY1);
+                y = Math.sin(polarY1);
+                z = Math.cos(polarY1) * Math.cos(azimuthal - azimuthalOffsY1);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+                x = Math.cos(polarY1) * Math.sin(azimuthal + azimuthalOffsY1);
+                y = Math.sin(polarY1);
+                z = Math.cos(polarY1) * Math.cos(azimuthal + azimuthalOffsY1);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
                 // const ctx = getDebugOverlayCanvas2D();
                 // colorCopy(materialParams.u_Color[ColorKind.C0], Magenta, kumo.alpha);
                 // drawWorldSpacePoint(ctx, viewerInput.camera, kumo.position, materialParams.u_Color[ColorKind.C0], 300 * Math.abs(kumo.height));
             }
+
+            ddraw.end();
+
+            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
 
         ddraw.endAndUpload(device, renderInstManager);
@@ -1190,7 +1198,7 @@ export class dKankyo_star_Packet {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
 
         const mb = new GXMaterialBuilder();
-        // noclip modification: Use VTX instead of separate draw calls for the alpha.
+        // noclip modification: Use VTX instead of separate draw calls for the color.
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
