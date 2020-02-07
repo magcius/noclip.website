@@ -139,6 +139,7 @@ export class BlockRenderer {
                 bitstreamOffset: 0x74, // Whoa...
                 // FIXME: There are three bitstreams, probably for opaque and transparent objects
                 bitstreamByteCount: 0x84,
+                oldVat: true,
             };
             break;
         case 8:
@@ -162,6 +163,7 @@ export class BlockRenderer {
                 numLayersOffset: 0x41,
                 bitstreamOffset: 0x78,
                 bitstreamByteCount: 0x84,
+                oldVat: false,
             };
             break;
         default:
@@ -190,22 +192,19 @@ export class BlockRenderer {
         //////////////////////////
 
         const posOffset = blockDv.getUint32(fields.posOffset);
-        const posCount = blockDv.getUint16(fields.posCount);
-        // const posCount = 3200; // XXX: can't find the damn field...
+        // const posCount = blockDv.getUint16(fields.posCount);
         // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-        const vertBuffer = blockData.subarray(posOffset, posCount * 3 * 2);
+        const vertBuffer = blockData.subarray(posOffset);
 
         const clrOffset = blockDv.getUint32(fields.clrOffset);
-        const clrCount = blockDv.getUint16(fields.clrCount);
-        // const clrCount = 3200;
+        // const clrCount = blockDv.getUint16(fields.clrCount);
         // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
-        const clrBuffer = blockData.subarray(clrOffset, clrCount * 2);
+        const clrBuffer = blockData.subarray(clrOffset);
 
         const texcoordOffset = blockDv.getUint32(fields.texcoordOffset);
-        const texcoordCount = blockDv.getUint16(fields.texcoordCount);
-        // const coordCount = 3200;
+        // const texcoordCount = blockDv.getUint16(fields.texcoordCount);
         // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
-        const texcoordBuffer = blockData.subarray(texcoordOffset, texcoordCount * 2 * 2);
+        const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
@@ -232,7 +231,9 @@ export class BlockRenderer {
             // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
             shader.tex0Num = blockDv.getUint32(offs + 0x24);
             //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
-            shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
+            //XXX: for demo
+            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
+            // shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
             shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
@@ -276,17 +277,18 @@ export class BlockRenderer {
         vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
 
         vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[3][GX.Attr.NBT] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_NBT };
         vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         
-        vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
 
-        vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 3, compCnt: GX.CompCnt.POS_XYZ };
+        vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: fields.oldVat ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
         vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
         vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };

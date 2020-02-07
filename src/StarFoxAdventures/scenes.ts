@@ -36,7 +36,7 @@ class SFABlockFetcher implements BlockFetcher {
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
-        if (subdir == 'linklevel' || subdir == 'insidegal') {
+        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'crfort') {
             console.log(`Holy smokes! Loading a deleted map!`);
             this.isDeletedMap = true;
         }
