@@ -36,7 +36,7 @@ class SFABlockFetcher implements BlockFetcher {
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
-        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'crfort') {
+        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'cloudtreasure') {
             console.log(`Holy smokes! Loading a deleted map!`);
             this.isDeletedMap = true;
         }
@@ -96,31 +96,42 @@ export const SFA_GAME_INFO: GameInfo = {
     },
     subdirs: {
         0: 'animtest',
+        1: 'animtest',
         2: 'animtest',
-        3: 'arwing', // ???
+        3: 'arwing',
+        4: 'dragrock',
         5: 'animtest',
         6: 'dfptop',
         7: 'volcano',
+        8: 'animtest',
         9: 'mazecave',
         10: 'dragrockbot',
-        11: 'crfort', // ???
+        11: 'dfalls',
         12: 'swaphol',
+        13: 'shipbattle',
         14: 'nwastes',
         15: 'warlock',
         16: 'shop',
+        17: 'animtest',
         18: 'crfort',
         19: 'swapholbot',
         20: 'wallcity',
         21: 'lightfoot',
+        22: 'cloudtreasure',
+        23: 'animtest',
         24: 'clouddungeon',
         25: 'mmpass',
         26: 'darkicemines',
+        27: 'animtest',
         28: 'desert',
-        29: 'shipbattle', // ???
+        29: 'animtest',
         30: 'icemountain',
         31: 'animtest',
+        32: 'animtest',
+        33: 'animtest',
         34: 'darkicemines2',
         35: 'bossgaldon',
+        36: 'animtest',
         37: 'insidegal',
         38: 'magiccave',
         39: 'dfshrine',
@@ -130,11 +141,16 @@ export const SFA_GAME_INFO: GameInfo = {
         43: 'dbshrine',
         44: 'nwshrine',
         45: 'worldmap',
+        46: 'animtest',
         47: 'capeclaw',
+        48: 'dbay',
+        49: 'animtest',
         50: 'cloudrace',
         51: 'bossdrakor',
+        52: 'animtest',
         53: 'bosstrex',
         54: 'linkb',
+        55: 'cloudjoin',
         56: 'arwingtoplanet',
         57: 'arwingdarkice',
         58: 'arwingcloud',

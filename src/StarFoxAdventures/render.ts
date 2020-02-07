@@ -76,7 +76,16 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
         return decoded;
     } else {
         // TODO: also seen is value 0x01000000
-        return null;
+        console.warn(`Texture id 0x${id} not found in table; using first valid texture!`);
+        let firstValidId = 0;
+        for (let i = 0; i < tab.byteLength; i += 4) {
+            if (tabDv.getUint32(i) & 0x80000000) {
+                break;
+            }
+            ++firstValidId;
+        }
+        return loadTextureFromTable(device, tab, bin, firstValidId);
+        // return null;
     }
 }
 
@@ -109,6 +118,8 @@ export class ModelInstance {
         mb.setZMode(true, GX.CompareType.LESS, true);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        // mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
+        // mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
         mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
         mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);

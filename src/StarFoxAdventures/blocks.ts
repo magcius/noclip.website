@@ -134,12 +134,15 @@ export class BlockRenderer {
                 listOffset: 0x68,
                 listCount: 0x9f,
                 listSize: 0x34,
-                numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort!
+                //numListBits: 8, // ??? should be 6 according to decompilation of demo????
                 numLayersOffset: 0x3b,
                 bitstreamOffset: 0x74, // Whoa...
                 // FIXME: There are three bitstreams, probably for opaque and transparent objects
                 bitstreamByteCount: 0x84,
                 oldVat: true,
+                hasYTranslate: false,
+                oldShaders: true,
             };
             break;
         case 8:
@@ -164,6 +167,8 @@ export class BlockRenderer {
                 bitstreamOffset: 0x78,
                 bitstreamByteCount: 0x84,
                 oldVat: false,
+                hasYTranslate: true,
+                oldShaders: false,
             };
             break;
         default:
@@ -174,13 +179,10 @@ export class BlockRenderer {
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
 
-        this.yTranslate = blockDv.getInt16(0x8e); // TODO: fix for demo
-
         //////////// TEXTURE STUFF TODO: move somewhere else
 
         const texOffset = blockDv.getUint32(fields.texOffset);
         const texCount = blockDv.getUint8(fields.texCount);
-        // const texCount = 8; // XXX: can't find the damn field...
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
@@ -232,15 +234,21 @@ export class BlockRenderer {
             shader.tex0Num = blockDv.getUint32(offs + 0x24);
             //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
             //XXX: for demo
-            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
+            // shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
+            shader.tex1Num = blockDv.getUint32(offs + 0x2c); // ???
             // shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
             shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
             }
             // FIXME: find this field's offset for demo files
-            shader.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
-            // polyType.enableCull = false;
+            if (fields.oldShaders) {
+                // FIXME: this is from decompilation but it doesn't seem to work in cloudtreasure...
+                // shader.enableCull = (blockDv.getUint8(offs + 0x38) & 0x4) != 0;
+                shader.enableCull = true;
+            } else {
+                shader.enableCull = (blockDv.getUint32(offs + 0x3c) & 0x8) != 0;
+            }
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
@@ -317,6 +325,12 @@ export class BlockRenderer {
         const bitstreamCount = blockDv.getUint16(fields.bitstreamByteCount);
         // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
+        if (fields.hasYTranslate) {
+            this.yTranslate = blockDv.getInt16(0x8e);
+        } else {
+            this.yTranslate = 0;
+        }
+
         const bits = new LowBitReader(blockDv, bitstreamOffset);
         let done = false;
         let curShader = 0;
@@ -337,7 +351,7 @@ export class BlockRenderer {
                 offs = listOffset + listNum * fields.listSize;
                 const dlOffset = blockDv.getUint32(offs);
                 const dlSize = blockDv.getUint16(offs + 4);
-                // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
+                console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
                 const displayList = blockData.subarray(dlOffset, dlSize);
 
                 const vtxArrays: GX_Array[] = [];
@@ -353,7 +367,8 @@ export class BlockRenderer {
                     if (shader.numLayers == 2) {
                         newModel.setTextures([
                             texColl.getTexture(device, texIds[shader.tex0Num]),
-                            texColl.getTexture(device, texIds[shader.tex1Num]),
+                            null,
+                            // texColl.getTexture(device, texIds[shader.tex0Num]),
                         ]);
                     } else if (shader.numLayers == 1) {
                         newModel.setTextures([
