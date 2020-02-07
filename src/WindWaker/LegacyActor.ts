@@ -1651,7 +1651,7 @@ export function spawnLegacyActor(renderer: WindWakerRenderer, roomRenderer: Wind
             buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
         });
         // Forsaken Fortress
-        else if (figureId >= 0x74 && figureId <= 0xFF) fetchArchive(`Figure6`).then((rarc) => {
+        else if (figureId >= 0x74 && figureId < 0xFF) fetchArchive(`Figure6`).then((rarc) => {
             buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
         });
     } else if (actor.name === 'KNOB00') {

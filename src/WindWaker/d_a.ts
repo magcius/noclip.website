@@ -1072,6 +1072,7 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK1;
 
     private model: J3DModelInstance;
+    private bckAnm = new mDoExt_bckAnm();
     private effectMtx = mat4.create();
 
     public subload(globals: dGlobals): cPhs__Status {
@@ -1081,6 +1082,10 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `VzouK`, 0x08));
+
+        const anm = resCtrl.getObjectRes(ResType.Bck, `VzouK`, 0x05);
+        this.bckAnm.init(this.model.modelData, anm, true, LoopMode.ONCE, 0.0, anm.duration);
+        this.bckAnm.play(0.0);
 
         for (let i = 0; i < this.model.materialInstances.length; i++)
             this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
@@ -1121,9 +1126,10 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
+        this.bckAnm.entry(this.model);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
     }
 }

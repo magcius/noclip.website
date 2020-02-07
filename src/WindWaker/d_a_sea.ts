@@ -2,9 +2,7 @@
 import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
 import { vec2, vec3, mat4 } from "gl-matrix";
@@ -15,14 +13,13 @@ import { ViewerRenderInput } from "../viewer";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { GXMaterialHelperGfx, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { dKy_get_seacolor, dKy_GxFog_set, dKy_GxFog_sea_set } from './d_kankyo';
+import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
 import { dKy_usonami_set } from './d_kankyo_wether';
 
 const scratchVec2a = vec2.create();
 const scratchVec2b = vec2.create();
 const scratchVec2c = vec2.create();
-const scratchVec3a = vec3.create();
 
 class daSea_WaveInfo__Param {
     public height: number;

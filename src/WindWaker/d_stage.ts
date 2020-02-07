@@ -2,9 +2,10 @@
 import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { DZS } from "./d_resorce";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assert } from "../util";
+import { nArray, assert, hexdump } from "../util";
 import { dKy_tevstr_c } from "./d_kankyo";
 import { vec3 } from "gl-matrix";
+import { Endianness } from "../endian";
 
 export class stage_palet_info_class__DifAmb {
     public C0: Color; // Dif
@@ -168,14 +169,31 @@ export class stage_plight_info_class {
     }
 }
 
-type dStage_dt_decode_handlerCB<T> = (dt: T, buffer: ArrayBufferSlice, count: number) => void;
+export class roomRead_class {
+    public isTimePass: boolean = false;
+    public reverb: number = 0x00;
+    public table: Uint8Array;
+
+    public parse(buffer: ArrayBufferSlice, fileData: ArrayBufferSlice): void {
+        const view = buffer.createDataView();
+
+        const tableCount = view.getUint8(0x00);
+        this.isTimePass = !!view.getUint8(0x01);
+        this.reverb = view.getUint8(0x02);
+
+        const tableOffs = view.getUint32(0x04);
+        this.table = fileData.createTypedArray(Uint8Array, tableOffs, tableCount, Endianness.BIG_ENDIAN);
+    }
+}
+
+type dStage_dt_decode_handlerCB<T> = (dt: T, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice) => void;
 type dStage_dt_decode_handler<T> = { [k: string]: dStage_dt_decode_handlerCB<T> };
 
 export function dStage_dt_decode<T>(dt: T, dzs: DZS, handlers: dStage_dt_decode_handler<T>): void {
     for (const h of dzs.headers.values()) {
         const cb = handlers[h.type];
         if (cb !== undefined)
-            cb(dt, dzs.buffer.slice(h.offs), h.count);
+            cb(dt, dzs.buffer.slice(h.offs), h.count, dzs.buffer);
     }
 }
 
@@ -188,6 +206,7 @@ export class dStage_stageDt_c {
     public mult: dStage_Multi_c[] = [];
     public stag: stage_stag_info_class;
     public lght: stage_plight_info_class[] = [];
+    public rtbl: roomRead_class[] = [];
 }
 
 function colorFromRGB8(dst: Color, n: number): void {
@@ -254,6 +273,18 @@ function dStage_plightInfoInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, c
     }
 }
 
+function dStage_roomReadInit(dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice): void {
+    let offs = 0;
+    const view = buffer.createDataView();
+    for (let i = 0; i < count; i++) {
+        const roomRead = new roomRead_class();
+        const roomReadOffs = view.getUint32(offs);
+        offs += 0x04;
+        roomRead.parse(fileData.slice(roomReadOffs), fileData);
+        dt.rtbl.push(roomRead);
+    }
+}
+
 export function dStage_dt_c_initStageLoader(dt: dStage_stageDt_c, dzs: DZS): void {
     dStage_dt_decode(dt, dzs, {
         'Pale': dStage_paletInfoInit,
@@ -263,6 +294,7 @@ export function dStage_dt_c_initStageLoader(dt: dStage_stageDt_c, dzs: DZS): voi
         'MULT': dStage_multInfoInit,
         'STAG': dStage_stagInfoInit,
         'LGHT': dStage_plightInfoInit,
+        'RTBL': dStage_roomReadInit,
     });
 }
 //#endregion
@@ -289,7 +321,8 @@ function dStage_filiInfoInit(dt: dStage_roomDt_c, buffer: ArrayBufferSlice, coun
 
 function dStage_lgtvInfoInit(dt: dStage_roomDt_c, buffer: ArrayBufferSlice, count: number): void {
     if (count !== 0) {
-        assert(count === 1);
+        // TODO(jstpierre): TotG has a room with two light vectors? Is that even a thing?
+        // assert(count === 1);
         dt.lgtv = new stage_lightvec_info_class();
         dt.lgtv.parse(buffer);
     } else {

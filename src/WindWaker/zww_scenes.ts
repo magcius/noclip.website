@@ -284,6 +284,13 @@ export class ZWWExtraTextures {
     }
 }
 
+function fpcIsObject(n: fpc__ProcessName): boolean {
+    if (n === fpc__ProcessName.d_a_bg)
+        return false;
+
+    return true;
+}
+
 // Legacy
 export class WindWakerRoomRenderer {
     public name: string;
@@ -304,6 +311,19 @@ export class WindWakerRoomRenderer {
     }
 
     public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        // Set visibility of all room actors.
+        const fwGlobals = globals.frameworkGlobals;
+        for (let i = 0; i < fwGlobals.dwQueue.length; i++) {
+            for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
+                const ac = fwGlobals.dwQueue[i][j];
+                if (ac instanceof fopAc_ac_c && ac.roomNo === this.roomNo) {
+                    ac.visible = this.visible;
+                    if (this.visible && fpcIsObject(ac.processName))
+                        ac.visible = this.objectsVisible;
+                }
+            }
+        }
+
         if (!this.visible)
             return;
 
@@ -317,15 +337,6 @@ export class WindWakerRoomRenderer {
 
     public setVisible(v: boolean): void {
         this.visible = v;
-
-        const globals = this.renderer.globals.frameworkGlobals;
-        for (let i = 0; i < globals.dwQueue.length; i++) {
-            for (let j = 0; j < globals.dwQueue[i].length; j++) {
-                const ac = globals.dwQueue[i][j];
-                if (ac instanceof fopAc_ac_c && ac.roomNo === this.roomNo)
-                    ac.visible = v;
-            }
-        }
     }
 
     public setVisibleLayerMask(m: number): void {
@@ -472,7 +483,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
-    public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
 
     public onstatechanged!: () => void;
 
@@ -552,7 +562,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.time = viewerInput.time;
-        this.frameCount = viewerInput.time / 1000.0 * 30;
 
         if (!this.cameraFrozen) {
             mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
@@ -1135,13 +1144,14 @@ const sceneDescs = [
     new SceneDesc("Pjavdou", "Jabun's Cavern"),
 
     "Forsaken Fortress",
-    new SceneDesc("M2ganon", "Ganondorf's Room"),
-    new SceneDesc("MajyuE", "Exterior"),
+    new SceneDesc("MajyuE", "Forsaken Fortress Exterior (First Visit)"),
+    new SceneDesc("sea", "Forsaken Fortress (Second & Third Visits)", [41]),
     new SceneDesc("majroom", "Interior (First Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma2room", "Interior (Second Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma3room", "Interior (Third  Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("Mjtower", "The Tower (First Visit)"),
     new SceneDesc("M2tower", "The Tower (Second Visit)"),
+    new SceneDesc("M2ganon", "Ganondorf's Room"),
 
     "Windfall Island",
     new SceneDesc("sea", "Windfall Island", [11]),
@@ -1235,7 +1245,7 @@ const sceneDescs = [
     new SceneDesc("WarpD", "Diamond Steppe Island"),
 
     "Savage Labryinth",
-    new SceneDesc("Cave09", "Entrance"),
+    new SceneDesc("Cave09", "Entrance", [0]),
     new SceneDesc("Cave10", "Room 11"),
     new SceneDesc("Cave11", "Room 32"),
     new SceneDesc("Cave06", "End"),
@@ -1274,6 +1284,21 @@ const sceneDescs = [
     new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
     new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
+    new SceneDesc("sea_T", "sea_T"),
+    new SceneDesc("sea_E", "sea_E"),
+    new SceneDesc("ITest61", "ITest61"),
+    new SceneDesc("ITest62", "ITest62"),
+    new SceneDesc("K_Test2", "K_Test2"),
+    new SceneDesc("K_Test3", "K_Test3"),
+    new SceneDesc("K_Test4", "K_Test4"),
+    new SceneDesc("K_Test5", "K_Test5"),
+    new SceneDesc("K_Test6", "K_Test6"),
+    new SceneDesc("K_Test8", "K_Test8"),
+    new SceneDesc("K_Testa", "K_Testa"),
+    new SceneDesc("K_Testb", "K_Testb"),
+    new SceneDesc("K_Testc", "K_Testc"),
+    new SceneDesc("K_Testd", "K_Testd"),
+    new SceneDesc("K_Teste", "K_Teste"),
 ];
 
 const id = "zww";

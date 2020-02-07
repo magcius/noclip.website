@@ -375,10 +375,10 @@ function setLight(globals: dGlobals, envLight: dScnKy_env_light_c): void {
     envLight.fogStartZ = float_kankyo_color_ratio_set(ret.palePrevA.fogStartZ, ret.palePrevB.fogStartZ, ret.blendPaleAB, ret.paleCurrA.fogStartZ, ret.paleCurrB.fogStartZ, envLight.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio);
     envLight.fogEndZ = Math.max(envLight.fogStartZ, float_kankyo_color_ratio_set(ret.palePrevA.fogEndZ, ret.palePrevB.fogEndZ, ret.blendPaleAB, ret.paleCurrA.fogEndZ, ret.paleCurrB.fogEndZ, envLight.blendPsel, envLight.fogGlobalStartZ, envLight.fogGlobalRatio));
 
-    const virt0A = envLight.virt[ret.palePrevA.virtIdx];
-    const virt0B = envLight.virt[ret.palePrevB.virtIdx];
-    const virt1A = envLight.virt[ret.paleCurrA.virtIdx];
-    const virt1B = envLight.virt[ret.paleCurrB.virtIdx];
+    const virt0A = envLight.virt[ret.palePrevA.virtIdx] || envLight.virt[0];
+    const virt0B = envLight.virt[ret.palePrevB.virtIdx] || envLight.virt[0];
+    const virt1A = envLight.virt[ret.paleCurrA.virtIdx] || envLight.virt[0];
+    const virt1B = envLight.virt[ret.paleCurrB.virtIdx] || envLight.virt[0];
 
     kankyo_color_ratio_set__Color(envLight, envLight.vrSkyCol, virt0A.skyCol, virt0B.skyCol, ret.blendPaleAB, virt1A.skyCol, virt1B.skyCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
     kankyo_color_ratio_set__Color(envLight, envLight.vrUsoUmiCol, virt0A.usoUmiCol, virt0B.usoUmiCol, ret.blendPaleAB, virt1A.usoUmiCol, virt1B.usoUmiCol, envLight.blendPsel, envLight.vrSky0Add, envLight.vrSoraColRatio);
@@ -630,17 +630,23 @@ export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelI
 function SetBaseLight(globals: dGlobals): void {
     const envLight = globals.g_env_light;
 
-    // TODO(jstpierre): Stage lightVec.
-
-    if (dKyr__sun_arrival_check(envLight)) {
-        vec3.copy(envLight.baseLight.pos, envLight.sunPos);
+    const lgtv = globals.roomStatus[globals.mStayNo].lgtv;
+    if (lgtv !== null) {
+        vec3.copy(envLight.baseLight.pos, lgtv.pos);
+        colorFromRGBA(envLight.baseLight.color, 0.0, 0.0, 0.0, 0.0);
+        envLight.baseLight.power = 200.0 * lgtv.radius;
+        envLight.baseLight.fluctuation = lgtv.fluctuation;
     } else {
-        vec3.copy(envLight.baseLight.pos, envLight.moonPos);
-    }
+        if (dKyr__sun_arrival_check(envLight)) {
+            vec3.copy(envLight.baseLight.pos, envLight.sunPos);
+        } else {
+            vec3.copy(envLight.baseLight.pos, envLight.moonPos);
+        }
 
-    colorFromRGBA(envLight.baseLight.color, 1.0, 1.0, 1.0, 1.0);
-    envLight.baseLight.power = 0.0;
-    envLight.baseLight.fluctuation = 0.0;
+        colorFromRGBA(envLight.baseLight.color, 1.0, 1.0, 1.0, 1.0);
+        envLight.baseLight.power = 0.0;
+        envLight.baseLight.fluctuation = 0.0;
+    }
 }
 
 function setSunpos(envLight: dScnKy_env_light_c, cameraPos: vec3): void {
@@ -677,7 +683,7 @@ export function dKy_pship_existence_chk(globals: dGlobals): boolean {
 }
 
 function GetTimePass(globals: dGlobals): boolean {
-    return true;
+    return globals.dStage_dt.rtbl[globals.mStayNo].isTimePass;
 }
 
 function dice_rain_minus(envLight: dScnKy_env_light_c): void {
@@ -879,9 +885,31 @@ function dKankyo_DayProc(globals: dGlobals): void {
     // Called once a day.
 }
 
+function dKy_getdaytime_hour(globals: dGlobals): number {
+    return globals.g_env_light.curTime / 15.0;
+}
+
+function dKy_daynight_check(globals: dGlobals): boolean {
+    const hour = dKy_getdaytime_hour(globals);
+    return hour < 5 || hour > 17;
+}
+
 function setDaytime(globals: dGlobals, envLight: dScnKy_env_light_c, deltaTimeInFrames: number): void {
-    // Game also checks whether the player has collected the Wind Waker, and Flight Control Platform Minigame (?)
-    const timePass = GetTimePass(globals);
+    // Game checks whether the player has collected the Wind Waker, and Flight Control Platform Minigame (?)
+
+    let timePass = GetTimePass(globals);
+
+    if (!timePass) {
+        // Even if we're in a no time pass zone, advance time until the current
+
+        if (dKy_daynight_check(globals)) {
+            if (envLight.curTime >= 270.0 && envLight.curTime < 345.0)
+                timePass = true;
+        } else {
+            if (envLight.curTime < 165.0)
+                timePass = true;
+        }
+    }
 
     if (timePass) {
         envLight.curTime += envLight.timeAdv * deltaTimeInFrames;
