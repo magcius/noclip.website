@@ -65,6 +65,20 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture): DecodedTexture {
 
 function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number): (DecodedTexture | null) {
     const tabDv = tab.createDataView();
+    const idOffs = id * 4;
+    if (idOffs < 0 || idOffs + 4 >= tabDv.byteLength) {
+        console.warn(`Texture id 0x${id.toString(16)} out of range; using first valid texture!`);
+        let firstValidId = 0;
+        for (let i = 0; i < tab.byteLength; i += 4) {
+            if (tabDv.getUint32(i) & 0x80000000) {
+                break;
+            }
+            ++firstValidId;
+        }
+        return loadTextureFromTable(device, tab, bin, firstValidId);
+        // return null;
+        // return null;
+    }
     const tab0 = tabDv.getUint32(id * 4);
     // console.log(`tex ${id} tab 0x${hexzero(tab0, 8)}`);
     if (tab0 & 0x80000000) {
@@ -77,7 +91,7 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
         return decoded;
     } else {
         // TODO: also seen is value 0x01000000
-        console.warn(`Texture id 0x${id} not found in table; using first valid texture!`);
+        console.warn(`Texture id 0x${id.toString(16)} not found in table; using first valid texture!`);
         let firstValidId = 0;
         for (let i = 0; i < tab.byteLength; i += 4) {
             if (tabDv.getUint32(i) & 0x80000000) {

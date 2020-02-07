@@ -18,7 +18,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
 
 import { SFAMapDesc } from './maps';
-import { BlockRenderer, BlockFetcher } from './blocks';
+import { BlockRenderer, VeryOldBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { TextureCollection, SFARenderer } from './render';
 
@@ -254,8 +254,12 @@ class BlockExhibitFetcher implements BlockFetcher {
             if (tabValue == 0xFFFFFFFF) {
                 break;
             }
-            if ((tabValue >> 24) == 0x10) {
-                this.blockOffsets.push(tabValue & 0xFFFFFF);
+            if (this.useCompression) {
+                if ((tabValue >> 24) == 0x10) {
+                    this.blockOffsets.push(tabValue & 0xFFFFFF);
+                }
+            } else {
+                this.blockOffsets.push(tabValue);
             }
             offs += 4;
         }
@@ -282,26 +286,27 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
     public id: string;
     texColl: TextureCollection;
 
-    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useVeryOldBlocks = false) {
         this.id = `${subdir}blocks`;
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const pathBase = this.gameInfo.pathBase;
-        const directory = `${pathBase}/${this.subdir}`;
+        const directory = `${pathBase}${this.subdir != '' ? '/' : ''}${this.subdir}`;
         const dataFetcher = context.dataFetcher;
         console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
 
         const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
         const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
         this.texColl = new TextureCollection(tex1Tab, tex1Bin);
-        const blockFetcher = new BlockExhibitFetcher(true); // FIXME: Demo files don't use compression...
-        await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}.zlb.bin`);
+        const blockFetcher = new BlockExhibitFetcher(this.useCompression);
+        await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}${this.useCompression ? '.zlb' : ''}.bin`);
 
         const sfaRenderer = new SFARenderer(device);
         const X_BLOCKS = 10;
+        const Y_BLOCKS = 1;
         let done = false;
-        for (let y = 0; !done; y++) {
+        for (let y = 0; y < Y_BLOCKS && !done; y++) {
             for (let x = 0; x < X_BLOCKS && !done; x++) {
                 const blockNum = y * X_BLOCKS + x;
                 if (blockNum >= blockFetcher.blockOffsets.length) {
@@ -314,7 +319,12 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
                         console.warn(`Failed to load data for block ${blockNum}`);
                         continue;
                     }
-                    const blockRenderer = new BlockRenderer(device, blockData, this.texColl);
+                    let blockRenderer;
+                    if (this.useVeryOldBlocks) {
+                        blockRenderer = new VeryOldBlockRenderer(device, blockData, this.texColl);
+                    } else {
+                        blockRenderer = new BlockRenderer(device, blockData, this.texColl);
+                    }
                     if (!blockRenderer) {
                         console.warn(`Block ${blockNum} not found`);
                         continue;
@@ -498,6 +508,9 @@ const sceneDescs = [
 
     'Demo',
     new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
+
+    'Demo Block Exhibits',
+    new SFABlockExhibitDesc('', 'BLOCKS', 'Demo Blocks', SFADEMO_GAME_INFO, false, true),
 ];
 
 const id = 'sfa';
