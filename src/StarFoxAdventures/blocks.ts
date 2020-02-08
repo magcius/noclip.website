@@ -642,11 +642,11 @@ export class VeryOldBlockRenderer {
         const listOffsets = blockDv.getUint32(fields.listOffsets);
         const listSizes = blockDv.getUint32(fields.listSizes);
         const listCount = blockDv.getUint8(fields.listCount);
-        console.log(`Loading ${listCount} display lists from 0x${listOffsets.toString(16)} (sizes at 0x${listSizes.toString(16)})`);
+        // console.log(`Loading ${listCount} display lists from 0x${listOffsets.toString(16)} (sizes at 0x${listSizes.toString(16)})`);
 
         const bitstreamOffset = blockDv.getUint32(fields.bitstreamOffset);
         const bitstreamByteCount = blockDv.getUint16(fields.bitstreamByteCount);
-        console.log(`Loading ${bitstreamByteCount} bitstream bytes from 0x${bitstreamOffset.toString(16)}`);
+        // console.log(`Loading ${bitstreamByteCount} bitstream bytes from 0x${bitstreamOffset.toString(16)}`);
 
         if (fields.hasYTranslate) {
             this.yTranslate = blockDv.getInt16(0x8e);
@@ -675,7 +675,7 @@ export class VeryOldBlockRenderer {
                 const dlOffset = blockDv.getUint32(offs);
                 offs = listSizes + listNum * 2
                 const dlSize = blockDv.getUint16(offs);
-                console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
+                // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
                 const displayList = blockData.subarray(dlOffset, dlSize);
 
                 const vtxArrays: GX_Array[] = [];

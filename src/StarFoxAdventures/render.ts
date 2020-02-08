@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
@@ -11,8 +11,11 @@ import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
+import { hexzero } from '../util';
+import { GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 interface LoadedTexture {
+    offset: number;
     texture: GX_Texture.Texture;
     wrapS: number;
     wrapT: number;
@@ -26,9 +29,10 @@ interface DecodedTexture {
     gfxSampler: GfxSampler;
 }
 
-function loadTex(texData: ArrayBufferSlice): LoadedTexture {
+function loadTex(texData: ArrayBufferSlice, offset: number): LoadedTexture {
     const dv = texData.createDataView();
     const result = {
+        offset,
         texture: {
             name: `Texture`,
             width: dv.getUint16(0x0A),
@@ -45,9 +49,87 @@ function loadTex(texData: ArrayBufferSlice): LoadedTexture {
     return result;
 }
 
-function decodeTex(device: GfxDevice, loaded: LoadedTexture): DecodedTexture {
-    const mipChain = GX_Texture.calcMipChain(loaded.texture, 1);
-    const gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
+function loadAncientTex(texData: ArrayBufferSlice, offset: number): LoadedTexture {
+    const dv = texData.createDataView();
+    const result = {
+        offset,
+        texture: {
+            name: `Texture`,
+            width: dv.getUint8(0) & 0x7f,
+            height: dv.getUint8(1) & 0x7f,
+            format: dv.getUint8(2), // ??????
+            data: texData.slice(0x20),
+            // @0x14: total data size (including header) (SOMETIMES!)
+            mipCount: 1,
+        },
+        wrapS: GX.WrapMode.REPEAT,
+        wrapT: GX.WrapMode.REPEAT,
+        minFilt: GX.TexFilter.LINEAR,
+        magFilt: GX.TexFilter.LINEAR,
+    };
+    return result;
+
+}
+
+function decodeTex(device: GfxDevice, loaded: LoadedTexture, isAncient: boolean): DecodedTexture {
+    let gfxTexture;
+    if (!isAncient) {
+        const mipChain = GX_Texture.calcMipChain(loaded.texture, 1);
+        gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
+    } else {
+        gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, loaded.texture.width, loaded.texture.height, loaded.texture.mipCount));
+
+        const dv = loaded.texture.data!.createDataView();
+        const pixels = new Uint8Array(loaded.texture.width * loaded.texture.height * 4);
+        let src = 0;
+        let dst = 0;
+        switch (loaded.texture.format) {
+        case 0x00: // 32-bit RGBA? Size is 4 * width * height, not including header. might be mipmapped.
+            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
+                pixels[dst] = dv.getUint8(src);
+                pixels[dst + 1] = dv.getUint8(src + 1);
+                pixels[dst + 2] = dv.getUint8(src + 2);
+                pixels[dst + 3] = dv.getUint8(src + 3);
+                src += 4;
+                dst += 4;
+            }
+            break;
+        case 0x01:
+        case 0x11:
+            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
+                const c = dv.getUint16(src);
+                src += 2;
+                // RGB565
+                // pixels[dst] = (((c >> 11) & 0x1f) * 255 / 0x1f)|0;
+                // pixels[dst + 1] = (((c >> 5) & 0x3f) * 255 / 0x3f)|0;
+                // pixels[dst + 2] = (((c >> 0) & 0x1f) * 255 / 0x1f)|0;
+                // pixels[dst + 3] = 0xFF;
+                // IA8
+                pixels[dst] = (c >> 8) & 0xff;
+                pixels[dst + 1] = (c >> 8) & 0xff;
+                pixels[dst + 2] = (c >> 8) & 0xff;
+                pixels[dst + 3] = c & 0xFF;
+                dst += 4;
+            }
+            break;
+        case 0x15: // 24-bit RGB??! Size is 3 * width * height, not including header. might be mipmapped.
+            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
+                pixels[dst] = dv.getUint8(src);
+                pixels[dst + 1] = dv.getUint8(src + 1);
+                pixels[dst + 2] = dv.getUint8(src + 2);
+                pixels[dst + 3] = 0xFF;
+                src += 3;
+                dst += 4;
+            }
+            break;
+        default:
+            throw Error(`Unhandled texture format 0x${loaded.texture.format.toString(16)} at offset 0x${loaded.offset.toString(16)}`);
+        }
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+        device.submitPass(hostAccessPass);
+    }
     
     // GL texture is bound by loadTextureFromMipChain.
     const gfxSampler = device.createSampler({
@@ -91,7 +173,7 @@ function loadFirstValidTexture(device: GfxDevice, tab: ArrayBufferSlice, bin: Ar
         return null;
     }
     console.log(`loading first valid id ${firstValidId}`);
-    return loadTextureFromTable(device, tab, bin, firstValidId);
+    return loadTextureFromTable(device, tab, bin, firstValidId, isAncient);
 }
 
 function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: ArrayBufferSlice, id: number, isAncient: boolean = false): (DecodedTexture | null) {
@@ -107,12 +189,17 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
         const binOffs = isAncient ? tab0 : ((tab0 & 0x00FFFFFF) * 2);
         const compData = bin.slice(binOffs);
         const uncompData = isAncient ? compData : loadRes(compData);
-        const loaded = loadTex(uncompData);
-        const decoded = decodeTex(device, loaded);
+        let loaded;
+        if (isAncient) {
+            loaded = loadAncientTex(uncompData, tab0);
+        } else {
+            loaded = loadTex(uncompData, (tab0 & 0x00FFFFFF) * 2);
+        }
+        const decoded = decodeTex(device, loaded, isAncient);
         return decoded;
     } else {
         // TODO: also seen is value 0x01000000
-        console.warn(`Texture id 0x${id.toString(16)} not found in table; using first valid texture!`);
+        console.warn(`Texture id 0x${id.toString(16)} (tab value 0x${hexzero(tab0, 8)}, isAncient: ${isAncient}) not found in table; using first valid texture!`);
         return loadFirstValidTexture(device, tab, bin, isAncient);
     }
 }
@@ -120,7 +207,7 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 export class TextureCollection {
     decodedTextures: (DecodedTexture | null)[] = [];
 
-    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean) {
+    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false) {
     }
 
     public getTexture(device: GfxDevice, textureNum: number) {
