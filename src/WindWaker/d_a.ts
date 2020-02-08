@@ -795,6 +795,7 @@ class d_a_kytag00 extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let newRainCount = (saturate(target * target * target) * 250.0) | 0;
+        console.log(newRainCount);
 
         if (dKy_checkEventNightStop(globals)) {
             if (newRainCount < envLight.rainCount)

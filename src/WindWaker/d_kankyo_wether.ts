@@ -773,7 +773,7 @@ class RAIN_EFF {
     public alpha: number = 0.0;
     public timer: number = 0;
     public basePos = vec3.create();
-    public relPos = vec3.create();
+    public pos = vec3.create();
     public minY: number = 0.0;
 }
 
@@ -857,7 +857,7 @@ export class dKankyo_rain_Packet {
             vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
             // basePos
-            vec3.add(scratchVec3, rain.basePos, rain.relPos);
+            vec3.add(scratchVec3, rain.basePos, rain.pos);
             const dist = vec3.distance(scratchVec3, globals.cameraPosition);
             vec3.add(scratchVec3c, scratchVec3c, scratchVec3);
             vec3.add(scratchVec3d, scratchVec3d, scratchVec3);
@@ -1751,7 +1751,7 @@ function wether_move_sun(globals: dGlobals): void {
     dKyr_lenzflare_move(globals);
 }
 
-function wether_move_rain(globals: dGlobals): void {
+function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.rainCount === 0)
@@ -1769,51 +1769,59 @@ function wether_move_rain(globals: dGlobals): void {
     if (pkt.rainCount === 0)
         return;
 
+    // TODO(jstpierre): Center delta
+    dKyr_get_vectle_calc(pkt.camEyePos)
+
     dKy_set_eyevect_calc2(globals, scratchVec3, 700.0, 600.0);
 
     for (let i = 0; i < pkt.rainCount; i++) {
         const rain = pkt.instances[i];
 
         if (rain.initialized) {
-            rain.relPos[0] += 20.0 * scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07);
-            rain.relPos[1] += 20.0 * (-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul));
-            rain.relPos[2] += 20.0 * scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03);
+            rain.pos[0] += deltaTimeInFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
+            rain.pos[1] += deltaTimeInFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
+            rain.pos[2] += deltaTimeInFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
 
-            vec3.set(scratchVec3c, rain.basePos[0] + rain.relPos[0], scratchVec3[1], rain.basePos[2] + rain.relPos[2]);
+            vec3.set(scratchVec3c, rain.basePos[0] + rain.pos[0], scratchVec3[1], rain.basePos[2] + rain.pos[2]);
             const distXZ = vec3.distance(scratchVec3c, scratchVec3);
-            if (rain.timer === 0) {
+            if (rain.timer <= 0) {
                 if (distXZ > 800) {
                     rain.timer = 10;
                     vec3.copy(rain.basePos, scratchVec3);
-                    if (false && distXZ < 850) {
-                        // todo
+                    if (distXZ <= 850) {
+                        dKyr_get_vectle_calc(scratchVec3c, scratchVec3, scratchVec3b);
+                        vec3.scale(rain.pos, scratchVec3b, 800.0 + cM_rndFX(40.0));
                     } else {
-                        vec3.set(rain.relPos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
+                        vec3.set(rain.pos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
                     }
                     rain.minY = -800 + globals.cameraPosition[1];
                 }
 
-                const posY = rain.basePos[1] + rain.relPos[1];
+                const posY = rain.basePos[1] + rain.pos[1];
                 if (posY < 20.0 + rain.minY) {
                     vec3.copy(rain.basePos, scratchVec3);
-                    vec3.set(rain.relPos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
+                    vec3.set(rain.pos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
                     rain.minY = -800 + globals.cameraPosition[1];
                     rain.timer = 10;
                 }
             } else {
-                rain.timer--;
+                rain.timer -= deltaTimeInFrames;
             }
         } else {
             vec3.copy(rain.basePos, scratchVec3);
-            vec3.set(rain.relPos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
+            vec3.set(rain.pos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
             rain.alpha = 1.0;
             rain.timer = 0;
             rain.minY = -800 + globals.cameraPosition[1];
             rain.initialized = true;
         }
 
+        // TODO(jstpierre): Set rain alpha
         rain.alpha = 1.0;
     }
+
+    if (envLight.rainCount < pkt.rainCount)
+        pkt.rainCount = envLight.rainCount;
 }
 
 function wether_move_snow(globals: dGlobals): void {
@@ -2015,7 +2023,7 @@ function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
 export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
     if (globals.stageName !== 'Name') {
         wether_move_sun(globals);
-        wether_move_rain(globals);
+        wether_move_rain(globals, deltaTimeInFrames);
         wether_move_snow(globals);
     }
     wether_move_star(globals, deltaTimeInFrames);
