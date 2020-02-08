@@ -1770,7 +1770,7 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
         return;
 
     // TODO(jstpierre): Center delta
-    dKyr_get_vectle_calc(pkt.camEyePos)
+    // dKyr_get_vectle_calc(pkt.camEyePos)
 
     dKy_set_eyevect_calc2(globals, scratchVec3, 700.0, 600.0);
 
