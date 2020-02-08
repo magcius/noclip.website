@@ -224,11 +224,13 @@ class BatchInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder, materialInstanceOverride: MaterialInstance | null = null): void {
-        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

@@ -1,41 +1,35 @@
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
-import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { GfxRenderCache } from "./GfxRenderCache";
-import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { nArray, assert, assertExists } from "../../util";
 import { clamp } from "../../MathHelpers";
+
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
 import { gfxRenderPipelineDescriptorEquals, gfxBindingsDescriptorEquals } from "../platform/GfxPlatformUtil";
+
+import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { DEFAULT_NUM_SAMPLES } from "../helpers/RenderTargetHelpers";
+
+import { GfxRenderCache } from "./GfxRenderCache";
+import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
 //
-// A GfxRenderInst is basically equivalent to one draw call, and should be retained with the correct scene
-// graph object that has the power to update and rebind it every frame. GfxRenderer is designed for as little
-// per-frame GC garbage and pressure as possible, so this object should be retained in client code.
+// A GfxRenderInst is basically equivalent to one draw call. It contains everything that should be
+// necessary to draw it, including a few extra helpers like a sort key and a filter key. It is a
+// transient structure that will not persist past "one frame" of the renderer. The intention is to
+// build up a large collection of GfxRenderInst's during scene graph traversal, and then dispatch
+// them in whatever order you want. This allows efficient pass management along with Z sorting.
 //
-// Currently, GfxRenderInst is pretty expensive in terms of GC pressure. A future goal should be able to
-// remove as much as the bookkeeping and state on GfxRenderInst as possible, or compress the fields into a
-// cheaper form.
+// All GfxRenderInsts are owned by the GfxRenderInstManager, which stores a pool of them together
+// to cut down on GC allocation cost. At the end of a frame, GfxRenderInstManager::reset() is called,
+// which will reset all allocated GfxRenderInsts.
 //
-// GfxRenderInstBuilder is a way to create many GfxRenderInsts at once. It is not required to use, but is
-// very helpful and convenient for setting up the correct fields. It works best when the scene can be built
-// in one giant chunk. For cases where different parts of the scene are loaded at different times, it's a bit
-// clunky and doesn't cache the correct GfxBindings values. A planned future change is to change this so that
-// it can better support building a scene a piece at a time.
-//
-// GfxRenderInstViewRenderer is in charge of wrangling all of the GfxRenderInsts, sorting them, and then
-// executing the draws on the platform layer.
+// As a convenience for creation, a stack-based template system can be used which allows one to set
+// up multiple parameters. Templates are just like regular GfxRenderInsts, but they are not added
+// to draw lists automatically, instead, they are only added to the template stack. Regular render
+// insts will copy their initial values from the top of the template stack.
 
-// Changes to V2:
-//  * RenderInst is now meant to be reconstructed every frame, even more similarly to T3.
-//    GC costs are absorbed with an object pool.
-//  * Because we recreate RenderInsts every single frame, instead of the heavy runtime template
-//    dynamic inheritance system, we can simply demand that RenderInsts are recreated. So
-//    templates become a "blueprint" rather than an actual RenderInst.
-
-
+//#region Sort Keys
 
 // Suggested values for the "layer" of makeSortKey. These are rough groups, and you can define your own
 // ordering within the rough groups (e.g. you might use BACKGROUND + 1, or BACKGROUND + 2).
@@ -136,15 +130,9 @@ export function getSortKeyDepth(sortKey: number): number {
         return ((sortKey >>> 8) & 0xFFFC | (sortKey & 0x03));
     }
 }
+//#endregion
 
-const enum GfxRenderInstFlags {
-    TEMPLATE_RENDER_INST = 1 << 0,
-    DRAW_RENDER_INST = 1 << 1,
-    DRAW_INDEXED = 1 << 2,
-
-    INHERITED_FLAGS = (DRAW_INDEXED),
-}
-
+//#region GfxRendererTransientState
 interface GfxRendererTransientState {
     currentRenderPipelineDescriptor: GfxRenderPipelineDescriptor | null;
     currentRenderPipelineReady: boolean;
@@ -153,9 +141,41 @@ interface GfxRendererTransientState {
     currentBindings: GfxBindings | null;
 }
 
+function gfxRendererTransientStateReset(state: GfxRendererTransientState): void {
+    state.currentRenderPipelineDescriptor = null;
+    state.currentRenderPipelineReady = false;
+    state.currentInputState = null;
+    state.currentBindingDescriptor = null;
+    state.currentBindings = null;
+}
+
+export function gfxRendererTransientStateNew(): GfxRendererTransientState {
+    return {
+        currentRenderPipelineDescriptor: null,
+        currentRenderPipelineReady: false,
+        currentInputState: null,
+        currentBindingDescriptor: null,
+        currentBindings: null,
+    };
+}
+
+const defaultTransientState = gfxRendererTransientStateNew();
+//#endregion
+
+//#region GfxRenderInst
+// TODO(jstpierre): Very little of this is used, could be removed.
+const enum GfxRenderInstFlags {
+    Template = 1 << 0,
+    Draw = 1 << 1,
+    Indexed = 1 << 2,
+
+    // Which flags are inherited from templates...
+    InheritedFlags = (Indexed),
+}
+
 export class GfxRenderInst {
-    // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
     public sortKey: number = 0;
+    // TODO(jstpierre): Remove when we remove legacy GfxRenderInstManager.
     public filterKey: number = 0;
 
     // Pipeline building.
@@ -169,27 +189,40 @@ export class GfxRenderInst {
 
     public _flags: number = 0;
     private _inputState: GfxInputState | null = null;
-    private _drawStart: number;
-    private _drawCount: number;
-    private _drawInstanceCount: number;
+    private _drawStart: number = 0;
+    private _drawCount: number = 0;
+    private _drawInstanceCount: number = 0;
 
     constructor() {
         this._renderPipelineDescriptor = {
             bindingLayouts: [],
             inputLayout: null,
             megaStateDescriptor: copyMegaState(defaultMegaState),
-            program: null!, // lol
+            program: null!,
             topology: GfxPrimitiveTopology.TRIANGLES,
+            // TODO(jstpierre): Not great, need to figure out how to not do this...
             sampleCount: DEFAULT_NUM_SAMPLES,
         };
     }
 
+    /**
+     * Resets a render inst to be boring, so it can re-enter the pool.
+     * Normally, you should not need to call this.
+     *
+     * {@private}
+     */
     public reset(): void {
         this.sortKey = 0;
         this.filterKey = 0;
         this._renderPipeline = null;
     }
 
+    /**
+     * Copies the fields from another render inst {@param o} to this render inst.
+     * Normally, you should not need to call this.
+     *
+     * {@private}
+     */
     public setFromTemplate(o: GfxRenderInst): void {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, o._renderPipelineDescriptor.megaStateDescriptor);
         this._renderPipelineDescriptor.program = o._renderPipelineDescriptor.program;
@@ -201,7 +234,7 @@ export class GfxRenderInst {
         this._drawCount = o._drawCount;
         this._drawStart = o._drawStart;
         this._drawInstanceCount = o._drawInstanceCount;
-        this._flags = (this._flags & ~GfxRenderInstFlags.INHERITED_FLAGS) | (o._flags & GfxRenderInstFlags.INHERITED_FLAGS);
+        this._flags = (this._flags & ~GfxRenderInstFlags.InheritedFlags) | (o._flags & GfxRenderInstFlags.InheritedFlags);
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
         const tbd = this._bindingDescriptors[0], obd = o._bindingDescriptors[0];
@@ -214,46 +247,51 @@ export class GfxRenderInst {
             this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
     }
 
+    /**
+     * Set the {@see GfxPipeline} used by this render inst directly. Use this if you already have a pipeline object
+     * pre-constructed. Otherwise, you can use {@see setGfxProgram}, {@see setMegaStateFlags},
+     * {@see setInputLayoutAndState} and {@see setBindingLayouts} to construct a pipeline automatically.
+     */
     public setGfxRenderPipeline(pipeline: GfxRenderPipeline): void {
         this._renderPipeline = pipeline;
     }
 
+    /**
+     * Set the {@see GfxProgram} that this render inst will render with. This is part of the automatic
+     * pipeline building facilities. At render time, a pipeline will be automatically and constructed from
+     * the pipeline parameters.
+     */
     public setGfxProgram(program: GfxProgram): void {
         this._renderPipelineDescriptor.program = program;
     }
 
+    /**
+     * Set the {@see GfxMegaStateDescriptor} that this render inst will render with. This is part of the automatic
+     * pipeline building facilities. At render time, a pipeline will be automatically and constructed from
+     * the pipeline parameters.
+     */
     public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor>): GfxMegaStateDescriptor {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, r);
         return this._renderPipelineDescriptor.megaStateDescriptor;
     }
 
+    /**
+     * Retrieve the {@see GfxMegaStateDescriptor} property bag that this will render with. This is similar to
+     * {@see setMegaStateFlags} but allows you to set fields directly on the internal property bag, rather than
+     * merge them. This can be slightly more efficient.
+     */
     public getMegaStateFlags(): GfxMegaStateDescriptor {
         return this._renderPipelineDescriptor.megaStateDescriptor;
     }
 
+    /**
+     * Sets both the {@see GfxInputLayout} and {@see GfxInputState} to be used by this render instance.
+     * The {@see GfxInputLayout} is used to construct the pipeline as part of the automatic pipeline building
+     * facilities, while {@see GfxInputState} is used for the render.
+     */
     public setInputLayoutAndState(inputLayout: GfxInputLayout | null, inputState: GfxInputState | null): void {
         this._inputState = inputState;
         this._renderPipelineDescriptor.inputLayout = inputLayout;
-    }
-
-    public drawIndexes(indexCount: number, indexStart: number = 0): void {
-        this._flags |= GfxRenderInstFlags.DRAW_INDEXED;
-        this._drawCount = indexCount;
-        this._drawStart = indexStart;
-        this._drawInstanceCount = 1;
-    }
-
-    public drawIndexesInstanced(indexCount: number, instanceCount: number, indexStart: number = 0): void {
-        this._flags |= GfxRenderInstFlags.DRAW_INDEXED;
-        this._drawCount = indexCount;
-        this._drawStart = indexStart;
-        this._drawInstanceCount = instanceCount;
-    }
-
-    public drawPrimitives(primitiveCount: number, primitiveStart: number = 0): void {
-        this._drawCount = primitiveCount;
-        this._drawStart = primitiveStart;
-        this._drawInstanceCount = 1;
     }
 
     private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
@@ -267,16 +305,45 @@ export class GfxRenderInst {
             this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null });
     }
 
-    public setUniformBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer): void {
-        this._uniformBuffer = uniformBuffer;
-    }
-
+    /**
+     * Sets the {@see GfxBindingLayoutDescriptor}s that this render inst will render with.
+     */
     public setBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): void {
         assert(bindingLayouts.length <= this._bindingDescriptors.length);
         assert(bindingLayouts.length === 1);
         this._setBindingLayout(bindingLayouts[0]);
     }
 
+    public drawIndexes(indexCount: number, indexStart: number = 0): void {
+        this._flags |= GfxRenderInstFlags.Indexed;
+        this._drawCount = indexCount;
+        this._drawStart = indexStart;
+        this._drawInstanceCount = 1;
+    }
+
+    public drawIndexesInstanced(indexCount: number, instanceCount: number, indexStart: number = 0): void {
+        this._flags |= GfxRenderInstFlags.Indexed;
+        this._drawCount = indexCount;
+        this._drawStart = indexStart;
+        this._drawInstanceCount = instanceCount;
+    }
+
+    public drawPrimitives(primitiveCount: number, primitiveStart: number = 0): void {
+        this._drawCount = primitiveCount;
+        this._drawStart = primitiveStart;
+        this._drawInstanceCount = 1;
+    }
+
+    public setUniformBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer): void {
+        this._uniformBuffer = uniformBuffer;
+    }
+
+    /**
+     * Allocates {@param wordCount} words from the uniform buffer and assigns it to the buffer
+     * slot at index {@param bufferIndex}. As a convenience, this also directly returns the same
+     * offset into the uniform buffer, in words, that would be returned by a subsequent call to
+     * {@see getUniformBufferOffset}.
+     */
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
         assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferByteOffsets.length);
         this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
@@ -288,11 +355,20 @@ export class GfxRenderInst {
         return wordOffset;
     }
 
+    /**
+     * Returns the offset into the uniform buffer, in words, that is assigned to the buffer slot
+     * at index {@param bufferIndex}, to be used with e.g. {@see mapUniformBufferF32}.
+     */
     public getUniformBufferOffset(bufferIndex: number) {
         const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
         return wordOffset;
     }
 
+    /**
+     * Directly sets the uniform buffer assigned to the buffer slot at index {@param bufferIndex}
+     * to be {@param wordOffset}. Use this if you have already allocated a uniform buffer chunk through
+     * some other means and wish to directly assign it to this render inst.
+     */
     public setUniformBufferOffset(bufferIndex: number, wordOffset: number, wordCount: number): void {
         this._dynamicUniformBufferByteOffsets[bufferIndex] = wordOffset << 2;
 
@@ -301,15 +377,26 @@ export class GfxRenderInst {
         dst.wordCount = wordCount;
     }
 
+    /**
+     * This is a convenience wrapper for {@see GfxRenderDynamicUniformBuffer.mapBufferF32}, but uses
+     * the values previously assigned for the uniform buffer slot at index {@param bufferIndex}.
+     */
     public mapUniformBufferF32(bufferIndex: number): Float32Array {
         const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        return this._uniformBuffer.mapBufferF32(wordOffset, this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount);
+        const wordCount = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount;
+        return this._uniformBuffer.mapBufferF32(wordOffset, wordCount);
     }
 
+    /**
+     * Retrieve the {@see GfxRenderDynamicUniformBuffer} that this render inst will use to allocate.
+     */
     public getUniformBuffer(): GfxRenderDynamicUniformBuffer {
         return this._uniformBuffer;
     }
 
+    /**
+     * Sets the {@param GfxSamplerBinding}s in use by this render instance.
+     */
     public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
             const dst = this._bindingDescriptors[0].samplerBindings[i];
@@ -324,7 +411,7 @@ export class GfxRenderInst {
     }
 
     public drawOnPassWithState(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState): void {
-        assert(!!(this._flags & GfxRenderInstFlags.DRAW_RENDER_INST));
+        assert(!!(this._flags & GfxRenderInstFlags.Draw));
 
         if (this._renderPipeline !== null) {
             state.currentRenderPipelineDescriptor = null;
@@ -362,9 +449,9 @@ export class GfxRenderInst {
         passRenderer.setBindings(0, assertExists(state.currentBindings), this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
-            assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
+            assert(!!(this._flags & GfxRenderInstFlags.Indexed));
             passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
-        } else if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED)) {
+        } else if ((this._flags & GfxRenderInstFlags.Indexed)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
@@ -372,7 +459,7 @@ export class GfxRenderInst {
     }
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        assert(!!(this._flags & GfxRenderInstFlags.DRAW_RENDER_INST));
+        assert(!!(this._flags & GfxRenderInstFlags.Draw));
 
         if (this._renderPipeline !== null) {
             passRenderer.setPipeline(this._renderPipeline);
@@ -391,68 +478,18 @@ export class GfxRenderInst {
         passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
-            assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
+            assert(!!(this._flags & GfxRenderInstFlags.Indexed));
             passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
-        } else if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED)) {
+        } else if ((this._flags & GfxRenderInstFlags.Indexed)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
         }
     }
 }
+//#endregion
 
-// Basic linear pool allocator.
-export class GfxRenderInstPool {
-    // The pool contains all render insts that we've ever created.
-    public pool: GfxRenderInst[] = [];
-    // The number of render insts currently allocated out to the user.
-    public allocCount: number = 0;
-
-    public allocRenderInstIndex(): number {
-        this.allocCount++;
-
-        if (this.allocCount > this.pool.length)
-            this.pool.push(new GfxRenderInst());
-
-        return this.allocCount - 1;
-    }
-
-    public popRenderInst(): void {
-        this.allocCount--;
-    }
-
-    public reset(): void {
-        for (let i = 0; i < this.pool.length; i++)
-            this.pool[i]._flags = 0;
-        this.allocCount = 0;
-    }
-
-    public destroy(): void {
-        this.pool.length = 0;
-        this.allocCount = 0;
-    }
-}
-
-function gfxRendererTransientStateReset(state: GfxRendererTransientState): void {
-    state.currentRenderPipelineDescriptor = null;
-    state.currentRenderPipelineReady = false;
-    state.currentInputState = null;
-    state.currentBindingDescriptor = null;
-    state.currentBindings = null;
-}
-
-export function gfxRendererTransientStateNew(): GfxRendererTransientState {
-    return {
-        currentRenderPipelineDescriptor: null,
-        currentRenderPipelineReady: false,
-        currentInputState: null,
-        currentBindingDescriptor: null,
-        currentBindings: null,
-    };
-}
-
-const defaultTransientState = gfxRendererTransientStateNew();
-
+//#region GfxRenderInstList
 export const gfxRenderInstCompareNone = null;
 
 export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst): number {
@@ -495,6 +532,11 @@ export class GfxRenderInstList {
         this.needsSort = false;
     }
 
+    /**
+     * Insert a render inst to the list. This directly inserts the render inst to
+     * the position specified by the compare function, so the render inst must be
+     * fully constructed at this point.
+     */
     public insertSorted(renderInst: GfxRenderInst): void {
         this.flushSort();
         if (this.compareFunction !== null) {
@@ -505,12 +547,23 @@ export class GfxRenderInstList {
         }
     }
 
+    /**
+     * Insert a render inst to the list. This will mark the list for sorting, so the
+     * render inst does not need to be fully constructed at this time.
+     *
+     * {@deprecated}
+     */
     public insertToEnd(renderInst: GfxRenderInst): void {
         this.renderInsts.push(renderInst);
         if (this.compareFunction !== null)
             this.needsSort = true;
     }
 
+    /**
+     * Execute all scheduled render insts in this list onto the {@param GfxRenderPass},
+     * using {@param device} and {@param cache} to create any device-specific resources
+     * necessary to complete the draws.
+     */
     public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.renderInsts.length === 0)
             return;
@@ -536,6 +589,41 @@ export class GfxRenderInstList {
         this.renderInsts.length = 0;
     }
 }
+//#endregion
+
+//#region GfxRenderInstManager
+
+// Basic linear pool allocator.
+class GfxRenderInstPool {
+    // The pool contains all render insts that we've ever created.
+    public pool: GfxRenderInst[] = [];
+    // The number of render insts currently allocated out to the user.
+    public allocCount: number = 0;
+
+    public allocRenderInstIndex(): number {
+        this.allocCount++;
+
+        if (this.allocCount > this.pool.length)
+            this.pool.push(new GfxRenderInst());
+
+        return this.allocCount - 1;
+    }
+
+    public popRenderInst(): void {
+        this.allocCount--;
+    }
+
+    public reset(): void {
+        for (let i = 0; i < this.pool.length; i++)
+            this.pool[i]._flags = 0;
+        this.allocCount = 0;
+    }
+
+    public destroy(): void {
+        this.pool.length = 0;
+        this.allocCount = 0;
+    }
+}
 
 export class GfxRenderInstManager {
     // TODO(jstpierre): Share these caches between scenes.
@@ -545,6 +633,11 @@ export class GfxRenderInstManager {
     private simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
+    /**
+     * Creates a new {@see GfxRenderInst} object and returns it. If there is a template
+     * pushed onto the template stack, then its values will be used as a base for this
+     * render inst.
+     */
     public newRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
         const renderInstIndex = this.instPool.allocRenderInstIndex();
@@ -553,14 +646,27 @@ export class GfxRenderInstManager {
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         else
             renderInst.reset();
-        renderInst._flags = GfxRenderInstFlags.DRAW_RENDER_INST;
+        renderInst._flags = GfxRenderInstFlags.Draw;
         return renderInst;
     }
 
+    /**
+     * Submits {@param renderInst} to the current render inst list. Note that
+     * this assumes the render inst was fully filled in, so do not modify it
+     * after submitting it.
+     */
     public submitRenderInst(renderInst: GfxRenderInst): void {
         this.currentRenderInstList.insertSorted(renderInst);
     }
 
+    /**
+     * Creates a new render instance, immediately submits it to the current
+     * render inst list. Unlike {@param submitRenderInst}, this is slightly
+     * more efficient as this function cannot assume that the render inst is
+     * fully formed.
+     *
+     * {@deprecated}
+     */
     public pushRenderInst(): GfxRenderInst {
         const renderInst = this.newRenderInst();
         // Submitted to the current list by default. We can't insert
@@ -570,10 +676,24 @@ export class GfxRenderInstManager {
         return renderInst;
     }
 
+    /**
+     * Sets the currently active render inst list. This is the list that will
+     * be used by {@param pushRenderInst} and {@param submitRenderInst}. If
+     * you use this function, please make sure to call {@see disableSimpleMode}
+     * when the GfxRenderInstManager is created, to ensure that nobody uses
+     * the "legacy" APIs. Failure to do so might cause memory leaks or other
+     * problems.
+     */
     public setCurrentRenderInstList(list: GfxRenderInstList): void {
+        assert(this.simpleRenderInstList === null);
         this.currentRenderInstList = list;
     }
 
+    /**
+     * Returns a render instance to the pool after being used. This should be
+     * used in scenarios where the render inst is not submitted to any draw lists,
+     * like calling {@param drawOnPass} manually on the render inst.
+     */
     public returnRenderInst(renderInst: GfxRenderInst): void {
         renderInst._flags = 0;
 
@@ -582,13 +702,19 @@ export class GfxRenderInstManager {
         // again...
     }
 
+    /**
+     * Pushes a new template render inst to the template stack. All properties set
+     * on the topmost template on the template stack will be the defaults for both
+     * for any future render insts created. Once done with a template, call
+     * {@param popTemplateRenderInst} to pop it off the template stack.
+     */
     public pushTemplateRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
         const newTemplateIndex = this.templatePool.allocRenderInstIndex();
         const newTemplate = this.templatePool.pool[newTemplateIndex];
         if (templateIndex >= 0)
             newTemplate.setFromTemplate(this.templatePool.pool[templateIndex]);
-        newTemplate._flags = GfxRenderInstFlags.TEMPLATE_RENDER_INST;
+        newTemplate._flags = GfxRenderInstFlags.Template;
         return newTemplate;
     }
 
@@ -596,11 +722,18 @@ export class GfxRenderInstManager {
         this.templatePool.popRenderInst();
     }
 
+    /**
+     * Retrieves the current template render inst on the top of the template stack.
+     */
     public getTemplateRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
         return this.templatePool.pool[templateIndex];
     }
 
+    /**
+     * Reset all allocated render insts. This should be called at the end of the frame,
+     * once done with all of the allocated render insts and render inst lists.
+     */
     public resetRenderInsts(): void {
         // Retire the existing render insts.
         this.instPool.reset();
@@ -613,23 +746,39 @@ export class GfxRenderInstManager {
         this.gfxRenderCache.destroy(device);
     }
 
-    // Legacy pass management API.
+    /**
+     * Disables the "simple" render inst list management API.
+     */
+    public disableSimpleMode(): void {
+        // This is a one-way street!
+        this.simpleRenderInstList = null;
+    }
+
+    //#region Legacy render inst list management API.
+
+    /**
+     * {@deprecated}
+     */
     public setVisibleByFilterKeyExact(filterKey: number): void {
         const list = assertExists(this.simpleRenderInstList);
         list.renderInsts.length = 0;
 
-        for (let i = 0; i < this.instPool.pool.length; i++) {
-            if ((this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST &&
-                 this.instPool.pool[i].filterKey === filterKey))
+        for (let i = 0; i < this.instPool.pool.length; i++)
+            if (this.instPool.pool[i].filterKey === filterKey)
                 list.insertToEnd(this.instPool.pool[i]);
-        }
     }
 
+    /**
+     * {@deprecated}
+     */
     public hasAnyVisible(): boolean {
         const list = assertExists(this.simpleRenderInstList);
         return list.renderInsts.length > 0;
     }
 
+    /**
+     * {@deprecated}
+     */
     public setVisibleNone(): void {
         const list = assertExists(this.simpleRenderInstList);
         list.renderInsts.length = 0;
@@ -639,20 +788,22 @@ export class GfxRenderInstManager {
         const list = assertExists(this.simpleRenderInstList);
         list.drawOnPassRenderer(device, this.gfxRenderCache, passRenderer, state);
     }
-
-    public disableSimpleMode(): void {
-        // This is a one-way street!
-        this.simpleRenderInstList = null;
-    }
+    //#endregion
 }
 
-// Convenience for porting.
+/**
+ * {@deprecated}
+ */
 export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, sort: boolean = true): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
     renderInstManager.drawOnPassRenderer(device, passRenderer);
 }
 
+/**
+ * {@deprecated}
+ */
 export function hasAnyVisible(renderInstManager: GfxRenderInstManager, passMask: number): boolean {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
     return renderInstManager.hasAnyVisible();
 }
+//#endregion

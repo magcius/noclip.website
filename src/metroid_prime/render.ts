@@ -149,7 +149,8 @@ class SurfaceInstance {
         else
             computeViewMatrix(viewMatrix, viewerInput.camera);
 
-        const renderInst = this.surfaceData.shapeHelper.pushRenderInst(renderHelper.renderInstManager);
+        const renderInst = renderHelper.renderInstManager.pushRenderInst();
+        this.surfaceData.shapeHelper.setOnRenderInst(renderInst);
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 
         mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
@@ -157,6 +158,7 @@ class SurfaceInstance {
         renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, this.materialTextureKey);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);
+        renderHelper.renderInstManager.submitRenderInst(renderInst);
     }
 }
 

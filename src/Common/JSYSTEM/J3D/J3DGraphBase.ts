@@ -198,11 +198,14 @@ export class ShapeInstance {
             if (!instVisible)
                 continue;
 
-            const renderInst = this.shapeData.shapeHelpers[p].pushRenderInst(renderInstManager);
+            const renderInst = renderInstManager.newRenderInst();
+            this.shapeData.shapeHelpers[p].setOnRenderInst(renderInst);
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
 
             if (usesSkinning)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
+
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

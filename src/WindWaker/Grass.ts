@@ -412,9 +412,11 @@ export class FlowerPacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
+                const renderInst = renderInstManager.newRenderInst();
+                this.flowerModel.shapeWhiteUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -437,9 +439,11 @@ export class FlowerPacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
+                const renderInst = renderInstManager.newRenderInst();
+                this.flowerModel.shapePinkUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -462,9 +466,11 @@ export class FlowerPacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
+                const renderInst = renderInstManager.newRenderInst();
+                this.flowerModel.shapeBessouUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
                 this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -822,9 +828,12 @@ export class TreePacket {
                 const data = room[i];
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
-                const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
+
+                const shadowRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.shapeShadow.setOnRenderInst(shadowRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
                 this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
+                renderInstManager.submitRenderInst(shadowRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -849,13 +858,17 @@ export class TreePacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
+                const trunkRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.shapeMain.setOnRenderInst(trunkRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
                 this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                renderInstManager.submitRenderInst(trunkRenderInst);
 
-                const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
+                const topRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.shapeTop.setOnRenderInst(topRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
                 this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
+                renderInstManager.submitRenderInst(topRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -1132,9 +1145,11 @@ export class GrassPacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const renderInst = this.shape.pushRenderInst(renderInstManager);
+                const renderInst = renderInstManager.newRenderInst();
+                this.shape.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMtx);
                 this.shape.fillPacketParams(packetParams, renderInst);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();

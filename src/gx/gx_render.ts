@@ -487,15 +487,13 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public pushRenderInst(renderInstManager: GfxRenderInstManager, packet: LoadedVertexPacket | null = null): GfxRenderInst {
-        const renderInst = renderInstManager.pushRenderInst();
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
         else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
-        return renderInst;
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {

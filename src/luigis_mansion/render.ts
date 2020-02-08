@@ -56,7 +56,8 @@ class Command_Batch {
                 return;
         }
 
-        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.shapeHelper.setOnRenderInst(renderInst);
         const materialOffs = this.materialCommand.materialHelper.allocateMaterialParams(renderInst);
         this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -64,6 +65,7 @@ class Command_Batch {
         this.materialCommand.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, materialParams);
         this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(packetParams, renderInst);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

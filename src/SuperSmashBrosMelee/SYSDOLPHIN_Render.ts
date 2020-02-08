@@ -390,8 +390,10 @@ class HSD_DObj_Instance {
                 throw "whoops";
             }
 
-            const renderInst = shapeHelper.pushRenderInst(renderInstManager);
+            const renderInst = renderInstManager.newRenderInst();
+            shapeHelper.setOnRenderInst(renderInst);
             shapeHelper.fillPacketParams(packetParams, renderInst);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
