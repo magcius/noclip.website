@@ -311,7 +311,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         const sfaRenderer = new SFARenderer(device);
         const X_BLOCKS = 10;
         const Y_BLOCKS = 10;
-        const FIRST_BLOCK = 200;
+        const FIRST_BLOCK = 300;
         let done = false;
         for (let y = 0; y < Y_BLOCKS && !done; y++) {
             for (let x = 0; x < X_BLOCKS && !done; x++) {

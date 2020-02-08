@@ -13,6 +13,7 @@ import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
 import { hexzero } from '../util';
 import { GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8 } from '../Common/N64/Image';
 
 interface LoadedTexture {
     offset: number;
@@ -85,178 +86,21 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture, isAncient: boolean)
         let dst = 0;
         switch (loaded.texture.format) {
         case 0x00: // 32-bit RGBA? Size is 4 * width * height, not including header. might be mipmapped.
-            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
-                pixels[dst] = dv.getUint8(src);
-                pixels[dst + 1] = dv.getUint8(src + 1);
-                pixels[dst + 2] = dv.getUint8(src + 2);
-                pixels[dst + 3] = dv.getUint8(src + 3);
-                src += 4;
-                dst += 4;
-            }
+            decodeTex_RGBA32(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0);
             break;
         case 0x01: // Appears to be 16-bit
             console.log(`loading format 0x${loaded.texture.format.toString(16)} from offset 0x${loaded.offset.toString(16)}`);
-            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
-                // RGB565
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 11) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 5) & 0x3f) * 255 / 0x3f)|0;
-                // pixels[dst + 2] = (((c >> 0) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = 0xFF;
-                // dst += 4;
-                // ARGB1555
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 10) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 5) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 2] = (((c >> 0) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = c & 0x8000 ? 0xFF : 0x00;
-                // dst += 4;
-                // RGBA5551
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 11) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 6) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 2] = (((c >> 1) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = c & 0x1 ? 0xFF : 0x00;
-                // dst += 4;
-                // RGBA4
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 12) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 8) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = ((c & 0xf) * 255 / 0xf)|0;
-                // dst += 4;
-                // Magenta
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = 0xff;
-                // pixels[dst + 1] = 0x00;
-                // pixels[dst + 2] = 0xff;
-                // pixels[dst + 3] = 0xff;
-                // dst += 4;
-                // IA8
-                const c = dv.getUint16(src);
-                src += 2;
-                pixels[dst] = (c >> 8) & 0xff;
-                pixels[dst + 1] = (c >> 8) & 0xff;
-                pixels[dst + 2] = (c >> 8) & 0xff;
-                pixels[dst + 3] = c & 0xFF;
-                dst += 4;
-                // IA4
-                // pixels[dst] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = c & 0xF;
-                // dst += 4;
-                // I8
-                // pixels[dst] = c;
-                // pixels[dst + 1] = c;
-                // pixels[dst + 2] = c;
-                // pixels[dst + 3] = 0xFF;
-                // dst += 4;
-                // I4      
-                // const c = dv.getUint8(src);
-                // src += 1;
-                // pixels[dst] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 4] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 5] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 6] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 7] = ((c & 0xf) * 255 / 0xf)|0;
-                // dst += 8;
-            }
+            decodeTex_RGBA16(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false); // FIXME: where is the line parameter stored?
             break;
         case 0x11: // Appears to be 16-bit
-            console.log(`loading format 0x${loaded.texture.format.toString(16)} from offset 0x${loaded.offset.toString(16)}`);
-            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
-                // RGB565
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 11) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 5) & 0x3f) * 255 / 0x3f)|0;
-                // pixels[dst + 2] = (((c >> 0) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = 0xFF;
-                // dst += 4;
-                // ARGB1555
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 10) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 5) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 2] = (((c >> 0) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = c & 0x8000 ? 0xFF : 0x00;
-                // dst += 4;
-                // RGBA5551
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 11) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 1] = (((c >> 6) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 2] = (((c >> 1) & 0x1f) * 255 / 0x1f)|0;
-                // pixels[dst + 3] = c & 0x1 ? 0xFF : 0x00;
-                // dst += 4;
-                // RGBA4
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = (((c >> 12) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 8) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = ((c & 0xf) * 255 / 0xf)|0;
-                // dst += 4;
-                // Magenta
-                // const c = dv.getUint16(src);
-                // src += 2;
-                // pixels[dst] = 0xff;
-                // pixels[dst + 1] = 0x00;
-                // pixels[dst + 2] = 0xff;
-                // pixels[dst + 3] = 0xff;
-                // dst += 4;
-                // IA8
-                const c = dv.getUint16(src);
-                src += 2;
-                pixels[dst] = (c >> 8) & 0xff;
-                pixels[dst + 1] = (c >> 8) & 0xff;
-                pixels[dst + 2] = (c >> 8) & 0xff;
-                pixels[dst + 3] = c & 0xFF;
-                dst += 4;
-                // IA4
-                // pixels[dst] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = c & 0xF;
-                // dst += 4;
-                // I8
-                // pixels[dst] = c;
-                // pixels[dst + 1] = c;
-                // pixels[dst + 2] = c;
-                // pixels[dst + 3] = 0xFF;
-                // dst += 4;
-                // I4      
-                // const c = dv.getUint8(src);
-                // src += 1;
-                // pixels[dst] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 1] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 2] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 3] = (((c >> 4) & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 4] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 5] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 6] = ((c & 0xf) * 255 / 0xf)|0;
-                // pixels[dst + 7] = ((c & 0xf) * 255 / 0xf)|0;
-                // dst += 8;
-            }
+            decodeTex_IA16(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false);
             break;
         case 0x15: // 24-bit RGB??! Size is 3 * width * height, not including header. might be mipmapped.
-            for (let i = 0; i < loaded.texture.width * loaded.texture.height; i++) {
-                pixels[dst] = dv.getUint8(src);
-                pixels[dst + 1] = dv.getUint8(src + 1);
-                pixels[dst + 2] = dv.getUint8(src + 2);
-                pixels[dst + 3] = 0xFF;
-                src += 3;
-                dst += 4;
-            }
+            console.log(`loading format 0x${loaded.texture.format.toString(16)} from offset 0x${loaded.offset.toString(16)}`);
+            // TODO
+            break;
+        case 0x25: // Appears to be 8-bit
+            decodeTex_I8(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0 /*loaded.texture.width / 4*/, false);
             break;
         default:
             throw Error(`Unhandled texture format 0x${loaded.texture.format.toString(16)} at offset 0x${loaded.offset.toString(16)}`);

@@ -477,23 +477,23 @@ export class VeryOldBlockRenderer {
 
         let fields = {
             texOffset: 0x58,
-            texCount: 0xa0,
             posOffset: 0x5c,
-            posCount: 0x90,
             clrOffset: 0x60,
-            clrCount: 0x94,
             texcoordOffset: 0x64,
-            texcoordCount: 0x96,
             shaderOffset: 0x68,
-            shaderCount: 0x9a, // Polygon attributes and material information
-            shaderSize: 0x3c,
             listOffsets: 0x6c,
             listSizes: 0x70,
+            bitstreamOffset: 0x7c, // Whoa...
+            texCount: 0xa0,
+            posCount: 0x90,
+            clrCount: 0x94,
+            texcoordCount: 0x96,
+            shaderCount: 0x9a, // Polygon attributes and material information
+            shaderSize: 0x3c,
             listCount: 0x99,
             numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort!
             //numListBits: 8, // ??? should be 6 according to decompilation of demo????
             numLayersOffset: 0x3b,
-            bitstreamOffset: 0x7c, // Whoa...
             // FIXME: There are three bitstreams, probably for opaque and transparent objects
             bitstreamByteCount: 0x86,
             hasYTranslate: false,
@@ -733,7 +733,7 @@ export class VeryOldBlockRenderer {
 
                     newModel.setTextures([
                         texColl.getTexture(device, texIds[shader.tex0Num]),
-                        texColl.getTexture(device, texIds[shader.tex1Num]),
+                        // texColl.getTexture(device, texIds[shader.tex1Num]),
                     ]);
 
                     this.models.push(newModel);
