@@ -39,16 +39,16 @@ export function parse(buffer: ArrayBufferSlice): DZB {
 
     const vertexCount = view.getUint32(0x00);
     const vertexOffs = view.getUint32(0x04);
-    const faceCount = view.getUint32(0x08);
-    const faceOffs = view.getUint32(0x0C);
-    const octreeFaceMapCount = view.getUint32(0x10);
-    const octreeFaceMapOffs = view.getUint32(0x14);
-    const octreeNodeCount = view.getUint32(0x18);
-    const octreeNodeOffs = view.getUint32(0x1C);
+    const triCount = view.getUint32(0x08);
+    const triOffs = view.getUint32(0x0C);
+    const blkCount = view.getUint32(0x10);
+    const blkOffs = view.getUint32(0x14);
+    const nodeTreeCount = view.getUint32(0x18);
+    const nodeTreeOffs = view.getUint32(0x1C);
     const groupCount = view.getUint32(0x20);
     const groupOffs = view.getUint32(0x24);
-    const propertyCount = view.getUint32(0x28);
-    const propertyOffs = view.getUint32(0x2C);
+    const triInfoCount = view.getUint32(0x28);
+    const triInfoOffs = view.getUint32(0x2C);
 
     function parseOctreeNodeMaybe(index: number): OctreeNode | null {
         if (index >= 0)
@@ -58,8 +58,8 @@ export function parse(buffer: ArrayBufferSlice): DZB {
     }
 
     function parseOctreeNode(index: number): OctreeNode {
-        assert(index < octreeNodeCount);
-        const offs = octreeNodeOffs + (index * 0x14);
+        assert(index < nodeTreeCount);
+        const offs = nodeTreeOffs + (index * 0x14);
         assert(view.getUint8(offs + 0x00) === 0x01);
 
         const nodeType: OctreeNodeType = view.getUint8(offs + 0x01);
@@ -78,10 +78,10 @@ export function parse(buffer: ArrayBufferSlice): DZB {
             return { nodeType, children };
         } else if (nodeType === OctreeNodeType.LEAF) {
             const faceMapIndex = view.getUint16(offs + 0x04);
-            assert(faceMapIndex < octreeFaceMapCount);
-            const faceStart = view.getUint16(octreeFaceMapOffs + faceMapIndex * 0x02);
-            assert(faceStart < faceCount);
-            const faceEnd = (faceMapIndex + 1) < octreeFaceMapCount ? view.getUint16(octreeFaceMapOffs + (faceMapIndex + 1) * 0x02) : faceCount;
+            assert(faceMapIndex < blkCount);
+            const faceStart = view.getUint16(blkOffs + faceMapIndex * 0x02);
+            assert(faceStart < triCount);
+            const faceEnd = (faceMapIndex + 1) < blkCount ? view.getUint16(blkOffs + (faceMapIndex + 1) * 0x02) : triCount;
             const faceCount_ = faceEnd - faceStart;
             assert(faceCount_ > 0);
             return { nodeType, faceStart, faceCount: faceCount_ };
@@ -91,11 +91,11 @@ export function parse(buffer: ArrayBufferSlice): DZB {
     }
 
     const vertexData = buffer.createTypedArray(Float32Array, vertexOffs, vertexCount * 3, Endianness.BIG_ENDIAN);
-    const faceData = buffer.createTypedArray(Uint16Array, faceOffs, faceCount * 5, Endianness.BIG_ENDIAN);
+    const faceData = buffer.createTypedArray(Uint16Array, triOffs, triCount * 5, Endianness.BIG_ENDIAN);
     const octreeRoot = parseOctreeNode(0);
     const pos = vec3.create();
 
-    return { pos, octreeRoot, vertexData, faceData, faceCount };
+    return { pos, octreeRoot, vertexData, faceData, faceCount: triCount };
 }
 
 const scratchVec3 = vec3.create();

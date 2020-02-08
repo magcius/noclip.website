@@ -309,10 +309,9 @@ class NodeInstance {
 
             const indexBias = this.childIndex * 0.01;
             const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
-            const depthBias = 1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias);
+            const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
-            // TODO(jstpierre): Figure out what's wrong with this
-            if (false && depthBias !== 1.0) {
+            if (depthBias !== 1.0) {
                 let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
