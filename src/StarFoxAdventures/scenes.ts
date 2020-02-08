@@ -18,7 +18,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
 
 import { SFAMapDesc } from './maps';
-import { BlockRenderer, VeryOldBlockRenderer, BlockFetcher } from './blocks';
+import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { TextureCollection, SFARenderer } from './render';
 
@@ -329,7 +329,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
                     }
                     let blockRenderer;
                     if (this.useVeryOldBlocks) {
-                        blockRenderer = new VeryOldBlockRenderer(device, blockData, this.texColl);
+                        blockRenderer = new AncientBlockRenderer(device, blockData, this.texColl);
                     } else {
                         blockRenderer = new BlockRenderer(device, blockData, this.texColl);
                     }
@@ -515,10 +515,18 @@ const sceneDescs = [
     new SFABlockExhibitDesc('warlock', 'mod16', 'Warlock Blocks'),
 
     'Demo',
-    new SFAMapDesc(5, 'demo5', 'Location 5', SFADEMO_GAME_INFO),
+    new SFAMapDesc(5, 'demo5', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(6, 'demo6', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(7, 'demo7', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(8, 'demo8', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(9, 'demo9', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(10, 'demo10', 'Location 10', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(11, 'demo11', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(12, 'demo12', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(13, 'demo13', 'Location', SFADEMO_GAME_INFO, true),
 
-    'Demo Block Exhibits',
-    new SFABlockExhibitDesc('', 'BLOCKS', 'Demo Blocks', SFADEMO_GAME_INFO, false, true, true),
+    'Ancient Block Exhibits',
+    new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),
 ];
 
 const id = 'sfa';

@@ -22,12 +22,17 @@ interface BlockInfo {
     block: number;
 }
 
+abstract class BlockRendererBase {
+    public abstract addToRenderer(renderer: SFARenderer, modelMatrix: mat4): void;
+}
+
 export class BlockCollection {
-    blockRenderers: BlockRenderer[] = [];
+    blockRenderers: BlockRendererBase[] = [];
     blockFetcher: BlockFetcher;
-    tex1Tab: ArrayBufferSlice;
-    tex1Bin: ArrayBufferSlice;
     texColl: TextureCollection;
+
+    constructor(private isAncient: boolean) {
+    }
 
     public async create(device: GfxDevice, context: SceneContext,  trkblk: number, gameInfo: GameInfo) {
         const dataFetcher = context.dataFetcher;
@@ -36,17 +41,27 @@ export class BlockCollection {
         this.blockFetcher = await gameInfo.makeBlockFetcher(trkblk, dataFetcher, gameInfo);
         // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
-        this.tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
-        this.tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
-        this.texColl = new TextureCollection(this.tex1Tab, this.tex1Bin);
+        if (this.isAncient) {
+            const texTab = await dataFetcher.fetchData(`${pathBase}/TEX.tab`);
+            const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
+            this.texColl = new TextureCollection(texTab, texBin, this.isAncient);
+        } else {
+            const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
+            const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
+            this.texColl = new TextureCollection(tex1Tab, tex1Bin, this.isAncient);
+        }
     }
 
-    public getBlockRenderer(device: GfxDevice, blockNum: number, trkblk: number, subnum: number): BlockRenderer | null {
+    public getBlockRenderer(device: GfxDevice, blockNum: number, trkblk: number, subnum: number): BlockRendererBase | null {
         if (this.blockRenderers[blockNum] === undefined) {
             const uncomp = this.blockFetcher.getBlock(blockNum, trkblk, subnum);
             if (uncomp === null)
                 return null;
-            this.blockRenderers[blockNum] = new BlockRenderer(device, uncomp, this.texColl);
+            if (this.isAncient) {
+                this.blockRenderers[blockNum] = new AncientBlockRenderer(device, uncomp, this.texColl);
+            } else {
+                this.blockRenderers[blockNum] = new BlockRenderer(device, uncomp, this.texColl);
+            }
         }
 
         return this.blockRenderers[blockNum];
@@ -107,7 +122,7 @@ class LowBitReader {
     }
 }
 
-export class BlockRenderer {
+export class BlockRenderer implements BlockRendererBase {
     models: ModelInstance[] = [];
     yTranslate: number = 0;
 
@@ -467,7 +482,7 @@ export class BlockRenderer {
     }
 }
 
-export class VeryOldBlockRenderer {
+export class AncientBlockRenderer implements BlockRendererBase {
     models: ModelInstance[] = [];
     yTranslate: number = 0;
 

@@ -27,7 +27,7 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
 }
 
 export class SFAMapDesc implements Viewer.SceneDesc {
-    constructor(public locationNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public locationNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isAncient: boolean = false) {
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -58,7 +58,7 @@ export class SFAMapDesc implements Viewer.SceneDesc {
                     continue;
 
                 if (blockCollections[blockInfo.trkblk] === undefined) {
-                    const blockColl = new BlockCollection();
+                    const blockColl = new BlockCollection(this.isAncient);
                     try {
                         await blockColl.create(device, context, blockInfo.trkblk, this.gameInfo);
                     } catch (e) {
