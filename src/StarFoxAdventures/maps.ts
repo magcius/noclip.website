@@ -6,14 +6,40 @@ import { mat4 } from 'gl-matrix';
 import { hexzero, nArray } from '../util';
 
 import { SFARenderer } from './render';
-import { getBlockInfo, BlockCollection } from './blocks';
+import { BlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 
+export interface BlockInfo {
+    trkblk: number;
+    sub: number;
+    block: number;
+}
+
 export interface MapInfo {
+    mapsBin: DataView;
+    locationNum: number;
     infoOffset: number;
     blockTableOffset: number;
     blockCols: number;
     blockRows: number;
+}
+
+export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number): BlockInfo {
+    const blockIndex = y * mapInfo.blockCols + x;
+    const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
+    const sub = (blockInfo >>> 17) & 0x3F;
+    const trkblk = (blockInfo >>> 23);
+    let block;
+    if (trkblk == 0xff) {
+        block = -1;
+    } else {
+        try {
+            block = sub + trkblkTab.getUint16(trkblk * 2);
+        } catch (e) {
+            block = -1
+        }
+    }
+    return {trkblk, sub, block};
 }
 
 function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): MapInfo {
@@ -22,8 +48,22 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
     const blockTableOffset = mapsTab.getUint32(offs + 0x4);
     const blockCols = mapsBin.getUint16(infoOffset + 0x0);
     const blockRows = mapsBin.getUint16(infoOffset + 0x2);
-    console.log(`block table offset: 0x${hexzero(blockTableOffset, 8)}`);
-    return { infoOffset, blockTableOffset, blockCols, blockRows };
+    return { mapsBin, locationNum, infoOffset, blockTableOffset, blockCols, blockRows };
+}
+
+// Block table is addressed by blockTable[y][x].
+function getBlockTable(mapInfo: MapInfo, trkblkTab: DataView): BlockInfo[][] {
+    const blockTable: BlockInfo[][] = [];
+    for (let y = 0; y < mapInfo.blockRows; y++) {
+        const row: BlockInfo[] = [];
+        blockTable.push(row);
+        for (let x = 0; x < mapInfo.blockCols; x++) {
+            const blockInfo = getBlockInfo(mapInfo.mapsBin, mapInfo, x, y, trkblkTab, mapInfo.locationNum);
+            row.push(blockInfo);
+        }
+    }
+
+    return blockTable;
 }
 
 export class SFAMapDesc implements Viewer.SceneDesc {
@@ -40,20 +80,45 @@ export class SFAMapDesc implements Viewer.SceneDesc {
         console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
         const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
-        for (let y = 0; y < mapInfo.blockRows; y++) {
-            let line = '';
-            for (let x = 0; x < mapInfo.blockCols; x++) {
-                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab, this.locationNum);
-                line += ` ${JSON.stringify(blockInfo)}`;
+        const blockTable = getBlockTable(mapInfo, trkblkTab);
+
+        ////////////////////////// create editor stuff
+        const self = this;
+        window.main.openEditor = function() {
+            const newWin = window.open('about:blank');
+            if (!newWin) {
+                console.warn(`Failed to open editor. Please allow pop-up windows and try again.`);
+                return;
             }
-            console.log(`${line}`);
-        }
+            newWin.onload = function() {
+                const tableEl = newWin.document.createElement('table');
+                newWin.document.body.appendChild(tableEl);
+                for (let y = 0; y < mapInfo.blockRows; y++) {
+                    const trEl = newWin.document.createElement('tr');
+                    tableEl.appendChild(trEl);
+                    for (let x = 0 ; x < mapInfo.blockCols; x++) {
+                        const blockInfo = blockTable[y][x];
+                        const tdEl = newWin.document.createElement('td');
+                        tdEl.append(`${blockInfo.block}`);
+                        trEl.appendChild(tdEl);
+                    }
+                }
+
+                const submitEl = newWin.document.createElement('input');
+                submitEl.setAttribute('type', 'submit');
+                newWin.document.body.appendChild(submitEl);
+                submitEl.onclick = function() {
+                    console.warn(`Not implemented`);
+                }
+            }
+        };
+        //////////////////////////////////////////////
 
         const sfaRenderer = new SFARenderer(device);
         const blockCollections: BlockCollection[] = [];
         for (let y = 0; y < mapInfo.blockRows; y++) {
             for (let x = 0; x < mapInfo.blockCols; x++) {
-                const blockInfo = getBlockInfo(mapsBin, mapInfo, x, y, trkblkTab, this.locationNum);
+                const blockInfo = blockTable[y][x];
                 if (blockInfo.block == -1)
                     continue;
 
@@ -71,9 +136,9 @@ export class SFAMapDesc implements Viewer.SceneDesc {
 
                 const blockColl = blockCollections[blockInfo.trkblk];
                 try {
-                    const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.base);
+                    const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.sub);
                     if (!blockRenderer) {
-                        console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} base ${blockInfo.base}) not found`);
+                        console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} sub ${blockInfo.sub}) not found`);
                         continue;
                     }
 

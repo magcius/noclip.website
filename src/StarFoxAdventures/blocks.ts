@@ -16,12 +16,6 @@ export abstract class BlockFetcher {
     public abstract getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null;
 }
 
-interface BlockInfo {
-    base: number;
-    trkblk: number;
-    block: number;
-}
-
 abstract class BlockRendererBase {
     public abstract addToRenderer(renderer: SFARenderer, modelMatrix: mat4): void;
 }
@@ -66,24 +60,6 @@ export class BlockCollection {
 
         return this.blockRenderers[blockNum];
     }
-}
-
-export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number): BlockInfo {
-    const blockIndex = y * mapInfo.blockCols + x;
-    const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
-    const base = (blockInfo >>> 17) & 0x3F;
-    const trkblk = (blockInfo >>> 23);
-    let block;
-    if (trkblk == 0xff) {
-        block = -1;
-    } else {
-        try {
-            block = base + trkblkTab.getUint16(trkblk * 2);
-        } catch (e) {
-            block = -1
-        }
-    }
-    return {base, trkblk, block};
 }
 
 // Reads bitfields by pulling from the low bits of each byte in sequence
