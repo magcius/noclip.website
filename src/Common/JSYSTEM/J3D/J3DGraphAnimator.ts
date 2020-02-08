@@ -4,7 +4,7 @@
 import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, ANK1, Joint } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
-import { J3DModelInstance, JointMatrixCalcNoAnm } from './J3DGraphBase';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance } from './J3DGraphBase';
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 
@@ -135,12 +135,19 @@ export class J3DTexRegAnm {
     }
 }
 
+function findMaterialInstance(modelInstance: J3DModelInstance, name: string): MaterialInstance | null {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        if (modelInstance.materialInstances[i].name === name)
+            return modelInstance.materialInstances[i];
+    return null;
+}
+
 // TODO(jstpierre): Replace this with something that the J3DTexRegAnm, etc. structs directly.
 export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, trk1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.colorCalc[entry.colorKind])
             (materialInstance.colorCalc[entry.colorKind] as J3DTexRegAnm).set(frameCtrl, entry);
@@ -152,8 +159,8 @@ export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1,
 export function removeTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, trk1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.colorCalc[entry.colorKind] = null;
     }
@@ -191,8 +198,8 @@ export class J3DTexMtxAnm {
 export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.texMtxCalc[entry.texGenIndex])
             (materialInstance.texMtxCalc[entry.texGenIndex] as J3DTexMtxAnm).set(frameCtrl, ttk1, entry);
@@ -204,8 +211,8 @@ export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1,
 export function removeTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.texMtxCalc[entry.texGenIndex] = null;
     }
@@ -228,8 +235,8 @@ export class J3DTexNoAnm {
 export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, tpt1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.texNoCalc[entry.texMapIndex])
             (materialInstance.texNoCalc[entry.texMapIndex] as J3DTexNoAnm).set(frameCtrl, entry);
@@ -241,8 +248,8 @@ export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, 
 export function removeTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, tpt1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.texMtxCalc[entry.texMapIndex] = null;
     }

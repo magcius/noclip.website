@@ -178,8 +178,8 @@ export class roomRead_class {
         const view = buffer.createDataView();
 
         const tableCount = view.getUint8(0x00);
-        this.isTimePass = !!view.getUint8(0x01);
-        this.reverb = view.getUint8(0x02);
+        this.reverb = view.getUint8(0x01);
+        this.isTimePass = !!view.getUint8(0x02);
 
         const tableOffs = view.getUint32(0x04);
         this.table = fileData.createTypedArray(Uint8Array, tableOffs, tableCount, Endianness.BIG_ENDIAN);

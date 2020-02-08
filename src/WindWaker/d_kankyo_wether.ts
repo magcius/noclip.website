@@ -27,7 +27,6 @@ import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../ui";
-import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;

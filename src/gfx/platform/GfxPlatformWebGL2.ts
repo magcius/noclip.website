@@ -1672,8 +1672,6 @@ void main() {
         }
         if (clearBits !== 0)
             gl.clear(clearBits);
-
-        assert(gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
     }
 
     private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsetsCount: number, dynamicByteOffsets: Uint32Array, dynamicByteOffsetsStart: number): void {

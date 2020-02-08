@@ -728,9 +728,44 @@ export class TreePacket {
         // @TODO: Hit checks
     }
 
-    public update(globals: dGlobals): void {
-        let groundChecksThisFrame = 0;
+    private updateRoom(globals: dGlobals, roomIdx: number, groundChecksThisFrame: number): number {
+        const room = this.rooms[roomIdx];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
+            if (groundChecksThisFrame >= kMaxGroundChecksPerFrame)
+                break;
+
+            // Perform ground checks for some limited number of data
+            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+                data.pos[1] = this.checkGroundY(globals.renderer, roomIdx, data);
+                data.flags &= ~TreeFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                const anim = this.anims[data.animIdx];
+
+                // Top matrix (Leafs)
+                if ((data.flags & TreeFlags.unk8) === 0) {
+                    const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
+                    mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.topMtx);
+                } else {
+                    mat4.copy(data.topModelMtx, data.unkMatrix);
+                }
+
+                // Trunk matrix
+                mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
+            }
+        }
+
+        return groundChecksThisFrame;
+    }
+
+    public update(globals: dGlobals): void {
         // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             const anim = this.anims[i];
@@ -743,36 +778,18 @@ export class TreePacket {
             mat4.rotateY(anim.trunkMtx, anim.trunkMtx, uShortTo2PI(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
+        // Update grass packets
+        let groundChecksThisFrame = 0;
+
+        // Start with current room. Then prioritize others.
+        groundChecksThisFrame = this.updateRoom(globals, globals.mStayNo, groundChecksThisFrame);
+
         for (let roomIdx = 0; roomIdx < this.rooms.length; roomIdx++) {
-            const room = this.rooms[roomIdx];
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                // Perform ground checks for some limited number of data
-                if ((data.flags & TreeFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = this.checkGroundY(globals.renderer, roomIdx, data);
-                    data.flags &= ~TreeFlags.needsGroundCheck;
-                    ++groundChecksThisFrame;
-                }
-
-                // @TODO: Frustum culling
-
-                if (!(data.flags & TreeFlags.isFrustumCulled)) {
-                    // Update model matrix for all non-culled objects
-                    const anim = this.anims[data.animIdx];
-
-                    // Top matrix (Leafs)
-                    if ((data.flags & TreeFlags.unk8) === 0) {
-                        const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
-                        mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.topMtx);
-                    } else {
-                        mat4.copy(data.topModelMtx, data.unkMatrix);
-                    }
-
-                    // Trunk matrix
-                    mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
-                }
-            }
+            if (groundChecksThisFrame > kMaxGroundChecksPerFrame)
+                break;
+            if (roomIdx === globals.mStayNo)
+                continue;
+            groundChecksThisFrame = this.updateRoom(globals, roomIdx, groundChecksThisFrame);
         }
     }
 
@@ -1032,9 +1049,38 @@ export class GrassPacket {
         // @TODO: Hit checks
     }
 
-    public update(globals: dGlobals): void {
-        let groundChecksThisFrame = 0;
+    private updateRoom(globals: dGlobals, roomIdx: number, groundChecksThisFrame: number): number {
+        const room = this.rooms[roomIdx];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
+            if (groundChecksThisFrame >= kMaxGroundChecksPerFrame)
+                break;
+
+            // Perform ground checks for some limited number of data
+            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+                data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
+                data.flags &= ~GrassFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & GrassFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                if (data.animIdx < 0) {
+                    // @TODO: Draw cut grass
+                } else {
+                    const anim = this.anims[data.animIdx];
+                    mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
+                }
+            }
+        }
+
+        return groundChecksThisFrame;
+    }
+
+    public update(globals: dGlobals): void {
         // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             const anim = this.anims[i];
@@ -1043,31 +1089,18 @@ export class GrassPacket {
             mat4.rotateY(anim.modelMtx, anim.modelMtx, anim.rotationY);
         }
 
+        // Update grass packets
+        let groundChecksThisFrame = 0;
+
+        // Start with current room. Then prioritize others.
+        groundChecksThisFrame = this.updateRoom(globals, globals.mStayNo, groundChecksThisFrame);
+
         for (let roomIdx = 0; roomIdx < this.rooms.length; roomIdx++) {
-            const room = this.rooms[roomIdx];
-
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                // Perform ground checks for some limited number of data
-                if (window.debug || ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame)) {
-                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
-                    data.flags &= ~GrassFlags.needsGroundCheck;
-                    ++groundChecksThisFrame;
-                }
-
-                // @TODO: Frustum culling
-
-                if (!(data.flags & GrassFlags.isFrustumCulled)) {
-                    // Update model matrix for all non-culled objects
-                    if (data.animIdx < 0) {
-                        // @TODO: Draw cut grass
-                    } else {
-                        const anim = this.anims[data.animIdx];
-                        mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
-                    }
-                }
-            }
+            if (groundChecksThisFrame > kMaxGroundChecksPerFrame)
+                break;
+            if (roomIdx === globals.mStayNo)
+                continue;
+            groundChecksThisFrame = this.updateRoom(globals, roomIdx, groundChecksThisFrame);
         }
     }
 

@@ -1307,7 +1307,7 @@ export class J3DModelInstance {
         if (!this.isAnyShapeVisible())
             return;
 
-        const depth = this.computeDepth(camera);
+        const depth = translucent ? this.computeDepth(camera) : -1;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             if (!this.shapeInstances[i].visible)
                 continue;

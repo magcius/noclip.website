@@ -493,9 +493,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
     }
 
-    public getRoomDZB(roomIdx: number): DZB.DZB {
-        const roomRenderer = assertExists(this.roomRenderers.find((r) => r.roomNo === roomIdx));
-        return roomRenderer.dzb;
+    public getRoomDZB(roomNo: number): DZB.DZB {
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            if (this.roomRenderers[i].roomNo === roomNo)
+                return this.roomRenderers[i].dzb;
+        throw "whoops";
     }
 
     private setVisibleLayerMask(m: number): void {
