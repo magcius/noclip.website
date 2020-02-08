@@ -763,8 +763,8 @@ export class GfxRenderInstManager {
         const list = assertExists(this.simpleRenderInstList);
         list.renderInsts.length = 0;
 
-        for (let i = 0; i < this.instPool.pool.length; i++)
-            if (this.instPool.pool[i].filterKey === filterKey)
+        for (let i = 0; i < this.instPool.allocCount; i++)
+            if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
                 list.insertToEnd(this.instPool.pool[i]);
     }
 
