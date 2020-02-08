@@ -18,3 +18,11 @@ export function getPointBezier(p0: number, p1: number, p2: number, p3: number, t
     const cf3 = (p0 *  1) + (p1 *  0) + (p2 *  0) +  (p3 *  0);
     return getPointCubic(cf0, cf1, cf2, cf3, t);
 }
+
+export function getPointBasis(p0: number, p1: number, p2: number, p3: number, t: number): number {
+    const cf0 = (p0 * -1) + (p1 *  3) + (p2 * -3) +  (p3 *  1);
+    const cf1 = (p0 *  3) + (p1 * -6) + (p2 *  3) +  (p3 *  0);
+    const cf2 = (p0 * -3) + (p1 *  0) + (p2 *  3) +  (p3 *  0);
+    const cf3 = (p0 *  1) + (p1 *  4) + (p2 *  1) +  (p3 *  0);
+    return getPointCubic(cf0, cf1, cf2, cf3, t)/6;
+}

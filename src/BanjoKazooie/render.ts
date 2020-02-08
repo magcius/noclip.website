@@ -1408,8 +1408,7 @@ export class GeometryRenderer {
 
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
         mat4.getTranslation(lookatScratch, this.modelMatrix);
-        vec3.sub(depthScratch, depthScratch, lookatScratch);
-        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(depthScratch));
+        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.distance(depthScratch, lookatScratch));
 
         const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);

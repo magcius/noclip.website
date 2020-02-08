@@ -6,6 +6,8 @@ import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../Ban
 import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
+import { Endianness } from "../endian";
+import { getPointHermite } from "../Spline";
 
 
 export interface Level {
@@ -119,6 +121,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             euler: vec3.create(),
             scale: vec3.fromValues(1, 1, 1),
             children: [],
+            track: null,
         };
     }
 
@@ -166,16 +169,25 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const graphStart = objectView.getUint32(0x00);
             const materials = objectView.getUint32(0x04);
             const renderer = objectView.getUint32(0x08);
+            const animations = objectView.getUint32(0x0C);
             const scale = getVec3(objectView, 0x10);
             vec3.scale(scale, scale, 0.1);
             // four floats
             const flags = objectView.getUint16(0x2C);
             const extraTransforms = objectView.getUint32(0x2E) >>> 8;
 
+            let animationList = 0;
+            if (animations !== 0) {
+                // just use first animation for now
+                const firstAnimation = dataMap.deref(animations);
+                if (firstAnimation !== 0)
+                    animationList = dataMap.deref(firstAnimation + 0x08);
+            }
+
             const sharedOutput = new RSPSharedOutput();
             const objectState = new F3DEX2.RSPState([], sharedOutput, dataMap);
             try {
-                const graph = parseGraph(dataMap, graphStart, materials, renderer, objectState);
+                const graph = parseGraph(dataMap, graphStart, materials, animationList, renderer, objectState);
                 objectInfo.push({ id, flags, graph, scale, sharedOutput, flying: initData.address === flyingSpawn });
             } catch (e) {
                 console.warn("failed parse", e);
@@ -250,6 +262,7 @@ export interface GFXNode {
     translation: vec3;
     euler: vec3;
     scale: vec3;
+    track: AnimationTrack | null;
 }
 
 interface TileParams {
@@ -443,7 +456,7 @@ function selectRenderer(addr: number): graphRenderer | null {
     return null;
 }
 
-function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, state: F3DEX2.RSPState, rootNode: GFXNode | null = null): GFXNode {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, animatorList: number, renderFunc: number, state: F3DEX2.RSPState, rootNode: GFXNode | null = null): GFXNode {
     const view = dataMap.getView(graphStart);
     const parentList: GFXNode[] = [];
 
@@ -457,15 +470,16 @@ function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, 
         const translation = getVec3(view, offs + 0x08);
         const euler = getVec3(view, offs + 0x14);
         const scale = getVec3(view, offs + 0x20);
-        const node: GFXNode = { translation, euler, scale, children: [] };
+        const node: GFXNode = { translation, euler, scale, children: [], track: null };
         if (dl > 0) {
             const materials = materialList === 0 ? [] : parseMaterialData(dataMap, dataMap.deref(materialList + currIndex));
             const renderer = selectRenderer(renderFunc);
             if (renderer !== null) {
                 node.model = renderer(dataMap, dl, state, materials);
+                state.clear();
             }
-            state.clear();
-
+            if (animatorList !== 0)
+                node.track = parseAnimationTrack(dataMap, dataMap.deref(animatorList + currIndex));
         }
         if (id === 0) {
             assert(rootNode === null);
@@ -515,6 +529,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
         euler: vec3.create(),
         scale: vec3.fromValues(1, 1, 1),
         children: [],
+        track: null,
     };
 
     const objects: ObjectSpawn[] = [];
@@ -650,4 +665,231 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
         if (scroll.flags & UVScrollFlags.Scale)
             state.gSPTexture(true, 0, 0, (1 << 21) / scroll.scale / adjXScale, (1 << 21) / scroll.scale / scroll.yScale);
     };
+}
+
+export const enum AnimatorValue {
+    Pitch,
+    Yaw,
+    Roll,
+    Path,
+    X,
+    Y,
+    Z,
+    ScaleX,
+    ScaleY,
+    ScaleZ,
+}
+
+export const enum EntryKind {
+    Exit            = 0x00,
+    InitFunc        = 0x01,
+    Block           = 0x02,
+    LerpBlock       = 0x03,
+    Lerp            = 0x04,
+    SplineVelBlock  = 0x05,
+    SplineVel       = 0x06,
+    SplineEnd       = 0x07,
+    SplineBlock     = 0x08,
+    Spline          = 0x09,
+    StepBlock       = 0x0A,
+    Step            = 0x0B,
+    Skip             = 0x0C,
+    Path            = 0x0D,
+    Loop            = 0x0E,
+    SetFlags        = 0x0F,
+    Func            = 0x10,
+    MultiFunc       = 0x11,
+}
+
+export const enum AnimatorOP {
+    NOP,
+    STEP,
+    LERP,
+    SPLINE,
+}
+
+export const enum PathKind {
+    Linear,
+    Bezier,
+    BSpline,
+    Hermite,
+}
+
+export interface Path {
+    kind: PathKind,
+    length: number,
+    speed: number,
+    segmentRate: number,
+    times: Float32Array,
+    points: Float32Array,
+    quartics: Float32Array,
+}
+
+export interface AnimatorData {
+    kind: EntryKind,
+    flags: number,
+    increment: number,
+    data: Float32Array,
+}
+
+export class Animator {
+    public op = AnimatorOP.NOP;
+    public start = 0;
+    public len = 1;
+    public p0 = 0;
+    public p1 = 0;
+    public v0 = 0;
+    public v1 = 0;
+    public path: Path | null = null;
+
+    constructor(public value: AnimatorValue) { }
+
+    public getValue(t: number): number {
+        switch (this.op) {
+            case AnimatorOP.NOP: return 0;
+            case AnimatorOP.STEP: return (t - this.start) > this.len ? this.p1 : this.p0;
+            case AnimatorOP.LERP: return this.p0 + (t - this.start) * this.v0;
+            case AnimatorOP.SPLINE: return getPointHermite(this.p0, this.p1, this.v0 / this.len, this.v1 / this.len, (t - this.start) * this.len);
+        }
+    }
+
+    public reset(): void {
+        this.op = AnimatorOP.NOP;
+        this.start = 0;
+        this.len = 1;
+        this.p0 = 0;
+        this.p1 = 0;
+        this.v0 = 0;
+        this.v1 = 0;
+    }
+}
+interface Animation {
+    increment: number;
+    frames: number;
+    // per node list of animators
+    // per node per mat list of animators
+}
+
+function parsePath(dataMap: DataMap, addr: number): Path {
+    const view = dataMap.getView(addr);
+
+    const kind: PathKind = view.getUint8(0x00);
+    const length = view.getUint16(0x02);
+    const segmentRate = view.getFloat32(0x04);
+    const pointList = view.getUint32(0x08);
+    const speed = view.getFloat32(0x0C);
+    const timeList = view.getUint32(0x10);
+    const quarticList = view.getUint32(0x14);
+
+    const timeData = dataMap.getRange(timeList);
+    const times = timeData.data.createTypedArray(Float32Array, timeList - timeData.start, length, Endianness.BIG_ENDIAN);
+
+    const pointData = dataMap.getRange(pointList);
+    const points = pointData.data.createTypedArray(Float32Array, pointList - pointData.start, length * 3 * (kind === PathKind.Bezier ? 3 : 1), Endianness.BIG_ENDIAN);
+
+    const quarticData = dataMap.getRange(quarticList);
+    const quartics = quarticData.data.createTypedArray(Float32Array, quarticList - quarticData.start, (length - 1) * 5, Endianness.BIG_ENDIAN);
+
+    return { kind, length, segmentRate, speed, times, points, quartics };
+}
+
+export interface AnimationTrack {
+    entries: TrackEntry[];
+    loopStart: number;
+}
+
+export interface TrackEntry {
+    kind: EntryKind;
+    flags: number;
+    increment: number;
+    block: boolean;
+    data: Float32Array;
+    path: Path | null;
+}
+
+function bitCount(bits: number): number {
+    let count = 0;
+    bits = bits >>> 0;
+    while (bits > 0) {
+        if (bits & 1)
+            count++;
+        bits = bits >>> 1;
+    }
+    return count;
+}
+
+function entryDataSize(kind: EntryKind, count: number): number {
+    switch (kind) {
+        case EntryKind.Lerp:
+        case EntryKind.LerpBlock:
+        case EntryKind.SplineEnd:
+        case EntryKind.Spline:
+        case EntryKind.SplineBlock:
+        case EntryKind.Step:
+        case EntryKind.StepBlock:
+        case EntryKind.MultiFunc: // not actually floats
+            return count;
+        case EntryKind.SplineVel:
+        case EntryKind.SplineVelBlock:
+            return 2 * count;
+    }
+    return 0;
+}
+
+// return whether the animation should wait for the current transitions to finish
+// before setting new values
+function entryShouldBlock(kind: EntryKind): boolean {
+    switch (kind) {
+        case EntryKind.Block:
+        case EntryKind.LerpBlock:
+        case EntryKind.SplineVelBlock:
+        case EntryKind.SplineBlock:
+        case EntryKind.StepBlock:
+        case EntryKind.SetFlags:
+        case EntryKind.Func:
+        case EntryKind.MultiFunc:
+            return true;
+    }
+    return false;
+}
+
+function parseAnimationTrack(dataMap: DataMap, addr: number): AnimationTrack | null {
+    if (addr === 0)
+        return null;
+    const range = dataMap.getRange(addr);
+    const view = range.data.createDataView();
+
+    const entryStarts: number[] = [];
+    const entries: TrackEntry[] = [];
+
+    let offs = addr - range.start;
+    while (true) {
+        entryStarts.push(offs);
+        const kind: EntryKind = view.getUint8(offs + 0x00) >>> 1;
+        const flags = (view.getUint32(offs + 0x00) >>> 15) & 0x3FF;
+        const increment = view.getUint16(offs + 0x02) & 0x7FFF;
+
+        offs += 4;
+        if (kind === EntryKind.Loop) {
+            const loop = view.getUint32(offs);
+            const loopStart = entryStarts.findIndex((start) => start + range.start === loop);
+            assert(loopStart >= 0, `bad loop start address ${hexzero(loopStart, 8)}`);
+            return { entries, loopStart };
+        }
+        if (kind === EntryKind.Exit)
+            return { entries, loopStart: -1 };
+
+        const block = entryShouldBlock(kind);
+
+        const count = entryDataSize(kind, bitCount(flags));
+        const data = range.data.createTypedArray(Float32Array, offs, count, Endianness.BIG_ENDIAN);
+        offs += count * 4;
+
+        const newEntry: TrackEntry = { kind, flags, increment, block, data, path: null };
+        if (kind === EntryKind.Path) {
+            newEntry.path = parsePath(dataMap, view.getUint32(offs));
+            offs += 4;
+        }
+        entries.push(newEntry);
+    }
 }

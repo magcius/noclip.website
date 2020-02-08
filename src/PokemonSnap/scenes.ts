@@ -164,11 +164,16 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const objectRenderer = new ModelRenderer(objectDatas[objIndex], level.objectInfo[objIndex].graph);
+                    // set transform components
+                    vec3.copy(objectRenderer.translation, objects[j].pos);
                     if (level.objectInfo[objIndex].flying)
-                        vec3.sub(objects[j].pos, objects[j].pos, level.rooms[i].graph.translation);
-                    vec3.mul(scaleScratch, objects[j].scale, level.objectInfo[objIndex].scale);
-                    buildTransform(transformScratch, objects[j].pos, objects[j].euler, scaleScratch);
-                    mat4.mul(objectRenderer.modelMatrix, transformScratch, objectRenderer.transform);
+                        vec3.sub(objectRenderer.translation, objectRenderer.translation, level.rooms[i].graph.translation);
+
+                    vec3.copy(objectRenderer.euler, objects[j].euler);
+
+                    vec3.mul(objectRenderer.scale, objectRenderer.scale, objects[j].scale);
+                    vec3.mul(objectRenderer.scale, objectRenderer.scale, level.objectInfo[objIndex].scale);
+
                     sceneRenderer.modelRenderers.push(objectRenderer);
                 }
             }
