@@ -299,7 +299,8 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         if (this.useAncientTextures) {
             const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
             const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
-            this.texColl = new TextureCollection(texTab, texBin, true);
+            const textable = await dataFetcher.fetchData(`${directory}/TEXTABLE.bin`);
+            this.texColl = new TextureCollection(texTab, texBin, true, textable.createDataView());
         } else {
             const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);

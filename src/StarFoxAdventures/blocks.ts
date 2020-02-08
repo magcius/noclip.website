@@ -512,6 +512,7 @@ export class VeryOldBlockRenderer {
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
+            // console.log(`texid ${i} = 0x${texIdFromFile.toString(16)}`);
             texIds.push(texIdFromFile);
         }
         // console.log(`tex ids: ${JSON.stringify(texIds)}`);

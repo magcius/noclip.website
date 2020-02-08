@@ -13,7 +13,7 @@ import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
 import { hexzero } from '../util';
 import { GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8 } from '../Common/N64/Image';
+import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_I4, decodeTex_RGBA32, decodeTex_I8 } from '../Common/N64/Image';
 
 interface LoadedTexture {
     offset: number;
@@ -92,15 +92,21 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture, isAncient: boolean)
             console.log(`loading format 0x${loaded.texture.format.toString(16)} from offset 0x${loaded.offset.toString(16)}`);
             decodeTex_RGBA16(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false); // FIXME: where is the line parameter stored?
             break;
+        case 0x05: // Appears to be 8-bit
+            decodeTex_I8(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0 /*loaded.texture.width / 4*/, false);
+            break;
         case 0x11: // Appears to be 16-bit
             decodeTex_IA16(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false);
             break;
         case 0x15: // 24-bit RGB??! Size is 3 * width * height, not including header. might be mipmapped.
             console.log(`loading format 0x${loaded.texture.format.toString(16)} from offset 0x${loaded.offset.toString(16)}`);
-            // TODO
+            decodeTex_RGBA16(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false); // FIXME: where is the line parameter stored?
             break;
         case 0x25: // Appears to be 8-bit
             decodeTex_I8(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0 /*loaded.texture.width / 4*/, false);
+            break;
+        case 0x26: // Appears to be 4-bit
+            decodeTex_I4(pixels, dv, 0, loaded.texture.width, loaded.texture.height, 0, false);
             break;
         default:
             throw Error(`Unhandled texture format 0x${loaded.texture.format.toString(16)} at offset 0x${loaded.offset.toString(16)}`);
@@ -187,10 +193,14 @@ function loadTextureFromTable(device: GfxDevice, tab: ArrayBufferSlice, bin: Arr
 export class TextureCollection {
     decodedTextures: (DecodedTexture | null)[] = [];
 
-    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false) {
+    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false, private textable: DataView | null = null) {
     }
 
     public getTexture(device: GfxDevice, textureNum: number) {
+        // FIXME: texture mappings are wrong. TEXTABLE doesn't contain the needed information to fix them.
+        // if (this.isAncient) {
+        //     textureNum = this.textable!.getUint16(textureNum * 2);
+        // }
         if (this.decodedTextures[textureNum] === undefined) {
             this.decodedTextures[textureNum] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, textureNum, this.isAncient);
         }
