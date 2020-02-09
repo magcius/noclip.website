@@ -23,7 +23,7 @@ class cBgD__Tri_t {
     public vtxIdx0: number = 0;
     public vtxIdx1: number = 0;
     public vtxIdx2: number = 0;
-    public id: number = 0;
+    public infIdx: number = 0;
     public grpIdx: number = 0;
 }
 
@@ -99,7 +99,7 @@ export class cBgD_t {
             tri.vtxIdx0 = view.getUint16(triIdx + 0x00);
             tri.vtxIdx1 = view.getUint16(triIdx + 0x02);
             tri.vtxIdx2 = view.getUint16(triIdx + 0x04);
-            tri.id = view.getUint16(triIdx + 0x06);
+            tri.infIdx = view.getUint16(triIdx + 0x06);
             tri.grpIdx = view.getUint16(triIdx + 0x08);
             triIdx += 0x0A;
         }
@@ -546,10 +546,6 @@ class cBgW {
         return ret;
     }
 
-    protected ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
-        return false;
-    }
-
     private GroundCrossRp(chk: cBgS_GndChk, treIdx: number): boolean {
         let ret = false;
 
@@ -637,6 +633,11 @@ class cBgW {
         return true;
     }
 
+    // Base class. Overridden by dBgW.
+    protected ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
+        return false;
+    }
+
     protected ChkPolyThrough(grpIdx: number, chk: cBgS_PolyPassChk | null): boolean {
         return false;
     }
@@ -680,7 +681,7 @@ export class dBgW extends cBgW {
     protected ChkPolyThrough(triIdx: number, chk: cBgS_PolyPassChk | null): boolean {
         if (chk !== null) {
             // This field is documented as "Camera Behavior" which means it's likely used in the camera code...
-            const inf = this.dt.infTbl[this.dt.triTbl[triIdx].id];
+            const inf = this.dt.infTbl[this.dt.triTbl[triIdx].infIdx];
             if (chk.pass0 && !!(inf.passFlag & 0x02))
                 return true;
             if (chk.pass1 && !!(inf.passFlag & 0x01))
