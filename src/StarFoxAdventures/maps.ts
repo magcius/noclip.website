@@ -10,9 +10,8 @@ import { BlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 
 export interface BlockInfo {
-    trkblk: number;
+    mod: number;
     sub: number;
-    block: number;
 }
 
 export interface MapInfo {
@@ -24,22 +23,15 @@ export interface MapInfo {
     blockRows: number;
 }
 
-export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number, trkblkTab: DataView, locationNum: number): BlockInfo {
+export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number): BlockInfo | null {
     const blockIndex = y * mapInfo.blockCols + x;
     const blockInfo = mapsBin.getUint32(mapInfo.blockTableOffset + 4 * blockIndex);
     const sub = (blockInfo >>> 17) & 0x3F;
-    const trkblk = (blockInfo >>> 23);
-    let block;
-    if (trkblk == 0xff) {
-        block = -1;
-    } else {
-        try {
-            block = sub + trkblkTab.getUint16(trkblk * 2);
-        } catch (e) {
-            block = -1
-        }
+    const mod = (blockInfo >>> 23);
+    if (mod == 0xff) {
+        return null;
     }
-    return {trkblk, sub, block};
+    return {mod, sub};
 }
 
 function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): MapInfo {
@@ -52,13 +44,13 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
 }
 
 // Block table is addressed by blockTable[y][x].
-function getBlockTable(mapInfo: MapInfo, trkblkTab: DataView): BlockInfo[][] {
-    const blockTable: BlockInfo[][] = [];
+function getBlockTable(mapInfo: MapInfo): (BlockInfo | null)[][] {
+    const blockTable: (BlockInfo | null)[][] = [];
     for (let y = 0; y < mapInfo.blockRows; y++) {
-        const row: BlockInfo[] = [];
+        const row: (BlockInfo | null)[] = [];
         blockTable.push(row);
         for (let x = 0; x < mapInfo.blockCols; x++) {
-            const blockInfo = getBlockInfo(mapInfo.mapsBin, mapInfo, x, y, trkblkTab, mapInfo.locationNum);
+            const blockInfo = getBlockInfo(mapInfo.mapsBin, mapInfo, x, y);
             row.push(blockInfo);
         }
     }
@@ -80,7 +72,7 @@ export class SFAMapDesc implements Viewer.SceneDesc {
         console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
         const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
-        const blockTable = getBlockTable(mapInfo, trkblkTab);
+        const blockTable = getBlockTable(mapInfo);
 
         const sfaRenderer = new SFARenderer(device);
 
@@ -91,26 +83,26 @@ export class SFAMapDesc implements Viewer.SceneDesc {
             for (let y = 0; y < mapInfo.blockRows; y++) {
                 for (let x = 0; x < mapInfo.blockCols; x++) {
                     const blockInfo = blockTable[y][x];
-                    if (blockInfo.block == -1)
+                    if (blockInfo == null)
                         continue;
     
-                    if (blockCollections[blockInfo.trkblk] === undefined) {
-                        const blockColl = new BlockCollection(self.isAncient);
+                    if (blockCollections[blockInfo.mod] === undefined) {
+                        const blockColl = new BlockCollection(blockInfo.mod, self.isAncient);
                         try {
-                            await blockColl.create(device, context, blockInfo.trkblk, self.gameInfo);
+                            await blockColl.create(device, context, self.gameInfo);
                         } catch (e) {
                             console.error(e);
-                            console.warn(`Block collection ${blockInfo.trkblk} could not be loaded.`);
+                            console.warn(`Block collection ${blockInfo.mod} could not be loaded.`);
                             continue;
                         }
-                        blockCollections[blockInfo.trkblk] = blockColl;
+                        blockCollections[blockInfo.mod] = blockColl;
                     }
     
-                    const blockColl = blockCollections[blockInfo.trkblk];
+                    const blockColl = blockCollections[blockInfo.mod];
                     try {
-                        const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.sub);
+                        const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.sub);
                         if (!blockRenderer) {
-                            console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} sub ${blockInfo.sub}) not found`);
+                            console.warn(`Block mod${blockInfo.mod}.${blockInfo.sub} not found`);
                             continue;
                         }
     
@@ -145,7 +137,7 @@ export class SFAMapDesc implements Viewer.SceneDesc {
                         const blockInfo = blockTable[y][x];
                         const inputEl = newWin.document.createElement('input');
                         inputEl.setAttribute('type', 'number');
-                        inputEl.setAttribute('value', `${blockInfo.block}`);
+                        inputEl.setAttribute('value', `${blockInfo != null ? blockInfo.sub : -1}`);
                         row.push(inputEl);
                     }
                 }
@@ -169,9 +161,8 @@ export class SFAMapDesc implements Viewer.SceneDesc {
                     console.log(`Reloading blocks...`);
                     for (let y = 0; y < mapInfo.blockRows; y++) {
                         for (let x = 0; x < mapInfo.blockCols; x++) {
-                            const blockInfo = blockTable[y][x];
                             const newBlock = inputs[y][x].valueAsNumber;
-                            blockInfo.block = newBlock;
+                            blockTable[y][x] = {mod: 12345, sub: newBlock}; // TODO
                         }
                     }
                     await reloadBlocks();

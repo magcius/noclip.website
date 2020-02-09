@@ -13,7 +13,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial } from '../gx/gx_material';
 
 export abstract class BlockFetcher {
-    public abstract getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null;
+    public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
 }
 
 abstract class BlockRendererBase {
@@ -21,17 +21,17 @@ abstract class BlockRendererBase {
 }
 
 export class BlockCollection {
-    blockRenderers: BlockRendererBase[] = [];
+    blockRenderers: BlockRendererBase[] = []; // Address by blockRenderers[sub]
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
 
-    constructor(private isAncient: boolean) {
+    constructor(private mod: number, private isAncient: boolean) {
     }
 
-    public async create(device: GfxDevice, context: SceneContext,  trkblk: number, gameInfo: GameInfo) {
+    public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
         const dataFetcher = context.dataFetcher;
         const pathBase = gameInfo.pathBase;
-        this.blockFetcher = await gameInfo.makeBlockFetcher(trkblk, dataFetcher, gameInfo);
+        this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
         // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
         if (this.isAncient) {
@@ -39,26 +39,26 @@ export class BlockCollection {
             const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
             this.texColl = new TextureCollection(texTab, texBin, this.isAncient);
         } else {
-            const subdir = getSubdir(trkblk, gameInfo);
+            const subdir = getSubdir(this.mod, gameInfo);
             const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
             this.texColl = new TextureCollection(tex1Tab, tex1Bin, this.isAncient);
         }
     }
 
-    public getBlockRenderer(device: GfxDevice, blockNum: number, trkblk: number, subnum: number): BlockRendererBase | null {
-        if (this.blockRenderers[blockNum] === undefined) {
-            const uncomp = this.blockFetcher.getBlock(blockNum, trkblk, subnum);
+    public getBlockRenderer(device: GfxDevice, sub: number): BlockRendererBase | null {
+        if (this.blockRenderers[sub] === undefined) {
+            const uncomp = this.blockFetcher.getBlock(this.mod, sub);
             if (uncomp === null)
                 return null;
             if (this.isAncient) {
-                this.blockRenderers[blockNum] = new AncientBlockRenderer(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
-                this.blockRenderers[blockNum] = new BlockRenderer(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new BlockRenderer(device, uncomp, this.texColl);
             }
         }
 
-        return this.blockRenderers[blockNum];
+        return this.blockRenderers[sub];
     }
 }
 

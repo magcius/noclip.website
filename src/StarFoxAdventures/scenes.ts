@@ -31,6 +31,7 @@ export interface GameInfo {
 class SFABlockFetcher implements BlockFetcher {
     blocksTab: DataView;
     blocksBin: ArrayBufferSlice;
+    trkblkTab: DataView;
     locationNum: number;
 
     constructor(private isDeletedMap: boolean) {
@@ -39,11 +40,8 @@ class SFABlockFetcher implements BlockFetcher {
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
         this.locationNum = locationNum;
         const pathBase = gameInfo.pathBase;
+        this.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
         const subdir = getSubdir(locationNum, gameInfo);
-        // if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'cloudtreasure') {
-        //     console.log(`Holy smokes! Loading a deleted map from ${subdir}!`);
-        //     this.isDeletedMap = true;
-        // }
         if (this.isDeletedMap) {
             console.log(`isDeletedMap`);
             this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`)).createDataView();
@@ -54,7 +52,7 @@ class SFABlockFetcher implements BlockFetcher {
         }
     }
 
-    public getBlock(num: number, trkblk: number, subnum: number): ArrayBufferSlice | null {
+    public getBlock(mod: number, sub: number): ArrayBufferSlice | null {
         if (this.isDeletedMap) {
             // Different handling for blocks from the demo version's deleted maps
             // Find a workable block number...
@@ -65,7 +63,7 @@ class SFABlockFetcher implements BlockFetcher {
                 firstBlockNum++;
             }
 
-            const num = firstBlockNum + subnum;
+            const num = firstBlockNum + sub;
             if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
                 return null;
             }
@@ -79,10 +77,15 @@ class SFABlockFetcher implements BlockFetcher {
             return blocksBinPart;
         }
 
-        if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
+        if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
             return null;
         }
-        const tabValue = this.blocksTab.getUint32(num * 4);
+        const trkblk = this.trkblkTab.getUint16(mod * 2);
+        const blockNum = trkblk + sub;
+        if (blockNum < 0 || blockNum * 4 >= this.blocksTab.byteLength) {
+            return null;
+        }
+        const tabValue = this.blocksTab.getUint32(blockNum * 4);
         if (!(tabValue & 0x10000000)) {
             return null;
         }
@@ -348,7 +351,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         const sfaRenderer = new SFARenderer(device);
         const X_BLOCKS = 10;
         const Y_BLOCKS = 10;
-        const FIRST_BLOCK = 300;
+        const FIRST_BLOCK = 0;
         let done = false;
         for (let y = 0; y < Y_BLOCKS && !done; y++) {
             for (let x = 0; x < X_BLOCKS && !done; x++) {
