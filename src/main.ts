@@ -1,7 +1,7 @@
 
 /* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/noclip.website */
 
-import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
+import { Viewer, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 
@@ -66,27 +66,29 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
-import { UI, Panel } from './ui';
-import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { assertExists, assert, fallbackUndefined } from './util';
+import { UI } from './ui';
+import { hexdump, assertExists, magicstr } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
-import { atob, btoa } from './Ascii85';
-import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 
 import * as Sentry from '@sentry/browser';
+import { debugJunk } from './DebugJunk';
+
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
+import { SceneDesc, SceneGroup, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
-import { debugJunk } from './DebugJunk';
+import { LocationLoadContext, LocationBase, LocationLoader, LocationCameraSettings } from './AAA_NewUI/SceneBase2';
+import { SceneGroupLoader } from './AAA_NewUI/SceneDescLoader';
+import { FPSCameraController } from './Camera';
+import { mat4 } from 'gl-matrix';
 
 const sceneGroups = [
     "Wii",
@@ -169,12 +171,9 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
 }
 
-// Ideas for option bits. Not used yet.
-const enum OptionsBitsV3 {
-    HasSceneTime       = 0b00000001,
-    ScenePaused        = 0b00000010,
-    LowCameraPrecision = 0b00000100,
-};
+function getSceneGroups(sceneGroups: (SceneGroup | string)[]): SceneGroup[] {
+    return sceneGroups.filter((g) => typeof g !== 'string') as SceneGroup[];
+}
 
 const enum SaveStatesAction {
     Load,
@@ -221,13 +220,16 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
 
-    private currentSceneGroup: SceneGroup | null = null;
-    private currentSceneDesc: SceneDesc | null = null;
-
-    private loadingSceneDesc: SceneDesc | null = null;
     private destroyablePool: Destroyable[] = [];
-    private dataShare = new DataShare();
-    private dataFetcher: DataFetcher;
+    public dataShare = new DataShare();
+    public dataFetcher: DataFetcher;
+
+    private sceneGroupLoader: SceneGroupLoader;
+
+    private currentLocation: LocationBase | null = null;
+    private loadingLocation: LocationBase | null = null;
+    private loadingLocationAbort: (() => void) | null = null;
+
     private lastUpdatedURLTimeSeconds: number = -1;
 
     private postAnimFrameCanvas = new AnimationLoop();
@@ -305,28 +307,23 @@ class Main {
         this.groups.push('Other');
         this.groups.push(this.droppedFileGroup);
 
+        this.sceneGroupLoader = new SceneGroupLoader(getSceneGroups(this.groups), this.saveManager);
+        this.registerLocationLoader('SceneGroupLoader', this.sceneGroupLoader);
+
         this._loadSceneGroups();
 
         window.onhashchange = this._onHashChange.bind(this);
 
+        /*
         if (this.currentSceneDesc === null)
             this._onHashChange();
 
         if (this.currentSceneDesc === null) {
-            // Load the state from session storage.
-            const currentDescId = this.saveManager.getCurrentSceneDescId();
-            if (currentDescId !== null) {
-                // Load save slot 0.
-                const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
-                const sceneState = this.saveManager.loadState(key);
-                this._loadSceneDescById(currentDescId, sceneState);
-            }
-        }
-
-        if (this.currentSceneDesc === null) {
             // Make the user choose a scene if there's nothing loaded by default...
-            this.ui.sceneSelect.setExpanded(true);
         }
+        */
+
+        this.ui.sceneSelect.setExpanded(true);
 
         this._onRequestAnimationFrameCanvas();
 
@@ -352,9 +349,6 @@ class Main {
     }
 
     private _onHashChange(): void {
-        const hash = window.location.hash;
-        if (hash.startsWith('#'))
-            this._loadState(decodeURIComponent(hash.slice(1)));
     }
 
     private _exportSaveData() {
@@ -382,11 +376,13 @@ class Main {
             this.ui.sceneSelect.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
+                /*
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
                     const action = this.pickSaveStatesAction(inputManager);
                     this.doSaveStatesAction(action, key);
                 }
+                */
             }
         }
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
@@ -462,162 +458,24 @@ class Main {
         const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
         this._loadSceneGroups();
-        this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
+        // this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
     }
 
     private _onResize() {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
     }
 
-    private _saveStateTmp = new Uint8Array(512);
-    private _saveStateView = new DataView(this._saveStateTmp.buffer);
     // TODO(jstpierre): Save this in main instead of having this called 8 bajillion times...
     private _getSceneSaveState() {
-        let byteOffs = 0;
-
-        const optionsBits: OptionsBitsV3 = 0;
-        this._saveStateView.setUint8(byteOffs, optionsBits);
-        byteOffs++;
-
-        byteOffs += serializeCamera(this._saveStateView, byteOffs, this.viewer.camera);
-
-        // TODO(jstpierre): Pass DataView into serializeSaveState
-        if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, byteOffs);
-
-        const s = btoa(this._saveStateTmp, byteOffs);
-        return `ShareData=${s}`;
-    }
-
-    private _loadSceneSaveStateVersion2(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
-
-        let byteOffs = 0;
-        this.viewer.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
-        byteOffs += 0x04;
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _loadSceneSaveStateVersion3(state: string): boolean {
-        const byteLength = atob(this._saveStateTmp, 0, state);
-
-        let byteOffs = 0;
-        const optionsBits: OptionsBitsV3 = this._saveStateView.getUint8(byteOffs + 0x00);
-        assert(optionsBits === 0);
-        byteOffs++;
-
-        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
-
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.cameraUpdateForced();
-
-        return true;
-    }
-
-    private _tryLoadSceneSaveState(state: string): boolean {
-        // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
-        if (state.startsWith('ZNCA8') && state.endsWith('='))
-            return this._loadSceneSaveStateVersion2(state.slice(5, -1));
-
-        // Version 3 starts with 'A' and has no '=' at the end.
-        if (state.startsWith('A'))
-            return this._loadSceneSaveStateVersion3(state.slice(1));
-
-        if (state.startsWith('ShareData='))
-            return this._loadSceneSaveStateVersion3(state.slice(10));
-
-        return false;
-    }
-
-    private _loadSceneSaveState(state: string | null): boolean {
-        if (state === '' || state === null)
-            return false;
-
-        if (this._tryLoadSceneSaveState(state)) {
-            // Force an update of the URL whenever we successfully load state...
-            this._saveStateAndUpdateURL();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    private _loadSceneDescById(id: string, sceneState: string | null): void {
-        const [groupId, ...sceneRest] = id.split('/');
-        let sceneId = decodeURIComponent(sceneRest.join('/'));
-
-        const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
-        if (!group)
-            return;
-
-        if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
-            sceneId = group.sceneIdMap.get(sceneId)!;
-
-        const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        if (!desc)
-            return;
-
-        this._loadSceneDesc(group, desc, sceneState);
-    }
-
-    private _loadState(state: string) {
-        let sceneDescId: string = '', sceneSaveState: string = '';
-        const firstSemicolon = state.indexOf(';');
-        if (firstSemicolon >= 0) {
-            sceneDescId = state.slice(0, firstSemicolon);
-            sceneSaveState = state.slice(firstSemicolon + 1);
-        } else {
-            sceneDescId = state;
-        }
-
-        return this._loadSceneDescById(sceneDescId, sceneSaveState);
+        return '';
     }
 
     private _getCurrentSceneDescId() {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
-            return null;
-
-        const groupId = this.currentSceneGroup.id;
-        const sceneId = this.currentSceneDesc.id;
-        return `${groupId}/${sceneId}`;
+        return '';
     }
 
     private _saveState(forceUpdateURL: boolean = false) {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
-            return;
-
-        const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId()!;
-        const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
-        this.saveManager.saveTemporaryState(key, sceneStateStr);
-
-        const saveState = `${currentDescId};${sceneStateStr}`;
-        this.ui.setSaveState(saveState);
-
-        let shouldUpdateURL = forceUpdateURL;
-        if (!shouldUpdateURL) {
-            const timeSeconds = window.performance.now() / 1000;
-            const secondsElapsedSinceLastUpdatedURL = timeSeconds - this.lastUpdatedURLTimeSeconds;
-
-            if (secondsElapsedSinceLastUpdatedURL >= 2)
-                shouldUpdateURL = true;
-        }
-
-        if (shouldUpdateURL) {
-            window.history.replaceState('', document.title, `#${saveState}`);
-
-            const timeSeconds = window.performance.now() / 1000;
-            this.lastUpdatedURLTimeSeconds = timeSeconds;
-        }
+        return '';
     }
 
     private _saveStateAndUpdateURL(): void {
@@ -628,48 +486,8 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null): void {
-        scene.onstatechanged = () => {
-            this._saveStateAndUpdateURL();
-        };
-
-        let scenePanels: Panel[] = [];
-        if (scene.createPanels)
-            scenePanels = scene.createPanels();
-        this.ui.setScenePanels(scenePanels);
-        // Force time to play when loading a map.
-        this.ui.togglePlayPause(true);
-
-        const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
-        this.viewer.inputManager.isInteractive = isInteractive;
-        this._toggleUI(isInteractive);
-
-        const sceneDescId = this._getCurrentSceneDescId()!;
-        this.saveManager.setCurrentSceneDescId(sceneDescId);
-        this._saveStateAndUpdateURL();
-
-        if (scene.createCameraController !== undefined)
-            this.viewer.setCameraController(scene.createCameraController());
-        if (this.viewer.cameraController === null)
-            this.viewer.setCameraController(new FPSCameraController());
-
-        if (!this._loadSceneSaveState(sceneStateStr)) {
-            const camera = this.viewer.camera;
-
-            const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
-            const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
-
-            if (!didLoadCameraState)
-                mat4.identity(camera.worldMatrix);
-
-            mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
-        }
-
-        this.ui.sceneChanged();
-    }
-
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadSceneDesc(sceneGroup, sceneDesc);
+        this._loadLocation(this.sceneGroupLoader.getLocationFromSceneDesc(sceneGroup, sceneDesc));
     }
 
     private doSaveStatesAction(action: SaveStatesAction, key: string): void {
@@ -679,26 +497,61 @@ class Main {
             this.saveManager.deleteState(key);
         } else if (action === SaveStatesAction.Load) {
             const state = this.saveManager.loadState(key);
-            this._loadSceneSaveState(state);
+            // this._loadSceneSaveState(state);
         } else if (action === SaveStatesAction.LoadDefault) {
             const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            this._loadSceneSaveState(state);
+            // this._loadSceneSaveState(state);
+        }
+    }
+
+    public loaderMap = new Map<string, LocationLoader>();
+    private registerLocationLoader(engine: string, loader: LocationLoader): void {
+        this.loaderMap.set(engine, loader);
+    }
+
+    private findLocationLoader(location: LocationBase): LocationLoader {
+        return assertExists(this.loaderMap.get(location.engine));
+    }
+
+    private _loadCameraSettings(cameraSettings: LocationCameraSettings): void {
+        if (cameraSettings.kind === 'WASD') {
+            this.viewer.setCameraController(new FPSCameraController());
+            const camera = this.viewer.camera;
+            const m = camera.worldMatrix;
+            m[0]  = cameraSettings.worldMatrix[0];
+            m[4]  = cameraSettings.worldMatrix[1];
+            m[8]  = cameraSettings.worldMatrix[2];
+            m[12] = cameraSettings.worldMatrix[3];
+            m[1]  = cameraSettings.worldMatrix[4];
+            m[5]  = cameraSettings.worldMatrix[5];
+            m[9]  = cameraSettings.worldMatrix[6];
+            m[13] = cameraSettings.worldMatrix[7];
+            m[2]  = cameraSettings.worldMatrix[8];
+            m[6]  = cameraSettings.worldMatrix[9];
+            m[10] = cameraSettings.worldMatrix[10];
+            m[14] = cameraSettings.worldMatrix[11];
+            m[3]  = 0;
+            m[7]  = 0;
+            m[11] = 0;
+            m[15] = 1;
+            mat4.invert(camera.viewMatrix, camera.worldMatrix);
+            camera.worldMatrixUpdated();
+        } else if (cameraSettings.kind === 'Custom') {
+            this.viewer.setCameraController(cameraSettings.cameraController);
         }
     }
 
     private loadSceneDelta = 1;
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
-        if (this.currentSceneDesc === sceneDesc) {
-            this._loadSceneSaveState(sceneStateStr);
-            return;
-        }
-
+    private _loadLocation(location: LocationBase): void {
+        // TODO(jstpierre): Concurrent scene loading. It will happen eventually :)
         const device = this.viewer.gfxDevice;
 
         // Tear down old scene.
         if (this.dataFetcher !== null)
             this.dataFetcher.abort();
+        if (this.loadingLocationAbort !== null)
+            this.loadingLocationAbort();
         this.ui.destroyScene();
         if (this.viewer.scene && !this.destroyablePool.includes(this.viewer.scene))
             this.destroyablePool.push(this.viewer.scene);
@@ -706,14 +559,6 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
-
-        // Unhide any hidden scene groups upon being loaded.
-        if (sceneGroup.hidden)
-            sceneGroup.hidden = false;
-
-        this.currentSceneGroup = sceneGroup;
-        this.currentSceneDesc = sceneDesc;
-        this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         this.ui.sceneSelect.setProgress(0);
 
@@ -723,10 +568,6 @@ class Main {
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
-        const inputManager = this.viewer.inputManager;
-        const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
-        };
 
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
@@ -739,25 +580,58 @@ class Main {
 
         this.dataShare.loadNewScene();
 
-        this.loadingSceneDesc = sceneDesc;
-        const promise = sceneDesc.createScene(device, context);
+        const locationLoader = this.findLocationLoader(location);
 
-        if (promise === null) {
-            console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
+        const locationLoadContext: LocationLoadContext = {
+            device, dataFetcher, dataShare, uiContainer, destroyablePool,
+            oldLocation: this.currentLocation,
+            legacyUI: this.ui,
+
+            onabort: null,
+
+            setScene: (scene) => {
+                if (this.loadingLocation === null) {
+                    dataFetcher.setProgress();
+                    this.viewer.setScene(scene);
+                    this.currentLocation = location;
+                    this.loadingLocation = null;
+                }
+            },
+
+            setViewerLocation: (location) => {
+                // TODO(jstpierre): Change this to a location parameter?
+
+                // Force time to play when loading a location.
+                this.ui.togglePlayPause(true);
+
+                // Configure scene time if available.
+                if (location.time !== undefined)
+                    this.viewer.sceneTime = location.time;
+
+                if (location.cameraSettings !== undefined)
+                    this._loadCameraSettings(location.cameraSettings);
+                else
+                    this.viewer.setCameraController(new FPSCameraController());
+            },
+
+            locationChanged: () => {
+                this._saveStateAndUpdateURL();
+            },
+        };
+        this.loadingLocationAbort = () => {
+            if (locationLoadContext.onabort !== null)
+                locationLoadContext.onabort(locationLoadContext);
+        };
+
+        const ret = locationLoader.loadLocation(locationLoadContext, location);
+
+        if (!ret) {
+            console.error(`Cannot load ${location.title}. Probably an unsupported file extension?`);
             throw "whoops";
         }
 
-        promise.then((scene: SceneGfx) => {
-            if (this.loadingSceneDesc === sceneDesc) {
-                dataFetcher.setProgress();
-                this.loadingSceneDesc = null;
-                this.viewer.setScene(scene);
-                this._onSceneChanged(scene, sceneStateStr);
-            }
-        });
-
         // Set window title.
-        document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
+        document.title = `${location.fullTitle} - noclip`;
 
         const sceneDescId = this._getCurrentSceneDescId()!;
 
@@ -804,10 +678,13 @@ class Main {
     }
 
     private _getSceneDownloadPrefix() {
+        /*
         const groupId = this.currentSceneGroup!.id;
         const sceneId = this.currentSceneDesc!.id;
         const date = new Date();
         return `${groupId}_${sceneId}_${date.toISOString()}`;
+        */
+       return '';
     }
 
     private _takeScreenshot(opaque: boolean = true) {
