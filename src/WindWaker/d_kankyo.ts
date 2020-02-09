@@ -296,6 +296,12 @@ function setLight_palno_get(dst: setLight_palno_ret, pselenvr: setLight_palno_ps
         pselenvr.envrIdxPrev = 0;
     if (pselenvr.envrIdxCurr >= envLight.envr.length)
         pselenvr.envrIdxCurr = 0;
+    // NOTE(jstpierre): The original game does this check when initializing the tevstr. Not sure
+    // what will happen, but most actors that spawn on the stage have an override set up anyway...
+    if (pselenvr.envrIdxPrev < 0)
+        pselenvr.envrIdxPrev = globals.mStayNo;
+    if (pselenvr.envrIdxCurr < 0)
+        pselenvr.envrIdxCurr = globals.mStayNo;
 
     const envrPrev = envLight.envr[pselenvr.envrIdxPrev], envrCurr = envLight.envr[pselenvr.envrIdxCurr];
     const pselPrev = envLight.colo[envrPrev.pselIdx[pselenvr.pselIdxPrev]], pselCurr = envLight.colo[envrCurr.pselIdx[pselenvr.pselIdxCurr]];

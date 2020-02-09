@@ -755,9 +755,7 @@ export class TreePacket {
 
             // Perform ground checks for some limited number of data
             if (!!(data.flags & GrassFlags.needsGroundCheck)) {
-                console.time('ground y');
                 data.pos[1] = this.checkGroundY(globals, roomIdx, data);
-                console.timeEnd('ground y');
                 data.flags &= ~TreeFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }
