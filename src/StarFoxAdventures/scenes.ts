@@ -31,19 +31,25 @@ export interface GameInfo {
 class SFABlockFetcher implements BlockFetcher {
     blocksTab: DataView;
     blocksBin: ArrayBufferSlice;
-    isDeletedMap: boolean;
+    locationNum: number;
+
+    constructor(private isDeletedMap: boolean) {
+    }
 
     public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
+        this.locationNum = locationNum;
         const pathBase = gameInfo.pathBase;
         const subdir = getSubdir(locationNum, gameInfo);
-        if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'cloudtreasure') {
-            console.log(`Holy smokes! Loading a deleted map!`);
-            this.isDeletedMap = true;
-        }
-        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
+        // if (subdir == 'linklevel' || subdir == 'insidegal' || subdir == 'cloudtreasure') {
+        //     console.log(`Holy smokes! Loading a deleted map from ${subdir}!`);
+        //     this.isDeletedMap = true;
+        // }
         if (this.isDeletedMap) {
-            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
+            console.log(`isDeletedMap`);
+            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`)).createDataView();
+            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`);
         } else {
+            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
             this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
         }
     }
@@ -68,7 +74,7 @@ class SFABlockFetcher implements BlockFetcher {
                 return null;
             }
             const blockOffset = tabValue & 0xFFFFFF;
-            console.log(`Loading deleted block from offset 0x${blockOffset.toString(16)}`);
+            console.log(`Loading deleted block from offset 0x${blockOffset.toString(16)} (location num ${this.locationNum})`);
             const blocksBinPart = this.blocksBin.slice(blockOffset);
             return blocksBinPart;
         }
@@ -90,7 +96,7 @@ class SFABlockFetcher implements BlockFetcher {
 export const SFA_GAME_INFO: GameInfo = {
     pathBase: 'sfa',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher();
+        const result = new SFABlockFetcher(false);
         await result.create(locationNum, dataFetcher, gameInfo);
         return result;
     },
@@ -171,7 +177,7 @@ export const SFA_GAME_INFO: GameInfo = {
     },
 }
 
-class SFADemoBlockFetcher implements BlockFetcher {
+class AncientBlockFetcher implements BlockFetcher {
     blocksTab: DataView;
     blocksBin: ArrayBufferSlice;
 
@@ -195,38 +201,68 @@ class SFADemoBlockFetcher implements BlockFetcher {
 const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'sfademo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFADemoBlockFetcher();
+        const result = new SFABlockFetcher(false); // Change to true if you want to see earlier prototype blocks!
         await result.create(locationNum, dataFetcher, gameInfo);
         return result;
     },
     subdirs: {
         0: 'animtest',
-        1: 'dragrock',
-        2: 'dragrockbot',
-        3: 'swapholbot',
-        4: 'wallcity',
-        5: 'lightfoot',
-        6: 'cloudtreasure',
-        7: 'clouddungeon',
-        8: 'darkicemines',
-        //9: 'icemountain',
-        9: 'mazecave', // ????
-        10: 'darkicemines2',
-        11: 'bossgaldon',
-        12: 'insidegal',
-        //13: 'magiccave',
-        13: 'swaphol', // ???
-        14: 'dfshrine',
-        15: 'mmshrine',
-        16: 'ecshrine',
-        17: 'gpshrine',
-        18: 'dbshrine',
-        19: 'nwshrine',
-        20: 'worldmap',
-        21: 'capeclaw',
-        22: 'cloudrace',
-        23: 'bossdrakor',
-        24: 'bosstrex',
+        1: 'animtest',
+        2: 'animtest',
+        3: 'arwing',
+        4: 'dragrock',
+        5: 'animtest',
+        6: 'dfptop',
+        7: 'volcano',
+        8: 'animtest',
+        9: 'animtest',
+        10: 'dragrockbot',
+        11: 'dfalls',
+        12: 'swaphol',
+        13: 'animtest',
+        14: 'nwastes',
+        15: 'warlock',
+        16: 'shop',
+        17: 'animtest',
+        18: 'crfort',
+        19: 'swapholbot',
+        20: 'wallcity',
+        21: 'lightfoot',
+        22: 'cloudtreasure',
+        23: 'animtest',
+        24: 'clouddungeon',
+        25: 'mmpass',
+        26: 'darkicemines',
+        27: 'animtest',
+        28: 'desert',
+        29: 'animtest',
+        30: 'icemountain',
+        31: 'animtest',
+        32: 'animtest',
+        33: 'animtest',
+        34: 'darkicemines2',
+        35: 'bossgaldon',
+        36: 'animtest',
+        37: 'insidegal',
+        38: 'magiccave',
+        39: 'dfshrine',
+        40: 'mmshrine',
+        41: 'ecshrine',
+        42: 'gpshrine',
+        43: 'dbshrine',
+        44: 'nwshrine',
+        45: 'worldmap',
+        46: 'animtest',
+        47: 'capeclaw',
+        48: 'dbay',
+        49: 'animtest',
+        50: 'cloudrace',
+        51: 'bossdrakor',
+        52: 'animtest',
+        53: 'bosstrex',
+        54: 'animtest',
+        // The following entries are erased from the executable.
+        63: 'greatfox',
     }
 }
 
@@ -417,7 +453,7 @@ const sceneDescs = [
     new SFAMapDesc(57, 'loc57', 'Location'),
     new SFAMapDesc(58, 'loc58', 'Location'),
     new SFAMapDesc(59, 'loc59', 'Location'),
-    // new SFAMapDesc(60, 'loc60', 'Location 60'),
+    new SFAMapDesc(60, 'loc60', 'Location 60'),
     new SFAMapDesc(61, 'loc61', 'Location'),
     new SFAMapDesc(62, 'loc62', 'Location'),
     new SFAMapDesc(63, 'loc63', 'Location'),
@@ -432,36 +468,36 @@ const sceneDescs = [
     new SFAMapDesc(72, 'loc72', 'Location'),
     new SFAMapDesc(73, 'loc73', 'Location'),
     new SFAMapDesc(74, 'loc74', 'Location'),
-    // new SFAMapDesc(75, 'loc75', 'Location'),
-    // new SFAMapDesc(76, 'loc76', 'Location'),
-    // new SFAMapDesc(77, 'loc77', 'Location'),
-    // new SFAMapDesc(78, 'loc78', 'Location'),
-    // new SFAMapDesc(79, 'loc79', 'Location'),
-    // new SFAMapDesc(80, 'loc80', 'Location 80'),
-    // new SFAMapDesc(81, 'loc81', 'Location'),
-    // new SFAMapDesc(82, 'loc82', 'Location'),
-    // new SFAMapDesc(83, 'loc83', 'Location'),
-    // new SFAMapDesc(84, 'loc84', 'Location'),
-    // new SFAMapDesc(85, 'loc85', 'Location'),
-    // new SFAMapDesc(86, 'loc86', 'Location'),
-    // new SFAMapDesc(87, 'loc87', 'Location'),
-    // new SFAMapDesc(88, 'loc88', 'Location'),
-    // new SFAMapDesc(89, 'loc89', 'Location'),
-    // new SFAMapDesc(90, 'loc90', 'Location 90'),
-    // new SFAMapDesc(91, 'loc91', 'Location'),
-    // new SFAMapDesc(92, 'loc92', 'Location'),
-    // new SFAMapDesc(93, 'loc93', 'Location'),
-    // new SFAMapDesc(94, 'loc94', 'Location'),
-    // new SFAMapDesc(95, 'loc95', 'Location'),
-    // new SFAMapDesc(96, 'loc96', 'Location'),
-    // new SFAMapDesc(97, 'loc97', 'Location'),
-    // new SFAMapDesc(98, 'loc98', 'Location'),
-    // new SFAMapDesc(99, 'loc99', 'Location'),
+    new SFAMapDesc(75, 'loc75', 'Location'),
+    new SFAMapDesc(76, 'loc76', 'Location'),
+    new SFAMapDesc(77, 'loc77', 'Location'),
+    new SFAMapDesc(78, 'loc78', 'Location'),
+    new SFAMapDesc(79, 'loc79', 'Location'),
+    new SFAMapDesc(80, 'loc80', 'Location 80'),
+    new SFAMapDesc(81, 'loc81', 'Location'),
+    new SFAMapDesc(82, 'loc82', 'Location'),
+    new SFAMapDesc(83, 'loc83', 'Location'),
+    new SFAMapDesc(84, 'loc84', 'Location'),
+    new SFAMapDesc(85, 'loc85', 'Location'),
+    new SFAMapDesc(86, 'loc86', 'Location'),
+    new SFAMapDesc(87, 'loc87', 'Location'),
+    new SFAMapDesc(88, 'loc88', 'Location'),
+    new SFAMapDesc(89, 'loc89', 'Location'),
+    new SFAMapDesc(90, 'loc90', 'Location 90'),
+    new SFAMapDesc(91, 'loc91', 'Location'),
+    new SFAMapDesc(92, 'loc92', 'Location'),
+    new SFAMapDesc(93, 'loc93', 'Location'),
+    new SFAMapDesc(94, 'loc94', 'Location'),
+    new SFAMapDesc(95, 'loc95', 'Location'),
+    new SFAMapDesc(96, 'loc96', 'Location'),
+    new SFAMapDesc(97, 'loc97', 'Location'),
+    new SFAMapDesc(98, 'loc98', 'Location'),
+    new SFAMapDesc(99, 'loc99', 'Location'),
     // ... (Many maps contain empty or broken data) ...
-    // new SFAMapDesc(110, 'loc110', 'Location 110'),
+    new SFAMapDesc(110, 'loc110', 'Location 110'),
     // ...
-    // new SFAMapDesc(115, 'loc115', 'Location 115'),
-    // new SFAMapDesc(116, 'loc116', 'Location 116'), 
+    new SFAMapDesc(115, 'loc115', 'Location 115'),
+    new SFAMapDesc(116, 'loc116', 'Location 116'), 
     // (end)
 
     'Block Exhibits',
@@ -515,15 +551,72 @@ const sceneDescs = [
     new SFABlockExhibitDesc('warlock', 'mod16', 'Warlock Blocks'),
 
     'Demo',
-    new SFAMapDesc(5, 'demo5', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(6, 'demo6', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(7, 'demo7', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(8, 'demo8', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(9, 'demo9', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(10, 'demo10', 'Location 10', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(11, 'demo11', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(12, 'demo12', 'Location', SFADEMO_GAME_INFO, true),
-    new SFAMapDesc(13, 'demo13', 'Location', SFADEMO_GAME_INFO, true),
+    new SFAMapDesc(5, 'demo5', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(6, 'demo6', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(7, 'demo7', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(8, 'demo8', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(9, 'demo9', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(10, 'demo10', 'Location 10', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(11, 'demo11', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(12, 'demo12', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(13, 'demo13', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(14, 'demo14', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(15, 'demo15', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(16, 'demo16', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(17, 'demo17', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(18, 'demo18', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(19, 'demo19', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(20, 'demo20', 'Location 20', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(21, 'demo21', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(22, 'demo22', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(23, 'demo23', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(24, 'demo24', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(25, 'demo25', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(26, 'demo26', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(27, 'demo27', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(28, 'demo28', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(29, 'demo29', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(30, 'demo30', 'Location 30', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(31, 'demo31', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(32, 'demo32', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(33, 'demo33', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(34, 'demo34', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(35, 'demo35', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(36, 'demo36', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(37, 'demo37', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(38, 'demo38', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(39, 'demo39', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(40, 'demo40', 'Location 40', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(41, 'demo41', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(42, 'demo42', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(43, 'demo43', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(44, 'demo44', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(45, 'demo45', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(46, 'demo46', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(47, 'demo47', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(48, 'demo48', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(49, 'demo49', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(50, 'demo50', 'Location 50', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(51, 'demo51', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(52, 'demo52', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(53, 'demo53', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(54, 'demo54', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(55, 'demo55', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(56, 'demo56', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(57, 'demo57', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(58, 'demo58', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(59, 'demo59', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(60, 'demo60', 'Location 60', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(61, 'demo61', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(62, 'demo62', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(63, 'demo63', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(64, 'demo64', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(65, 'demo65', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(66, 'demo66', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(67, 'demo67', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(68, 'demo68', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(69, 'demo69', 'Location', SFADEMO_GAME_INFO, false),
+    new SFAMapDesc(70, 'demo70', 'Location 70', SFADEMO_GAME_INFO, false),
 
     'Ancient Block Exhibits',
     new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),

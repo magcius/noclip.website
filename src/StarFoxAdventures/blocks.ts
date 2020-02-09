@@ -127,8 +127,8 @@ export class BlockRenderer implements BlockRendererBase {
                 listOffset: 0x68,
                 listCount: 0x9f,
                 listSize: 0x34,
-                numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort!
-                //numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+                numListBits: 8, // ??? should be 6 according to decompilation of demo????
                 numLayersOffset: 0x3b,
                 bitstreamOffset: 0x74, // Whoa...
                 // FIXME: There are three bitstreams, probably for opaque and transparent objects
@@ -216,6 +216,9 @@ export class BlockRenderer implements BlockRendererBase {
 
         const shaders: Shader[] = [];
         offs = shaderOffset;
+        enum ShaderFlags {
+            Cull = 0x8,
+        }
         for (let i = 0; i < shaderCount; i++) {
             const shader = {
                 numLayers: 0,
@@ -243,7 +246,7 @@ export class BlockRenderer implements BlockRendererBase {
                 // shader.enableCull = (blockDv.getUint8(offs + 0x38) & 0x4) != 0;
                 shader.enableCull = true;
             } else {
-                shader.enableCull = (shader.flags & 0x8) != 0;
+                shader.enableCull = (shader.flags & ShaderFlags.Cull) != 0;
             }
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
@@ -362,8 +365,19 @@ export class BlockRenderer implements BlockRendererBase {
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, shader.enableCull);
 
                     const mb = new GXMaterialBuilder('Basic');
-                    mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
-                    mb.setZMode(true, GX.CompareType.LESS, true);
+                    if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
+                        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+                        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+                        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+                    } else {
+                        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+                        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+                        if (((shader.flags & 0x400) == 0) || ((shader.flags & 0x80) != 0)) {
+                            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+                        } else {
+                            mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+                        }
+                    }
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
                     mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
                     let tevStage = 0;
