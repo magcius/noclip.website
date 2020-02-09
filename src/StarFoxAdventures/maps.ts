@@ -82,8 +82,54 @@ export class SFAMapDesc implements Viewer.SceneDesc {
         const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
         const blockTable = getBlockTable(mapInfo, trkblkTab);
 
-        ////////////////////////// create editor stuff
+        const sfaRenderer = new SFARenderer(device);
+
         const self = this;
+        async function reloadBlocks() {
+            sfaRenderer.clearModels();
+            const blockCollections: BlockCollection[] = [];
+            for (let y = 0; y < mapInfo.blockRows; y++) {
+                for (let x = 0; x < mapInfo.blockCols; x++) {
+                    const blockInfo = blockTable[y][x];
+                    if (blockInfo.block == -1)
+                        continue;
+    
+                    if (blockCollections[blockInfo.trkblk] === undefined) {
+                        const blockColl = new BlockCollection(self.isAncient);
+                        try {
+                            await blockColl.create(device, context, blockInfo.trkblk, self.gameInfo);
+                        } catch (e) {
+                            console.error(e);
+                            console.warn(`Block collection ${blockInfo.trkblk} could not be loaded.`);
+                            continue;
+                        }
+                        blockCollections[blockInfo.trkblk] = blockColl;
+                    }
+    
+                    const blockColl = blockCollections[blockInfo.trkblk];
+                    try {
+                        const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.sub);
+                        if (!blockRenderer) {
+                            console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} sub ${blockInfo.sub}) not found`);
+                            continue;
+                        }
+    
+                        const modelMatrix: mat4 = mat4.create();
+                        mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
+                        blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
+                    } catch (e) {
+                        console.warn(`Skipped block at ${x},${y} due to exception:`);
+                        console.error(e);
+                    }
+                }
+            }
+            if (blockCollections.length == 0)
+                console.warn(`No blocks could be rendered.`);
+        }
+
+        await reloadBlocks();
+
+        ////////////////////////// create editor stuff
         window.main.openEditor = function() {
             const newWin = window.open('about:blank');
             if (!newWin) {
@@ -91,68 +137,48 @@ export class SFAMapDesc implements Viewer.SceneDesc {
                 return;
             }
             newWin.onload = function() {
+                const inputs: HTMLInputElement[][] = [];
+                for (let y = 0; y < mapInfo.blockRows; y++) {
+                    const row: HTMLInputElement[] = [];
+                    inputs.push(row);
+                    for (let x = 0; x < mapInfo.blockCols; x++) {
+                        const blockInfo = blockTable[y][x];
+                        const inputEl = newWin.document.createElement('input');
+                        inputEl.setAttribute('type', 'number');
+                        inputEl.setAttribute('value', `${blockInfo.block}`);
+                        row.push(inputEl);
+                    }
+                }
+
                 const tableEl = newWin.document.createElement('table');
                 newWin.document.body.appendChild(tableEl);
                 for (let y = 0; y < mapInfo.blockRows; y++) {
                     const trEl = newWin.document.createElement('tr');
                     tableEl.appendChild(trEl);
                     for (let x = 0 ; x < mapInfo.blockCols; x++) {
-                        const blockInfo = blockTable[y][x];
                         const tdEl = newWin.document.createElement('td');
-                        tdEl.append(`${blockInfo.block}`);
                         trEl.appendChild(tdEl);
+                        tdEl.appendChild(inputs[y][x]);
                     }
                 }
 
                 const submitEl = newWin.document.createElement('input');
                 submitEl.setAttribute('type', 'submit');
                 newWin.document.body.appendChild(submitEl);
-                submitEl.onclick = function() {
-                    console.warn(`Not implemented`);
+                submitEl.onclick = async function() {
+                    console.log(`Reloading blocks...`);
+                    for (let y = 0; y < mapInfo.blockRows; y++) {
+                        for (let x = 0; x < mapInfo.blockCols; x++) {
+                            const blockInfo = blockTable[y][x];
+                            const newBlock = inputs[y][x].valueAsNumber;
+                            blockInfo.block = newBlock;
+                        }
+                    }
+                    await reloadBlocks();
                 }
             }
         };
         //////////////////////////////////////////////
-
-        const sfaRenderer = new SFARenderer(device);
-        const blockCollections: BlockCollection[] = [];
-        for (let y = 0; y < mapInfo.blockRows; y++) {
-            for (let x = 0; x < mapInfo.blockCols; x++) {
-                const blockInfo = blockTable[y][x];
-                if (blockInfo.block == -1)
-                    continue;
-
-                if (blockCollections[blockInfo.trkblk] === undefined) {
-                    const blockColl = new BlockCollection(this.isAncient);
-                    try {
-                        await blockColl.create(device, context, blockInfo.trkblk, this.gameInfo);
-                    } catch (e) {
-                        console.error(e);
-                        console.warn(`Block collection ${blockInfo.trkblk} could not be loaded.`);
-                        continue;
-                    }
-                    blockCollections[blockInfo.trkblk] = blockColl;
-                }
-
-                const blockColl = blockCollections[blockInfo.trkblk];
-                try {
-                    const blockRenderer = blockColl.getBlockRenderer(device, blockInfo.block, blockInfo.trkblk, blockInfo.sub);
-                    if (!blockRenderer) {
-                        console.warn(`Block ${blockInfo.block} (trkblk ${blockInfo.trkblk} sub ${blockInfo.sub}) not found`);
-                        continue;
-                    }
-
-                    const modelMatrix: mat4 = mat4.create();
-                    mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                    blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
-                } catch (e) {
-                    console.warn(`Skipped block at ${x},${y} due to exception:`);
-                    console.error(e);
-                }
-            }
-        }
-        if (blockCollections.length == 0)
-            console.warn(`No blocks could be rendered.`);
 
         return sfaRenderer;
     }

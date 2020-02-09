@@ -31,7 +31,6 @@ export class BlockCollection {
     public async create(device: GfxDevice, context: SceneContext,  trkblk: number, gameInfo: GameInfo) {
         const dataFetcher = context.dataFetcher;
         const pathBase = gameInfo.pathBase;
-        const subdir = getSubdir(trkblk, gameInfo);
         this.blockFetcher = await gameInfo.makeBlockFetcher(trkblk, dataFetcher, gameInfo);
         // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
@@ -40,6 +39,7 @@ export class BlockCollection {
             const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
             this.texColl = new TextureCollection(texTab, texBin, this.isAncient);
         } else {
+            const subdir = getSubdir(trkblk, gameInfo);
             const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
             this.texColl = new TextureCollection(tex1Tab, tex1Bin, this.isAncient);

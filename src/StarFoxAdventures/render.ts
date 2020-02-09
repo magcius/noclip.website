@@ -291,6 +291,11 @@ export class SFARenderer extends BasicGXRendererHelper {
     models: ModelInstance[] = [];
     modelMatrices: mat4[] = [];
 
+    public clearModels() {
+        this.models = [];
+        this.modelMatrices = [];
+    }
+
     public addModel(model: ModelInstance, modelMatrix: mat4) {
         this.models.push(model);
         this.modelMatrices.push(modelMatrix);
