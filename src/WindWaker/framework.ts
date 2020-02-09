@@ -49,6 +49,7 @@ export class fGlobals {
     public process_id: number = 1;
 
     public f_pc_constructors: fpc_bs__Constructor[] = [];
+    public f_pc_fallbackConstructor: fpc_bs__Constructor | null = null;
 
     constructor(public f_pc_profiles: fpc_pc__ProfileList) {
     }
@@ -64,6 +65,7 @@ export class fGlobals {
 //#region cPhs
 
 export const enum cPhs__Status {
+    Started,
     Loading,
     Next,
     Complete,
@@ -351,12 +353,16 @@ function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fp
     if (pf !== undefined)
         return pf;
     else
-        return null;
+        return globals.f_pc_fallbackConstructor;
 }
 
 export function fpcPf__Register(globals: fGlobals, pcName: fpc__ProcessName, constructor: fpc_bs__Constructor): void {
     assert(globals.f_pc_constructors[pcName] === undefined);
     globals.f_pc_constructors[pcName] = constructor;
+}
+
+export function fpcPf__RegisterFallback(globals: fGlobals, constructor: fpc_bs__Constructor): void {
+    globals.f_pc_fallbackConstructor = constructor;
 }
 
 //#endregion
@@ -466,6 +472,8 @@ export class fopAc_ac_c extends leafdraw_class {
     public subtype: number;
     public roomNo: number;
     public tevStr = new dKy_tevstr_c();
+    // noclip addition
+    public roomLayer: number = -1;
 
     private loadInit: boolean = false;
 
@@ -484,12 +492,13 @@ export class fopAc_ac_c extends leafdraw_class {
                 this.parentPcId = prm.parentPcId;
                 this.parameters = prm.parameters;
                 this.roomNo = prm.roomNo;
+                this.roomLayer = prm.layer;
             }
 
             dKy_tevstr_init(this.tevStr, this.roomNo);
         }
 
-        const status = this.subload(globals);
+        const status = this.subload(globals, prm);
         if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;
@@ -499,7 +508,7 @@ export class fopAc_ac_c extends leafdraw_class {
         fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
     }
 
-    protected subload(globals: GlobalUserData): cPhs__Status {
+    protected subload(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
         return cPhs__Status.Next;
     }
 }

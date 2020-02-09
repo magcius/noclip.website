@@ -31,11 +31,10 @@ import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c, dSt
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
-import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
-import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
+import { d_a__RegisterConstructors } from './d_a';
+import { BMDObjectRenderer, loadActor, LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { cBgD_t, dBgS } from './d_bg';
-import { GlobalSaveManager, SaveStateLocation } from '../SaveManager';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -186,6 +185,15 @@ export class dGlobals {
             return null;
     }
 
+    public dStage__searchNameRev(processName: fpc__ProcessName, subtype: number): string | null {
+        for (const name in this.objectNameTable) {
+            const entry = this.objectNameTable[name];
+            if (entry.pcName === processName && entry.subtype === subtype)
+                return name;
+        }
+        return null;
+    }
+
     public objNameGetDbgName(objName: dStage__ObjectNameTableEntry): string {
         const pnameStr = `0x${hexzero(objName.pcName, 0x04)}`;
         const relName = this.relNameTable[objName.pcName] || 'built-in';
@@ -292,6 +300,13 @@ function fpcIsObject(n: fpc__ProcessName): boolean {
     return true;
 }
 
+function objectLayerVisible(layerMask: number, layer: number): boolean {
+    if (layer < 0)
+        return true;
+    else
+        return !!(layerMask & (1 << layer));
+}
+
 // Legacy
 export class WindWakerRoomRenderer {
     public name: string;
@@ -318,8 +333,8 @@ export class WindWakerRoomRenderer {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
                 if (ac instanceof fopAc_ac_c && ac.roomNo === this.roomNo) {
-                    ac.visible = this.visible;
-                    if (this.visible && fpcIsObject(ac.processName))
+                    ac.visible = this.visible && objectLayerVisible(globals.renderer.roomLayerMask, ac.roomLayer);
+                    if (ac.visible && fpcIsObject(ac.processName))
                         ac.visible = this.objectsVisible;
                 }
             }
@@ -338,16 +353,6 @@ export class WindWakerRoomRenderer {
 
     public setVisible(v: boolean): void {
         this.visible = v;
-    }
-
-    public setVisibleLayerMask(m: number): void {
-        for (let i = 0; i < this.objectRenderers.length; i++) {
-            const o = this.objectRenderers[i];
-            if (o.layer >= 0) {
-                const v = !!(m & (1 << o.layer));
-                o.visible = v;
-            }
-        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -484,6 +489,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
+    public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
 
@@ -494,16 +500,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
     }
 
-    public getRoomDZB(roomNo: number): cBgD_t {
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            if (this.roomRenderers[i].roomNo === roomNo)
-                return this.roomRenderers[i].dzb;
-        throw "whoops";
-    }
-
     private setVisibleLayerMask(m: number): void {
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].setVisibleLayerMask(m);
+        this.roomLayerMask = m;
     }
 
     public createPanels(): UI.Panel[] {
@@ -885,6 +883,7 @@ class SceneDesc {
         dKy__RegisterConstructors(framework);
         dKyw__RegisterConstructors(framework);
         d_a__RegisterConstructors(framework);
+        LegacyActor__RegisterFallbackConstructor(framework);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const globals = new dGlobals(modelCache, symbolMap, framework);
@@ -921,9 +920,6 @@ class SceneDesc {
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
             globals.mStayNo = Math.abs(this.rooms[0]);
-
-        const isSea = this.stageDir === 'sea';
-        const isFullSea = isSea && this.rooms.length > 1;
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
@@ -1076,10 +1072,7 @@ class SceneDesc {
 
     private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS): void {
         this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
-            const placedActor: PlacedActor = actor as PlacedActor;
-            placedActor.rotationY = actor.rot![1] / 0x7FFF * Math.PI;
-            placedActor.roomRenderer = roomRenderer;
-            loadActor(renderer.globals, roomRenderer, processName, placedActor);
+            loadActor(renderer.globals, processName, actor);
         });
     }
 }

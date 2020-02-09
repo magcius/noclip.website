@@ -2384,6 +2384,8 @@ class ShareButton extends PanelButton {
     }
 
     private setCopyButtonState(state: 'copy' | 'copied'): void {
+        if (this.copyButtonState === state)
+            return;
         this.copyButtonState = state;
         if (state === 'copy') {
             this.copyButton.style.backgroundColor = HIGHLIGHT_COLOR;

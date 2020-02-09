@@ -255,7 +255,7 @@ class cBgW {
     private needsFullTransform: boolean = true;
 
     private vtx: vec3[];
-    private triElm: Plane[];
+    public triElm: Plane[];
 
     private curMtx = mat4.create();
     private oldMtx = mat4.create();
@@ -526,11 +526,11 @@ class cBgW {
         const grp = this.grp[grpIdx];
 
         // Check whether we're inside the AABB.
-        if (chk.pos[0] <= grp.aabb.minX && chk.pos[0] > grp.aabb.maxX)
+        if (chk.pos[0] <= grp.aabb.minX || chk.pos[0] > grp.aabb.maxX)
             return false;
-        if (chk.pos[1] <= grp.aabb.minY && chk.retY > grp.aabb.maxY)
+        if (chk.pos[1] <= grp.aabb.minY || chk.retY > grp.aabb.maxY)
             return false;
-        if (chk.pos[2] <= grp.aabb.minZ && chk.pos[2] > grp.aabb.maxZ)
+        if (chk.pos[2] <= grp.aabb.minZ || chk.pos[2] > grp.aabb.maxZ)
             return false;
 
         let ret = false;
@@ -577,11 +577,11 @@ class cBgW {
 
                 const tre = this.tre[treIdx];
 
-                if (chk.pos[0] < tre.aabb.minX && chk.pos[0] > tre.aabb.maxX)
+                if (chk.pos[0] < tre.aabb.minX || chk.pos[0] > tre.aabb.maxX)
                     continue;
-                if (chk.pos[1] < tre.aabb.minY && chk.retY > tre.aabb.maxY)
+                if (chk.pos[1] < tre.aabb.minY || chk.retY > tre.aabb.maxY)
                     continue;
-                if (chk.pos[2] < tre.aabb.minZ && chk.pos[2] > tre.aabb.maxZ)
+                if (chk.pos[2] < tre.aabb.minZ || chk.pos[2] > tre.aabb.maxZ)
                     continue;
 
                 if (this.GroundCrossRp(chk, treIdx))
@@ -737,6 +737,10 @@ class cBgS {
         }
 
         return chk.retY;
+    }
+
+    public GetTriPla(bgIdx: number, triIdx: number): Plane {
+        return this.chkElm[bgIdx].bgW.triElm[triIdx];
     }
 }
 

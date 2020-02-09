@@ -1,8 +1,6 @@
 
 import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader";
 
-import * as DZB from './DZB';
-
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";

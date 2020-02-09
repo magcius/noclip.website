@@ -5,8 +5,6 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { dGlobals } from './zww_scenes';
-import { WindWakerRenderer } from './zww_scenes';
-import * as DZB from './DZB';
 import { Endianness } from '../endian';
 
 import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture';
@@ -343,7 +341,7 @@ export class FlowerPacket {
             modelMatrix: mat4.create(),
         };
 
-        // this.rooms[roomIdx].push(data);
+        this.rooms[roomIdx].push(data);
 
         return data;
     }
@@ -672,15 +670,21 @@ export class TreePacket {
         }
     }
 
-    private checkGroundY(context: WindWakerRenderer, roomIdx: number, treeData: TreeData): number {
-        const dzb = context.getRoomDZB(roomIdx);
+    private checkGroundY(globals: dGlobals, roomIdx: number, treeData: TreeData): number {
+        chk.Reset();
+        vec3.copy(chk.pos, treeData.pos);
+        chk.pos[1] += 50;
+    
+        const y = globals.scnPlay.bgS.GroundCross(chk);
+        if (y > -Infinity) {
+            treeData.pos[1] = y;
+            globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx).getNormal(scratchVec3a);
+        } else {
+            treeData.pos[1] = y;
+            vec3.set(scratchVec3a, 0, 1, 0);
+        }
 
-        const down = vec3.set(scratchVec3b, 0, -1, 0);
-        const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down, scratchVec3a);
-
-        const normal = hit ? scratchVec3a : vec3.set(scratchVec3a, 0, 1, 0);
-        const groundHeight = hit ? scratchVec3b[1] : treeData.pos[1];
-
+        const normal = scratchVec3a;
         const right = vec3.set(scratchVec3c, 1, 0, 0);
         const forward = vec3.cross(scratchVec3d, normal, right);
         vec3.cross(right, normal, forward);
@@ -694,7 +698,7 @@ export class TreePacket {
         treeData.shadowModelMtx[4] = normal[0];
         treeData.shadowModelMtx[5] = normal[1];
         treeData.shadowModelMtx[6] = normal[2];
-        treeData.shadowModelMtx[7] = 1.0 + groundHeight;
+        treeData.shadowModelMtx[7] = 1.0 + y;
 
         treeData.shadowModelMtx[8]  = forward[0];
         treeData.shadowModelMtx[9]  = forward[1];
@@ -703,7 +707,7 @@ export class TreePacket {
 
         mat4.transpose(treeData.shadowModelMtx, treeData.shadowModelMtx);
 
-        return groundHeight;
+        return y;
     }
 
     public newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
@@ -751,7 +755,9 @@ export class TreePacket {
 
             // Perform ground checks for some limited number of data
             if (!!(data.flags & GrassFlags.needsGroundCheck)) {
-                data.pos[1] = this.checkGroundY(globals.renderer, roomIdx, data);
+                console.time('ground y');
+                data.pos[1] = this.checkGroundY(globals, roomIdx, data);
+                console.timeEnd('ground y');
                 data.flags &= ~TreeFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }

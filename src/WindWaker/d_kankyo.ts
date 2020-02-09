@@ -1401,7 +1401,7 @@ export function dKankyo_create(globals: dGlobals): void {
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kankyo, null);
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff, null);
     fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_kyeff2, null);
-    fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_envse, null);
+    // fopKyM_Create(globals.frameworkGlobals, fpc__ProcessName.d_envse, null);
 }
 
 interface constructor extends fpc_bs__Constructor {
