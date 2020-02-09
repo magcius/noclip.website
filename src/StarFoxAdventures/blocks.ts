@@ -1,7 +1,8 @@
 import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { MapInfo } from './maps';
 import { SceneContext } from '../SceneBase';
-import { TextureCollection, ModelInstance, SFARenderer } from './render';
+import { ModelInstance, SFARenderer } from './render';
+import { TextureCollection, SFATextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
 import { mat4 } from 'gl-matrix';
@@ -37,12 +38,12 @@ export class BlockCollection {
         if (this.isAncient) {
             const texTab = await dataFetcher.fetchData(`${pathBase}/TEX.tab`);
             const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
-            this.texColl = new TextureCollection(texTab, texBin, this.isAncient);
+            this.texColl = new SFATextureCollection(texTab, texBin, this.isAncient);
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
-            this.texColl = new TextureCollection(tex1Tab, tex1Bin, this.isAncient);
+            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, this.isAncient);
         }
     }
 

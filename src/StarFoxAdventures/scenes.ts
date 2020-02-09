@@ -20,7 +20,8 @@ import { mat4 } from 'gl-matrix';
 import { SFAMapDesc } from './maps';
 import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
-import { TextureCollection, SFARenderer } from './render';
+import { SFARenderer } from './render';
+import { TextureCollection, SFATextureCollection } from './textures';
 
 export interface GameInfo {
     pathBase: string;
@@ -325,7 +326,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
     public id: string;
     texColl: TextureCollection;
 
-    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useVeryOldBlocks = false, private useAncientTextures = false) {
+    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useAncientBlocks = false, private useAncientTextures = false) {
         this.id = `${subdir}blocks`;
     }
     
@@ -336,14 +337,14 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
 
         if (this.useAncientTextures) {
+            // TODO: get rid of this
             const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
             const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
-            const textable = await dataFetcher.fetchData(`${directory}/TEXTABLE.bin`);
-            this.texColl = new TextureCollection(texTab, texBin, true, textable.createDataView());
+            this.texColl = new SFATextureCollection(texTab, texBin, true);
         } else {
             const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
-            this.texColl = new TextureCollection(tex1Tab, tex1Bin, false);
+            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, false);
         }
         const blockFetcher = new BlockExhibitFetcher(this.useCompression);
         await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}${this.useCompression ? '.zlb' : ''}.bin`);
@@ -367,7 +368,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     let blockRenderer;
-                    if (this.useVeryOldBlocks) {
+                    if (this.useAncientBlocks) {
                         blockRenderer = new AncientBlockRenderer(device, blockData, this.texColl);
                     } else {
                         blockRenderer = new BlockRenderer(device, blockData, this.texColl);

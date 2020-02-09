@@ -67,7 +67,6 @@ export class SFAMapDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const mapsTab = (await dataFetcher.fetchData(`${pathBase}/MAPS.tab`)).createDataView();
         const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
-        const trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
 
         console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
 
