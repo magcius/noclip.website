@@ -23,7 +23,7 @@ export class GeometryData {
         const normals = vertices.map((v) => v.normal);
         const texcoords = vertices.map((v) => v.texcoord);
 
-        this.bbox.set(positions);
+        this.bbox.setFromPoints(positions);
 
         const posF32A = flat(positions);
         const normalF32A = flat(normals);

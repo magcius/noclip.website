@@ -2,7 +2,7 @@
 import { vec3, mat4 } from "gl-matrix";
 import { nArray } from "./util";
 
-class Plane {
+export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
     // Plane normal
     public x: number;
@@ -75,7 +75,20 @@ export class AABB {
         this.maxZ = dstMax[2];
     }
 
-    public set(points: vec3[]): void {
+    public set(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
+        this.minX = minX;
+        this.minY = minY;
+        this.minX = minZ;
+        this.maxX = maxX;
+        this.maxY = maxY;
+        this.maxX = maxZ;
+    }
+
+    public setInf(): void {
+        this.set(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    }
+
+    public setFromPoints(points: vec3[]): void {
         this.minX = this.minY = this.minZ = Infinity;
         this.maxX = this.maxY = this.maxZ = -Infinity;
 
@@ -266,7 +279,7 @@ export class Frustum {
         for (let i = 0; i < 9; i++)
             vec3.transformMat4(scratch[i], scratch[i], worldMatrix);
 
-        this.aabb.set(scratch);
+        this.aabb.setFromPoints(scratch);
 
         this.planes[0].set(scratch[8], scratch[3], scratch[0]); // left plane
         this.planes[1].set(scratch[8], scratch[1], scratch[2]); // right plane

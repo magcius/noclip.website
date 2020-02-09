@@ -13,6 +13,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Destroyable } from "../SceneBase";
 import { dGlobals } from "./zww_scenes";
 import { cPhs__Status } from "./framework";
+import { cBgD_t } from "./d_bg";
 
 export interface DZSChunkHeader {
     type: string;
@@ -55,7 +56,7 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Btp ? TPT1 :
     T extends ResType.Btk ? TTK1 :
     T extends ResType.Bti ? BTIData :
-    T extends ResType.Dzb ? DZB.DZB :
+    T extends ResType.Dzb ? cBgD_t :
     T extends ResType.Dzs ? DZS :
     T extends ResType.Bva ? VAF1 :
     T extends ResType.Raw ? ArrayBufferSlice :
@@ -220,7 +221,7 @@ export class dRes_info_c {
             // TODO(jstpierre): BCKS sound data.
             resEntry.res = BCK.parse(file.buffer);
         } else if (type === `DZB `) {
-            resEntry.res = DZB.parse(file.buffer);
+            resEntry.res = new cBgD_t(file.buffer);
         }
 
         // This is a bit of a hack. dRes_info_c::loadResource doesn't normally preprocess texture data,

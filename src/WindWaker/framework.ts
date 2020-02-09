@@ -46,6 +46,7 @@ export class fGlobals {
     public liQueue: base_process_class[][] = nArray(0x10, () => []);
     // fopDw
     public dwQueue: leafdraw_class[][] = nArray(1000, () => []);
+    public process_id: number = 1;
 
     public f_pc_constructors: fpc_bs__Constructor[] = [];
 
@@ -137,7 +138,7 @@ function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
 //#region cPhs, fpcCt, fpcSCtRq
 
 export interface fpc_bs__Constructor {
-    new(globalUserData: fGlobals, profile: DataView): base_process_class;
+    new(globalUserData: fGlobals, pcId: number, profile: DataView): base_process_class;
 }
 
 class standard_create_request_class<T = any> {
@@ -149,7 +150,7 @@ class standard_create_request_class<T = any> {
     ]);
     public process: base_process_class | null = null;
 
-    constructor(public layer: layer_class, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    constructor(public layer: layer_class, public pcId: number, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
     }
 
     // fpcSCtRq_Handler
@@ -163,7 +164,7 @@ class standard_create_request_class<T = any> {
 
     private CreateProcess(globals: fGlobals, globalUserData: GlobalUserData, userData: this): cPhs__Status {
         const self = userData;
-        self.process = new self.constructor(globals, self.profileBinary.createDataView());
+        self.process = new self.constructor(globals, self.pcId, self.profileBinary.createDataView());
         return cPhs__Status.Next;
     }
 
@@ -219,6 +220,10 @@ function fpcCtRq_ToCreateQ(globals: fGlobals, rq: standard_create_request_class)
     globals.ctQueue.push(rq);
 }
 
+function fpcBs_MakeOfId(globals: fGlobals): number {
+    return globals.process_id++;
+}
+
 export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, pcName: fpc__ProcessName, userData: G): boolean {
     const constructor = fpcPf_Get__Constructor(globals, pcName);
     if (constructor === null)
@@ -228,7 +233,8 @@ export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, p
         ly = fpcLy_CurrentLayer(globals);
 
     const binary = fpcPf_Get__ProfileBinary(globals, pcName);
-    const rq = new standard_create_request_class(ly, constructor, binary, userData);
+    const pcId = fpcBs_MakeOfId(globals);
+    const rq = new standard_create_request_class(ly, pcId, constructor, binary, userData);
     fpcCtRq_ToCreateQ(globals, rq);
     return true;
 }
@@ -315,7 +321,7 @@ export class base_process_class {
     public ly: layer_class;
     public pi = new process_priority_class();
 
-    constructor(globals: fGlobals, profile: DataView) {
+    constructor(globals: fGlobals, public processId: number, profile: DataView) {
         // fpcBs_Create
         this.pi.layerID = profile.getUint32(0x00);
         this.pi.listID = profile.getUint16(0x04);
@@ -361,8 +367,8 @@ class process_node_class extends base_process_class {
     public layer: layer_class;
     public visible: boolean = true;
 
-    constructor(globals: fGlobals, profile: DataView) {
-        super(globals, profile);
+    constructor(globals: fGlobals, pcId: number, profile: DataView) {
+        super(globals, pcId, profile);
 
         this.layer = new layer_class(globals.lyNextID++);
     }
@@ -377,8 +383,8 @@ class leafdraw_class extends base_process_class {
     public drawPriority: number;
     public visible: boolean = true;
 
-    constructor(globals: fGlobals, profile: DataView) {
-        super(globals, profile);
+    constructor(globals: fGlobals, pcId: number, profile: DataView) {
+        super(globals, pcId, profile);
         this.drawPriority = profile.getUint16(0x20);
     }
 

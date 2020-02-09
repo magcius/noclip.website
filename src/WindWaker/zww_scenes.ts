@@ -35,6 +35,7 @@ import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fop
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
+import { cBgD_t } from './d_bg';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -297,11 +298,11 @@ export class WindWakerRoomRenderer {
     public visible: boolean = true;
     public objectsVisible = true;
     public objectRenderers: BMDObjectRenderer[] = [];
-    public dzb: DZB.DZB;
+    public dzb: cBgD_t;
 
     public extraTextures: ZWWExtraTextures;
 
-    constructor(private renderer: WindWakerRenderer, public roomNo: number) {
+    constructor(renderer: WindWakerRenderer, public roomNo: number) {
         this.name = `Room ${roomNo}`;
 
         const resCtrl = renderer.globals.modelCache.resCtrl;
@@ -493,7 +494,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
     }
 
-    public getRoomDZB(roomNo: number): DZB.DZB {
+    public getRoomDZB(roomNo: number): cBgD_t {
         for (let i = 0; i < this.roomRenderers.length; i++)
             if (this.roomRenderers[i].roomNo === roomNo)
                 return this.roomRenderers[i].dzb;

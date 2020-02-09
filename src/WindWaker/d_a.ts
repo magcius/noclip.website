@@ -18,6 +18,7 @@ import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_
 import { ColorKind } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { dBgW, cBgW_Flags } from "./d_bg";
 
 // Framework'd actors
 
@@ -405,8 +406,11 @@ class d_a_bg extends fopAc_ac_c {
     private bgBtkAnm: (daBg_btkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgBrkAnm: (daBg_brkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
+    private bgW = new dBgW();
 
     public subload(globals: dGlobals): cPhs__Status {
+        const resCtrl = globals.resCtrl;
+
         const roomNo = this.parameters;
         const arcName = `Room` + roomNo;
 
@@ -417,9 +421,9 @@ class d_a_bg extends fopAc_ac_c {
 
         // createHeap
         for (let i = 0; i < this.numBg; i++) {
-            let modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName[i]);
+            let modelData = resCtrl.getStageResByName(ResType.Model, arcName, modelName[i]);
             if (modelData === null)
-                modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
+                modelData = resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
             if (modelData === null)
                 continue;
             this.bgModel[i] = new J3DModelInstance(modelData);
@@ -435,9 +439,10 @@ class d_a_bg extends fopAc_ac_c {
             const tevStr = new dKy_tevstr_c();
             this.bgTevStr[i] = tevStr;
             dKy_tevstr_init(tevStr, roomNo, -1);
-
-            // Load BgW
         }
+
+        const bgDt = assertExists(resCtrl.getStageResByName(ResType.Dzb, arcName, 'room.dzb'));
+        this.bgW.Set(bgDt, cBgW_Flags.Global, null);
 
         // create
         for (let i = 0; i < this.numBg; i++) {
