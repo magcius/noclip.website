@@ -1840,26 +1840,6 @@ export class BMDObjectRenderer {
     }
 }
 
-export function loadActor(globals: dGlobals, processNameStr: string, actor: fopAcM_prm_class): void {
-    // Attempt to find an implementation of this Actor in our table
-    const objName = globals.dStage_searchName(processNameStr);
-
-    if (objName === null) {
-        // Game specified a completely bogus actor. For funsies, what was it?
-        console.log(`Stage data references missing actor: ${processNameStr}`);
-        return;
-    }
-
-    actor.gbaName = objName.gbaName;
-    actor.subtype = objName.subtype;
-
-    // This is supposed to be executing in the context of the stage, I believe.
-    // TODO(jstpierre): This can also be the room class!
-    assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
-    const res = fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor);
-    assert(res);
-}
-
 export function LegacyActor__RegisterFallbackConstructor(globals: fGlobals): void {
     fpcPf__RegisterFallback(globals, d_a_noclip_legacy);
 }

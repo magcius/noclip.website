@@ -26,15 +26,15 @@ import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
-import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
-import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader } from './d_stage';
+import { dRes_control_c, ResType } from './d_resorce';
+import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
 import { d_a__RegisterConstructors } from './d_a';
-import { BMDObjectRenderer, loadActor, LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
+import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
-import { cBgD_t, dBgS } from './d_bg';
+import { dBgS } from './d_bg';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -174,8 +174,10 @@ export class dGlobals {
         this.relNameTable = createRelNameTable(extraSymbolData);
         this.objectNameTable = createActorTable(extraSymbolData);
 
-        for (let i = 0; i < this.roomStatus.length; i++)
+        for (let i = 0; i < this.roomStatus.length; i++) {
+            this.roomStatus[i].roomNo = i;
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
+        }
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -891,7 +893,8 @@ class SceneDesc {
 
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
-        dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
+        dStage_dt_c_stageInitLoader(globals, globals.dStage_dt, dzs);
+        dStage_dt_c_stageLoader(globals, globals.dStage_dt, dzs);
 
         // If this is a single-room scene, then set mStayNo.
         if (this.rooms.length === 1)
@@ -931,119 +934,11 @@ class SceneDesc {
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            this.spawnActors(renderer, roomNo, dzr);
-
-            dStage_dt_c_roomLoader(globals.roomStatus[roomNo], dzr);
+            dStage_dt_c_roomLoader(globals, globals.roomStatus[roomNo], dzr);
+            dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
         }
-
-        this.spawnActors(renderer, -1, dzs);
 
         return renderer;
-    }
-
-    private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
-        if (actrHeader === undefined)
-            return;
-
-        const buffer = dzs.buffer;
-        const view = buffer.createDataView();
-
-        let actrTableIdx = actrHeader.offs;
-        for (let i = 0; i < actrHeader.count; i++) {
-            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameter = view.getUint32(actrTableIdx + 0x08, false);
-            const posX = view.getFloat32(actrTableIdx + 0x0C);
-            const posY = view.getFloat32(actrTableIdx + 0x10);
-            const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const angleX = view.getInt16(actrTableIdx + 0x18);
-            const angleY = view.getInt16(actrTableIdx + 0x1A);
-            const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
-
-            const actor: fopAcM_prm_class = {
-                parameters: parameter,
-                roomNo,
-                pos: vec3.fromValues(posX, posY, posZ),
-                rot: vec3.fromValues(angleX, angleY, angleZ),
-                enemyNo,
-                scale: vec3.fromValues(1, 1, 1),
-                subtype: 0,
-                gbaName: 0,
-                parentPcId: 0xFFFFFFFF,
-                layer,
-            };
-
-            callback(name, actor);
-            actrTableIdx += 0x20;
-        }
-    }
-
-    private iterActorLayerSCOB(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (name: string, it: fopAcM_prm_class) => void): void {
-        if (actrHeader === undefined)
-            return;
-
-        const buffer = dzs.buffer;
-        const view = buffer.createDataView();
-
-        let actrTableIdx = actrHeader.offs;
-        for (let i = 0; i < actrHeader.count; i++) {
-            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameter = view.getUint32(actrTableIdx + 0x08, false);
-            const posX = view.getFloat32(actrTableIdx + 0x0C);
-            const posY = view.getFloat32(actrTableIdx + 0x10);
-            const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const angleX = view.getInt16(actrTableIdx + 0x18);
-            const angleY = view.getInt16(actrTableIdx + 0x1A);
-            const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
-            const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
-            const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
-            const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
-            // const pad = view.getUint8(actrTableIdx + 0x23);
-
-            const actor: fopAcM_prm_class = {
-                parameters: parameter,
-                roomNo,
-                pos: vec3.fromValues(posX, posY, posZ),
-                rot: vec3.fromValues(angleX, angleY, angleZ),
-                enemyNo,
-                scale: vec3.fromValues(scaleX, scaleY, scaleZ),
-                subtype: 0,
-                gbaName: 0,
-                parentPcId: 0xFFFFFFFF,
-                layer,
-            };
-
-            callback(name, actor);
-            actrTableIdx += 0x24;
-        }
-    }
-
-    private iterActorLayers(roomNo: number, dzs: DZS, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
-        const chunkHeaders = dzs.headers;
-
-        function buildChunkLayerName(base: string, i: number): string {
-            if (i === -1) {
-                return base;
-            } else {
-                return base.slice(0, 3) + i.toString(16).toLowerCase();
-            }
-        }
-
-        for (let i = -1; i < 16; i++) {
-            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
-            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
-            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
-            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
-            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
-            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
-        }
-    }
-
-    private spawnActors(renderer: WindWakerRenderer, roomNo: number, dzs: DZS): void {
-        this.iterActorLayers(roomNo, dzs, (processName, actor) => {
-            loadActor(renderer.globals, processName, actor);
-        });
     }
 }
 
