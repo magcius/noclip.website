@@ -16,10 +16,14 @@ export class Plane {
         return this.d + dot;
     }
 
+    public getNormal(dst: vec3): void {
+        vec3.set(dst, this.x, this.y, this.z);
+    }
+
     public set(p0: vec3, p1: vec3, p2: vec3): void {
         const scratch = Plane.scratchVec3;
-        vec3.sub(scratch[0], p2, p0);
-        vec3.sub(scratch[1], p1, p0);
+        vec3.sub(scratch[0], p1, p0);
+        vec3.sub(scratch[1], p2, p0);
         vec3.cross(scratch[0], scratch[0], scratch[1]);
         vec3.normalize(scratch[0], scratch[0]);
         this.x = scratch[0][0];
@@ -281,12 +285,12 @@ export class Frustum {
 
         this.aabb.setFromPoints(scratch);
 
-        this.planes[0].set(scratch[8], scratch[3], scratch[0]); // left plane
-        this.planes[1].set(scratch[8], scratch[1], scratch[2]); // right plane
-        this.planes[2].set(scratch[0], scratch[1], scratch[2]); // near plane
-        this.planes[3].set(scratch[4], scratch[7], scratch[6]); // far plane
-        this.planes[4].set(scratch[8], scratch[0], scratch[1]); // top plane
-        this.planes[5].set(scratch[8], scratch[2], scratch[3]); // bottom plane
+        this.planes[0].set(scratch[8], scratch[0], scratch[3]); // left plane
+        this.planes[1].set(scratch[8], scratch[2], scratch[1]); // right plane
+        this.planes[2].set(scratch[0], scratch[2], scratch[1]); // near plane
+        this.planes[3].set(scratch[4], scratch[6], scratch[7]); // far plane
+        this.planes[4].set(scratch[8], scratch[1], scratch[0]); // top plane
+        this.planes[5].set(scratch[8], scratch[3], scratch[2]); // bottom plane
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;

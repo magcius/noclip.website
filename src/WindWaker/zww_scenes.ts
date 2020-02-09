@@ -11,7 +11,6 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
-import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, texProjCameraSceneTex } from '../Camera';
@@ -35,7 +34,8 @@ import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fop
 import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
 import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
-import { cBgD_t } from './d_bg';
+import { cBgD_t, dBgS } from './d_bg';
+import { GlobalSaveManager, SaveStateLocation } from '../SaveManager';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -443,7 +443,7 @@ class SimpleEffectSystem {
 
     public createEmitterTest(resourceId: number = 0x14) {
         const device: GfxDevice = window.main.viewer.gfxDevice;
-        const cache: GfxRenderCache = window.main.scene.renderHelper.getCache();
+        const cache: GfxRenderCache = (window.main as any).scene.renderHelper.getCache();
         const emitter = this.createBaseEmitter(device, cache, resourceId);
         if (emitter !== null) {
             emitter.globalTranslation[0] = -275;
@@ -785,6 +785,8 @@ export class ModelCache {
 export const pathBase = `j3d/ww`;
 
 class d_s_play extends fopScn {
+    public bgS = new dBgS();
+
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
@@ -945,7 +947,6 @@ class SceneDesc {
             fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox2, null);
         }
 
-        let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
             const roomNo = Math.abs(this.rooms[i]);
 
@@ -954,42 +955,13 @@ class SceneDesc {
             roomRenderer.visible = visible;
             renderer.roomRenderers.push(roomRenderer);
 
-            // The MULT affects BG actors only, but not actors.
-            const mult = dComIfGp_getMapTrans(globals, roomNo);
-
-            // Actors are stored in world-space normally.
-            actorMultMtx = null;
-
-            if (isSea && !isFullSea && mult !== null) {
-                // HACK(jstpierre): For non-full sea levels, we apply the inverse of the MULT, so that
-                // the room is located at 0, 0. This is for convenience and back-compat with existing
-                // savestates.
-
-                MtxTrans(vec3.fromValues(mult.transX, 0, mult.transZ), false);
-                mDoMtx_YrotM(calc_mtx, mult.rotY);
-
-                const roomMultMtx = calc_mtx;
-
-                actorMultMtx = mat4.create();
-                mat4.invert(actorMultMtx, roomMultMtx);
-
-                // Hack up the DZB as well.
-                const dzb = roomRenderer.dzb;
-                vec3.transformMat4(dzb.pos, dzb.pos, roomMultMtx);
-
-                // Now reset MULT to 0.
-                mult.transX = 0;
-                mult.transZ = 0;
-                mult.rotY = 0;
-            }
-
             // objectSetCheck
 
             // noclip modification: We pass in roomNo so it's attached to the room.
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
+            this.spawnActors(renderer, roomRenderer, dzr);
 
             dStage_dt_c_roomLoader(globals.roomStatus[roomNo], dzr);
         }
@@ -1102,12 +1074,10 @@ class SceneDesc {
         }
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, actorMultMtx: mat4 | null = null): void {
+    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS): void {
         this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
             const placedActor: PlacedActor = actor as PlacedActor;
             placedActor.rotationY = actor.rot![1] / 0x7FFF * Math.PI;
-            if (actorMultMtx !== null)
-                vec3.transformMat4(actor.pos!, actor.pos!, actorMultMtx);
             placedActor.roomRenderer = roomRenderer;
             loadActor(renderer.globals, roomRenderer, processName, placedActor);
         });
@@ -1148,7 +1118,7 @@ const sceneDescs = [
 
     "Forsaken Fortress",
     new SceneDesc("MajyuE", "Forsaken Fortress Exterior (First Visit)"),
-    new SceneDesc("sea", "Forsaken Fortress (Second & Third Visits)", [41]),
+    // new SceneDesc("sea", "Forsaken Fortress Exterior (Second & Third Visits)", [1]),
     new SceneDesc("majroom", "Interior (First Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma2room", "Interior (Second Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma3room", "Interior (Third  Visit)", [0, 1, 2, 3, 4]),

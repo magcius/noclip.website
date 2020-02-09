@@ -442,7 +442,9 @@ class d_a_bg extends fopAc_ac_c {
         }
 
         const bgDt = assertExists(resCtrl.getStageResByName(ResType.Dzb, arcName, 'room.dzb'));
+
         this.bgW.Set(bgDt, cBgW_Flags.Global, null);
+        globals.scnPlay.bgS.Regist(this.bgW, this);
 
         // create
         for (let i = 0; i < this.numBg; i++) {
@@ -490,6 +492,10 @@ class d_a_bg extends fopAc_ac_c {
 
         const roomNo = this.parameters;
         settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
+    }
+
+    public delete(globals: dGlobals): void {
+        globals.scnPlay.bgS.Release(this.bgW);
     }
 }
 

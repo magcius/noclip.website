@@ -4,7 +4,6 @@ import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { dGlobals } from './zww_scenes';
 import { WindWakerRenderer } from './zww_scenes';
 import * as DZB from './DZB';
@@ -22,6 +21,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/rend
 import { ViewerRenderInput } from '../viewer';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { dKy_GxFog_set } from './d_kankyo';
+import { cBgS_GndChk } from './d_bg';
 
 function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     // Patch material.
@@ -117,12 +117,19 @@ export function uShortTo2PI(x: number) {
 }
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
-function checkGroundY(context: WindWakerRenderer, roomIdx: number, pos: vec3) {
-    const dzb = context.getRoomDZB(roomIdx);
 
-    const down = vec3.set(scratchVec3b, 0, -1, 0);
-    const hit = DZB.raycast(scratchVec3b, dzb, pos, down);
-    return hit ? scratchVec3b[1] : pos[1];
+const chk = new cBgS_GndChk();
+function checkGroundY(globals: dGlobals, roomIdx: number, pos: vec3) {
+    chk.Reset();
+    vec3.copy(chk.pos, pos);
+    chk.pos[1] += 50;
+
+    const y = globals.scnPlay.bgS.GroundCross(chk);
+    if (y > -Infinity) {
+        return y;
+    } else {
+        return pos[1];
+    }
 }
 
 function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, roomNo: number): void {
@@ -336,7 +343,7 @@ export class FlowerPacket {
             modelMatrix: mat4.create(),
         };
 
-        this.rooms[roomIdx].push(data);
+        // this.rooms[roomIdx].push(data);
 
         return data;
     }
@@ -368,7 +375,7 @@ export class FlowerPacket {
 
                 // Perform ground checks for some limited number of flowers
                 if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
+                    data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
                     data.flags &= ~FlowerFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
                 }
@@ -1072,7 +1079,7 @@ export class GrassPacket {
 
             // Perform ground checks for some limited number of data
             if (!!(data.flags & GrassFlags.needsGroundCheck)) {
-                data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
+                data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
                 data.flags &= ~GrassFlags.needsGroundCheck;
                 ++groundChecksThisFrame;
             }

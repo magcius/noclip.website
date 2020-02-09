@@ -16,6 +16,7 @@ export const enum cBgW_Flags {
     Dynamic   = 0x01,
     NoVtxTbl  = 0x10,
     Global    = 0x20,
+    Immovable = 0x80,
 }
 
 class cBgD__Tri_t {
@@ -136,10 +137,10 @@ export class cBgD_t {
             grp.parentIdx = view.getInt16(grpIdx + 0x24);
             grp.nextSiblingIdx = view.getInt16(grpIdx + 0x26);
             grp.firstChildIdx = view.getInt16(grpIdx + 0x28);
-            grp.roomIdx = view.getUint16(grpIdx + 0x2A);
+            grp.roomIdx = view.getInt16(grpIdx + 0x2A);
             grp.treIdx = view.getInt16(grpIdx + 0x2E);
             grp.attr = view.getUint32(grpIdx + 0x30);
-            
+
             grpIdx += 0x34;
         }
 
@@ -220,7 +221,7 @@ class cBgS_Chk {
     }
 }
 
-class cBgS_GndChk extends cBgS_Chk {
+export class cBgS_GndChk extends cBgS_Chk {
     public pos = vec3.create();
     public flags: number = 0;
     public retY: number = -Infinity;
@@ -236,15 +237,30 @@ class cBgS_GndChk extends cBgS_Chk {
     }
 }
 
+function mtxHasNonTransDifference(a: mat4, b: mat4): boolean {
+    // Check upper 3x3.
+    return (
+        a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2] ||
+        a[4] !== b[4] || a[5] !== b[5] || a[6] !== b[6] ||
+        a[8] !== b[8] || a[9] !== b[9] || a[10] !== b[10]
+    );
+}
+
+const scratchVec3 = vec3.create();
 class cBgW {
     public flags: cBgW_Flags = 0;
-    public modelMtx: mat4 | null;
+    public modelMtxPtr: mat4 | null;
 
     public dt: cBgD_t;
     private needsFullTransform: boolean = true;
 
     private vtx: vec3[];
     private triElm: Plane[];
+
+    private curMtx = mat4.create();
+    private oldMtx = mat4.create();
+    private moveCounter = 0;
+    private translationDelta = vec3.create();
 
     // Node Tree
     private rwg: number[];
@@ -256,7 +272,7 @@ class cBgW {
     public Set(dt: cBgD_t, flags: cBgW_Flags, modelMtx: mat4 | null): void {
         this.flags = flags;
         // Don't copy.
-        this.modelMtx = modelMtx;
+        this.modelMtxPtr = modelMtx;
         this.dt = dt;
 
         this.SetVtx();
@@ -273,6 +289,49 @@ class cBgW {
         this.MakeNodeTree();
     }
 
+    public Move(): void {
+        if (!(this.flags & cBgW_Flags.Dynamic))
+            return;
+
+        if (!!(this.flags & cBgW_Flags.Immovable))
+            return;
+
+        if (!(this.flags & 0x02)) {
+            // Check whether we can do a fast update.
+            if (this.moveCounter === 0xFF || mtxHasNonTransDifference(this.curMtx, this.modelMtxPtr!)) {
+                this.needsFullTransform = true;
+            } else if (this.curMtx[12] === this.modelMtxPtr![12] && this.curMtx[13] === this.modelMtxPtr![13] && this.curMtx[14] === this.modelMtxPtr![14]) {
+                // No rebuild necessary.
+                mat4.copy(this.oldMtx, this.curMtx);
+                // TODO(jstpierre): mIgnorePlaneType
+            } else {
+                this.translationDelta[0] = this.modelMtxPtr![12] - this.curMtx[12];
+                this.translationDelta[1] = this.modelMtxPtr![13] - this.curMtx[13];
+                this.translationDelta[2] = this.modelMtxPtr![14] - this.curMtx[14];
+                this.needsFullTransform = false;
+            }
+
+            if (this.moveCounter === 0xFF)
+                this.moveCounter = 0;
+            else
+                this.moveCounter++;
+
+            this.GlobalVtx();
+        }
+
+        this.CopyOldMtx();
+        this.CalcPlane();
+        this.ClassifyPlane();
+        this.MakeNodeTree();
+    }
+
+    private CopyOldMtx(): void {
+        if (this.modelMtxPtr !== null) {
+            mat4.copy(this.oldMtx, this.curMtx);
+            mat4.copy(this.curMtx, this.modelMtxPtr);
+        }
+    }
+
     protected CalcPlane(): void {
         if (this.needsFullTransform) {
             for (let i = 0; i < this.dt.triTbl.length; i++) {
@@ -280,10 +339,15 @@ class cBgW {
                 const p0 = this.vtx[tri.vtxIdx0];
                 const p1 = this.vtx[tri.vtxIdx1];
                 const p2 = this.vtx[tri.vtxIdx2];
+                
                 this.triElm[i].set(p0, p1, p2);
             }
         } else {
-            // TODO(jstpierre)
+            for (let i = 0; i < this.dt.triTbl.length; i++) {
+                const plane = this.triElm[i];
+                plane.getNormal(scratchVec3);
+                plane.d -= vec3.dot(scratchVec3, this.translationDelta);
+            }
         }
     }
 
@@ -298,9 +362,10 @@ class cBgW {
             const triEnd = i < this.dt.blkTbl.length - 1 ? this.dt.blkTbl[i + 1] : this.dt.triTbl.length;
 
             let prevRoofIdx = -1, prevWallIdx = -1, prevGroundIdx = -1;
-            for (let j = triStart; i < triEnd; i++) {
+            for (let j = triStart; j < triEnd; j++) {
                 const plane = this.triElm[j];
 
+                // Skip degenerate planes.
                 if (Math.abs(plane.x) <= MathConstants.EPSILON && Math.abs(plane.y) <= MathConstants.EPSILON && Math.abs(plane.z) <= MathConstants.EPSILON)
                     continue;
 
@@ -313,7 +378,6 @@ class cBgW {
                     if (prevRoofIdx >= 0)
                         this.rwg[prevRoofIdx] = j;
                     prevRoofIdx = j;
-                    this.rwg[prevRoofIdx] = j;
                 } else if (plane.y < 0.5) {
                     // Wall.
 
@@ -322,7 +386,6 @@ class cBgW {
                     if (prevWallIdx >= 0)
                         this.rwg[prevWallIdx] = j;
                     prevWallIdx = j;
-                    this.rwg[prevWallIdx] = j;
                 } else {
                     // Ground.
 
@@ -331,7 +394,6 @@ class cBgW {
                     if (prevGroundIdx >= 0)
                         this.rwg[prevGroundIdx] = j;
                     prevGroundIdx = j;
-                    this.rwg[prevGroundIdx] = j;
                 }
             }
         }
@@ -356,16 +418,17 @@ class cBgW {
     }
 
     private GlobalVtx(): void {
-        if (this.modelMtx === null)
+        if (this.modelMtxPtr === null)
             return;
 
         // Transform the vertices into global space.
 
         if (this.needsFullTransform) {
             for (let i = 0; i < this.dt.vtxTbl.length; i++)
-                vec3.transformMat4(this.vtx[i], this.dt.vtxTbl[i], this.modelMtx);
+                vec3.transformMat4(this.vtx[i], this.dt.vtxTbl[i], this.modelMtxPtr);
         } else {
-            // TODO(jstpierre): Fast path
+            for (let i = 0; i < this.dt.vtxTbl.length; i++)
+                vec3.add(this.vtx[i], this.vtx[i], this.translationDelta);
         }
     }
 
@@ -447,7 +510,12 @@ class cBgW {
             dst.maxY += 1.0;
             dst.maxZ += 1.0;
         } else {
-            // TODO(jstpierre): Fast path.
+            dst.minX += this.translationDelta[0];
+            dst.minY += this.translationDelta[1];
+            dst.minZ += this.translationDelta[2];
+            dst.maxX += this.translationDelta[0];
+            dst.maxY += this.translationDelta[1];
+            dst.maxZ += this.translationDelta[2];
         }
     }
 
@@ -465,15 +533,17 @@ class cBgW {
         if (chk.pos[2] <= grp.aabb.minZ && chk.pos[2] > grp.aabb.maxZ)
             return false;
 
+        let ret = false;
+
         const treIdx = this.dt.grpTbl[grpIdx].treIdx;
         if (treIdx >= 0 && this.GroundCrossRp(chk, treIdx))
-            return true;
+            ret = true;
 
         for (let childIdx = this.dt.grpTbl[grpIdx].firstChildIdx; childIdx >= 0; childIdx = this.dt.grpTbl[childIdx].nextSiblingIdx)
             if (this.GroundCrossGrpRp(chk, childIdx, depth + 1))
-                return true;
+                ret = true;
 
-        return false;
+        return ret;
     }
 
     protected ChkGrpThrough(grpIdx: number, chk: cBgS_GrpPassChk | null, depth: number): boolean {
@@ -481,6 +551,8 @@ class cBgW {
     }
 
     private GroundCrossRp(chk: cBgS_GndChk, treIdx: number): boolean {
+        let ret = false;
+
         const treTbl = this.dt.treTbl[treIdx];
         if (!!(treTbl.flag & 0x01)) {
             const blkIdx = treTbl.childBlk[0];
@@ -488,18 +560,21 @@ class cBgW {
             if (chk.searchGnd) {
                 const rwgIdx = this.blk[blkIdx].groundIdx;
                 if (this.RwgGroundCheckGnd(rwgIdx, chk))
-                    return true;
+                    ret = true;
             }
 
             if (chk.searchWall) {
                 const rwgIdx = this.blk[blkIdx].wallIdx;
                 if (this.RwgGroundCheckWall(rwgIdx, chk))
-                    return true;
+                    ret = true;
             }
         } else {
             // Traverse down children.
             for (let i = 0; i < 8; i++) {
                 const treIdx = treTbl.childBlk[i];
+                if (treIdx < 0)
+                    continue;
+
                 const tre = this.tre[treIdx];
 
                 if (chk.pos[0] < tre.aabb.minX && chk.pos[0] > tre.aabb.maxX)
@@ -510,35 +585,39 @@ class cBgW {
                     continue;
 
                 if (this.GroundCrossRp(chk, treIdx))
-                    return true;
+                    ret = true;
             }
         }
 
-        return false;
+        return ret;
     }
 
     private RwgGroundCheckWall(rwgIdx: number, chk: cBgS_GndChk): boolean {
+        let ret = false;
+
         for (; rwgIdx >= 0; rwgIdx = this.rwg[rwgIdx]) {
             const plane = this.triElm[rwgIdx];
             if (plane.y < 0.014)
                 continue;
             const y = -(plane.x * chk.pos[0] + plane.z * chk.pos[2] + plane.d) / plane.y;
             if (this.RwgGroundCheckCommon(y, rwgIdx, chk))
-                return true;
+                ret = true;
         }
 
-        return false;
+        return ret;
     }
 
     private RwgGroundCheckGnd(rwgIdx: number, chk: cBgS_GndChk): boolean {
+        let ret = false;
+
         for (; rwgIdx >= 0; rwgIdx = this.rwg[rwgIdx]) {
             const plane = this.triElm[rwgIdx];
             const y = -(plane.x * chk.pos[0] + plane.z * chk.pos[2] + plane.d) / plane.y;
             if (this.RwgGroundCheckCommon(y, rwgIdx, chk))
-                return true;
+                ret = true;
         }
 
-        return false;
+        return ret;
     }
 
     private RwgGroundCheckCommon(y: number, triIdx: number, chk: cBgS_GndChk): boolean {
@@ -549,6 +628,7 @@ class cBgW {
         if (!cM3d_CrossY_Tri_Front(this.vtx[tri.vtxIdx0], this.vtx[tri.vtxIdx1], this.vtx[tri.vtxIdx2], chk.pos))
             return false;
 
+        // const tri = this.dt.triTbl[triIdx];
         if (this.ChkPolyThrough(triIdx, chk.polyPassChk))
             return false;
 
@@ -640,12 +720,6 @@ class cBgS {
     }
 
     public GroundCross(chk: cBgS_GndChk): number {
-        chk.retY = -Infinity;
-        chk.polyInfo.triIdx = -1;
-        chk.polyInfo.bgIdx = -1;
-        chk.polyInfo.bgW = null;
-        chk.polyInfo.processId = -1;
-
         chk.searchWall = !!(chk.flags & 0x02);
         chk.searchGnd = !!(chk.flags & 0x01);
 
