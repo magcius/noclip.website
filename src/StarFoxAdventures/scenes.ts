@@ -21,7 +21,7 @@ import { SFAMapDesc } from './maps';
 import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection } from './textures';
+import { TextureCollection, SFATextureCollection, FalseTextureCollection } from './textures';
 
 export interface GameInfo {
     pathBase: string;
@@ -338,9 +338,10 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
 
         if (this.useAncientTextures) {
             // TODO: get rid of this
-            const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
-            const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
-            this.texColl = new SFATextureCollection(texTab, texBin, true);
+            // const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
+            // const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
+            // this.texColl = new SFATextureCollection(texTab, texBin, true);
+            this.texColl = new FalseTextureCollection(device);
         } else {
             const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
             const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);

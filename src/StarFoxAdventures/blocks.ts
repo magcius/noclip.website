@@ -2,7 +2,7 @@ import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode
 import { MapInfo } from './maps';
 import { SceneContext } from '../SceneBase';
 import { ModelInstance, SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection } from './textures';
+import { TextureCollection, SFATextureCollection, FalseTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
 import { mat4 } from 'gl-matrix';
@@ -36,9 +36,11 @@ export class BlockCollection {
         // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
         // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
         if (this.isAncient) {
-            const texTab = await dataFetcher.fetchData(`${pathBase}/TEX.tab`);
-            const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
-            this.texColl = new SFATextureCollection(texTab, texBin, this.isAncient);
+            // const texTab = await dataFetcher.fetchData(`${pathBase}/TEX.tab`);
+            // const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
+            // this.texColl = new SFATextureCollection(texTab, texBin, this.isAncient);
+            console.log(`creating ancient texture collection`);
+            this.texColl = new FalseTextureCollection(device);
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);

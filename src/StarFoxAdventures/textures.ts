@@ -4,7 +4,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
 import { loadRes } from './resource';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
-import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_I4, decodeTex_RGBA32, decodeTex_I8 } from '../Common/N64/Image';
 
 interface LoadedTexture {
@@ -17,9 +17,10 @@ interface LoadedTexture {
 }
 
 export interface DecodedTexture {
-    loadedTexture: LoadedTexture;
     gfxTexture: GfxTexture;
     gfxSampler: GfxSampler;
+    width: number;
+    height: number;
 }
 
 function loadTex(texData: ArrayBufferSlice, offset: number): LoadedTexture {
@@ -43,6 +44,8 @@ function loadTex(texData: ArrayBufferSlice, offset: number): LoadedTexture {
 }
 
 function loadAncientTex(texData: ArrayBufferSlice, offset: number): LoadedTexture {
+    // FIXME: "Ancient" textures are actually copied from Diddy Kong Racing and are useless for viewing
+    // Dinosaur Planet maps. This code is left here for posterity.
     const dv = texData.createDataView();
     const result = {
         offset,
@@ -71,9 +74,9 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture, isAncient: boolean)
         gfxTexture = loadTextureFromMipChain(device, mipChain).gfxTexture;
     } else {
         // FIXME: "Ancient" textures are actually copied from Diddy Kong Racing and are useless for viewing
-        // Dinosaur Planet maps. This code is left for posterity.
+        // Dinosaur Planet maps. This code is left here for posterity.
         gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, loaded.texture.width, loaded.texture.height, loaded.texture.mipCount));
-
+        
         const dv = loaded.texture.data!.createDataView();
         const pixels = new Uint8Array(loaded.texture.width * loaded.texture.height * 4);
         let src = 0;
@@ -122,7 +125,12 @@ function decodeTex(device: GfxDevice, loaded: LoadedTexture, isAncient: boolean)
         maxLOD: 100,
     });
 
-    return { loadedTexture: loaded, gfxTexture, gfxSampler };
+    return {
+        gfxTexture,
+        gfxSampler,
+        width: loaded.texture.width,
+        height: loaded.texture.height,
+    };
 }
 
 function isValidTextureTabValue(tabValue: number, isAncient: boolean) {
@@ -200,5 +208,43 @@ export class SFATextureCollection implements TextureCollection {
         }
 
         return this.decodedTextures[num];
+    }
+}
+
+export class FalseTextureCollection implements TextureCollection {
+    texture: DecodedTexture;
+
+    constructor(device: GfxDevice) {
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
+        const gfxSampler = device.createSampler({
+            wrapS: GfxWrapMode.REPEAT,
+            wrapT: GfxWrapMode.REPEAT,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        const pixels = new Uint8Array(4 * 4);
+        pixels.set([0xcc, 0xcc, 0xcc, 0xff], 0);
+        pixels.set([0xff, 0xff, 0xff, 0xff], 4);
+        pixels.set([0xff, 0xff, 0xff, 0xff], 8);
+        pixels.set([0xcc, 0xcc, 0xcc, 0xff], 12);
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+        device.submitPass(hostAccessPass);
+
+        this.texture = {
+            gfxTexture,
+            gfxSampler,
+            width: 2,
+            height: 2,
+        }
+    }
+
+    public getTexture(device: GfxDevice, num: number): DecodedTexture | null {
+        return this.texture;
     }
 }

@@ -72,8 +72,8 @@ export class ModelInstance {
                 const tex = this.textures[i]!;
                 materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
                 materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
-                materialParams.m_TextureMapping[i].width = tex.loadedTexture.texture.width;
-                materialParams.m_TextureMapping[i].height = tex.loadedTexture.texture.height;
+                materialParams.m_TextureMapping[i].width = tex.width;
+                materialParams.m_TextureMapping[i].height = tex.height;
                 materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else {
                 materialParams.m_TextureMapping[i].reset();
