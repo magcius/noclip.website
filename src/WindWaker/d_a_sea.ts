@@ -123,7 +123,7 @@ class daSea_WaterHeightInfo_Mng {
         const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
 
         // noclip modification: For single-room scenes, x/z are junk, so use mStayNo.
-        const isFullSea = globals.renderer.roomRenderers.length > 1;
+        const isFullSea = globals.renderer.rooms.length > 1;
         if (roomType === 7 && isFullSea) {
             return this.height[z*9 + x];
         } else {
@@ -522,7 +522,7 @@ export class d_a_sea extends fopAc_ac_c {
 
         // noclip modification: Usually, this is done by the collision system -- Room 0 of the sea is always loaded, and
         // has giant collision triangles tagged as the individual room. Here, we special case the logic for rooms.
-        const isFullSea = globals.renderer.roomRenderers.length > 1;
+        const isFullSea = globals.renderer.rooms.length > 1;
         if (globals.stageName === 'sea' && isFullSea) {
             const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 1, 49);
             globals.mStayNo = roomNo;

@@ -419,13 +419,11 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcDt_Handler(globals, globalUserData);
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
-
+    // fpcCt_Handler(globals);
     const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
     fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
-
-// TODO(jstpierre): Remove this in favor of explicit scene loading from the Renderer.
 
 //#endregion
 
@@ -468,9 +466,9 @@ export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
     public rot = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
-    public parentPcId: number;
-    public subtype: number;
-    public roomNo: number;
+    public parentPcId: number = 0xFFFFFFFF;
+    public subtype: number = 0xFF;
+    public roomNo: number = -1;
     public tevStr = new dKy_tevstr_c();
     // noclip addition
     public roomLayer: number = -1;

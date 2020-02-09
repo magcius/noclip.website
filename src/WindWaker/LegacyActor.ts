@@ -47,26 +47,31 @@ class d_a_noclip_legacy extends fopAc_ac_c {
             spawnLegacyActor(globals, this, prm).then(() => {
                 this.phase = cPhs__Status.Next;
             });
-
-            if (this.processName === 0x45)
-                console.log(this);
         }
 
         return this.phase;
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
-        super.execute(globals, deltaTimeInFrames);
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const device = globals.modelCache.device;
 
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].visible = this.visible;
+            this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
+    }
+
+    public delete(globals: dGlobals): void {
+        super.delete(globals);
+
+        const device = globals.modelCache.device;
+
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
     }
 }
 
 function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: fopAcM_prm_class): Promise<void> {
     const modelCache = globals.modelCache;
     const renderer = globals.renderer;
-    const roomRenderer = renderer.roomRenderers.find((roomRenderer) => roomRenderer.roomNo === actor.roomNo)!;
     const resCtrl = modelCache.resCtrl;
 
     const actorName = globals.dStage__searchNameRev(legacy.processName, legacy.subtype);
@@ -107,7 +112,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     function buildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
         const objectRenderer = buildChildModel(rarc, modelPath);
         setModelMatrix(objectRenderer.modelMatrix);
-        roomRenderer.objectRenderers.push(objectRenderer);
         legacy.objectRenderers.push(objectRenderer);
         return objectRenderer;
     }
@@ -120,7 +124,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
         objectRenderer.layer = actor.layer;
         setModelMatrix(objectRenderer.modelMatrix);
-        roomRenderer.objectRenderers.push(objectRenderer);
         legacy.objectRenderers.push(objectRenderer);
         return objectRenderer;
     }
@@ -199,7 +202,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             const m = buildModelRes(globals.renderer, res, actor);
         } else {
             // Might be something else, not sure.
-            console.warn(`Unknown chest type: ${actorName} / ${roomRenderer.name} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
+            console.warn(`Unknown chest type: ${actorName} / Room ${actor.roomNo} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);
         }
     });
     else if (actorName === 'item') {
@@ -1792,7 +1795,7 @@ export class BMDObjectRenderer {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
 
-    public setExtraTextures(extraTextures: ZWWExtraTextures): void {
+    private setExtraTextures(extraTextures: ZWWExtraTextures): void {
         extraTextures.fillExtraTextures(this.modelInstance);
 
         for (let i = 0; i < this.childObjects.length; i++)
@@ -1825,6 +1828,7 @@ export class BMDObjectRenderer {
         settingTevStruct(globals, this.lightTevColorType, scratchVec3a, this.tevstr);
         setLightTevColorType(globals, this.modelInstance, this.tevstr, viewerInput.camera);
 
+        this.setExtraTextures(globals.renderer.extraTextures);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].prepareToRender(globals, device, renderInstManager, viewerInput);

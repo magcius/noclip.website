@@ -97,6 +97,7 @@ function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
 class RenderHacks {
     public vertexColorsEnabled = true;
     public texturesEnabled = true;
+    public objectsVisible = true;
 
     public renderHacksChanged = false;
 }
@@ -307,57 +308,15 @@ function objectLayerVisible(layerMask: number, layer: number): boolean {
         return !!(layerMask & (1 << layer));
 }
 
-// Legacy
-export class WindWakerRoomRenderer {
+export class WindWakerRoom {
     public name: string;
-    public visible: boolean = true;
-    public objectsVisible = true;
-    public objectRenderers: BMDObjectRenderer[] = [];
-    public dzb: cBgD_t;
 
-    public extraTextures: ZWWExtraTextures;
-
-    constructor(renderer: WindWakerRenderer, public roomNo: number) {
+    constructor(public roomNo: number, public visible: boolean) {
         this.name = `Room ${roomNo}`;
-
-        const resCtrl = renderer.globals.modelCache.resCtrl;
-        this.dzb = assertExists(resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`));
-
-        this.extraTextures = renderer.extraTextures;
-    }
-
-    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        // Set visibility of all room actors.
-        const fwGlobals = globals.frameworkGlobals;
-        for (let i = 0; i < fwGlobals.dwQueue.length; i++) {
-            for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
-                const ac = fwGlobals.dwQueue[i][j];
-                if (ac instanceof fopAc_ac_c && ac.roomNo === this.roomNo) {
-                    ac.visible = this.visible && objectLayerVisible(globals.renderer.roomLayerMask, ac.roomLayer);
-                    if (ac.visible && fpcIsObject(ac.processName))
-                        ac.visible = this.objectsVisible;
-                }
-            }
-        }
-
-        if (!this.visible)
-            return;
-
-        if (this.objectsVisible) {
-            for (let i = 0; i < this.objectRenderers.length; i++) {
-                this.objectRenderers[i].setExtraTextures(this.extraTextures);
-                this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
-            }
-        }
     }
 
     public setVisible(v: boolean): void {
         this.visible = v;
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].destroy(device);
     }
 }
 
@@ -483,7 +442,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public opaqueSceneTexture = new ColorTexture();
     public renderHelper: GXRenderHelperGfx;
 
-    public roomRenderers: WindWakerRoomRenderer[] = [];
+    public rooms: WindWakerRoom[] = [];
     public effectSystem: SimpleEffectSystem;
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
@@ -527,7 +486,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         roomsPanel.setTitle(UI.LAYER_ICON, 'Rooms');
-        roomsPanel.setLayers(this.roomRenderers);
+        roomsPanel.setLayers(this.rooms);
 
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -547,8 +506,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const enableObjects = new UI.Checkbox('Enable Objects', true);
         enableObjects.onchanged = () => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].objectsVisible = enableObjects.checked;
+            this.globals.renderHacks.objectsVisible = enableObjects.checked;
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
@@ -557,6 +515,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     // For people to play around with.
     public cameraFrozen = false;
+
+    private getRoomVisible(roomNo: number): boolean {
+        if (roomNo === -1)
+            return true;
+        for (let i = 0; i < this.rooms.length; i++)
+            if (this.rooms[i].roomNo === roomNo)
+                return this.rooms[i].visible;
+        throw "whoops";
+    }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -572,6 +539,20 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
         }
 
+        // Update actor visibility from settings.
+        // TODO(jstpierre): Figure out a better place to put this?
+        const fwGlobals = this.globals.frameworkGlobals;
+        for (let i = 0; i < fwGlobals.dwQueue.length; i++) {
+            for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
+                const ac = fwGlobals.dwQueue[i][j];
+                if (ac instanceof fopAc_ac_c) {
+                    ac.visible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    if (ac.visible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
+                        ac.visible = false;
+                }
+            }
+        }
+
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -585,9 +566,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
 
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
-
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(this.globals, device, renderInstManager, viewerInput);
 
         {
             this.effectSystem.calc(viewerInput);
@@ -669,8 +647,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.extraTextures.destroy(device);
         this.renderTarget.destroy(device);
         this.globals.destroy(device);
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
@@ -947,9 +923,7 @@ class SceneDesc {
             const roomNo = Math.abs(this.rooms[i]);
 
             const visible = this.rooms[i] >= 0;
-            const roomRenderer = new WindWakerRoomRenderer(renderer, roomNo);
-            roomRenderer.visible = visible;
-            renderer.roomRenderers.push(roomRenderer);
+            renderer.rooms.push(new WindWakerRoom(roomNo, visible));
 
             // objectSetCheck
 
@@ -957,16 +931,12 @@ class SceneDesc {
             fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            this.spawnActors(renderer, roomRenderer, dzr);
+            this.spawnActors(renderer, roomNo, dzr);
 
             dStage_dt_c_roomLoader(globals.roomStatus[roomNo], dzr);
         }
 
-        // HACK(jstpierre): We spawn stage actors on the first room renderer.
-        this.spawnActors(renderer, renderer.roomRenderers[0], dzs);
-
-        // TODO(jstpierre): Not all the actors load in the requestArchives phase...
-        await modelCache.waitForLoad();
+        this.spawnActors(renderer, -1, dzs);
 
         return renderer;
     }
@@ -1049,7 +1019,7 @@ class SceneDesc {
         }
     }
 
-    private iterActorLayers(roomIdx: number, dzs: DZS, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
+    private iterActorLayers(roomNo: number, dzs: DZS, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
         const chunkHeaders = dzs.headers;
 
         function buildChunkLayerName(base: string, i: number): string {
@@ -1061,17 +1031,17 @@ class SceneDesc {
         }
 
         for (let i = -1; i < 16; i++) {
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
+            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
+            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
+            this.iterActorLayerACTR(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
+            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
+            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
+            this.iterActorLayerSCOB(roomNo, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
         }
     }
 
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS): void {
-        this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
+    private spawnActors(renderer: WindWakerRenderer, roomNo: number, dzs: DZS): void {
+        this.iterActorLayers(roomNo, dzs, (processName, actor) => {
             loadActor(renderer.globals, processName, actor);
         });
     }
