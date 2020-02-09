@@ -1,7 +1,7 @@
 
 /* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/noclip.website */
 
-import { Viewer, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
+import { Viewer, SceneGfxBase, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 
@@ -67,7 +67,7 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI } from './ui';
-import { hexdump, assertExists, magicstr } from './util';
+import { hexdump, assertExists, magicstr, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
@@ -86,9 +86,10 @@ import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
 import { LocationLoadContext, LocationBase, LocationLoader, LocationCameraSettings } from './AAA_NewUI/SceneBase2';
-import { SceneGroupLoader } from './AAA_NewUI/SceneDescLoader';
+import { SceneDescLoader } from './AAA_NewUI/SceneDescLoader';
 import { FPSCameraController } from './Camera';
 import { mat4 } from 'gl-matrix';
+import { GfxDevice } from './gfx/platform/GfxPlatform';
 
 const sceneGroups = [
     "Wii",
@@ -209,6 +210,60 @@ class AnimationLoop implements ViewerUpdateInfo {
     };
 }
 
+class SceneLoadContext implements LocationLoadContext {
+    public oldLocation: LocationBase | null;
+
+    public device: GfxDevice;
+    public destroyablePool: Destroyable[] = [];
+    public dataShare: DataShare;
+    public dataFetcher: DataFetcher;
+    public uiContainer: HTMLElement;
+    public legacyUI: UI;
+    public scene: SceneGfxBase | null = null;
+
+    public onabort: ((context: LocationLoadContext) => void) | null = null;
+
+    constructor(private main: Main, public location: LocationBase) {
+        this.oldLocation = this.main.currentScene !== null ? this.main.currentScene.location : null;
+
+        this.device = this.main.viewer.gfxDevice;
+        this.dataShare = this.main.dataShare;
+        this.dataFetcher = this.main.dataFetcher;
+        this.legacyUI = this.main.ui;
+
+        this.uiContainer = document.createElement('div');
+    }
+
+    public setScene(scene: SceneGfxBase): void {
+        this.scene = scene;
+        this.main.setCurrentScene(this, false);
+    }
+
+    public setOldScene(): void {
+        this.scene = assertExists(this.main.currentScene).scene;
+        this.main.setCurrentScene(this, true);
+    }
+
+    public setViewerLocation(location: LocationBase): void {
+        this.main.setViewerLocation(location);
+    }
+
+    public destroy(): void {
+        if (this.scene && !this.destroyablePool.includes(this.scene))
+            this.destroyablePool.push(this.scene);
+        for (let i = 0; i < this.destroyablePool.length; i++)
+            this.destroyablePool[i].destroy(this.device);
+        this.destroyablePool.length = 0;
+    }
+
+    public abort(): void {
+        // Call the abort hook first, if necessary.
+        if (this.scene === null && this.onabort !== null)
+            this.onabort(this);
+        this.destroy();
+    }
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -220,15 +275,14 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
 
-    private destroyablePool: Destroyable[] = [];
     public dataShare = new DataShare();
     public dataFetcher: DataFetcher;
 
-    private sceneGroupLoader: SceneGroupLoader;
+    private sceneDescLoader: SceneDescLoader;
 
-    private currentLocation: LocationBase | null = null;
-    private loadingLocation: LocationBase | null = null;
-    private loadingLocationAbort: (() => void) | null = null;
+    public loadingScene: SceneLoadContext | null = null;
+    public currentScene: SceneLoadContext | null = null;
+    public _locationRecommendations: LocationBase[] = [];
 
     private lastUpdatedURLTimeSeconds: number = -1;
 
@@ -307,21 +361,12 @@ class Main {
         this.groups.push('Other');
         this.groups.push(this.droppedFileGroup);
 
-        this.sceneGroupLoader = new SceneGroupLoader(getSceneGroups(this.groups), this.saveManager);
-        this.registerLocationLoader('SceneGroupLoader', this.sceneGroupLoader);
+        this.sceneDescLoader = new SceneDescLoader(getSceneGroups(this.groups), this.saveManager);
+        this.registerLocationLoader(this.sceneDescLoader);
 
         this._loadSceneGroups();
 
         window.onhashchange = this._onHashChange.bind(this);
-
-        /*
-        if (this.currentSceneDesc === null)
-            this._onHashChange();
-
-        if (this.currentSceneDesc === null) {
-            // Make the user choose a scene if there's nothing loaded by default...
-        }
-        */
 
         this.ui.sceneSelect.setExpanded(true);
 
@@ -376,13 +421,8 @@ class Main {
             this.ui.sceneSelect.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
-                /*
-                if (this.currentSceneDesc) {
-                    const key = this._getSaveStateSlotKey(i);
-                    const action = this.pickSaveStatesAction(inputManager);
-                    this.doSaveStatesAction(action, key);
-                }
-                */
+                if (this._locationRecommendations[i] !== undefined)
+                    this._loadLocation(this._locationRecommendations[i]);
             }
         }
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
@@ -487,30 +527,16 @@ class Main {
     }
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadLocation(this.sceneGroupLoader.getLocationFromSceneDesc(sceneGroup, sceneDesc));
-    }
-
-    private doSaveStatesAction(action: SaveStatesAction, key: string): void {
-        if (action === SaveStatesAction.Save) {
-            this.saveManager.saveState(key, this._getSceneSaveState());
-        } else if (action === SaveStatesAction.Delete) {
-            this.saveManager.deleteState(key);
-        } else if (action === SaveStatesAction.Load) {
-            const state = this.saveManager.loadState(key);
-            // this._loadSceneSaveState(state);
-        } else if (action === SaveStatesAction.LoadDefault) {
-            const state = this.saveManager.loadStateFromLocation(key, SaveStateLocation.Defaults);
-            // this._loadSceneSaveState(state);
-        }
+        this._loadLocation(this.sceneDescLoader.getLocationFromSceneDesc(sceneGroup, sceneDesc));
     }
 
     public loaderMap = new Map<string, LocationLoader>();
-    private registerLocationLoader(engine: string, loader: LocationLoader): void {
-        this.loaderMap.set(engine, loader);
+    private registerLocationLoader(loader: LocationLoader): void {
+        this.loaderMap.set(loader.loaderKey, loader);
     }
 
     private findLocationLoader(location: LocationBase): LocationLoader {
-        return assertExists(this.loaderMap.get(location.engine));
+        return assertExists(this.loaderMap.get(location.loaderKey));
     }
 
     private _loadCameraSettings(cameraSettings: LocationCameraSettings): void {
@@ -543,87 +569,89 @@ class Main {
 
     private loadSceneDelta = 1;
 
-    private _loadLocation(location: LocationBase): void {
-        // TODO(jstpierre): Concurrent scene loading. It will happen eventually :)
-        const device = this.viewer.gfxDevice;
-
-        // Tear down old scene.
-        if (this.dataFetcher !== null)
-            this.dataFetcher.abort();
-        if (this.loadingLocationAbort !== null)
-            this.loadingLocationAbort();
-        this.ui.destroyScene();
-        if (this.viewer.scene && !this.destroyablePool.includes(this.viewer.scene))
-            this.destroyablePool.push(this.viewer.scene);
-        this.viewer.setScene(null);
-        for (let i = 0; i < this.destroyablePool.length; i++)
-            this.destroyablePool[i].destroy(device);
-        this.destroyablePool.length = 0;
-
-        this.ui.sceneSelect.setProgress(0);
-
-        const dataShare = this.dataShare;
-        const dataFetcher = this.dataFetcher;
-        dataFetcher.reset();
-        const uiContainer: HTMLElement = document.createElement('div');
-        this.ui.sceneUIContainer.appendChild(uiContainer);
-        const destroyablePool: Destroyable[] = this.destroyablePool;
-
+    private cleanupDataShare(): void {
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
         // we increment the age below fore the "new" scene, which is the only proper way to do leak
         // checking. Typically, we allow one old scene's worth of contents.
-        this.dataShare.pruneOldObjects(device, this.loadSceneDelta);
+        this.dataShare.pruneOldObjects(this.viewer.gfxDevice, this.loadSceneDelta);
 
         if (this.loadSceneDelta === 0)
             this.viewer.gfxDevice.checkForLeaks();
+    }
 
+    public setCurrentScene(sceneContext: SceneLoadContext, reuseExistingScene: boolean): void {
+        if (this.loadingScene !== sceneContext) {
+            // If this happens, it means that an abort wasn't respected.
+            console.warn(`Abort was not respected`);
+            return;
+        }
+
+        // Ensure that we set our progress at least once...
+        this.loadingScene.dataFetcher.setProgress();
+
+        // Stop loading the scene.
+        this.loadingScene = null;
+
+        if (!reuseExistingScene) {
+            // Tear down the old scene.
+            const oldScene = this.currentScene;
+            if (oldScene !== null) {
+                oldScene.destroy();
+            }
+
+            // At this stage, we can do a leak check / cleanup on the DataShare, if wanted.
+            this.cleanupDataShare();
+
+            // Swap in the new UI container.
+            this.ui.destroyScene();
+            this.ui.sceneUIContainer.appendChild(sceneContext.uiContainer);
+            this.viewer.setScene(sceneContext.scene);
+        }
+
+        this.currentScene = sceneContext;
+        this._generateLocationRecommendations();
+    }
+
+    public setViewerLocation(location: LocationBase): void {
+        // Force time to play when loading a location.
+        // TODO(jstpierre): Change this to a location parameter?
+        this.ui.togglePlayPause(true);
+
+        // Configure scene time if available.
+        if (location.time !== undefined)
+            this.viewer.sceneTime = location.time;
+
+        if (location.cameraSettings !== undefined)
+            this._loadCameraSettings(location.cameraSettings);
+        else
+            this.viewer.setCameraController(new FPSCameraController());
+    }
+
+    private _loadLocation(location: LocationBase): void {
+        // If there's an existing scene being loaded, kill it and start over.
+        if (this.loadingScene !== null) {
+            // Also abort any ongoing loads.
+            this.dataFetcher.abort();
+            this.loadingScene.abort();
+            this.loadingScene = null;
+        }
+
+        // Reset the DataFetcher, if we aborted it.
+        this.dataFetcher.reset();
+
+        // Advance the DataShare age counter.
         this.dataShare.loadNewScene();
 
+        // Mark the scene as selected, and start loading.
+        this.ui.sceneSelect.setProgress(0);
+        this.ui.sceneSelect.setCurrentDesc(this.sceneDescLoader.getSceneGroupFromLocation(location), this.sceneDescLoader.getSceneDescFromLocation(location));
+
+        assert(this.loadingScene === null);
         const locationLoader = this.findLocationLoader(location);
 
-        const locationLoadContext: LocationLoadContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool,
-            oldLocation: this.currentLocation,
-            legacyUI: this.ui,
-
-            onabort: null,
-
-            setScene: (scene) => {
-                if (this.loadingLocation === null) {
-                    dataFetcher.setProgress();
-                    this.viewer.setScene(scene);
-                    this.currentLocation = location;
-                    this.loadingLocation = null;
-                }
-            },
-
-            setViewerLocation: (location) => {
-                // TODO(jstpierre): Change this to a location parameter?
-
-                // Force time to play when loading a location.
-                this.ui.togglePlayPause(true);
-
-                // Configure scene time if available.
-                if (location.time !== undefined)
-                    this.viewer.sceneTime = location.time;
-
-                if (location.cameraSettings !== undefined)
-                    this._loadCameraSettings(location.cameraSettings);
-                else
-                    this.viewer.setCameraController(new FPSCameraController());
-            },
-
-            locationChanged: () => {
-                this._saveStateAndUpdateURL();
-            },
-        };
-        this.loadingLocationAbort = () => {
-            if (locationLoadContext.onabort !== null)
-                locationLoadContext.onabort(locationLoadContext);
-        };
-
-        const ret = locationLoader.loadLocation(locationLoadContext, location);
+        this.loadingScene = new SceneLoadContext(this, location);
+        const ret = locationLoader.loadLocation(this.loadingScene, location);
 
         if (!ret) {
             console.error(`Cannot load ${location.title}. Probably an unsupported file extension?`);
@@ -650,6 +678,20 @@ class Main {
         Sentry.configureScope((scope) => {
             scope.setExtra('sceneDescId', sceneDescId);
         });
+    }
+
+    private _generateLocationRecommendations(): void {
+        this._locationRecommendations = [];
+
+        if (this.currentScene === null)
+            return;
+
+        for (let i = 1; i <= 9; i++) {
+            const location = this.sceneDescLoader.getLocationFromSaveState(this.currentScene.location, i);
+            if (location === null)
+                continue;
+            this._locationRecommendations[i] = location;
+        }
     }
 
     private _loadSceneGroups() {

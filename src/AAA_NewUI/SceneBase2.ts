@@ -3,30 +3,30 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DataFetcher } from "../DataFetcher";
 import { DataShare } from "../DataShare";
 import { Destroyable } from "../SceneBase";
-import { SceneGfx, SceneGfxBase } from "../viewer";
+import { SceneGfxBase } from "../viewer";
 import { UI } from "../ui";
 import { CameraController } from "../Camera";
 
-// A Location is a combination of what was a "scene desc" and a "save state" in V1.
+// A Location is a combination of what was a "scene desc" and a "save state" was in V1.
+//
+// Basically, it loosely and valuely identifies a "loaded scene"
 
 export const enum LocationVersion {
     V0 = 'V0',
 }
 
-export interface LocationBase {
+export interface LocationBaseV0 {
     /**
      * The version of this structure.
      */
-    version: LocationVersion;
+    version: LocationVersion.V0;
 
     /**
-     * The engine to use to load this location. In most cases, this will be
-     * some identifier for the game. Different engines can register themselves.
+     * Which LocationLoader should load this scene?
      */
-    engine: string;
+    loaderKey: string;
 
-    // TODO(jstpierre): Grouping and filtering information.
-    // This will change when we add these.
+    // TODO(jstpierre): This will change when we add grouping and filtering information.
     /**
      * Human-readable title for the location. Should not include any game-specific info.
      */
@@ -54,15 +54,17 @@ export interface LocationBase {
     screenshotURL?: string;
 
     /**
-     * Engines can extend this with extra details.
+     * Different loaders can extend this with extra details.
      */
 }
+
+export type LocationBase = LocationBaseV0;
 
 export interface LocationCameraSettingsWASD {
     kind: 'WASD';
 
     /**
-     * There's probably a better way to store this...
+     * There's probably a better way to store this... Currently a 4x3 matrix array.
      */
     worldMatrix: number[];
 }
@@ -79,44 +81,75 @@ export interface LocationCameraSettingsCustom {
 export type LocationCameraSettings = LocationCameraSettingsWASD | LocationCameraSettingsCustom;
 
 export interface LocationLoadContext {
-    // Possible optimization if the existing location is the same. Use sparingly.
+    /**
+     * The location currently being displayed. Use this as a possible optimization, together
+     * with {@method setOldScene} as a way of preventing a full scene load.
+     */
     oldLocation: LocationBase | null;
 
     device: GfxDevice;
+
+    /**
+     * The DataFetcher is the primary way to make external requests to load assets.
+     */
     dataFetcher: DataFetcher;
+
+    /**
+     * The DataShare is a way of sharing data between different scenes, to prevent
+     * extra loading.
+     */
     dataShare: DataShare;
-    // TODO(jstpierre): Remove this
+
+    /**
+     * UI shenanigans. These might be removed at some point.
+     */
     uiContainer: HTMLElement;
-    // TODO(jstpierre): Remove this
     legacyUI: UI;
+
     // TODO(jstpierre): Remove this in favor of the new loading approach?
     destroyablePool: Destroyable[];
 
     /**
-     * LocationLoaders should fill this in on the context to destroy any assets
-     * they've created.
+     * This callback will be called when the load is aborted. It will *not* be called
+     * after the scene is finished loading.
+     *
+     * TODO(jstpierre): Should it?
      */
     onabort: ((context: this) => void) | null;
 
     /**
-     * Set the resulting scene. Does not have to be called.
+     * Set the resulting scene. This signifies the end of the main loading stage, after which
+     * any previous scenes may now be destroyed. Loading may continue afterwards if required.
+     *
+     * This *must* be called or memory leaks might happen. If you wish to reuse the currently
+     * displayed scene, pass {@member oldScene.scene}.
      */
     setScene(s: SceneGfxBase): void;
 
     /**
-     * Configures the viewer to use the location settings. Currently, that includes things
-     * like scene time, camera settings, and so on. Normally, this would be passed straight
-     * from the location, but this gives the loader an opportunity to overwrite some of the
-     * settings.
+     * Use the old scene. This is a special case that completes the load process on the currently
+     * displayed scene.
      */
-    setViewerLocation(location: LocationBase): void;
+    setOldScene(): void;
 
     /**
-     * Call this to signal that the location has changed.
+     * Configures the viewer to use the location settings. Currently, that includes things
+     * like scene time, camera settings, and so on. In most cases, this should be passed directly
+     * from the location, but this gives the loader an opportunity to overwrite some of the
+     * settings if desired.
      */
-    locationChanged(): void;
+    setViewerLocation(location: LocationBase): void;
 }
 
 export interface LocationLoader<T extends LocationBase = LocationBase> {
+    loaderKey: string;
+
+    /**
+     * Requests a load of a location, using the given context and location.
+     *
+     * Return false if you cannot load this location, for whatever reason.
+     *
+     * Use {@param context} to signif
+     */
     loadLocation(context: LocationLoadContext, location: T): boolean;
 }

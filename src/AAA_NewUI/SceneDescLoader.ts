@@ -7,8 +7,11 @@ import { atob } from '../Ascii85';
 import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { SaveManager } from '../SaveManager';
+import { SceneGfx } from '../viewer';
 
 export interface SceneDescLocation extends LocationBase {
+    loaderKey: 'SceneDescLoader';
+
     sceneGroup: SceneGroup;
     sceneDesc: SceneDesc;
 
@@ -18,48 +21,74 @@ export interface SceneDescLocation extends LocationBase {
     sceneSaveState: ArrayBufferSlice | null;
 }
 
-export class SceneGroupLoader implements LocationLoader<SceneDescLocation> {
+export class SceneDescLoader implements LocationLoader<SceneDescLocation> {
+    public loaderKey = 'SceneDescLoader' as const;
+
     constructor(private groups: SceneGroup[], private saveManager: SaveManager) {
+    }
+
+    private setCurrentScene(context: LocationLoadContext, scene: SceneGfx, location: SceneDescLocation): void {
+        // Set our new scene. This needs to happen *first*.
+        context.setScene(scene);
+
+        // Check if we need extra camera settings.
+        if (location.cameraSettings === undefined && scene.createCameraController !== undefined) {
+            location.cameraSettings = {
+                kind: 'Custom',
+                cameraController: scene.createCameraController(),
+            };
+        }
+
+        // TODO(jstpierre): adjustCameraController
+
+        context.setViewerLocation(location);
+
+        if (scene.createPanels)
+            context.legacyUI.setScenePanels(scene.createPanels());
+
+        if (scene.textureHolder !== undefined)
+            context.legacyUI.textureViewer.setTextureHolder(scene.textureHolder);
+        else
+            context.legacyUI.textureViewer.setTextureList([]);
+
+        // Deserialize any save states if necessary.
+        const state = location.sceneSaveState;
+        if (state !== null && scene.deserializeSaveState)
+            scene.deserializeSaveState(state.arrayBuffer, state.byteOffset, state.byteLength);
+
+        // When the state changes, force an update of the location.
+        scene.onstatechanged = () => {
+            // context.locationChanged();
+        };
     }
 
     public loadLocation(context: LocationLoadContext, location: SceneDescLocation): boolean {
         // If we're just switching save states in the same SceneDesc, then we can simply do that.
-        if (context.oldLocation !== null && context.oldLocation.engine === 'SceneDescLoader') {
+        if (context.oldLocation !== null && context.oldLocation.loaderKey === this.loaderKey) {
             const oldLocation = context.oldLocation as SceneDescLocation;
             if (oldLocation.sceneGroup === location.sceneGroup && oldLocation.sceneDesc === location.sceneDesc) {
+                // Reuse the old scene, with the new location.
+                context.setOldScene();
                 context.setViewerLocation(location);
                 return true;
             }
         }
 
         location.sceneDesc.createScene(context.device, context).then((scene) => {
-            context.setScene(scene);
-
-            if (location.cameraSettings === undefined && scene.createCameraController !== undefined) {
-                location.cameraSettings = {
-                    kind: 'Custom',
-                    cameraController: scene.createCameraController(),
-                };
-            }
-
-            // TODO(jstpierre): adjustCameraController.
-
-            context.setViewerLocation(location);
-
-            if (scene.createPanels)
-                context.legacyUI.setScenePanels(scene.createPanels());
-
-            const state = location.sceneSaveState;
-            if (state !== null && scene.deserializeSaveState)
-                scene.deserializeSaveState(state.arrayBuffer, state.byteOffset, state.byteLength);
-
-            scene.onstatechanged = () => {
-                // When the state changes, force an update of the location.
-                context.locationChanged();
-            };
+            this.setCurrentScene(context, scene, location);
         });
 
         return true;
+    }
+
+    private getSaveStateSlotKey(location: SceneDescLocation, saveStateSlot: number): string {
+        const key = `${location.sceneGroup.id}/${location.sceneDesc.id}`;
+        return this.saveManager.getSaveStateSlotKey(key, saveStateSlot);
+    }
+
+    private loadState(location: SceneDescLocation, saveStateSlot: number): string | null {
+        const slotKey = this.getSaveStateSlotKey(location, saveStateSlot);
+        return this.saveManager.loadState(slotKey);
     }
 
     private getScreenshotURL(sceneGroupId: string, sceneDescId: string, saveStateSlot: number): string | undefined {
@@ -73,21 +102,18 @@ export class SceneGroupLoader implements LocationLoader<SceneDescLocation> {
     public getLocationFromSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, saveStateSlot: number = 1, saveState: string | null = null): SceneDescLocation {
         const location: SceneDescLocation = {
             version: LocationVersion.V0,
-            engine: 'SceneGroupLoader',
+            loaderKey: this.loaderKey,
             title: sceneDesc.name,
             fullTitle: `${sceneGroup.name} - ${sceneDesc.name}`,
+            screenshotURL: this.getScreenshotURL(sceneGroup.id, sceneDesc.id, saveStateSlot),
+
             sceneGroup,
             sceneDesc,
             sceneSaveState: null,
-            screenshotURL: this.getScreenshotURL(sceneGroup.id, sceneDesc.id, saveStateSlot),
         };
 
-        if (saveState === null && saveStateSlot >= 0) {
-            const fullDescId = `${sceneGroup.id}/${sceneDesc.id}`;
-            const slotKey = this.saveManager.getSaveStateSlotKey(fullDescId, saveStateSlot);
-            console.log(fullDescId, slotKey);
-            saveState = this.saveManager.loadState(slotKey);
-        }
+        if (saveState === null && saveStateSlot >= 0)
+            saveState = this.loadState(location, saveStateSlot);
 
         if (saveState !== null) {
             // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
@@ -142,7 +168,26 @@ export class SceneGroupLoader implements LocationLoader<SceneDescLocation> {
         }
 
         return this.getLocationFromIDs(sceneGroupId, sceneDescId, saveStateSlot, saveState);
-    }    
+    }
+
+    public getLocationFromSaveState(existingLocation: LocationBase, saveStateSlot: number): SceneDescLocation | null {
+        if (existingLocation.loaderKey !== this.loaderKey)
+            return null;
+
+        const location = existingLocation as SceneDescLocation;
+        const saveState = this.loadState(location, saveStateSlot);
+        return this.getLocationFromSceneDesc(location.sceneGroup, location.sceneDesc, saveStateSlot, saveState);
+    }
+
+    public getSceneGroupFromLocation(location: LocationBase): SceneGroup {
+        assert(location.loaderKey === this.loaderKey);
+        return (location as SceneDescLocation).sceneGroup;
+    }
+
+    public getSceneDescFromLocation(location: LocationBase): SceneDesc {
+        assert(location.loaderKey === this.loaderKey);
+        return (location as SceneDescLocation).sceneDesc;
+    }
 }
 
 const saveStateTmp = new Uint8Array(512);
@@ -174,7 +219,7 @@ function loadSceneSaveStateVersion2(location: SceneDescLocation, state: string):
     byteOffs += 0x04;
     byteOffs += deserializeCameraSettings(location, saveStateView, byteOffs);
 
-    location.sceneSaveState = new ArrayBufferSlice(saveStateTmp, byteOffs, byteLength - byteOffs);
+    location.sceneSaveState = new ArrayBufferSlice(saveStateTmp.buffer, byteOffs, byteLength - byteOffs);
 }
 
 function loadSceneSaveStateVersion3(location: SceneDescLocation, state: string): void {
@@ -186,5 +231,5 @@ function loadSceneSaveStateVersion3(location: SceneDescLocation, state: string):
     byteOffs++;
 
     byteOffs += deserializeCameraSettings(location, saveStateView, byteOffs);
-    location.sceneSaveState = new ArrayBufferSlice(saveStateTmp, byteOffs, byteLength - byteOffs);
+    location.sceneSaveState = new ArrayBufferSlice(saveStateTmp.buffer, byteOffs, byteLength - byteOffs);
 }
