@@ -15,6 +15,7 @@ import "reflect-metadata";
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { DebugFloaterHolder } from './DebugFloaters';
+import { LocationBase } from './AAA_NewUI/SceneBase2';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -878,17 +879,19 @@ function matchRegExps(n: RegExp[], S: string): boolean {
     })
 }
 
+interface LocationGroup {
+    name: string;
+    tag: string | null;
+    locations: LocationBase[];
+}
+
 class SceneSelect extends Panel {
-    private sceneGroups: (string | Viewer.SceneGroup)[] = [];
-    private sceneDescs: (string | Viewer.SceneDesc)[] = [];
+    private groups: LocationGroup[] = [];
 
     private searchEntry: TextEntry;
     private sceneGroupList: SingleSelect;
     private sceneDescList: SingleSelect;
 
-    private selectedSceneGroup: Viewer.SceneGroup;
-    private currentSceneGroup: Viewer.SceneGroup;
-    private currentSceneDesc: Viewer.SceneDesc;
     private loadProgress: number;
 
     private currentSearchTokens: RegExp[] = [];
@@ -973,8 +976,8 @@ class SceneSelect extends Panel {
 
         let lastGroupHeaderVisible = false;
         let selectedGroupExplicitlyVisible = false;
-        for (let i = 0; i < this.sceneGroups.length; i++) {
-            const item = this.sceneGroups[i];
+        for (let i = 0; i < this.groups.length; i++) {
+            const item = this.groups[i];
             if (typeof item === 'string') {
                 // If this is a header, then all items under the header should match.
                 lastGroupHeaderVisible = matchRegExps(n, item);
@@ -1022,20 +1025,29 @@ class SceneSelect extends Panel {
         this.sceneDescList.computeHeaderVisibility();
     }
 
-    public setCurrentDesc(sceneGroup: Viewer.SceneGroup, sceneDesc: Viewer.SceneDesc) {
-        this.selectedSceneGroup = sceneGroup;
-        this.currentSceneGroup = sceneGroup;
-        this.currentSceneDesc = sceneDesc;
-
-        const index = this.sceneGroups.indexOf(this.currentSceneGroup);
-        this.sceneGroupList.setHighlighted(index);
-
-        this.syncSceneDescs();
+    public setCurrentLocation(location: LocationBase) {
     }
 
-    public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
-        this.sceneGroups = sceneGroups;
-        this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
+    public setLocations(locations: LocationBase[]): void {
+        // Reconstruct groups from given locations.
+        this.groups = [];
+
+        const groupItems: ScrollSelectItem[] = [];
+
+        for (let i = 0; i < locations.length; i++) {
+            const location = locations[i];
+
+            let group = this.groups.find((g) => g.name === location.groupName && g.tag === location.groupTag);
+            if (group === undefined) {
+                group = { name: location.groupName, tag: location.groupTag, locations: [] };
+                // Look for an existing group with the same tag to figure out where to put it.
+                this.groups.push(group);
+            }
+
+            group.locations.push(location);
+        }
+
+        this.sceneGroupList.setItems(this.groups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, html: g };
             else

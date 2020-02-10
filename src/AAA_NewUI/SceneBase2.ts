@@ -22,11 +22,12 @@ export interface LocationBaseV0 {
     version: LocationVersion.V0;
 
     /**
-     * Which LocationLoader should load this scene?
+     * Which LocationLoader to use when loading this scene? Note that this is not guaranteed
+     * to tell you anything game-specific.
      */
     loaderKey: string;
 
-    // TODO(jstpierre): This will change when we add grouping and filtering information.
+    // TODO(jstpierre): This will change when we add proper grouping and filtering information.
     /**
      * Human-readable title for the location. Should not include any game-specific info.
      */
@@ -36,6 +37,12 @@ export interface LocationBaseV0 {
      * Full human-readable title for the location. Include the game here too.
      */
     fullTitle: string;
+
+    // Legacy grouping & sorting information, for the old UI, until we decide what we want the
+    // navigation to look like for the new UI.
+    tag: string | null;
+    groupName: string;
+    groupTag: string | null;
 
     /**
      * Camera settings. These are dependent on the camera controller used to
@@ -142,7 +149,7 @@ export interface LocationLoadContext {
 }
 
 export interface LocationLoader<T extends LocationBase = LocationBase> {
-    loaderKey: string;
+    providerKey: string;
 
     /**
      * Requests a load of a location, using the given context and location.

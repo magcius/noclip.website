@@ -83,10 +83,9 @@ import { SceneDesc, SceneGroup, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
-import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
 import { LocationLoadContext, LocationBase, LocationLoader, LocationCameraSettings } from './AAA_NewUI/SceneBase2';
-import { SceneDescLoader } from './AAA_NewUI/SceneDescLoader';
+import { SceneDescLocationLoader, SceneDescLocationCreator } from './AAA_NewUI/SceneDescLoader';
 import { FPSCameraController } from './Camera';
 import { mat4 } from 'gl-matrix';
 import { GfxDevice } from './gfx/platform/GfxPlatform';
@@ -271,7 +270,8 @@ class Main {
     public dataShare = new DataShare();
     public dataFetcher: DataFetcher;
 
-    private sceneDescLoader: SceneDescLoader;
+    // Generates locations from scene descs.
+    private sceneDescLocationCreator: SceneDescLocationCreator;
 
     public loadingScene: SceneLoadContext | null = null;
     public currentScene: SceneLoadContext | null = null;
@@ -353,8 +353,8 @@ class Main {
         this.groups.push('Other');
         this.groups.push(this.droppedFileGroup);
 
-        this.sceneDescLoader = new SceneDescLoader(getSceneGroups(this.groups), this.saveManager);
-        this.registerLocationLoader(this.sceneDescLoader);
+        this.sceneDescLocationCreator = new SceneDescLocationCreator(this.groups, this.saveManager);
+        this.registerLocationLoader(new SceneDescLocationLoader());
 
         this._loadSceneGroups();
 
@@ -481,7 +481,6 @@ class Main {
         const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
         this._loadSceneGroups();
-        // this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
     }
 
     private _onResize() {
@@ -489,12 +488,12 @@ class Main {
     }
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadLocation(this.sceneDescLoader.getLocationFromSceneDesc(sceneGroup, sceneDesc));
+        this._loadLocation(this.sceneDescLocationCreator.getLocationFromSceneDesc(sceneGroup, sceneDesc));
     }
 
     public loaderMap = new Map<string, LocationLoader>();
     private registerLocationLoader(loader: LocationLoader): void {
-        this.loaderMap.set(loader.loaderKey, loader);
+        this.loaderMap.set(loader.providerKey, loader);
     }
 
     private findLocationLoader(location: LocationBase): LocationLoader {
@@ -607,7 +606,7 @@ class Main {
 
         // Mark the scene as selected, and start loading.
         this.ui.sceneSelect.setProgress(0);
-        this.ui.sceneSelect.setCurrentDesc(this.sceneDescLoader.getSceneGroupFromLocation(location), this.sceneDescLoader.getSceneDescFromLocation(location));
+        this.ui.sceneSelect.setCurrentDesc(this.sceneDescLocationCreator.getSceneGroupFromLocation(location), this.sceneDescLocationCreator.getSceneDescFromLocation(location));
 
         assert(this.loadingScene === null);
         const locationLoader = this.findLocationLoader(location);
@@ -643,7 +642,7 @@ class Main {
             return;
 
         for (let i = 1; i <= 9; i++) {
-            const location = this.sceneDescLoader.getLocationFromSaveState(this.currentScene.location, i);
+            const location = this.sceneDescLocationCreator.getLocationFromSaveState(this.currentScene.location, i);
             if (location === null)
                 continue;
             this._locationRecommendations[i] = location;
@@ -651,7 +650,7 @@ class Main {
     }
 
     private _loadSceneGroups() {
-        this.ui.sceneSelect.setSceneGroups(this.groups);
+        this.ui.sceneSelect.setLocations([... this.sceneDescLocationCreator.getPublicLocations()]);
     }
 
     private _makeUI() {
