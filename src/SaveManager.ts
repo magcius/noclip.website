@@ -6,6 +6,7 @@ export type SettingCallback = (saveManager: SaveManager, key: string) => void;
 export type SaveStateCallback = (saveManager: SaveManager) => void;
 
 export const enum SaveStateLocation {
+    Any,
     LocalStorage,
     SessionStorage,
     Defaults,
@@ -101,14 +102,17 @@ export class SaveManager {
     }
 
     public hasStateInLocation(key: string, location: SaveStateLocation): boolean {
-        if (location === SaveStateLocation.LocalStorage)
-            return key in window.localStorage;
+        if (location === SaveStateLocation.LocalStorage || location === SaveStateLocation.Any)
+            if (key in window.localStorage)
+                return true;
 
-        if (location === SaveStateLocation.SessionStorage)
-            return key in window.sessionStorage;
+        if (location === SaveStateLocation.SessionStorage || location === SaveStateLocation.Any)
+            if (key in window.sessionStorage)
+                return true;
 
-        if (location === SaveStateLocation.Defaults)
-            return key in defaultSaveStateData;
+        if (location === SaveStateLocation.Defaults || location === SaveStateLocation.Any)
+            if (key in defaultSaveStateData)
+                return true;
 
         return false;
     }

@@ -66,11 +66,11 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
-import { UI } from './ui';
+import { UI, LocationCardLocation } from './ui';
 import { hexdump, assertExists, magicstr, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
-import { GlobalSaveManager } from './SaveManager';
+import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
@@ -487,9 +487,9 @@ class Main {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
     }
 
-    private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
-        this._loadLocation(this.sceneDescLocationCreator.getLocationFromSceneDesc(sceneGroup, sceneDesc));
-    }
+    private _onLocationSelected = (card: LocationCardLocation): void => {
+        this._loadLocation(card.location);
+    };
 
     public loaderMap = new Map<string, LocationLoader>();
     private registerLocationLoader(loader: LocationLoader): void {
@@ -608,7 +608,7 @@ class Main {
 
         // Mark the scene as selected, and start loading.
         this.ui.sceneSelect.setProgress(0);
-        this.ui.sceneSelect.setCurrentDesc(this.sceneDescLocationCreator.getSceneGroupFromLocation(location), this.sceneDescLocationCreator.getSceneDescFromLocation(location));
+        // this.ui.sceneSelect.setCurrentLocation(location);
 
         assert(this.loadingScene === null);
         const locationLoader = this.findLocationLoader(location);
@@ -644,7 +644,7 @@ class Main {
             return;
 
         for (let i = 1; i <= 9; i++) {
-            const location = this.sceneDescLocationCreator.getLocationFromSaveState(this.currentScene.location, i);
+            const location = this.sceneDescLocationCreator.getLocationFromSaveState(this.currentScene.location, i, SaveStateLocation.Defaults);
             if (location === null)
                 continue;
             this._locationRecommendations[i] = location;
@@ -652,14 +652,31 @@ class Main {
     }
 
     private _loadSceneGroups() {
-        this.ui.sceneSelect.setSceneGroups(this.sceneGroups);
+        // this.ui.sceneSelect.setSceneGroups(this.sceneGroups);
+
+        // Pull out Mario Kart Wii locations.
+        const cards: LocationCardLocation[] = [];
+        for (const location of this.sceneDescLocationCreator.getPublicLocations()) {
+            if (location.groupName !== 'Mario Kart Wii')
+                continue;
+
+            let card = cards.find((card) => card.title === location.title);
+            if (card === undefined) {
+                card = { title: location.title, screenshotURLs: [], location };
+                cards.push(card);
+            }
+            if (location.screenshotURL !== undefined)
+                card.screenshotURLs.push(location.screenshotURL);
+        }
+
+        this.ui.sceneSelect.setLocations(cards);
     }
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
         this.ui.setEmbedMode(this.isEmbedMode);
         this.toplevel.appendChild(this.ui.elem);
-        this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
+        this.ui.sceneSelect.onlocationselected = this._onLocationSelected;
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
 
         this.webXRContext.onsupportedchanged = () => {

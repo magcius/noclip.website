@@ -6,8 +6,9 @@ import { SceneGroup, SceneDesc, getSceneDescs } from '../SceneBase';
 import { atob } from '../Ascii85';
 import { assert, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { SaveManager } from '../SaveManager';
+import { SaveManager, SaveStateLocation } from '../SaveManager';
 import { SceneGfx } from '../viewer';
+import { getDataURLForPath } from '../DataFetcher';
 
 export interface SceneDescLocation extends LocationBase {
     loaderKey: 'SceneDescLocation';
@@ -125,17 +126,11 @@ export class SceneDescLocationCreator {
         return this.saveManager.getSaveStateSlotKey(key, saveStateSlot);
     }
 
-    private loadState(location: SceneDescLocation, saveStateSlot: number): string | null {
-        const slotKey = this.getSaveStateSlotKey(location, saveStateSlot);
-        return this.saveManager.loadState(slotKey);
-    }
-
     private getScreenshotURL(sceneGroupId: string, sceneDescId: string, saveStateSlot: number): string | undefined {
         if (saveStateSlot < 0)
             return undefined;
-    
-        // TODO(jstpierre): Take screenshots
-        return undefined;
+
+        return getDataURLForPath(`_Screenshots/${sceneGroupId}_${sceneDescId}_${saveStateSlot}.png`);
     }
 
     public getLocationFromSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, saveStateSlot: number = 1, saveState: string | null = null): SceneDescLocation {
@@ -158,8 +153,10 @@ export class SceneDescLocationCreator {
             sceneSaveState: null,
         };
 
-        if (saveState === null && saveStateSlot >= 0)
-            saveState = this.loadState(location, saveStateSlot);
+        if (saveState === null && saveStateSlot >= 0) {
+            const slotKey = this.getSaveStateSlotKey(location, saveStateSlot);
+            saveState = this.saveManager.loadState(slotKey);
+        }
 
         if (saveState !== null) {
             // Version 2 starts with ZNCA8, which is Ascii85 for 'NC\0\0'
@@ -216,12 +213,16 @@ export class SceneDescLocationCreator {
         return this.getLocationFromIDs(sceneGroupId, sceneDescId, saveStateSlot, saveState);
     }
 
-    public getLocationFromSaveState(existingLocation: LocationBase, saveStateSlot: number): SceneDescLocation | null {
+    public getLocationFromSaveState(existingLocation: LocationBase, saveStateSlot: number, saveStateLocation: SaveStateLocation): SceneDescLocation | null {
         if (existingLocation.loaderKey !== this.providerKey)
             return null;
 
         const location = existingLocation as SceneDescLocation;
-        const saveState = this.loadState(location, saveStateSlot);
+        const slotKey = this.getSaveStateSlotKey(location, saveStateSlot);
+        const saveState = this.saveManager.loadStateFromLocation(slotKey, saveStateLocation);
+        if (saveState === null)
+            return null;
+
         return this.getLocationFromSceneDesc(location.sceneGroup, location.sceneDesc, saveStateSlot, saveState);
     }
 
@@ -232,7 +233,7 @@ export class SceneDescLocationCreator {
             let hasAnySaveState = false;
 
             for (let i = 0; i <= 9; i++) {
-                const location = this.getLocationFromSaveState(baseLocation, i);
+                const location = this.getLocationFromSaveState(baseLocation, i, SaveStateLocation.Defaults);
                 if (location) {
                     yield location;
                     hasAnySaveState = true;
