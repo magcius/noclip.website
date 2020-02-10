@@ -55,6 +55,7 @@ class d_a_noclip_legacy extends fopAc_ac_c {
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const device = globals.modelCache.device;
 
+        renderInstManager.setCurrentRenderInstList(globals.dlst.main[0]);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
     }
