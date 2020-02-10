@@ -15,7 +15,7 @@ export const enum LocationVersion {
     V0 = 'V0',
 }
 
-export interface LocationBaseV0 {
+interface LocationBaseV0 {
     /**
      * The version of this structure.
      */

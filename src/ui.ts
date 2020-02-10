@@ -14,6 +14,7 @@ import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { LightweightOverlay } from './AAA_NewUI/LightweightOverlay';
 import { DebugFloaterHolder } from './DebugFloaters';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
@@ -2476,6 +2477,7 @@ export class UI {
     private recordingBranding = new RecordingBranding();
 
     public cameraSpeedIndicator = new CameraSpeedIndicator();
+    public lightweightOverlay = new LightweightOverlay();
     private bottomBar = new BottomBar();
     private playPauseButton = new PlayPauseButton();
     private shareButton = new ShareButton();
@@ -2537,6 +2539,7 @@ export class UI {
         this.dragHighlight.style.pointerEvents = 'none';
 
         this.toplevel.appendChild(this.debugFloaterHolder.elem);
+        this.toplevel.appendChild(this.lightweightOverlay.elem);
 
         this.toplevel.appendChild(this.recordingBranding.elem);
 

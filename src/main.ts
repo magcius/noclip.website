@@ -571,6 +571,8 @@ class Main {
         }
 
         this.currentScene = sceneContext;
+
+        this.ui.lightweightOverlay.setLocation(this.currentScene.location);
         this._generateLocationRecommendations();
     }
 
