@@ -70,7 +70,7 @@ import { UI } from './ui';
 import { hexdump, assertExists, magicstr, assert } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
-import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
+import { GlobalSaveManager } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
@@ -175,13 +175,6 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
 function getSceneGroups(sceneGroups: (SceneGroup | string)[]): SceneGroup[] {
     return sceneGroups.filter((g) => typeof g !== 'string') as SceneGroup[];
 }
-
-const enum SaveStatesAction {
-    Load,
-    LoadDefault,
-    Save,
-    Delete
-};
 
 class AnimationLoop implements ViewerUpdateInfo {
     public time: number = 0;
@@ -343,8 +336,7 @@ class Main {
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
-        this.viewer.oncamerachanged = (force: boolean) => {
-            this._saveState(force);
+        this.viewer.oncamerachanged = () => {
         };
         this.viewer.inputManager.onisdraggingchanged = () => {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
@@ -394,21 +386,13 @@ class Main {
     }
 
     private _onHashChange(): void {
+        // TODO(jstpierre): Load location by URL
     }
 
     private _exportSaveData() {
         const saveData = this.saveManager.export();
         const date = new Date();
         downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
-    }
-
-    private pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
-        if (inputManager.isKeyDown('ShiftLeft'))
-            return SaveStatesAction.Save;
-        else if (inputManager.isKeyDown('AltLeft'))
-            return SaveStatesAction.Delete;
-        else
-            return SaveStatesAction.Load;
     }
 
     private checkKeyShortcuts() {
@@ -420,10 +404,9 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('KeyT'))
             this.ui.sceneSelect.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
-            if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
+            if (inputManager.isKeyDownEventTriggered('Digit'+i))
                 if (this._locationRecommendations[i] !== undefined)
                     this._loadLocation(this._locationRecommendations[i]);
-            }
         }
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
@@ -503,27 +486,6 @@ class Main {
 
     private _onResize() {
         resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
-    }
-
-    // TODO(jstpierre): Save this in main instead of having this called 8 bajillion times...
-    private _getSceneSaveState() {
-        return '';
-    }
-
-    private _getCurrentSceneDescId() {
-        return '';
-    }
-
-    private _saveState(forceUpdateURL: boolean = false) {
-        return '';
-    }
-
-    private _saveStateAndUpdateURL(): void {
-        this._saveState(true);
-    }
-
-    private _getSaveStateSlotKey(slotIndex: number): string {
-        return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
     private _onSceneDescSelected(sceneGroup: SceneGroup, sceneDesc: SceneDesc) {
@@ -661,14 +623,8 @@ class Main {
         // Set window title.
         document.title = `${location.fullTitle} - noclip`;
 
-        const sceneDescId = this._getCurrentSceneDescId()!;
-
-        if (typeof gtag !== 'undefined') {
-            gtag("event", "loadScene", {
-                'event_category': "Scenes",
-                'event_label': sceneDescId,
-            });
-        }
+        // TODO(jstpierre): Invent some sort of "location ID"
+        const sceneDescId = '';
 
         Sentry.addBreadcrumb({
             category: 'loadScene',
@@ -726,7 +682,7 @@ class Main {
         const date = new Date();
         return `${groupId}_${sceneId}_${date.toISOString()}`;
         */
-       return '';
+        return '';
     }
 
     private _takeScreenshot(opaque: boolean = true) {
@@ -775,9 +731,6 @@ class Main {
         return this.viewer.scene;
     }
 }
-
-// Google Analytics
-declare var gtag: (command: string, eventName: string, eventParameters: { [key: string]: string }) => void;
 
 // Declare a "main" object for easy access.
 declare global {
