@@ -7,18 +7,24 @@ import { assertExists, nArray, arrayRemove, assert } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
 
 export const enum fpc__ProcessName {
-    d_s_play     = 0x0007,
-    d_kankyo     = 0x0015,
-    d_envse      = 0x0017,
-    d_a_ep       = 0x00BA,
-    d_a_tbox     = 0x0126,
-    d_a_grass    = 0x01B8,
-    d_thunder    = 0x01B9,
-    d_a_vrbox    = 0x01BA,
-    d_a_vrbox2   = 0x01BB,
-    d_a_bg       = 0x01BC,
-    d_kyeff      = 0x01E4,
-    d_kyeff2     = 0x01E5,
+    d_s_play            = 0x0007,
+    d_kankyo            = 0x0015,
+    d_envse             = 0x0017,
+    d_a_sea             = 0x0028,
+    d_a_obj_lpalm       = 0x004B,
+    d_a_obj_Ygush00     = 0x0099,
+    d_a_ep              = 0x00BA,
+    d_a_tbox            = 0x0126,
+    d_a_kytag00         = 0x0181,
+    d_a_kytag01         = 0x0182,
+    d_a_obj_zouK1       = 0x018F,
+    d_a_grass           = 0x01B8,
+    d_thunder           = 0x01B9,
+    d_a_vrbox           = 0x01BA,
+    d_a_vrbox2          = 0x01BB,
+    d_a_bg              = 0x01BC,
+    d_kyeff             = 0x01E4,
+    d_kyeff2            = 0x01E5,
 };
 
 export type fpc_pc__ProfileList = { Profiles: ArrayBufferSlice[] };
@@ -40,8 +46,10 @@ export class fGlobals {
     public liQueue: base_process_class[][] = nArray(0x10, () => []);
     // fopDw
     public dwQueue: leafdraw_class[][] = nArray(1000, () => []);
+    public process_id: number = 1;
 
     public f_pc_constructors: fpc_bs__Constructor[] = [];
+    public f_pc_fallbackConstructor: fpc_bs__Constructor | null = null;
 
     constructor(public f_pc_profiles: fpc_pc__ProfileList) {
     }
@@ -57,6 +65,7 @@ export class fGlobals {
 //#region cPhs
 
 export const enum cPhs__Status {
+    Started,
     Loading,
     Next,
     Complete,
@@ -131,7 +140,7 @@ function fpcDt_Delete(globals: fGlobals, pc: base_process_class): void {
 //#region cPhs, fpcCt, fpcSCtRq
 
 export interface fpc_bs__Constructor {
-    new(globalUserData: fGlobals, profile: DataView): base_process_class;
+    new(globalUserData: fGlobals, pcId: number, profile: DataView): base_process_class;
 }
 
 class standard_create_request_class<T = any> {
@@ -143,7 +152,7 @@ class standard_create_request_class<T = any> {
     ]);
     public process: base_process_class | null = null;
 
-    constructor(public layer: layer_class, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    constructor(public layer: layer_class, public pcId: number, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
     }
 
     // fpcSCtRq_Handler
@@ -157,7 +166,7 @@ class standard_create_request_class<T = any> {
 
     private CreateProcess(globals: fGlobals, globalUserData: GlobalUserData, userData: this): cPhs__Status {
         const self = userData;
-        self.process = new self.constructor(globals, self.profileBinary.createDataView());
+        self.process = new self.constructor(globals, self.pcId, self.profileBinary.createDataView());
         return cPhs__Status.Next;
     }
 
@@ -213,6 +222,10 @@ function fpcCtRq_ToCreateQ(globals: fGlobals, rq: standard_create_request_class)
     globals.ctQueue.push(rq);
 }
 
+function fpcBs_MakeOfId(globals: fGlobals): number {
+    return globals.process_id++;
+}
+
 export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, pcName: fpc__ProcessName, userData: G): boolean {
     const constructor = fpcPf_Get__Constructor(globals, pcName);
     if (constructor === null)
@@ -222,7 +235,8 @@ export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, p
         ly = fpcLy_CurrentLayer(globals);
 
     const binary = fpcPf_Get__ProfileBinary(globals, pcName);
-    const rq = new standard_create_request_class(ly, constructor, binary, userData);
+    const pcId = fpcBs_MakeOfId(globals);
+    const rq = new standard_create_request_class(ly, pcId, constructor, binary, userData);
     fpcCtRq_ToCreateQ(globals, rq);
     return true;
 }
@@ -309,7 +323,7 @@ export class base_process_class {
     public ly: layer_class;
     public pi = new process_priority_class();
 
-    constructor(globals: fGlobals, profile: DataView) {
+    constructor(globals: fGlobals, public processId: number, profile: DataView) {
         // fpcBs_Create
         this.pi.layerID = profile.getUint32(0x00);
         this.pi.listID = profile.getUint16(0x04);
@@ -339,12 +353,16 @@ function fpcPf_Get__Constructor(globals: fGlobals, pcName: fpc__ProcessName): fp
     if (pf !== undefined)
         return pf;
     else
-        return null;
+        return globals.f_pc_fallbackConstructor;
 }
 
 export function fpcPf__Register(globals: fGlobals, pcName: fpc__ProcessName, constructor: fpc_bs__Constructor): void {
     assert(globals.f_pc_constructors[pcName] === undefined);
     globals.f_pc_constructors[pcName] = constructor;
+}
+
+export function fpcPf__RegisterFallback(globals: fGlobals, constructor: fpc_bs__Constructor): void {
+    globals.f_pc_fallbackConstructor = constructor;
 }
 
 //#endregion
@@ -355,8 +373,8 @@ class process_node_class extends base_process_class {
     public layer: layer_class;
     public visible: boolean = true;
 
-    constructor(globals: fGlobals, profile: DataView) {
-        super(globals, profile);
+    constructor(globals: fGlobals, pcId: number, profile: DataView) {
+        super(globals, pcId, profile);
 
         this.layer = new layer_class(globals.lyNextID++);
     }
@@ -371,8 +389,8 @@ class leafdraw_class extends base_process_class {
     public drawPriority: number;
     public visible: boolean = true;
 
-    constructor(globals: fGlobals, profile: DataView) {
-        super(globals, profile);
+    constructor(globals: fGlobals, pcId: number, profile: DataView) {
+        super(globals, pcId, profile);
         this.drawPriority = profile.getUint16(0x20);
     }
 
@@ -401,13 +419,11 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcDt_Handler(globals, globalUserData);
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
-
+    // fpcCt_Handler(globals);
     const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
     fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
-
-// TODO(jstpierre): Remove this in favor of explicit scene loading from the Renderer.
 
 //#endregion
 
@@ -450,10 +466,12 @@ export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
     public rot = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
-    public parentPcId: number;
-    public subtype: number;
-    public roomNo: number;
+    public parentPcId: number = 0xFFFFFFFF;
+    public subtype: number = 0xFF;
+    public roomNo: number = -1;
     public tevStr = new dKy_tevstr_c();
+    // noclip addition
+    public roomLayer: number = -1;
 
     private loadInit: boolean = false;
 
@@ -472,12 +490,13 @@ export class fopAc_ac_c extends leafdraw_class {
                 this.parentPcId = prm.parentPcId;
                 this.parameters = prm.parameters;
                 this.roomNo = prm.roomNo;
+                this.roomLayer = prm.layer;
             }
 
             dKy_tevstr_init(this.tevStr, this.roomNo);
         }
 
-        const status = this.subload(globals);
+        const status = this.subload(globals, prm);
         if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;
@@ -487,7 +506,7 @@ export class fopAc_ac_c extends leafdraw_class {
         fopDwTg_DrawQTo(globals.frameworkGlobals, this, this.drawPriority);
     }
 
-    protected subload(globals: GlobalUserData): cPhs__Status {
+    protected subload(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
         return cPhs__Status.Next;
     }
 }

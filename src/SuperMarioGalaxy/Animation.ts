@@ -5,7 +5,7 @@ import { assertExists, nullify, assert, nArray } from "../util";
 import { quatFromEulerRadians } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
-import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData, JointMatrixCalc } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode, JNT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
@@ -183,7 +183,7 @@ export class XanimeFrameCtrl extends J3DFrameCtrl {
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchQuat = quat.create();
-export class XanimeCore {
+export class XanimeCore implements JointMatrixCalc {
     public curAnmTime = 0.0;
     public interpoleRatio = 0.0;
     public freeze: boolean = false;

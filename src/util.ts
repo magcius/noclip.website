@@ -19,20 +19,6 @@ export function nullify<T>(v: T | undefined | null): T | null {
     return v === undefined ? null : v;
 }
 
-function makeTextDecoder(encoding: string): TextDecoder | null {
-    if ((window as any).TextDecoder)
-        return new TextDecoder(encoding);
-    else
-        return null;
-}
-
-const textDecoderCache = new Map<string, TextDecoder | null>();
-export function getTextDecoder(encoding: string): TextDecoder | null {
-    if (!textDecoderCache.has(encoding))
-        textDecoderCache.set(encoding, makeTextDecoder(encoding));
-    return textDecoderCache.get(encoding)!;
-}
-
 export function readString(buffer: ArrayBufferSlice, offs: number, length: number = -1, nulTerminated: boolean = true): string {
     const buf = buffer.createTypedArray(Uint8Array, offs);
     let S = '';

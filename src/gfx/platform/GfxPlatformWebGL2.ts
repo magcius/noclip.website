@@ -1,7 +1,7 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl } from "./GfxPlatformImpl";
-import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple, GfxAttachmentDescriptor } from './GfxPlatform';
+import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
+import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
 
 import { assert, assertExists, leftPad } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -36,14 +36,10 @@ interface GfxTextureP_GL extends GfxTexture {
     numLevels: number;
 }
 
-interface GfxColorAttachmentP_GL extends GfxColorAttachment {
-    gl_renderbuffer: WebGLRenderbuffer;
-    width: number;
-    height: number;
-}
-
-interface GfxDepthStencilAttachmentP_GL extends GfxDepthStencilAttachment {
-    gl_renderbuffer: WebGLRenderbuffer;
+interface GfxAttachmentP_GL extends GfxAttachment {
+    gl_renderbuffer: WebGLRenderbuffer | null;
+    gfxTexture: GfxTexture | null;
+    pixelFormat: GfxFormat;
     width: number;
     height: number;
 }
@@ -101,6 +97,11 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     megaState: GfxMegaStateDescriptor;
     inputLayout: GfxInputLayoutP_GL | null;
     ready: boolean;
+}
+
+interface GfxReadbackP_GL extends GfxReadback {
+    gl_pbo: WebGLBuffer;
+    gl_sync: WebGLSync | null;
 }
 
 function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
@@ -236,16 +237,6 @@ function getPlatformSampler(sampler_: GfxSampler): WebGLSampler {
     return sampler.gl_sampler;
 }
 
-function getPlatformColorAttachment(colorAttachment_: GfxColorAttachment): WebGLRenderbuffer {
-    const colorAttachment = colorAttachment_ as GfxColorAttachmentP_GL;
-    return colorAttachment.gl_renderbuffer;
-}
-
-function getPlatformDepthStencilAttachment(depthStencilAttachment_: GfxDepthStencilAttachment): WebGLRenderbuffer {
-    const depthStencilAttachment = depthStencilAttachment_ as GfxDepthStencilAttachmentP_GL;
-    return depthStencilAttachment.gl_renderbuffer;
-}
-
 function assignPlatformName(o: any, name: string): void {
     o.name = name;
     o.__SPECTOR_Metadata = { name };
@@ -306,6 +297,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
     public o: (object | null)[] = [];
+    public descriptor: GfxRenderPassDescriptor;
 
     public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
 
@@ -315,7 +307,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public po(r: object | null) { this.o.push(r); }
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
-    public setRenderPassParameters(ca: GfxColorAttachment | null, dsa: GfxDepthStencilAttachment | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) this.po(ca); this.po(dsa); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
+    public setRenderPassParameters(ca: GfxAttachment | null, cr: GfxTexture | null, dsa: GfxAttachment | null, dsr: GfxTexture | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) { this.po(ca); this.po(cr); } this.po(dsa); this.po(dsr); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
     public setViewport(x: number, y: number, w: number, h: number) { this.pcmd(RenderPassCmd.setViewport); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setScissor(x: number, y: number, w: number, h: number)  { this.pcmd(RenderPassCmd.setScissor); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
@@ -325,7 +317,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
-    public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
+    public endPass()                              { this.pcmd(RenderPassCmd.endPass); }
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
@@ -554,8 +546,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resourceUniqueId = 0;
 
     // Pass Execution
-    private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
-    private _currentDepthStencilAttachment: GfxDepthStencilAttachmentP_GL | null;
+    private _currentColorAttachments: GfxAttachmentP_GL[] = [];
+    private _currentColorResolveTos: (GfxTextureP_GL | null)[] = [];
+    private _currentDepthStencilAttachment: GfxAttachmentP_GL | null;
+    private _currentDepthStencilResolveTo: GfxTextureP_GL | null = null;
     private _currentPipeline: GfxRenderPipelineP_GL;
     private _currentInputState: GfxInputStateP_GL;
     private _currentMegaState: GfxMegaStateDescriptor = copyMegaState(defaultMegaState);
@@ -754,11 +748,12 @@ void main() {
             return WebGL2RenderingContext.RGBA32F;
         case GfxFormat.U16_R:
             return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U32_R:
+            return WebGL2RenderingContext.R32UI;
         case GfxFormat.U8_R_NORM:
             return WebGL2RenderingContext.R8;
         case GfxFormat.U8_RG_NORM:
             return WebGL2RenderingContext.RG8;
-        // TODO(jsptierre): This should really be U8_RGB_NORM
         case GfxFormat.U8_RGB_NORM:
             return WebGL2RenderingContext.RGB8;
         case GfxFormat.U8_RGB_SRGB:
@@ -781,6 +776,14 @@ void main() {
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case GfxFormat.BC3_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case GfxFormat.D32F_S8:
+            return WebGL2RenderingContext.DEPTH32F_STENCIL8;
+        case GfxFormat.D24_S8:
+            return WebGL2RenderingContext.DEPTH24_STENCIL8;
+        case GfxFormat.D32F:
+            return WebGL2RenderingContext.DEPTH_COMPONENT32F;
+        case GfxFormat.D24:
+            return WebGL2RenderingContext.DEPTH_COMPONENT24;
         default:
             throw "whoops";
         }
@@ -800,6 +803,12 @@ void main() {
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case GfxFormat.BC3_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case GfxFormat.D24_S8:
+        case GfxFormat.D32F_S8:
+            return WebGL2RenderingContext.DEPTH_STENCIL;
+        case GfxFormat.D24:
+        case GfxFormat.D32F:
+            return WebGL2RenderingContext.DEPTH_COMPONENT;
         default:
             break;
         }
@@ -822,6 +831,18 @@ void main() {
         switch (typeFlags) {
         case FormatTypeFlags.U8:
             return WebGL2RenderingContext.UNSIGNED_BYTE;
+        case FormatTypeFlags.U16:
+            return WebGL2RenderingContext.UNSIGNED_SHORT;
+        case FormatTypeFlags.U32:
+            return WebGL2RenderingContext.UNSIGNED_INT;
+        case FormatTypeFlags.F32:
+        case FormatTypeFlags.D32:
+            return WebGL2RenderingContext.FLOAT;
+        case FormatTypeFlags.D24:
+        case FormatTypeFlags.D24S8:
+            return WebGL2RenderingContext.UNSIGNED_INT_24_8;
+        case FormatTypeFlags.D32S8:
+            return WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV;
         case FormatTypeFlags.S8:
             return WebGL2RenderingContext.BYTE;
         default:
@@ -990,26 +1011,41 @@ void main() {
         return sampler;
     }
 
-    public createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment {
+    public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
+        const width = descriptor.width, height = descriptor.height, format = descriptor.format, numSamples = descriptor.numSamples;
         const gl = this.gl;
+
         const gl_renderbuffer = this.ensureResourceExists(gl.createRenderbuffer());
         gl.bindRenderbuffer(gl.RENDERBUFFER, gl_renderbuffer);
-        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, gl.RGBA8, width, height);
-        const colorAttachment: GfxColorAttachmentP_GL = { _T: _T.ColorAttachment, ResourceUniqueId: this.getNextUniqueId(), gl_renderbuffer, width, height };
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, this.translateTextureInternalFormat(format), width, height);
+
+        const attachment: GfxAttachmentP_GL = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
+            gl_renderbuffer,
+            gfxTexture: null,
+            pixelFormat: format, width, height,
+        };
+
         if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(colorAttachment);
-        return colorAttachment;
+            this._resourceCreationTracker.trackResourceCreated(attachment);
+        return attachment;
     }
 
-    public createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment {
+    public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
+        const { pixelFormat, width, height, numLevels } = gfxTexture as GfxTextureP_GL;
         const gl = this.gl;
-        const gl_renderbuffer = this.ensureResourceExists(gl.createRenderbuffer());
-        gl.bindRenderbuffer(gl.RENDERBUFFER, gl_renderbuffer);
-        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, gl.DEPTH32F_STENCIL8, width, height);
-        const depthStencilAttachment: GfxDepthStencilAttachmentP_GL = { _T: _T.DepthStencilAttachment, ResourceUniqueId: this.getNextUniqueId(), gl_renderbuffer, width, height };
+
+        // Attachments cannot have a mip chain currently.
+        assert(numLevels === 1);
+
+        const attachment: GfxAttachmentP_GL = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
+            gl_renderbuffer: null,
+            gfxTexture,
+            pixelFormat, width, height,
+        };
+
         if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceCreated(depthStencilAttachment);
-        return depthStencilAttachment;
+            this._resourceCreationTracker.trackResourceCreated(attachment);
+        return attachment;
     }
 
     private _createProgram(descriptor: GfxProgramDescriptorSimple): GfxProgramP_GL {
@@ -1115,6 +1151,18 @@ void main() {
         return pipeline;
     }
 
+    public createReadback(elemCount: number): GfxReadback {
+        const gl = this.gl;
+        const gl_pbo = this.ensureResourceExists(gl.createBuffer());
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, gl_pbo);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, elemCount * 0x04, gl.STREAM_READ);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        const readback: GfxReadbackP_GL = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(), gl_pbo, gl_sync: null };
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.trackResourceCreated(readback);
+        return readback;
+    }
+
     public destroyBuffer(o: GfxBuffer): void {
         const { gl_buffer_pages } = o as GfxBufferP_GL;
         for (let i = 0; i < gl_buffer_pages.length; i++)
@@ -1139,14 +1187,10 @@ void main() {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
-    public destroyColorAttachment(o: GfxColorAttachment): void {
-        this.gl.deleteRenderbuffer(getPlatformColorAttachment(o));
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.trackResourceDestroyed(o);
-    }
-
-    public destroyDepthStencilAttachment(o: GfxDepthStencilAttachment): void {
-        this.gl.deleteRenderbuffer(getPlatformDepthStencilAttachment(o));
+    public destroyAttachment(o_: GfxAttachment): void {
+        const o = o_ as GfxAttachmentP_GL;
+        if (o.gl_renderbuffer !== null)
+            this.gl.deleteRenderbuffer(o.gl_renderbuffer);
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
@@ -1186,6 +1230,16 @@ void main() {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
+    public destroyReadback(o: GfxReadback): void {
+        const readback = o as GfxReadbackP_GL;
+        if (readback.gl_sync !== null)
+            this.gl.deleteSync(readback.gl_sync);
+        if (readback.gl_pbo !== null)
+            this.gl.deleteBuffer(readback.gl_pbo);
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.trackResourceDestroyed(o);
+    }
+
     public createHostAccessPass(): GfxHostAccessPass {
         let pass = this._hostAccessPassPool.pop();
         if (pass === undefined)
@@ -1198,21 +1252,27 @@ void main() {
         if (pass === undefined)
             pass = new GfxRenderPassP_GL();
 
-        const shouldClearColor = descriptor.colorLoadDisposition === GfxLoadDisposition.CLEAR;
-        const shouldClearDepth = descriptor.depthLoadDisposition === GfxLoadDisposition.CLEAR;
-        const shouldClearStencil = descriptor.stencilLoadDisposition === GfxLoadDisposition.CLEAR;
+        let clearBits: number = 0;
+        if (descriptor.colorAttachment !== null) {
+            if (descriptor.colorLoadDisposition === GfxLoadDisposition.CLEAR)
+                clearBits |= WebGL2RenderingContext.COLOR_BUFFER_BIT;
+        }
 
-        let clearBits = 0;
-        if (shouldClearColor)
-            clearBits |= WebGL2RenderingContext.COLOR_BUFFER_BIT;
-        if (shouldClearDepth)
-            clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
-        if (shouldClearStencil)
-            clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
+        if (descriptor.depthStencilAttachment !== null) {
+            const attachment = descriptor.depthStencilAttachment as GfxAttachmentP_GL;
+            const flags = getFormatFlags(attachment.pixelFormat);
+            if (!!(flags & FormatFlags.DEPTH) && descriptor.depthLoadDisposition === GfxLoadDisposition.CLEAR)
+                clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
+            if (!!(flags & FormatFlags.STENCIL) && descriptor.stencilLoadDisposition === GfxLoadDisposition.CLEAR)
+                clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
+        }
 
-        const { colorAttachment, depthStencilAttachment, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+        // TODO(jstpierre): This isn't kosher.
+        pass.descriptor = descriptor;
 
-        pass.setRenderPassParameters(colorAttachment, depthStencilAttachment, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
+        const { colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+
+        pass.setRenderPassParameters(colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
         return pass;
     }
 
@@ -1227,6 +1287,41 @@ void main() {
             this.executeHostAccessPass(o.u32.b, o.gfxr, o.bufr);
             o.reset();
             this._hostAccessPassPool.push(o);
+        }
+    }
+
+    public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
+        const gl = this.gl;
+        const readback = o as GfxReadbackP_GL;
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
+        const texture = a as GfxTextureP_GL;
+        gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture.gl_texture, 0);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.gl_pbo);
+        gl.readPixels(x, y, 1, 1, gl.RED_INTEGER, gl.UNSIGNED_INT, dstOffset * 0x04);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    }
+
+    public submitReadback(o: GfxReadback): void {
+        const gl = this.gl;
+        const readback = o as GfxReadbackP_GL;
+        if (readback.gl_sync !== null) {
+            // TODO(jstpierre): Any way to avoid this? :/
+            gl.deleteSync(readback.gl_sync);
+        }
+        readback.gl_sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+
+    public queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean {
+        const gl = this.gl;
+        const readback = o as GfxReadbackP_GL;
+        const gl_sync = assertExists(readback.gl_sync);
+        if (gl.getSyncParameter(gl_sync, gl.SYNC_STATUS) === gl.SIGNALED) {
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, readback.gl_pbo);
+            gl.getBufferSubData(gl.PIXEL_UNPACK_BUFFER, 0, dst, dstOffs);
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -1287,6 +1382,11 @@ void main() {
         return this;
     }
 
+    public queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor {
+        const pass = o as GfxRenderPassP_GL;
+        return pass.descriptor;
+    }
+
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
 
@@ -1294,16 +1394,17 @@ void main() {
             const { gl_buffer_pages } = o as GfxBufferP_GL;
             for (let i = 0; i < gl_buffer_pages.length; i++)
                 assignPlatformName(gl_buffer_pages[i], `${name} Page ${i}`);
-        } else if (o._T === _T.Texture)
+        } else if (o._T === _T.Texture) {
             assignPlatformName(getPlatformTexture(o), name);
-        else if (o._T === _T.Sampler)
+        } else if (o._T === _T.Sampler) {
             assignPlatformName(getPlatformSampler(o), name);
-        else if (o._T === _T.ColorAttachment)
-            assignPlatformName(getPlatformColorAttachment(o), name);
-        else if (o._T === _T.DepthStencilAttachment)
-            assignPlatformName(getPlatformDepthStencilAttachment(o), name);
-        else if (o._T === _T.InputState)
+        } else if (o._T === _T.Attachment) {
+            const { gl_renderbuffer } = o as GfxAttachmentP_GL;
+            if (gl_renderbuffer !== null)
+                assignPlatformName(gl_renderbuffer, name);
+        } else if (o._T === _T.InputState) {
             assignPlatformName((o as GfxInputStateP_GL).vao, name);
+        }
     }
 
     public setResourceLeakCheck(o: GfxResource, v: boolean): void {
@@ -1341,8 +1442,8 @@ void main() {
 
             if (cmd === RenderPassCmd.setRenderPassParameters) {
                 const numColorAttachments = u32[iu32++];
-                igfxr += numColorAttachments;
-                this.setRenderPassParameters(gfxr as GfxColorAttachment[], numColorAttachments, gfxr[igfxr++] as GfxDepthStencilAttachment, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
+                igfxr += numColorAttachments * 2;
+                this.setRenderPassParameters(gfxr as GfxAttachment[], numColorAttachments, gfxr[igfxr++] as GfxAttachment | null, gfxr[igfxr++] as GfxTexture | null, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setViewport) {
                 this.setViewport(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setScissor) {
@@ -1364,7 +1465,7 @@ void main() {
             } else if (cmd === RenderPassCmd.drawIndexedInstanced) {
                 this.drawIndexedInstanced(u32[iu32++], u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.endPass) {
-                this.endPass(gfxr[igfxr++] as GfxTexture | null);
+                this.endPass();
                 return;
             } else {
                 const m: RenderPassCmd.invalid = cmd;
@@ -1514,32 +1615,50 @@ void main() {
         program.bindDirty = true;
     }
 
-    private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
+    private _bindFramebufferAttachment(binding: GLenum, attachment: GfxAttachmentP_GL | null): void {
+        const gl = this.gl;
+
+        if (attachment === null)
+            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, binding, gl.RENDERBUFFER, null);
+        else if (attachment.gl_renderbuffer !== null)
+            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, binding, gl.RENDERBUFFER, attachment.gl_renderbuffer);
+        else if (attachment.gfxTexture !== null)
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, binding, gl.TEXTURE_2D, getPlatformTexture(attachment.gfxTexture), 0);
+    }
+
+    private setRenderPassParameters(colorResources: GfxResource[], numColorAttachments: number, depthStencilAttachment: GfxAttachment | null, depthStencilResolveTo: GfxTexture | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
 
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._renderPassDrawFramebuffer);
 
-        for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++)
+        for (let i = numColorAttachments; i < this._currentColorAttachments.length; i++) {
             gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, null);
-        this._currentColorAttachments.length = numColorAttachments;
-        for (let i = 0; i < numColorAttachments; i++) {
-            if (this._currentColorAttachments[i] !== colorAttachments[i]) {
-                this._currentColorAttachments[i] = colorAttachments[i] as GfxColorAttachmentP_GL;
-                const platformColorAttachment = this._currentColorAttachments[i] !== null ? this._currentColorAttachments[i].gl_renderbuffer : null;
-                gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.RENDERBUFFER, platformColorAttachment);
-            }
-        }
-        if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
-            this._currentDepthStencilAttachment = depthStencilAttachment as GfxDepthStencilAttachmentP_GL;
-            const platformDepthStencilAttachment = this._currentDepthStencilAttachment !== null ? this._currentDepthStencilAttachment.gl_renderbuffer : null;
-            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, platformDepthStencilAttachment);
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, null, 0);
         }
 
+        this._currentColorAttachments.length = numColorAttachments;
+        for (let i = 0; i < numColorAttachments; i += 2) {
+            const colorAttachment = colorResources[i + 0] as GfxAttachmentP_GL, colorResolveTo = colorResources[i + 1] as GfxTextureP_GL;
+            if (this._currentColorAttachments[i] !== colorAttachment) {
+                this._currentColorAttachments[i] = colorAttachment;
+                this._bindFramebufferAttachment(gl.COLOR_ATTACHMENT0 + i, colorAttachment);
+            }
+            this._currentColorResolveTos[i] = colorResolveTo;
+        }
+
+        if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
+            this._currentDepthStencilAttachment = depthStencilAttachment as GfxAttachmentP_GL;
+            this._bindFramebufferAttachment(gl.DEPTH_STENCIL_ATTACHMENT, this._currentDepthStencilAttachment);
+        }
+        this._currentDepthStencilResolveTo = depthStencilResolveTo as GfxTextureP_GL;
+
         gl.disable(gl.SCISSOR_TEST);
-        if (clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT) {
+        if (!!(clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT)) {
+            assert(this._currentColorAttachments.length > 0);
             gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
         }
-        if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT) {
+        if (!!(clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)) {
+            assert(this._currentDepthStencilAttachment !== null);
             // GL clears obey the masks... bad API or worst API?
             if (!this._currentMegaState.depthWrite) {
                 gl.depthMask(true);
@@ -1547,8 +1666,10 @@ void main() {
             }
             gl.clearDepth(depthClearValue);
         }
-        if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)
+        if (!!(clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)) {
+            assert(this._currentDepthStencilAttachment !== null);
             gl.clearStencil(stencilClearValue);
+        }
         if (clearBits !== 0)
             gl.clear(clearBits);
     }
@@ -1713,21 +1834,60 @@ void main() {
         this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
 
-    private endPass(resolveColorTo_: GfxTexture | null): void {
-        if (resolveColorTo_ !== null) {
-            const gl = this.gl;
+    private framebufferAttachmentForFormat(format: GfxFormat): GLenum {
+        const flags = getFormatFlags(format);
+        const depth = !!(flags & FormatFlags.DEPTH), stencil = !!(flags & FormatFlags.STENCIL);
+        if (depth && stencil)
+            return WebGL2RenderingContext.DEPTH_STENCIL_ATTACHMENT;
+        else if (depth)
+            return WebGL2RenderingContext.DEPTH_ATTACHMENT;
+        else if (stencil)
+            return WebGL2RenderingContext.STENCIL_ATTACHMENT;
+        else
+            throw "whoops";
+    }
 
-            const resolveColorTo = resolveColorTo_ as GfxTextureP_GL;
-            const resolveColorFrom = this._currentColorAttachments[0];
+    private endPass(): void {
+        const gl = this.gl;
+        for (let i = 0; i < this._currentColorAttachments.length; i++) {
+            const colorResolveFrom = this._currentColorAttachments[i];
+            const colorResolveTo = this._currentColorResolveTos[i];
 
-            assert(resolveColorFrom.width === resolveColorTo.width && resolveColorFrom.height === resolveColorTo.height);
+            if (colorResolveTo !== null) {
+                assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
+                assert(colorResolveFrom.gl_renderbuffer !== null);
+
+                gl.disable(gl.SCISSOR_TEST);
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
+                gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorResolveFrom.gl_renderbuffer);
+                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
+                gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorResolveTo.gl_texture, 0);
+                gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+
+                gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, null);
+                gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
+
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+            }
+        }
+
+        const depthStencilResolveFrom = this._currentDepthStencilAttachment;
+        const depthStencilResolveTo = this._currentDepthStencilResolveTo;
+
+        if (depthStencilResolveFrom !== null && depthStencilResolveTo !== null) {
+            assert(depthStencilResolveFrom.width === depthStencilResolveTo.width && depthStencilResolveFrom.height === depthStencilResolveTo.height);
+            assert(depthStencilResolveFrom.gl_renderbuffer !== null);
 
             gl.disable(gl.SCISSOR_TEST);
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
-            gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, resolveColorFrom.gl_renderbuffer);
+            gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveFrom.pixelFormat), gl.RENDERBUFFER, depthStencilResolveFrom.gl_renderbuffer);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
-            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, resolveColorTo.gl_texture, 0);
-            gl.blitFramebuffer(0, 0, resolveColorFrom.width, resolveColorFrom.height, 0, 0, resolveColorTo.width, resolveColorTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveTo.pixelFormat), gl.TEXTURE_2D, depthStencilResolveTo.gl_texture, 0);
+            gl.blitFramebuffer(0, 0, depthStencilResolveFrom.width, depthStencilResolveFrom.height, 0, 0, depthStencilResolveTo.width, depthStencilResolveTo.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+
+            gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, null);
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, null, 0);
 
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);

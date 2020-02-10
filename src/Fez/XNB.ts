@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists, nArray } from "../util";
 import { LZXState, decompressLZX } from "../Common/Compression/LZX";
 import { vec3, vec2, mat4, vec4, quat } from "gl-matrix";
-import { Color, colorNew } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color";
 
 //#region ContentTypeReaderManager
 export type ContentTypeReader = (reader: ContentReader) => any;
@@ -221,7 +221,7 @@ export class ContentReader {
         const g = this.ReadByte() / 0xFF;
         const b = this.ReadByte() / 0xFF;
         const a = this.ReadByte() / 0xFF;
-        return colorNew(r, g, b, a);
+        return colorNewFromRGBA(r, g, b, a);
     }
 
     public ReadVector2(): vec2 {

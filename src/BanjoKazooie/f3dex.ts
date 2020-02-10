@@ -1,8 +1,8 @@
+import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt } from "../Common/N64/Image";
-import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt, decodeTex_I8, decodeTex_I4, decodeTex_IA16 } from "../Common/N64/Image";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
@@ -35,37 +35,6 @@ export class TextureImageState {
     }
 }
 
-export class TileState {
-    public fmt: number = 0;
-    public siz: number = 0;
-    public line: number = 0;
-    public tmem: number = 0;
-    public palette: number = 0;
-    public cmt: number = 0;
-    public maskt: number = 0;
-    public shiftt: number = 0;
-    public cms: number = 0;
-    public masks: number = 0;
-    public shifts: number = 0;
-    public uls: number = 0;
-    public ult: number = 0;
-    public lrs: number = 0;
-    public lrt: number = 0;
-
-    public set(fmt: number, siz: number, line: number, tmem: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
-        this.fmt = fmt; this.siz = siz; this.line = line; this.tmem = tmem; this.palette = palette; this.cmt = cmt; this.maskt = maskt; this.shiftt = shiftt; this.cms = cms; this.masks = masks; this.shifts = shifts;
-    }
-
-    public setSize(uls: number, ult: number, lrs: number, lrt: number): void {
-        this.uls = uls; this.ult = ult; this.lrs = lrs; this.lrt = lrt;
-    }
-
-    public copy(o: TileState): void {
-        this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
-        this.setSize(o.uls, o.ult, o.lrs, o.lrt);
-    }
-}
-
 export class Vertex {
     public x: number = 0;
     public y: number = 0;
@@ -90,7 +59,7 @@ export class Vertex {
     }
 }
 
-class StagingVertex extends Vertex {
+export class StagingVertex extends Vertex {
     public outputIndex: number = -1;
 
     public setFromView(view: DataView, offs: number): void {
@@ -100,23 +69,12 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this.tx = (view.getInt16(offs + 0x08) / 0x40) + 0.5;
-        this.ty = (view.getInt16(offs + 0x0A) / 0x40) + 0.5;
+        this.tx = (view.getInt16(offs + 0x08) / 0x20) + 0.5;
+        this.ty = (view.getInt16(offs + 0x0A) / 0x20) + 0.5;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
         this.a = view.getUint8(offs + 0x0F) / 0xFF;
-    }
-}
-
-export class Texture {
-    public name: string;
-    public format = 'rgba8';
-    public tile = new TileState();
-
-    constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
-        this.tile.copy(tile);
-        this.name = hexzero(this.dramAddr, 8);
     }
 }
 
@@ -130,7 +88,7 @@ export class DrawCall {
     public SP_TextureState = new TextureState();
     public DP_OtherModeL: number = 0;
     public DP_OtherModeH: number = 0;
-    public DP_Combine: CombineParams;
+    public DP_Combine: RDP.CombineParams;
 
     public textureIndices: number[] = [];
 
@@ -139,7 +97,7 @@ export class DrawCall {
 }
 
 export class RSPSharedOutput {
-    public textureCache: TextureCache = new TextureCache();
+    public textureCache: RDP.TextureCache = new RDP.TextureCache();
     public vertices: Vertex[] = [];
     public indices: number[] = [];
 
@@ -271,101 +229,6 @@ export const enum BlendParam_B {
     G_BL_0     = 3,
 }
 
-export const enum CCMUX {
-    COMBINED    = 0,
-    TEXEL0      = 1,
-    TEXEL1      = 2,
-    PRIMITIVE   = 3,
-    SHADE       = 4,
-    ENVIRONMENT = 5,
-    ONE         = 6,
-    ADD_ZERO    = 7,
-    // param C only
-    COMBINED_A  = 7, // only for C
-    TEXEL0_A    = 8,
-    TEXEL1_A    = 9,
-    PRIMITIVE_A = 10,
-    SHADE_A     = 11,
-    ENV_A       = 12,
-    MUL_ZERO    = 15, // should really be 31
-}
-
-export const enum ACMUX {
-    ADD_COMBINED = 0,
-    TEXEL0 = 1,
-    TEXEL1 = 2,
-    PRIMITIVE = 3,
-    SHADE = 4,
-    ENVIRONMENT = 5,
-    ADD_ONE = 6,
-    ZERO = 7,
-}
-
-interface ColorCombinePass {
-    a: CCMUX;
-    b: CCMUX;
-    c: CCMUX;
-    d: CCMUX;
-}
-
-interface AlphaCombinePass {
-    a: ACMUX;
-    b: ACMUX;
-    c: ACMUX;
-    d: ACMUX;
-}
-
-export interface CombineParams {
-    c0: ColorCombinePass;
-    a0: AlphaCombinePass;
-    c1: ColorCombinePass;
-    a1: AlphaCombinePass;
-}
-
-export function decodeCombineParams(w0: number, w1: number): CombineParams {
-    // because we aren't implementing all the combine input options (notably, not noise)
-    // and the highest values are just 0, we can get away with throwing away high bits:
-    // ax,bx,dx can be 3 bits, and cx can be 4
-    const a0  = (w0 >>> 20) & 0x07;
-    const c0  = (w0 >>> 15) & 0x0f;
-    const Aa0 = (w0 >>> 12) & 0x07;
-    const Ac0 = (w0 >>> 9) & 0x07;
-    const a1  = (w0 >>> 5) & 0x07;
-    const c1  = (w0 >>> 0) & 0x0f;
-    const b0  = (w1 >>> 28) & 0x07;
-    const b1  = (w1 >>> 24) & 0x07;
-    const Aa1 = (w1 >>> 21) & 0x07;
-    const Ac1 = (w1 >>> 18) & 0x07;
-    const d0  = (w1 >>> 15) & 0x07;
-    const Ab0 = (w1 >>> 12) & 0x07;
-    const Ad0 = (w1 >>> 9) & 0x07;
-    const d1  = (w1 >>> 6) & 0x07;
-    const Ab1 = (w1 >>> 3) & 0x07;
-    const Ad1 = (w1 >>> 0) & 0x07;
-
-    // CCMUX.ONE only applies to params a and d, the others are not implemented
-    assert(b0 != CCMUX.ONE && c0 != CCMUX.ONE && b1 != CCMUX.ONE && c1 != CCMUX.ONE);
-
-    return {
-        c0: { a: a0, b: b0, c: c0, d: d0 },
-        a0: { a: Aa0, b: Ab0, c: Ac0, d: Ad0 },
-        c1: { a: a1, b: b1, c: c1, d: d1 },
-        a1: { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
-    };
-}
-
-function packParams(params: ColorCombinePass | AlphaCombinePass): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
-}
-
-export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    const cc0 = packParams(params.c0);
-    const cc1 = packParams(params.c1);
-    const ac0 = packParams(params.a0);
-    const ac1 = packParams(params.a1);
-    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
-}
-
 function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
     if (paramB === BlendParam_B.G_BL_1MA) {
         if (srcParam === GfxBlendFactor.SRC_ALPHA)
@@ -460,147 +323,6 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
     return out;
 }
 
-function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
-}
-
-const tlutColorTable = new Uint8Array(256 * 4);
-
-function getTileWidth(tile: TileState): number {
-    if (tile.masks !== 0)
-        return 1 << tile.masks;
-    else
-        return ((tile.lrs - tile.uls) >>> 2) + 1;
-}
-
-function getTileHeight(tile: TileState): number {
-    if (tile.maskt !== 0)
-        return 1 << tile.maskt;
-    else
-        return ((tile.lrt - tile.ult) >>> 2) + 1;
-}
-
-function translateTile_CI4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_4b);
-
-    const tileW = getTileWidth(tile);
-    const tileH = getTileHeight(tile);
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable);
-    return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
-}
-
-function translateTile_CI8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_8b);
-
-    const tileW = getTileWidth(tile);
-    const tileH = getTileHeight(tile);
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
-    return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
-}
-
-function translateTile_RGBA16(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTile_IA8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTile_RGBA32(segmentBuffers: ArrayBufferSlice[], dramAddr: number, tile: TileState): Texture {
-    const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-
-    const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
-    const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-    // TODO(jstpierre): Support more tile parameters
-    assert(tile.shifts === 0); // G_TX_NOLOD
-    assert(tile.shiftt === 0); // G_TX_NOLOD
-    assert(tile.masks === 0 || (1 << tile.masks) === tileW);
-    assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
-
-    const dst = new Uint8Array(tileW * tileH * 4);
-    const srcIdx = dramAddr & 0x00FFFFFF;
-    decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH);
-    return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
-}
-
-function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
-    switch ((tile.fmt << 4) | tile.siz) {
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  return translateTile_CI4(segmentBuffers, dramAddr, dramPalAddr, tile);
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_CI8(segmentBuffers, dramAddr, dramPalAddr, tile);
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  return translateTile_IA8(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_RGBA16(segmentBuffers, dramAddr, tile);
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): return translateTile_RGBA32(segmentBuffers, dramAddr, tile);
-    default:
-        throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
-    }
-}
-
-export class TextureCache {
-    public textures: Texture[] = [];
-
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
-        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr);
-        if (existingIndex >= 0) {
-            const texture = this.textures[existingIndex];
-            assert(texture.dramAddr === dramAddr);
-            assert(texture.dramPalAddr === dramPalAddr);
-            return existingIndex;
-        } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
-            const index = this.textures.length;
-            this.textures.push(texture);
-            return index;
-        }
-    }
-}
-
 function getSizBitsPerPixel(siz: ImageSize): number {
     switch (siz) {
     case ImageSize.G_IM_SIZ_4b:  return 4;
@@ -625,7 +347,7 @@ export class RSPState {
     private DP_CombineL: number = 0;
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new TextureImageState();
-    private DP_TileState = nArray(8, () => new TileState());
+    private DP_TileState = nArray(8, () => new RDP.TileState());
     private DP_TMemTracker = new Map<number, number>();
 
     constructor(public segmentBuffers: ArrayBufferSlice[], public sharedOutput: RSPSharedOutput) {
@@ -659,7 +381,7 @@ export class RSPState {
 
     public gSPTexture(on: boolean, tile: number, level: number, s: number, t: number): void {
         // This is the texture we're using to rasterize triangles going forward.
-        this.SP_TextureState.set(on, tile, level, s, t);
+        this.SP_TextureState.set(on, tile, level, s / 0x10000, t / 0x10000);
         this.stateChanged = true;
     }
 
@@ -686,7 +408,7 @@ export class RSPState {
         let dramPalAddr: number;
         if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
             const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-            // assert(textlut === TextureLUT.G_TT_RGBA16);
+            // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
 
             const palTmem = 0x100 + (tile.palette << 4);
             dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
@@ -711,22 +433,10 @@ export class RSPState {
             const cycletype = getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === OtherModeH_CycleType.G_CYC_2CYCLE);
 
-            // XXX(jstpierre): Hack for Banjo-Kazooie mipmaps. If we want to use mipmaps,
-            // use G_TX_LOADTILE, which we just loaded into TMEM from. I assume the game
-            // uses the G_DL call to 0x30000000 with DL generated by e.g. guLoadTextureBlockMipMap
-            // to set up the mipmap tiles in practice. Will have to figure out how to emulate that...
-            if (this.SP_TextureState.level === 2) {
-                assert(this.SP_TextureState.tile === 2);
-                this.DP_TileState[2].copy(this.DP_TileState[7]);
-                assert(this.DP_TileState[2].lrs === (31 << 2));
-                assert(this.DP_TileState[2].lrt === (47 << 2));
-                this.DP_TileState[2].lrt = this.DP_TileState[2].lrs;
-                this.DP_TileState[0].copy(this.DP_TileState[2]);
-            }
-
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level > 0) {
+            if (this.SP_TextureState.level == 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+                // if tex1 is used, and it isn't a mipmap, load it
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             }
@@ -738,12 +448,12 @@ export class RSPState {
             this.stateChanged = false;
 
             const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
-            this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
-            dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
+            dc.DP_Combine = RDP.decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
+            this._flushTextures(dc);
         }
     }
 

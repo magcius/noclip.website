@@ -224,11 +224,13 @@ class BatchInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder, materialInstanceOverride: MaterialInstance | null = null): void {
-        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.shapeHelper.setOnRenderInst(renderInst);
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -307,10 +309,9 @@ class NodeInstance {
 
             const indexBias = this.childIndex * 0.01;
             const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
-            const depthBias = 1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias);
+            const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
-            // TODO(jstpierre): Figure out what's wrong with this
-            if (false && depthBias !== 1.0) {
+            if (depthBias !== 1.0) {
                 let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);

@@ -1,5 +1,5 @@
 
-import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, BlendMode } from "./gx_material";
+import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo } from "./gx_material";
 import * as GX from "./gx_enum";
 import { autoOptimizeMaterial } from "./gx_render";
 
@@ -76,18 +76,14 @@ function copyIndTexStage(indStage: IndTexStage): IndTexStage {
     };
 }
 
-function copyBlendMode(blendMode: BlendMode): BlendMode {
-    return {
-        type: blendMode.type,
-        srcFactor: blendMode.srcFactor,
-        dstFactor: blendMode.dstFactor,
-        logicOp: blendMode.logicOp,
-    }
-}
-
 function copyRopInfo(ropInfo: RopInfo): RopInfo {
     return {
-        blendMode: copyBlendMode(ropInfo.blendMode),
+        fogType: ropInfo.fogType,
+        fogAdjEnabled: ropInfo.fogAdjEnabled,
+        blendMode: ropInfo.blendMode,
+        blendSrcFactor: ropInfo.blendSrcFactor,
+        blendDstFactor: ropInfo.blendDstFactor,
+        blendLogicOp: ropInfo.blendLogicOp,
         depthTest: ropInfo.depthTest,
         depthFunc: ropInfo.depthFunc,
         depthWrite: ropInfo.depthWrite,
@@ -119,8 +115,8 @@ export class GXMaterialBuilder {
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
         this.ropInfo = {
-            blendMode: {} as BlendMode,
         } as RopInfo;
+        this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
     }
@@ -305,11 +301,16 @@ export class GXMaterialBuilder {
         this.alphaTest.referenceB = referenceB / 0xFF;
     }
 
+    public setFog(fogType: GX.FogType, fogAdjEnabled: boolean): void {
+        this.ropInfo.fogType = fogType;
+        this.ropInfo.fogAdjEnabled = fogAdjEnabled;
+    }
+
     public setBlendMode(blendMode: GX.BlendMode, srcFactor: GX.BlendFactor, dstFactor: GX.BlendFactor, logicOp: GX.LogicOp = GX.LogicOp.CLEAR): void {
-        this.ropInfo.blendMode.type = blendMode;
-        this.ropInfo.blendMode.srcFactor = srcFactor;
-        this.ropInfo.blendMode.dstFactor = dstFactor;
-        this.ropInfo.blendMode.logicOp = logicOp;
+        this.ropInfo.blendMode = blendMode;
+        this.ropInfo.blendSrcFactor = srcFactor;
+        this.ropInfo.blendDstFactor = dstFactor;
+        this.ropInfo.blendLogicOp = logicOp;
     }
 
     public setZMode(depthTest: boolean, depthFunc: GX.CompareType, depthWrite: boolean): void {

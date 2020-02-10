@@ -439,3 +439,6 @@ export function getMatrixAxisZ(dst: vec3, m: mat4): void {
 export function getMatrixTranslation(dst: vec3, m: mat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }
+
+export const Vec3Zero = vec3.fromValues(0, 0, 0);
+export const Vec3UnitY = vec3.fromValues(0, 1, 0);

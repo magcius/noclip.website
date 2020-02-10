@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
@@ -198,11 +198,14 @@ export class ShapeInstance {
             if (!instVisible)
                 continue;
 
-            const renderInst = this.shapeData.shapeHelpers[p].pushRenderInst(renderInstManager);
+            const renderInst = renderInstManager.newRenderInst();
+            this.shapeData.shapeHelpers[p].setOnRenderInst(renderInst);
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
 
             if (usesSkinning)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
+
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -340,18 +343,22 @@ function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColor
     setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
 }
 
+type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
+
 const materialParams = new MaterialParams();
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
 export class MaterialInstance {
     public colorCalc: (ColorCalc | null)[] = [];
     public texMtxCalc: (TexMtxCalc | null)[] = [];
     public texNoCalc: (TexNoCalc | null)[] = [];
+    public effectMtxCallback: EffectMtxCallback | null = null;
     public name: string;
     public materialData: MaterialData;
     public materialHelper: GXMaterialHelperGfx;
     public visible: boolean = true;
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
+    public fogBlock = new GX_Material.FogBlock();
 
     constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         this.setMaterialData(materialData, materialHacks);
@@ -521,7 +528,14 @@ export class MaterialInstance {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
         const flipYScale = flipY ? -1.0 : 1.0;
 
-        // Now apply effects.
+        // If this uses a custom effect matrix and we have a callback, give the user an opportunity to create one.
+        let effectMtx = texMtx.effectMatrix;
+
+        const hasCustomEffectMtx = matrixMode === TexMtxMapMode.EnvmapEffectMtx || matrixMode === TexMtxMapMode.EnvmapOldEffectMtx;
+        if (hasCustomEffectMtx && this.effectMtxCallback !== null) {
+            this.effectMtxCallback(matrixScratch4, texMtx);
+            effectMtx = matrixScratch4;
+        }
 
         // ref. J3DTexMtx::calc()
         const tmp1 = matrixScratch;
@@ -627,7 +641,7 @@ export class MaterialInstance {
                     mat43Concat(tmp2, tmp2, tmp1);
 
                     // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
-                    J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
+                    J3DMtxProjConcat(tmp1, tmp2, effectMtx);
                 }
 
                 // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
@@ -645,7 +659,7 @@ export class MaterialInstance {
                 mat43Concat(tmp2, tmp2, tmp1);
 
                 // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
-                J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
+                J3DMtxProjConcat(tmp1, tmp2, effectMtx);
 
                 // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
                 mat43Concat(dst, tmp1, dst);
@@ -727,6 +741,8 @@ export class MaterialInstance {
 
         for (let i = 0; i < materialInstanceState.lights.length; i++)
             materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
+
+        materialParams.u_FogBlock.copy(this.fogBlock);
 
         if (this.materialData.fillMaterialParamsCallback !== null)
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
@@ -981,6 +997,8 @@ export class JointMatrixCalcNoAnm {
     }
 }
 
+export type JointMatrixCalcCallback = (dst: mat4, i: number, jnt1: Joint) => void;
+
 const bboxScratch = new AABB();
 const scratchViewMatrix = mat4.create();
 export class J3DModelInstance {
@@ -992,6 +1010,7 @@ export class J3DModelInstance {
     public baseScale = vec3.fromValues(1, 1, 1);
 
     public jointMatrixCalc: JointMatrixCalc;
+    public jointMatrixCalcCallback: JointMatrixCalcCallback | null = null;
     public materialInstanceState = new MaterialInstanceState();
     public shapeInstances: ShapeInstance[] = [];
     public materialInstances: MaterialInstance[] = [];
@@ -1291,7 +1310,7 @@ export class J3DModelInstance {
         if (!this.isAnyShapeVisible())
             return;
 
-        const depth = this.computeDepth(camera);
+        const depth = translucent ? this.computeDepth(camera) : -1;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             if (!this.shapeInstances[i].visible)
                 continue;
@@ -1316,6 +1335,8 @@ export class J3DModelInstance {
             const jointIndex = joint.jointIndex;
             const jointEntry = this.modelData.bmd.jnt1.joints[jointIndex];
             this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
+            if (this.jointMatrixCalcCallback !== null)
+                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
         }
     }
 
@@ -1386,6 +1407,13 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
     public vaf1Animator: VAF1Animator | null = null;
     public passMask: number = 0x01;
+    public ownedModelMaterialData: BMDModelMaterialData | null = null;
+
+    public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
+        this.setModelMaterialData(modelMaterialData);
+        assert(this.ownedModelMaterialData === null);
+        this.ownedModelMaterialData = modelMaterialData;
+    }
 
     public calcAnim(camera: Camera): void {
         super.calcAnim(camera);
@@ -1474,5 +1502,11 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        if (this.ownedModelMaterialData !== null)
+            this.ownedModelMaterialData.destroy(device);
     }
 }

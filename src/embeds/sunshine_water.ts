@@ -163,8 +163,8 @@ class SeaPlaneScene {
             // Disable blending.
             gxMaterial.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
             gxMaterial.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
-            gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
-            gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ZERO;
+            gxMaterial.ropInfo.blendSrcFactor = GX.BlendFactor.ONE;
+            gxMaterial.ropInfo.blendDstFactor = GX.BlendFactor.ZERO;
             material.translucent = false;
         }
 

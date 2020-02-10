@@ -1,6 +1,6 @@
 
-import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
@@ -42,6 +42,13 @@ abstract class mDoExt_baseAnm<T extends AnimationBase> {
     }
 
     public abstract entry(modelInstance: J3DModelInstance): void;
+}
+
+export class mDoExt_bckAnm extends mDoExt_baseAnm<ANK1> {
+    public entry(modelInstance: J3DModelInstance, curTime: number = this.frameCtrl.currentTimeInFrames): void {
+        this.frameCtrl.currentTimeInFrames = curTime;
+        entryJointAnimator(modelInstance, this.anm, this.frameCtrl);
+    }
 }
 
 export class mDoExt_btkAnm extends mDoExt_baseAnm<TTK1> {

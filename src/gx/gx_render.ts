@@ -44,6 +44,7 @@ export class MaterialParams {
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
     public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
+    public u_FogBlock = new GX_Material.FogBlock();
 
     constructor() {
         colorFromRGBA(this.u_Color[ColorKind.MAT0], 1.0, 1.0, 1.0, 1.0);
@@ -88,6 +89,15 @@ export function fillLightData(d: Float32Array, offs: number, light: GX_Material.
     return 4*5;
 }
 
+export function fillFogBlock(d: Float32Array, offs: number, fog: GX_Material.FogBlock): number {
+    offs += fillVec4(d, offs, fog.A, fog.B, fog.C, fog.AdjCenter);
+    offs += fillVec4(d, offs, fog.AdjTable[0], fog.AdjTable[1], fog.AdjTable[2], fog.AdjTable[3]);
+    offs += fillVec4(d, offs, fog.AdjTable[4], fog.AdjTable[5], fog.AdjTable[6], fog.AdjTable[7]);
+    offs += fillVec4(d, offs, fog.AdjTable[8], fog.AdjTable[9]);
+    offs += fillColor(d, offs, fog.Color);
+    return 4*5;
+}
+
 export function fillTextureMappingInfo(d: Float32Array, offs: number, textureMapping: TextureMapping): number {
     return fillVec4(d, offs, textureMapping.width, (textureMapping.flipY ? -1 : 1) * textureMapping.height, 0, textureMapping.lodBias);
 }
@@ -109,6 +119,8 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
     if (GX_Material.materialHasLightsBlock(material))
         for (let i = 0; i < 8; i++)
             offs += fillLightData(d, offs, materialParams.u_Lights[i]);
+    if (GX_Material.materialHasFogBlock(material))
+        offs += fillFogBlock(d, offs, materialParams.u_FogBlock);
 
     assert(d.length >= offs);
 }
@@ -297,12 +309,19 @@ function autoOptimizeMaterialHasLightsBlock(material: GX_Material.GXMaterial): b
     return false;
 }
 
+function autoOptimizeMaterialHasFogBlock(material: GX_Material.GXMaterial): boolean {
+    return material.ropInfo.fogType !== GX.FogType.NONE;
+}
+
 export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
     if (material.hasPostTexMtxBlock === undefined)
         material.hasPostTexMtxBlock = autoOptimizeMaterialHasPostTexMtxBlock(material);
 
     if (material.hasLightsBlock === undefined)
         material.hasLightsBlock = autoOptimizeMaterialHasLightsBlock(material);
+
+    if (material.hasFogBlock === undefined)
+        material.hasFogBlock = autoOptimizeMaterialHasFogBlock(material);
 }
 
 export class GXMaterialHelperGfx {
@@ -468,15 +487,13 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public pushRenderInst(renderInstManager: GfxRenderInstManager, packet: LoadedVertexPacket | null = null): GfxRenderInst {
-        const renderInst = renderInstManager.pushRenderInst();
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
         else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
-        return renderInst;
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {

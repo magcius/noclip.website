@@ -1,8 +1,9 @@
 
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
+import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, CombineParams, ColorCombinePass, AlphaCombinePass, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -114,7 +115,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: CombineParams) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: RDP.CombineParams) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
@@ -178,11 +179,11 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
         ];
 
-        function generateColorCombine(c: ColorCombinePass) {
+        function generateColorCombine(c: RDP.ColorCombinePass) {
             return `((${colorInputs[c.a]} - ${colorInputs[c.b]}) * ${multInputs[c.c]} + ${colorInputs[c.d]})`;
         }
-        
-        function generateAlphaCombine(a: AlphaCombinePass) {
+
+        function generateAlphaCombine(a: RDP.AlphaCombinePass) {
             return `((${alphaInputs[a.a]} - ${alphaInputs[a.b]}) * ${alphaInputs[a.c]} + ${alphaInputs[a.d]})`;
         }
 
@@ -543,6 +544,12 @@ class DrawCallInstance {
         comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
         offs++;
     }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureMappings.length; i++)
+            if (this.textureMappings[i].gfxTexture !== null)
+                device.destroyTexture(this.textureMappings[i].gfxTexture!);
+    }
 }
 
 export const enum BKPass {
@@ -562,8 +569,13 @@ export interface Mesh {
 
 export class MeshData {
     public renderData: RenderData;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, public mesh: Mesh) {
         this.renderData = new RenderData(device, cache, mesh.sharedOutput, false);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderData.destroy(device);
     }
 }
 
@@ -598,6 +610,11 @@ class MeshRenderer {
     public setAlphaVisualizerEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].destroy(device);
     }
 }
 
@@ -699,6 +716,6 @@ export class RootMeshRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        // TODO
+        this.rootNodeRenderer.destroy(device);
     }
 }

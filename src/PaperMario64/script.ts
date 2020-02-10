@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero } from "../util";
-import { Color, colorNew } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color";
 
 const scriptAddrBase = 0x80240000;
 
@@ -235,7 +235,7 @@ export class ScriptExecutor {
             const r = view.getUint32(operOffs + 0x04) / 0xFF;
             const g = view.getUint32(operOffs + 0x08) / 0xFF;
             const b = view.getUint32(operOffs + 0x0C) / 0xFF;
-            const color = colorNew(r, g, b);
+            const color = colorNewFromRGBA(r, g, b);
             this.scriptHost.setBGColor(color);
         } else if (addr === 0x802C9208) {
             // EnableTexPanning

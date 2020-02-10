@@ -17,7 +17,7 @@ import { getPointHermite } from '../../../Spline';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
-import { Color, colorNew } from '../../../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 import { VAF1_getVisibility } from './J3DGraphAnimator';
 
@@ -575,6 +575,7 @@ export interface MaterialEntry {
     colorAmbRegs: Color[];
     colorConstants: Color[];
     colorRegisters: Color[];
+    fogBlock: GX_Material.FogBlock;
 }
 
 export interface MAT3 {
@@ -614,11 +615,7 @@ export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotat
 }
 
 function readColorU8(view: DataView, srcOffs: number): Color {
-    const r = view.getUint8(srcOffs + 0x00) / 0xFF;
-    const g = view.getUint8(srcOffs + 0x01) / 0xFF;
-    const b = view.getUint8(srcOffs + 0x02) / 0xFF;
-    const a = view.getUint8(srcOffs + 0x03) / 0xFF;
-    return colorNew(r, g, b, a);
+    return colorNewFromRGBA8(view.getUint32(srcOffs + 0x00));
 }
 
 function readColorS16(view: DataView, srcOffs: number): Color {
@@ -626,7 +623,7 @@ function readColorS16(view: DataView, srcOffs: number): Color {
     const g = view.getInt16(srcOffs + 0x02) / 0xFF;
     const b = view.getInt16(srcOffs + 0x04) / 0xFF;
     const a = view.getInt16(srcOffs + 0x06) / 0xFF;
-    return colorNew(r, g, b, a);
+    return colorNewFromRGBA(r, g, b, a);
 }
 
 function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
@@ -658,6 +655,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const tevStageTableOffs = view.getUint32(0x5C);
     const tevSwapModeInfoOffs = view.getUint32(0x60);
     const tevSwapModeTableInfoOffset = view.getUint32(0x64);
+    const fogInfoTableOffs = view.getUint32(0x68);
     const alphaTestTableOffs = view.getUint32(0x6C);
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
@@ -827,7 +825,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             if (tevStageIndex < 0)
                 continue;
 
-            const index = j;
             const tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
 
             // const unknown0 = view.getUint8(tevStageOffs + 0x00);
@@ -937,11 +934,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
         // SetBlendMode
         const blendModeOffs = blendModeTableOffs + blendModeIndex * 0x04;
-        const blendType: GX.BlendMode = view.getUint8(blendModeOffs + 0x00);
-        const blendSrc: GX.BlendFactor = view.getUint8(blendModeOffs + 0x01);
-        const blendDst: GX.BlendFactor = view.getUint8(blendModeOffs + 0x02);
+        const blendMode: GX.BlendMode = view.getUint8(blendModeOffs + 0x00);
+        const blendSrcFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x01);
+        const blendDstFactor: GX.BlendFactor = view.getUint8(blendModeOffs + 0x02);
         const blendLogicOp: GX.LogicOp = view.getUint8(blendModeOffs + 0x03);
-        const blendMode: GX_Material.BlendMode = { type: blendType, srcFactor: blendSrc, dstFactor: blendDst, logicOp: blendLogicOp };
 
         const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
         const depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
@@ -949,7 +945,29 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
         const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
 
-        const ropInfo: GX_Material.RopInfo = { blendMode, depthTest, depthFunc, depthWrite };
+        const fogInfoIndex = view.getUint16(materialEntryIdx + 0x144);
+        const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;
+        const fogType: GX.FogType = view.getUint8(fogInfoOffs + 0x00);
+        const fogAdjEnabled = !!view.getUint8(fogInfoOffs + 0x01);
+        const fogAdjCenter = view.getUint16(fogInfoOffs + 0x02);
+        const fogStartZ = view.getFloat32(fogInfoOffs + 0x04);
+        const fogEndZ = view.getFloat32(fogInfoOffs + 0x08);
+        const fogNearZ = view.getFloat32(fogInfoOffs + 0x0C);
+        const fogFarZ = view.getFloat32(fogInfoOffs + 0x10);
+        const fogColor = readColorU8(view, fogInfoOffs + 0x14);
+        const fogAdjTable = buffer.createTypedArray(Uint16Array, fogInfoOffs + 0x18, 10, Endianness.BIG_ENDIAN);
+
+        const fogBlock = new GX_Material.FogBlock();
+        GX_Material.fogBlockSet(fogBlock, fogType, fogStartZ, fogEndZ, fogNearZ, fogFarZ);
+        colorCopy(fogBlock.Color, fogColor);
+        fogBlock.AdjTable.set(fogAdjTable);
+        fogBlock.AdjCenter = fogAdjCenter;
+
+        const ropInfo: GX_Material.RopInfo = {
+            fogType, fogAdjEnabled,
+            blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
+            depthTest, depthFunc, depthWrite,
+        };
         const translucent = !(flags & 0x03);
 
         const gxMaterial: GX_Material.GXMaterial = {
@@ -976,6 +994,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorAmbRegs,
             colorRegisters,
             colorConstants,
+            fogBlock,
         });
     }
 
@@ -1689,7 +1708,7 @@ export class BPK {
 //#endregion
 //#region J3DAnmTransformKey
 //#region ANK1
-interface JointAnimationEntry {
+interface ANK1JointAnimationEntry {
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
     translationX: AnimationTrack;
@@ -1702,7 +1721,7 @@ interface JointAnimationEntry {
 }
 
 export interface ANK1 extends AnimationBase {
-    jointAnimationEntries: JointAnimationEntry[];
+    jointAnimationEntries: ANK1JointAnimationEntry[];
 }
 
 function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
@@ -1734,7 +1753,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
-    const jointAnimationEntries: JointAnimationEntry[] = [];
+    const jointAnimationEntries: ANK1JointAnimationEntry[] = [];
     for (let i = 0; i < jointAnimationTableCount; i++) {
         const scaleX = readAnimationTrack(sTable, 1);
         const rotationX = readAnimationTrack(rTable, rotationScale);
@@ -1766,7 +1785,7 @@ export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Ani
     let translationY: number;
     let translationZ: number;
 
-    let entry: JointAnimationEntry | null = null;
+    let entry: ANK1JointAnimationEntry | null = null;
 
     if (ank1Animator !== null)
         entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;

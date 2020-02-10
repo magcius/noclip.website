@@ -121,7 +121,7 @@ export class SaveManager {
             return window.sessionStorage.getItem(key);
 
         if (location === SaveStateLocation.Defaults)
-            return defaultSaveStateData[key];
+            return defaultSaveStateData[key] || null;
 
         return null;
     }

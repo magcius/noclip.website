@@ -13,7 +13,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
 import { calcMipChain } from "../gx/gx_texture";
-import { assert, assertExists } from "../util";
+import { assert } from "../util";
 import { Camera } from "../Camera";
 import { getPointHermite } from "../Spline";
 
@@ -390,8 +390,10 @@ class HSD_DObj_Instance {
                 throw "whoops";
             }
 
-            const renderInst = shapeHelper.pushRenderInst(renderInstManager);
+            const renderInst = renderInstManager.newRenderInst();
+            shapeHelper.setOnRenderInst(renderInst);
             shapeHelper.fillPacketParams(packetParams, renderInst);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

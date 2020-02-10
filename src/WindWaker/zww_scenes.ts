@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assertExists, assert, nArray, hexzero, getTextDecoder } from '../util';
+import { readString, assertExists, assert, nArray, hexzero } from '../util';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
@@ -11,35 +11,30 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
-import * as DZB from './DZB';
 import * as JPA from '../Common/JSYSTEM/JPA';
-import { J3DModelData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../Camera';
-import { DeviceProgram } from '../Program';
-import { colorCopy, TransparentBlack, colorNewCopy } from '../Color';
+import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { range, getMatrixAxisZ } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
-import { dRes_control_c, ResType, DZS, DZSChunkHeader } from './d_resorce';
-import { dStage_stageDt_c, dStage_dt_c_initStageLoader, dStage_roomStatus_c } from './d_stage';
+import { dRes_control_c, ResType } from './d_resorce';
+import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader, dStage_roomStatus_c, dStage_dt_c_roomLoader, dStage_dt_c_roomReLoader } from './d_stage';
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
-import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer } from './framework';
-import { d_a__RegisterConstructors, dComIfGp_getMapTrans, MtxTrans, mDoMtx_YrotM, calc_mtx } from './d_a';
-import { BMDObjectRenderer, PlacedActor, loadActor } from './LegacyActor';
+import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
+import { d_a__RegisterConstructors } from './d_a';
+import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
+import { PeekZManager } from './d_dlst_peekZ';
+import { dBgS } from './d_bg';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -54,7 +49,7 @@ type dStage__ObjectNameTable = { [name: string]: dStage__ObjectNameTableEntry };
 function createRelNameTable(symbolMap: SymbolMap) {
     const nameTableBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === 'DynamicNameTable'));
     const stringsBuf = assertExists(symbolMap.SymbolData.find((e) => e.Filename === 'c_dylink.o' && e.SymbolName === '@stringBase0'));
-    const textDecoder = getTextDecoder('utf8') as TextDecoder;
+    const textDecoder = new TextDecoder('utf8') as TextDecoder;
 
     const nameTableView = nameTableBuf.Data.createDataView();
     const stringsBytes = stringsBuf.Data.createTypedArray(Uint8Array);
@@ -66,9 +61,9 @@ function createRelNameTable(symbolMap: SymbolMap) {
 
     for (let i = 0; i < entryCount; i++) {
         const offset = i * 8;
-        const id = nameTableView.getUint16(offset + 0);
-        const ptr = nameTableView.getUint32(offset + 4);
-        const strOffset = ptr - 0x8033a648;
+        const id = nameTableView.getUint16(offset + 0x00);
+        const ptr = nameTableView.getUint32(offset + 0x04);
+        const strOffset = ptr - 0x8033A648;
         const endOffset = stringsBytes.indexOf(0, strOffset);
         const relName = textDecoder.decode(stringsBytes.subarray(strOffset, endOffset));
         relTable[id] = relName;
@@ -102,6 +97,7 @@ function createActorTable(symbolMap: SymbolMap): dStage__ObjectNameTable {
 class RenderHacks {
     public vertexColorsEnabled = true;
     public texturesEnabled = true;
+    public objectsVisible = true;
 
     public renderHacksChanged = false;
 }
@@ -113,6 +109,8 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
     ];
+    // This really should be .sky[15], but we don't have multiple buffers in the render inst list...
+    public sea = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards);
     public main: dDlst_list_Set = [
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
@@ -122,15 +120,21 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];
+    public peekZ = new PeekZManager();
 
     public reset(): void {
         this.sky[0].reset();
         this.sky[1].reset();
+        this.sea.reset();
         this.main[0].reset();
         this.main[1].reset();
         this.wetherEffect.reset();
         for (let i = 0; i < this.effect.length; i++)
             this.effect[i].reset();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.peekZ.destroy(device);
     }
 }
 
@@ -170,8 +174,10 @@ export class dGlobals {
         this.relNameTable = createRelNameTable(extraSymbolData);
         this.objectNameTable = createActorTable(extraSymbolData);
 
-        for (let i = 0; i < this.roomStatus.length; i++)
+        for (let i = 0; i < this.roomStatus.length; i++) {
+            this.roomStatus[i].roomNo = i;
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
+        }
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -182,6 +188,15 @@ export class dGlobals {
             return null;
     }
 
+    public dStage__searchNameRev(processName: fpc__ProcessName, subtype: number): string | null {
+        for (const name in this.objectNameTable) {
+            const entry = this.objectNameTable[name];
+            if (entry.pcName === processName && entry.subtype === subtype)
+                return name;
+        }
+        return null;
+    }
+
     public objNameGetDbgName(objName: dStage__ObjectNameTableEntry): string {
         const pnameStr = `0x${hexzero(objName.pcName, 0x04)}`;
         const relName = this.relNameTable[objName.pcName] || 'built-in';
@@ -190,6 +205,10 @@ export class dGlobals {
 
     public findExtraSymbolData(filename: string, symname: string): ArrayBufferSlice {
         return assertExists(this.extraSymbolData.SymbolData.find((e) => e.Filename === filename && e.SymbolName === symname)).Data;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.dlst.destroy(device);
     }
 }
 
@@ -277,160 +296,29 @@ export class ZWWExtraTextures {
     }
 }
 
-// Legacy
-export class WindWakerRoomRenderer {
+function fpcIsObject(n: fpc__ProcessName): boolean {
+    if (n === fpc__ProcessName.d_a_bg)
+        return false;
+
+    return true;
+}
+
+function objectLayerVisible(layerMask: number, layer: number): boolean {
+    if (layer < 0)
+        return true;
+    else
+        return !!(layerMask & (1 << layer));
+}
+
+export class WindWakerRoom {
     public name: string;
-    public visible: boolean = true;
-    public objectsVisible = true;
-    public objectRenderers: BMDObjectRenderer[] = [];
-    public dzb: DZB.DZB;
 
-    public extraTextures: ZWWExtraTextures;
-
-    constructor(renderer: WindWakerRenderer, public roomNo: number) {
+    constructor(public roomNo: number, public visible: boolean) {
         this.name = `Room ${roomNo}`;
-
-        const resCtrl = renderer.globals.modelCache.resCtrl;
-        this.dzb = assertExists(resCtrl.getStageResByName(ResType.Dzb, `Room${roomNo}`, `room.dzb`));
-
-        this.extraTextures = renderer.extraTextures;
-    }
-
-    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
-        if (this.objectsVisible) {
-            for (let i = 0; i < this.objectRenderers.length; i++) {
-                this.objectRenderers[i].setExtraTextures(this.extraTextures);
-                this.objectRenderers[i].prepareToRender(globals, device, renderInstManager, viewerInput);
-            }
-        }
     }
 
     public setVisible(v: boolean): void {
         this.visible = v;
-    }
-
-    public setVisibleLayerMask(m: number): void {
-        for (let i = 0; i < this.objectRenderers.length; i++) {
-            const o = this.objectRenderers[i];
-            if (o.layer >= 0) {
-                const v = !!(m & (1 << o.layer));
-                o.visible = v;
-            }
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].destroy(device);
-    }
-}
-
-class PlaneColorProgram extends DeviceProgram {
-    public static a_Position: number = 0;
-
-    public both = `
-precision mediump float;
-layout(row_major, std140) uniform ub_Params {
-    Mat4x4 u_Projection;
-    Mat4x3 u_ModelView;
-    vec4 u_PlaneColor;
-};
-#ifdef VERT
-layout(location = ${PlaneColorProgram.a_Position}) in vec3 a_Position;
-void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
-}
-#endif
-#ifdef FRAG
-void main() {
-    gl_FragColor = u_PlaneColor;
-}
-#endif
-`;
-}
-
-const scratchMatrix = mat4.create();
-const seaPlaneBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
-class SeaPlane {
-    private posBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-    private gfxProgram: GfxProgram;
-    private modelMatrix = mat4.create();
-    private color = colorNewCopy(TransparentBlack);
-
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
-        this.createBuffers(device);
-        mat4.fromScaling(this.modelMatrix, [2000000, 1, 2000000]);
-        mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
-
-        this.gfxProgram = cache.createProgram(device, new PlaneColorProgram());
-    }
-
-    private computeModelView(dst: mat4, camera: Camera): void {
-        computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, this.modelMatrix);
-    }
-
-    public prepareToRender(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        colorCopy(this.color, globals.g_env_light.bgCol[1].K0);
-
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInst.setBindingLayouts(seaPlaneBindingLayouts);
-        renderInst.setMegaStateFlags({
-            depthWrite: true,
-            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LESS),
-        });
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.drawIndexes(6);
-
-        let offs = renderInst.allocateUniformBuffer(0, 32);
-        const d = renderInst.mapUniformBufferF32(0);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-        this.computeModelView(scratchMatrix, viewerInput.camera);
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
-        offs += fillColor(d, offs, this.color);
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroyBuffer(this.posBuffer);
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
-    }
-
-    private createBuffers(device: GfxDevice) {
-        const posData = new Float32Array(4 * 3);
-        posData[0]  = -1;
-        posData[1]  = 0;
-        posData[2]  = -1;
-        posData[3]  = 1;
-        posData[4]  = 0;
-        posData[5]  = -1;
-        posData[6]  = -1;
-        posData[7]  = 0;
-        posData[8]  = 1;
-        posData[9]  = 1;
-        posData[10] = 0;
-        posData[11] = 1;
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
-        this.posBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, posData.buffer);
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { format: GfxFormat.F32_RGB, location: PlaneColorProgram.a_Position, bufferByteOffset: 0, bufferIndex: 0 },
-        ];
-        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-        ];
-        const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.posBuffer, byteOffset: 0, },
-        ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 }
 
@@ -521,7 +409,7 @@ class SimpleEffectSystem {
 
     public createEmitterTest(resourceId: number = 0x14) {
         const device: GfxDevice = window.main.viewer.gfxDevice;
-        const cache: GfxRenderCache = window.main.scene.renderHelper.getCache();
+        const cache: GfxRenderCache = (window.main as any).scene.renderHelper.getCache();
         const emitter = this.createBaseEmitter(device, cache, resourceId);
         if (emitter !== null) {
             emitter.globalTranslation[0] = -275;
@@ -550,20 +438,19 @@ class SimpleEffectSystem {
     }
 }
 
+const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
     public renderHelper: GXRenderHelperGfx;
 
-    private seaPlane: SeaPlane | null = null;
-
-    public roomRenderers: WindWakerRoomRenderer[] = [];
+    public rooms: WindWakerRoom[] = [];
     public effectSystem: SimpleEffectSystem;
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
     public time: number; // In milliseconds, affected by pause and time scaling
-    public frameCount: number; // Assumes 33 FPS, affected by pause and time scaling
+    public roomLayerMask: number = 0;
 
     public onstatechanged!: () => void;
 
@@ -572,20 +459,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
-
-        const wantsSeaPlane = globals.stageName === 'sea';
-        if (wantsSeaPlane)
-            this.seaPlane = new SeaPlane(device, this.renderCache);
-    }
-
-    public getRoomDZB(roomIdx: number): DZB.DZB {
-        const roomRenderer = assertExists(this.roomRenderers.find((r) => r.roomNo === roomIdx));
-        return roomRenderer.dzb;
     }
 
     private setVisibleLayerMask(m: number): void {
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].setVisibleLayerMask(m);
+        this.roomLayerMask = m;
     }
 
     public createPanels(): UI.Panel[] {
@@ -611,7 +488,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const roomsPanel = new UI.LayerPanel();
         roomsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         roomsPanel.setTitle(UI.LAYER_ICON, 'Rooms');
-        roomsPanel.setLayers(this.roomRenderers);
+        roomsPanel.setLayers(this.rooms);
 
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -631,12 +508,23 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const enableObjects = new UI.Checkbox('Enable Objects', true);
         enableObjects.onchanged = () => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].objectsVisible = enableObjects.checked;
+            this.globals.renderHacks.objectsVisible = enableObjects.checked;
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
         return [roomsPanel, scenarioPanel, renderHacksPanel];
+    }
+
+    // For people to play around with.
+    public cameraFrozen = false;
+
+    private getRoomVisible(roomNo: number): boolean {
+        if (roomNo === -1)
+            return true;
+        for (let i = 0; i < this.rooms.length; i++)
+            if (this.rooms[i].roomNo === roomNo)
+                return this.rooms[i].visible;
+        throw "whoops";
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -644,13 +532,29 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.time = viewerInput.time;
-        this.frameCount = viewerInput.time / 1000.0 * 30;
 
-        mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
-        getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
-        vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
-        // Update the "player position" from the camera.
-        vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
+        if (!this.cameraFrozen) {
+            mat4.getTranslation(this.globals.cameraPosition, viewerInput.camera.worldMatrix);
+            getMatrixAxisZ(this.globals.cameraFwd, viewerInput.camera.worldMatrix);
+            vec3.negate(this.globals.cameraFwd, this.globals.cameraFwd);
+            // Update the "player position" from the camera.
+            vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
+        }
+
+        // Update actor visibility from settings.
+        // TODO(jstpierre): Figure out a better place to put this?
+        const fwGlobals = this.globals.frameworkGlobals;
+        for (let i = 0; i < fwGlobals.dwQueue.length; i++) {
+            for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
+                const ac = fwGlobals.dwQueue[i][j];
+                if (ac instanceof fopAc_ac_c) {
+                    ac.visible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    if (ac.visible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
+                        ac.visible = false;
+                }
+            }
+        }
+
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -664,11 +568,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const dlst = this.globals.dlst;
 
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
-        if (this.seaPlane)
-            this.seaPlane.prepareToRender(this.globals, renderInstManager, viewerInput);
-
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(this.globals, device, renderInstManager, viewerInput);
 
         {
             this.effectSystem.calc(viewerInput);
@@ -704,31 +603,36 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const dlst = this.globals.dlst;
+
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        dlst.peekZ.setParameters(device, this.renderTarget.depthStencilAttachment.width, this.renderTarget.depthStencilAttachment.height);
+
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
-        const dlst = this.globals.dlst;
-
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.executeListSet(device, renderInstManager, skyboxPassRenderer, dlst.sky);
-        skyboxPassRenderer.endPass(null);
+        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
+        this.executeList(device, renderInstManager, mainPassRenderer, dlst.sea);
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
-
-        mainPassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+        mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
+
+        // Execute PeekZ.
+        dlst.peekZ.submitFrame(device, this.renderTarget.depthStencilAttachment.gfxAttachment!);
+        dlst.peekZ.peekData(device);
 
         // Now indirect stuff.
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
@@ -744,10 +648,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
         this.renderTarget.destroy(device);
-        if (this.seaPlane)
-            this.seaPlane.destroy(device);
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].destroy(device);
+        this.globals.destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
@@ -851,21 +752,17 @@ export class ModelCache {
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
     }
 
-    // For compatibility.
-    public getModel(archive: RARC.JKRArchive, modelPath: string): J3DModelData {
-        const resInfo = assertExists(this.resCtrl.findResInfoByArchive(archive, this.resCtrl.resObj));
-        const resEntry = assertExists(resInfo.res.find((g) => modelPath.endsWith(g.file.name)));
-        return resEntry.res;
-    }
-
     public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
+        this.resCtrl.destroy(device);
     }
 }
 
 export const pathBase = `j3d/ww`;
 
 class d_s_play extends fopScn {
+    public bgS = new dBgS();
+
     public flowerPacket: FlowerPacket;
     public treePacket: TreePacket;
     public grassPacket: GrassPacket;
@@ -939,7 +836,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 5);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 6);
         modelCache.fetchFileData(`${pathBase}/f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
@@ -964,6 +861,7 @@ class SceneDesc {
         dKy__RegisterConstructors(framework);
         dKyw__RegisterConstructors(framework);
         d_a__RegisterConstructors(framework);
+        LegacyActor__RegisterFallbackConstructor(framework);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
         const globals = new dGlobals(modelCache, symbolMap, framework);
@@ -990,15 +888,17 @@ class SceneDesc {
         const resCtrl = modelCache.resCtrl;
 
         const sysRes = assertExists(resCtrl.findResInfo(`System`, resCtrl.resObj));
-        const ZAtoon   = sysRes.getResByID(ResType.Bti, 0x03);
-        const ZBtoonEX = sysRes.getResByID(ResType.Bti, 0x04);
+        const ZAtoon   = sysRes.getResByIndex(ResType.Bti, 0x03);
+        const ZBtoonEX = sysRes.getResByIndex(ResType.Bti, 0x04);
 
         const dzs = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Stage`, `stage.dzs`));
 
-        dStage_dt_c_initStageLoader(globals.dStage_dt, dzs);
+        dStage_dt_c_stageInitLoader(globals, globals.dStage_dt, dzs);
+        dStage_dt_c_stageLoader(globals, globals.dStage_dt, dzs);
 
-        const isSea = this.stageDir === 'sea';
-        const isFullSea = isSea && this.rooms.length > 1;
+        // If this is a single-room scene, then set mStayNo.
+        if (this.rooms.length === 1)
+            globals.mStayNo = Math.abs(this.rooms[0]);
 
         renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
@@ -1022,168 +922,23 @@ class SceneDesc {
             fpcSCtRq_Request(framework, null, fpc__ProcessName.d_a_vrbox2, null);
         }
 
-        let actorMultMtx: mat4 | null = null;
         for (let i = 0; i < this.rooms.length; i++) {
             const roomNo = Math.abs(this.rooms[i]);
 
             const visible = this.rooms[i] >= 0;
-            const roomRenderer = new WindWakerRoomRenderer(renderer, roomNo);
-            roomRenderer.visible = visible;
-            renderer.roomRenderers.push(roomRenderer);
-
-            // The MULT affects BG actors only, but not actors.
-            const mult = dComIfGp_getMapTrans(globals, roomNo);
-
-            // Actors are stored in world-space normally.
-            actorMultMtx = null;
-
-            if (isSea && !isFullSea && mult !== null) {
-                // HACK(jstpierre): For non-full sea levels, we apply the inverse of the MULT, so that
-                // the room is located at 0, 0. This is for convenience and back-compat with existing
-                // savestates.
-
-                MtxTrans(vec3.fromValues(mult.transX, 0, mult.transZ), false);
-                mDoMtx_YrotM(calc_mtx, mult.rotY);
-
-                const roomMultMtx = calc_mtx;
-
-                actorMultMtx = mat4.create();
-                mat4.invert(actorMultMtx, roomMultMtx);
-
-                // Hack up the DZB as well.
-                const dzb = roomRenderer.dzb;
-                vec3.transformMat4(dzb.pos, dzb.pos, roomMultMtx);
-
-                // Now reset MULT to 0.
-                mult.transX = 0;
-                mult.transZ = 0;
-                mult.rotY = 0;
-            }
+            renderer.rooms.push(new WindWakerRoom(roomNo, visible));
 
             // objectSetCheck
-            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, -1, null, null, 0xFF, -1);
+
+            // noclip modification: We pass in roomNo so it's attached to the room.
+            fopAcM_create(framework, fpc__ProcessName.d_a_bg, roomNo, null, roomNo, null, null, 0xFF, -1);
 
             const dzr = assertExists(resCtrl.getStageResByName(ResType.Dzs, `Room${roomNo}`, `room.dzr`));
-            this.spawnActors(renderer, roomRenderer, dzr, actorMultMtx);
+            dStage_dt_c_roomLoader(globals, globals.roomStatus[roomNo], dzr);
+            dStage_dt_c_roomReLoader(globals, globals.roomStatus[roomNo], dzr);
         }
-
-        // HACK(jstpierre): We spawn stage actors on the first room renderer.
-        this.spawnActors(renderer, renderer.roomRenderers[0], dzs);
-
-        // TODO(jstpierre): Not all the actors load in the requestArchives phase...
-        await modelCache.waitForLoad();
 
         return renderer;
-    }
-
-    private iterActorLayerACTR(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
-        if (actrHeader === undefined)
-            return;
-
-        const buffer = dzs.buffer;
-        const view = buffer.createDataView();
-
-        let actrTableIdx = actrHeader.offs;
-        for (let i = 0; i < actrHeader.count; i++) {
-            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameter = view.getUint32(actrTableIdx + 0x08, false);
-            const posX = view.getFloat32(actrTableIdx + 0x0C);
-            const posY = view.getFloat32(actrTableIdx + 0x10);
-            const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const angleX = view.getInt16(actrTableIdx + 0x18);
-            const angleY = view.getInt16(actrTableIdx + 0x1A);
-            const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
-
-            const actor: fopAcM_prm_class = {
-                parameters: parameter,
-                roomNo,
-                pos: vec3.fromValues(posX, posY, posZ),
-                rot: vec3.fromValues(angleX, angleY, angleZ),
-                enemyNo,
-                scale: vec3.fromValues(1, 1, 1),
-                subtype: 0,
-                gbaName: 0,
-                parentPcId: 0xFFFFFFFF,
-                layer,
-            };
-
-            callback(name, actor);
-            actrTableIdx += 0x20;
-        }
-    }
-
-    private iterActorLayerSCOB(roomNo: number, layer: number, dzs: DZS, actrHeader: DZSChunkHeader | undefined, callback: (name: string, it: fopAcM_prm_class) => void): void {
-        if (actrHeader === undefined)
-            return;
-
-        const buffer = dzs.buffer;
-        const view = buffer.createDataView();
-
-        let actrTableIdx = actrHeader.offs;
-        for (let i = 0; i < actrHeader.count; i++) {
-            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
-            const parameter = view.getUint32(actrTableIdx + 0x08, false);
-            const posX = view.getFloat32(actrTableIdx + 0x0C);
-            const posY = view.getFloat32(actrTableIdx + 0x10);
-            const posZ = view.getFloat32(actrTableIdx + 0x14);
-            const angleX = view.getInt16(actrTableIdx + 0x18);
-            const angleY = view.getInt16(actrTableIdx + 0x1A);
-            const angleZ = view.getInt16(actrTableIdx + 0x1C);
-            const enemyNo = view.getUint16(actrTableIdx + 0x1E);
-            const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
-            const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
-            const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
-            // const pad = view.getUint8(actrTableIdx + 0x23);
-
-            const actor: fopAcM_prm_class = {
-                parameters: parameter,
-                roomNo,
-                pos: vec3.fromValues(posX, posY, posZ),
-                rot: vec3.fromValues(angleX, angleY, angleZ),
-                enemyNo,
-                scale: vec3.fromValues(scaleX, scaleY, scaleZ),
-                subtype: 0,
-                gbaName: 0,
-                parentPcId: 0xFFFFFFFF,
-                layer,
-            };
-
-            callback(name, actor);
-            actrTableIdx += 0x24;
-        }
-    }
-
-    private iterActorLayers(roomIdx: number, dzs: DZS, callback: (actorName: string, it: fopAcM_prm_class) => void): void {
-        const chunkHeaders = dzs.headers;
-
-        function buildChunkLayerName(base: string, i: number): string {
-            if (i === -1) {
-                return base;
-            } else {
-                return base.slice(0, 3) + i.toString(16).toLowerCase();
-            }
-        }
-
-        for (let i = -1; i < 16; i++) {
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('ACTR', i)), callback);
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGOB', i)), callback);
-            this.iterActorLayerACTR(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TRES', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('SCOB', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('TGSC', i)), callback);
-            this.iterActorLayerSCOB(roomIdx, i, dzs, chunkHeaders.get(buildChunkLayerName('DOOR', i)), callback);
-        }
-    }
-
-    private spawnActors(renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, dzs: DZS, actorMultMtx: mat4 | null = null): void {
-        this.iterActorLayers(roomRenderer.roomNo, dzs, (processName, actor) => {
-            const placedActor: PlacedActor = actor as PlacedActor;
-            placedActor.rotationY = actor.rot![1] / 0x7FFF * Math.PI;
-            if (actorMultMtx !== null)
-                vec3.transformMat4(actor.pos!, actor.pos!, actorMultMtx);
-            placedActor.roomRenderer = roomRenderer;
-            loadActor(renderer.globals, roomRenderer, processName, placedActor);
-        });
     }
 }
 
@@ -1220,13 +975,14 @@ const sceneDescs = [
     new SceneDesc("Pjavdou", "Jabun's Cavern"),
 
     "Forsaken Fortress",
-    new SceneDesc("M2ganon", "Ganondorf's Room"),
-    new SceneDesc("MajyuE", "Exterior"),
+    new SceneDesc("MajyuE", "Forsaken Fortress Exterior (First Visit)"),
+    // new SceneDesc("sea", "Forsaken Fortress Exterior (Second & Third Visits)", [1]),
     new SceneDesc("majroom", "Interior (First Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma2room", "Interior (Second Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("ma3room", "Interior (Third  Visit)", [0, 1, 2, 3, 4]),
     new SceneDesc("Mjtower", "The Tower (First Visit)"),
     new SceneDesc("M2tower", "The Tower (Second Visit)"),
+    new SceneDesc("M2ganon", "Ganondorf's Room"),
 
     "Windfall Island",
     new SceneDesc("sea", "Windfall Island", [11]),
@@ -1320,7 +1076,7 @@ const sceneDescs = [
     new SceneDesc("WarpD", "Diamond Steppe Island"),
 
     "Savage Labryinth",
-    new SceneDesc("Cave09", "Entrance"),
+    new SceneDesc("Cave09", "Entrance", [0]),
     new SceneDesc("Cave10", "Room 11"),
     new SceneDesc("Cave11", "Room 32"),
     new SceneDesc("Cave06", "End"),
@@ -1359,6 +1115,21 @@ const sceneDescs = [
     new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
     new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
+    new SceneDesc("sea_T", "sea_T"),
+    new SceneDesc("sea_E", "sea_E"),
+    new SceneDesc("ITest61", "ITest61"),
+    new SceneDesc("ITest62", "ITest62"),
+    new SceneDesc("K_Test2", "K_Test2"),
+    new SceneDesc("K_Test3", "K_Test3"),
+    new SceneDesc("K_Test4", "K_Test4"),
+    new SceneDesc("K_Test5", "K_Test5"),
+    new SceneDesc("K_Test6", "K_Test6"),
+    new SceneDesc("K_Test8", "K_Test8"),
+    new SceneDesc("K_Testa", "K_Testa"),
+    new SceneDesc("K_Testb", "K_Testb"),
+    new SceneDesc("K_Testc", "K_Testc"),
+    new SceneDesc("K_Testd", "K_Testd"),
+    new SceneDesc("K_Teste", "K_Teste"),
 ];
 
 const id = "zww";

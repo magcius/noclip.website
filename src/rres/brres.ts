@@ -19,7 +19,7 @@ import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
-import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNew, colorCopy } from '../Color';
+import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
@@ -391,7 +391,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const ca = ((vl >>> 12) & 0x7FF) / 0xFF;
         const cb = ((vh >>>  0) & 0x7FF) / 0xFF;
         const cg = ((vh >>> 12) & 0x7FF) / 0xFF;
-        const c = colorNew(cr, cg, cb, ca);
+        const c = colorNewFromRGBA(cr, cg, cb, ca);
         if (i < 4)
             colorRegisters[i] = c;
         else
@@ -426,8 +426,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const colorChannel = parseColorChannelControlRegister(chanCtrlC);
         const alphaChannel = parseColorChannelControlRegister(chanCtrlA);
 
-        colorMatRegs.push(colorNew(matColorR, matColorG, matColorB, matColorA));
-        colorAmbRegs.push(colorNew(ambColorR, ambColorG, ambColorB, ambColorA));
+        colorMatRegs.push(colorNewFromRGBA(matColorR, matColorG, matColorB, matColorA));
+        colorAmbRegs.push(colorNewFromRGBA(ambColorR, ambColorG, ambColorB, ambColorA));
 
         if (i < numChans)
             gxMaterial.lightChannels.push({ colorChannel, alphaChannel });

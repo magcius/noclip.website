@@ -1,10 +1,10 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop } from "./d_kankyo";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_plight_cut, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
-import { colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy } from "../Color";
-import { clamp, computeMatrixWithoutTranslation, MathConstants } from "../MathHelpers";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
+import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
@@ -19,11 +19,14 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assertExists, assert, hexzero } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
 import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
+import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
+import { dfRange, dfShow } from "../ui";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -104,9 +107,9 @@ function dKyr_thunder_move(globals: dGlobals, envLight: dScnKy_env_light_c, came
             ef.pos[2] = cameraPos[2];
 
             const brightness = (0.2 * flash) / 0xFF;
-            ef.color.r = clamp(0xB4 * brightness, 0.0, 1.0);
-            ef.color.g = clamp(0xEB * brightness, 0.0, 1.0);
-            ef.color.b = clamp(0xFF * brightness, 0.0, 1.0);
+            ef.color.r = saturate(0xB4 * brightness);
+            ef.color.g = saturate(0xEB * brightness);
+            ef.color.b = saturate(0xFF * brightness);
 
             // This field is written to by dKy_Itemgetcol_chg_move, I think it's true
             // when we're in some sort of a getitem cutscene...
@@ -183,7 +186,15 @@ export class dKankyo__CommonTextures {
 
 const scratchMatrix = mat4.create();
 
-export class dKankyo_sun_packet {
+const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
+const scratchVec4 = vec4.create();
+
+export class dKankyo_sun_Packet {
     // Shared
     private ddraw = new TDDraw();
 
@@ -191,11 +202,11 @@ export class dKankyo_sun_packet {
     private moonTextures: BTIData[] = [];
     private sunTexture: BTIData;
     private materialHelperSunMoon: GXMaterialHelperGfx;
+    public sunPos = vec3.create();
     private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
     public visibility: number = 1.0;
-    public sunPos = vec3.create();
 
     // Lenzflare
     private lensHalfTexture: BTIData;
@@ -204,8 +215,17 @@ export class dKankyo_sun_packet {
     private materialHelperLenzflareSolid: GXMaterialHelperGfx;
     public lenzflarePos = nArray(6, () => vec3.create());
     public lenzflareAngle: number = 0.0;
-    public distFalloff: number;
+    public distFalloff: number = 0.0;
     public hideLenz: boolean = false;
+
+    public chkPoints: vec2[] = [
+        vec2.fromValues(  0,   0),
+        vec2.fromValues(-10, -20),
+        vec2.fromValues( 10,  20),
+        vec2.fromValues(-20,  10),
+        vec2.fromValues( 20, -10),
+    ];
+    public peekZResults = nArray(5, () => new PeekZResult());
 
     constructor(globals: dGlobals) {
         const resCtrl = globals.resCtrl;
@@ -391,6 +411,21 @@ export class dKankyo_sun_packet {
         }
     }
 
+    @dfShow()
+    private lensflareColor = colorNewCopy(White, 0x50/0xFF);
+    @dfRange(0, 1600, 1)
+    private lensflareBaseSize: number = 960.0;
+    @dfRange(0, 32, 1)
+    private lensflareCount: number = 16.0;
+    @dfRange(0.0, MathConstants.TAU, 0.0001)
+    private lensflareAngles: number[] = [uShortTo2PI(0xf80a), uShortTo2PI(0x416b)];
+    @dfRange(0.0, 0.8, 0.0001)
+    private lensflareAngleSteps: number[] = [uShortTo2PI(0x1000), uShortTo2PI(0x1C71)];
+    @dfRange(-5, 5)
+    private lensflareSizes: number[] = [0.1, 1.1, 0.2, 0.4];
+    @dfRange(0, MathConstants.TAU, 0.0001)
+    private lensflareWidth: number = uShortTo2PI(1600.0);
+
     private drawLenzflare(globals: dGlobals, ddraw: TDDraw, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (this.visibility <= 0.1)
             return;
@@ -408,11 +443,12 @@ export class dKankyo_sun_packet {
         const invDist = 1.0 - this.distFalloff;
         const flareViz = (0.6 + (0.8 * this.visibility * sqr(invDist)));
         const innerRad = 300 * flareViz;
-        const flareScale = 960 * flareViz * (3.0 + invDist);
+        const flareScale = this.lensflareBaseSize * flareViz * (3.0 + invDist);
         const vizSq = sqr(this.visibility);
-        let angle0 = uShortTo2PI(0xf80a);
-        let angle1 = uShortTo2PI(0x416b);
-        for (let i = 0; i < 16; i++) {
+
+        let angle0 = this.lensflareAngles[0];
+        let angle1 = this.lensflareAngles[1];
+        for (let i = 0; i < this.lensflareCount; i++) {
             ddraw.begin(GX.Command.DRAW_TRIANGLES);
 
             let baseAngle: number;
@@ -422,9 +458,10 @@ export class dKankyo_sun_packet {
                 baseAngle = angle1;
             }
 
-            const arcSize = Math.abs(Math.sin(34.0 * baseAngle));
-            const arcAngleSize = uShortTo2PI(1600.0) * (0.5 + arcSize);
-            const arcAngle0 = baseAngle + arcAngleSize;
+            const flicker = Math.abs(Math.sin(34.0 * baseAngle));
+            const arcSize = this.lensflareWidth * (0.5 + flicker);
+
+            const arcAngle0 = baseAngle + arcSize;
             vec3.set(scratchVec3, innerRad * Math.sin(arcAngle0), innerRad * Math.cos(arcAngle0), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
@@ -432,21 +469,11 @@ export class dKankyo_sun_packet {
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
             const whichScale = i & 3;
-            let outerRadScale = ((0.6 + (0.4 * arcSize)) * flareScale) * (1.5 * this.visibility);
+            let outerRadScale = ((0.6 + (0.4 * flicker)) * flareScale) * (1.5 * this.visibility);
             if (whichScale !== 0)
                 outerRadScale *= 0.2;
 
-            let outerRadScale2: number;
-            if (whichScale === 0)
-                outerRadScale2 = 0.1;
-            else if (whichScale === 1)
-                outerRadScale2 = 1.1;
-            else if (whichScale === 2)
-                outerRadScale2 = 0.2;
-            else if (whichScale === 3)
-                outerRadScale2 = 0.4;
-            else
-                throw "whoops";
+            const outerRadScale2: number = this.lensflareSizes[whichScale];
 
             const outerRad = outerRadScale * (this.visibility * (sqr(this.visibility) + outerRadScale2));
             vec3.set(scratchVec3, outerRad * Math.sin(baseAngle), outerRad * Math.cos(baseAngle), 0);
@@ -455,10 +482,10 @@ export class dKankyo_sun_packet {
             ddraw.position3vec3(scratchVec3);
             ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
 
-            angle0 += uShortTo2PI(0x1000);
-            angle1 += uShortTo2PI(0x1C71);
+            angle0 += this.lensflareAngleSteps[0];
+            angle1 += this.lensflareAngleSteps[1];
 
-            const arcAngle2 = baseAngle - arcAngleSize;
+            const arcAngle2 = baseAngle - arcSize;
             vec3.set(scratchVec3, innerRad * Math.sin(arcAngle2), innerRad * Math.cos(arcAngle2), 0);
             vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
             vec3.add(scratchVec3, scratchVec3, this.sunPos);
@@ -467,7 +494,7 @@ export class dKankyo_sun_packet {
 
             ddraw.end();
         }
-        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 80/0xFF * vizSq * sqr(vizSq));
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor);
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
@@ -556,7 +583,7 @@ class VRKUMO_EFF {
     }
 }
 
-export class dKankyo_vrkumo_packet {
+export class dKankyo_vrkumo_Packet {
     public enabled: boolean = false;
     public count: number = 0;
     public strength: number = 0;
@@ -578,16 +605,20 @@ export class dKankyo_vrkumo_packet {
         this.enabled = true;
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the color.
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.C0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.C1, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
@@ -602,7 +633,9 @@ export class dKankyo_vrkumo_packet {
 
         const envLight = globals.g_env_light;
 
-        const farPlane = globals.dStage_dt.stag.farPlane - 10000.0;
+        // Clouds are projected onto a dome that hovers around the camera.
+
+        const domeRadius = globals.dStage_dt.stag.farPlane - 10000.0;
         const ddraw = this.ddraw;
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
@@ -615,114 +648,116 @@ export class dKankyo_vrkumo_packet {
         for (let textureIdx = 2; textureIdx >= 0; textureIdx--) {
             this.textures[textureIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-            for (let i = 0; i < 100; i++) {
+            ddraw.begin(GX.Command.DRAW_QUADS);
+
+            for (let i = 0; i < this.instances.length; i++) {
                 const kumo = this.instances[i];
 
                 if (kumo.alpha <= 0.000001)
                     continue;
 
-                const baseAngle = ((textureIdx + i) & 0x0F) * 1/16;
-                const theta_01 = kumo.distFalloff * (1.0 - Math.pow(baseAngle, 3)) * (0.45 + (this.strength * 0.55));
+                const size = kumo.distFalloff * (1.0 - Math.pow(((textureIdx + i) & 0x0F) * 1/16, 3)) * (0.45 + (this.strength * 0.55));
 
                 const bounceAnim = Math.sin(textureIdx + 0.0001 * this.bounceAnimTimer);
-                const sizeAnim = theta_01 + (0.06 * theta_01) * bounceAnim * kumo.distFalloff;
+                const sizeAnim = size + (0.06 * size) * bounceAnim * kumo.distFalloff;
                 const height = sizeAnim + sizeAnim * kumo.height;
-                if (height < 0)
-                    debugger;
                 const m0 = 0.15 * sizeAnim;
                 const m1 = 0.65 * sizeAnim;
 
-                let out0 = 0, out1 = 0;
+                let polarOffs = 0, azimuthalOffs = 0;
                 if (textureIdx !== 0) {
-                    const cloudRep = 0;
+                    const cloudRep = i & 3;
                     if (cloudRep === 0) {
                         if (textureIdx === 2) {
-                            out0 = m1;
-                            out1 = m0;
+                            polarOffs = m1;
+                            azimuthalOffs = m0;
                         }
                     } else if (cloudRep === 1) {
                         if (textureIdx === 1) {
-                            out0 = -m0;
-                            out1 = m0;
+                            polarOffs = -m0;
+                            azimuthalOffs = m0;
                         } else if (textureIdx === 2) {
-                            out0 = -m1;
-                            out1 = m1;
+                            polarOffs = -m1;
+                            azimuthalOffs = m1;
                         }
                     } else if (cloudRep === 2) {
                         if (textureIdx === 1) {
-                            out0 = m1;
-                            out1 = -m1;
+                            polarOffs = m1;
+                            azimuthalOffs = -m1;
                         } else if (textureIdx === 2) {
-                            out0 = m0;
-                            out1 = -m1;
+                            polarOffs = m0;
+                            azimuthalOffs = -m1;
                         }
                     } else if (cloudRep === 3) {
                         if (textureIdx === 1) {
-                            out0 = -m1;
+                            polarOffs = -m1;
                         } else if (textureIdx === 2) {
-                            out0 = -m0;
-                            out1 = m0;
+                            polarOffs = -m0;
+                            azimuthalOffs = m0;
                         }
                     }
                 }
 
-                const rot = Math.atan2(kumo.position[0], kumo.position[2]) + out1;
-                const pitchBottom = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + out0;
-                const normalPitch = Math.pow(Math.min(pitchBottom / 1.9, 1.0), 3);
-                const offs0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
-                const offs1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
+                const polarY1 = Math.atan2(kumo.position[1], Math.hypot(kumo.position[0], kumo.position[2])) + polarOffs;
+                const normalPitch = Math.pow(Math.min(polarY1 / 1.9, 1.0), 3);
 
-                const pitchTop = Math.min(pitchBottom + 0.9 * height * (1.0 + -4.0 * normalPitch), 1.21);
+                const azimuthal = Math.atan2(kumo.position[0], kumo.position[2]) + azimuthalOffs;
+                const azimuthalOffsY0 = 0.6 * sizeAnim * (1.0 + 16.0 * normalPitch);
+                const azimuthalOffsY1 = 0.6 * sizeAnim * (1.0 + 2.0 * normalPitch);
+
+                const polarY0 = Math.min(polarY1 + 0.9 * height * (1.0 + -4.0 * normalPitch), 1.21);
 
                 let x = 0, y = 0, z = 0;
 
-                ddraw.begin(GX.Command.DRAW_QUADS);
-
-                // Generate a quad along a sphere around the player.
-                x = Math.cos(pitchTop) * Math.sin(rot + offs0);
-                y = Math.sin(pitchTop);
-                z = Math.cos(pitchTop) * Math.cos(rot + offs0);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-
-                x = Math.cos(pitchTop) * Math.sin(rot - offs0);
-                y = Math.sin(pitchTop);
-                z = Math.cos(pitchTop) * Math.cos(rot - offs0);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-
-                x = Math.cos(pitchBottom) * Math.sin(rot - offs1);
-                y = Math.sin(pitchBottom);
-                z = Math.cos(pitchBottom) * Math.cos(rot - offs1);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-
-                x = Math.cos(pitchBottom) * Math.sin(rot + offs1);
-                y = Math.sin(pitchBottom);
-                z = Math.cos(pitchBottom) * Math.cos(rot + offs1);
-                vec3.set(scratchVec3, x * farPlane, y * farPlane, z * farPlane);
-                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
-                ddraw.position3vec3(scratchVec3);
-                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-
-                ddraw.end();
-
-                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoColor, envLight.vrKumoCenterColor, kumo.distFalloff);
+                colorLerp(materialParams.u_Color[ColorKind.C0], envLight.vrKumoCol, envLight.vrKumoCenterCol, kumo.distFalloff);
                 materialParams.u_Color[ColorKind.C0].a = kumo.alpha;
 
-                const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-                submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+                // Project onto sphere.
+                x = Math.cos(polarY0) * Math.sin(azimuthal + azimuthalOffsY0);
+                y = Math.sin(polarY0);
+                z = Math.cos(polarY0) * Math.cos(azimuthal + azimuthalOffsY0);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+                x = Math.cos(polarY0) * Math.sin(azimuthal - azimuthalOffsY0);
+                y = Math.sin(polarY0);
+                z = Math.cos(polarY0) * Math.cos(azimuthal - azimuthalOffsY0);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+
+                x = Math.cos(polarY1) * Math.sin(azimuthal - azimuthalOffsY1);
+                y = Math.sin(polarY1);
+                z = Math.cos(polarY1) * Math.cos(azimuthal - azimuthalOffsY1);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+
+                x = Math.cos(polarY1) * Math.sin(azimuthal + azimuthalOffsY1);
+                y = Math.sin(polarY1);
+                z = Math.cos(polarY1) * Math.cos(azimuthal + azimuthalOffsY1);
+                vec3.set(scratchVec3, x * domeRadius, y * domeRadius, z * domeRadius);
+                vec3.add(scratchVec3, scratchVec3, globals.cameraPosition);
+                ddraw.position3vec3(scratchVec3);
+                ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
+                ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
                 // const ctx = getDebugOverlayCanvas2D();
                 // colorCopy(materialParams.u_Color[ColorKind.C0], Magenta, kumo.alpha);
                 // drawWorldSpacePoint(ctx, viewerInput.camera, kumo.position, materialParams.u_Color[ColorKind.C0], 300 * Math.abs(kumo.height));
             }
+
+            ddraw.end();
+
+            const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
         }
 
         ddraw.endAndUpload(device, renderInstManager);
@@ -738,11 +773,11 @@ class RAIN_EFF {
     public alpha: number = 0.0;
     public timer: number = 0;
     public basePos = vec3.create();
-    public relPos = vec3.create();
+    public pos = vec3.create();
     public minY: number = 0.0;
 }
 
-export class dKankyo_rain_packet {
+export class dKankyo_rain_Packet {
     private ringTexture: BTIData;
     private ddraw = new TDDraw();
     private materialHelperRain: GXMaterialHelperGfx;
@@ -822,7 +857,7 @@ export class dKankyo_rain_packet {
             vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
 
             // basePos
-            vec3.add(scratchVec3, rain.basePos, rain.relPos);
+            vec3.add(scratchVec3, rain.basePos, rain.pos);
             const dist = vec3.distance(scratchVec3, globals.cameraPosition);
             vec3.add(scratchVec3c, scratchVec3c, scratchVec3);
             vec3.add(scratchVec3d, scratchVec3d, scratchVec3);
@@ -937,8 +972,9 @@ export class dKankyo_rain_packet {
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = globals.modelCache.device;
+        const envLight = globals.g_env_light;
 
-        if (globals.g_env_light.rainCount === 0)
+        if (envLight.rainCount === 0)
             return;
 
         this.ddraw.beginDraw();
@@ -974,14 +1010,333 @@ export class dKankyo__Windline {
     public hasCustomWindPower: boolean = false;
 }
 
-const scratchVec3 = vec3.create();
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchVec3c = vec3.create();
-const scratchVec3d = vec3.create();
-const scratchVec4 = vec4.create();
+class WAVE_EFF {
+    public initialized = false;
+    public basePos = vec3.create();
+    public pos = vec3.create();
+    public animCounter = 0;
+    public alpha = 0.0;
+    public strengthEnv = 0.0;
+    public scale = 0.0;
+    public speed = 0.0;
+    public animCounterSpeed = 0.0;
+}
 
-function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
+export class dKankyo_wave_Packet {
+    public instances: WAVE_EFF[] = nArray(300, () => new WAVE_EFF());
+
+    private texUsonami: BTIData;
+    private texUsonamiM: BTIData;
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    public skewDirection: number = 0.0;
+    public skewWidth: number = 0.0;
+
+    constructor(globals: dGlobals) {
+        const resCtrl = globals.resCtrl;
+
+        this.texUsonami = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8b);
+        this.texUsonamiM = resCtrl.getObjectRes(ResType.Bti, `Always`, 0x8c);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+
+        const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the alpha.
+        mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.C0, GX.CombineColorInput.KONST, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setUsePnMtxIdx(false);
+        mb.setFog(GX.FogType.PERSP_LIN, true);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_wave_Packet'));
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        const envLight = globals.g_env_light;
+
+        if (envLight.waveCount === 0 || envLight.waveFlatInter >= 1.0)
+            return;
+
+        const ddraw = this.ddraw;
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
+
+        dKy_get_seacolor(envLight, materialParams.u_Color[ColorKind.K0], materialParams.u_Color[ColorKind.C0]);
+        if (globals.stageName === 'MajyuE')
+            this.texUsonamiM.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        else
+            this.texUsonami.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+
+        this.ddraw.beginDraw();
+        ddraw.begin(GX.Command.DRAW_QUADS, 4 * envLight.waveCount);
+
+        const txc1 = 0xFA/0xFF;
+
+        for (let i = 0; i < envLight.waveCount; i++) {
+            const wave = this.instances[i];
+            const sin = Math.sin(wave.animCounter);
+            if (sin < 0.0)
+                continue;
+
+            const alpha = wave.alpha * 0xFF;
+
+            const scale = wave.scale * envLight.waveScale;
+            const y = scale * sin * wave.strengthEnv;
+
+            const x = scale * envLight.waveScaleBottom * (wave.strengthEnv - (y * 0.00000015 * (i * 15)));
+
+            const skewFlip = this.skewDirection >= 0.0 ? 1.0 : -1.0;
+            const skew = (skewFlip * this.skewWidth * x * 1.2 * wave.speed);
+
+            vec3.add(scratchVec3a, wave.basePos, wave.pos);
+
+            vec3.set(scratchVec3, -x + skew, y, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+
+            vec3.set(scratchVec3,  x + skew, y, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, txc1, 0);
+    
+            vec3.set(scratchVec3,  x, 0.0, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, txc1, txc1);
+    
+            vec3.set(scratchVec3, -x, 0.0, 0.0);
+            vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+            vec3.add(scratchVec3, scratchVec3, scratchVec3a);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, 0, txc1);
+        }
+
+        ddraw.end();
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+
+        this.ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class STAR_EFF {
+    public animCounter: number = 0;
+    public animWave: number = 0.0;
+}
+
+export class dKankyo_star_Packet {
+    public instances = nArray(1, () => new STAR_EFF());
+    public rot: number = 0.0;
+
+    private hokuto_pos = [
+        vec3.fromValues(13000, 10500, -16000),
+        vec3.fromValues(9400, 9800, -12646),
+        vec3.fromValues(10200, 11800, -13525),
+        vec3.fromValues(10300, 13450, -13525),
+        vec3.fromValues(15000, 18400, -16162),
+        vec3.fromValues(12500, 19800, -15000),
+        vec3.fromValues(9179, 17200, -14404),
+        vec3.fromValues(9500, 9800, -12646),
+        vec3.fromValues(-7421, 31005, 18798),
+        vec3.fromValues(-10937, 28000, 15000),
+        vec3.fromValues(-10000, 24902, 18400),
+        vec3.fromValues(-9400, 22500, 15900),
+        vec3.fromValues(-9179, 21300, 14300),
+        vec3.fromValues(-10300, 22000, 21000),
+        vec3.fromValues(-16000, 25500, 20000),
+        vec3.fromValues(0, 30000, 19000),        
+    ];
+
+    private star_col: Color[] = [
+        colorNewFromRGBA8(0xDCE8FFFF),
+        colorNewFromRGBA8(0xFFC8C8FF),
+        colorNewFromRGBA8(0xFFFFC8FF),
+        colorNewFromRGBA8(0xC8C8FFFF),
+    ];
+
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+
+    public renderInMain = false;
+
+    constructor(globals: dGlobals) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+
+        const mb = new GXMaterialBuilder();
+        // noclip modification: Use VTX instead of separate draw calls for the color.
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_star_Packet'));
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+
+        const envLight = globals.g_env_light;
+
+        if (envLight.starCount === 0)
+            return;
+
+        const ddraw = this.ddraw;
+
+        if (this.renderInMain)
+            renderInstManager.setCurrentRenderInstList(globals.dlst.main[1]);
+        else
+            renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
+
+        dKy_GxFog_sea_set(envLight, materialParams.u_FogBlock, viewerInput.camera);
+
+        this.ddraw.beginDraw();
+        ddraw.begin(GX.Command.DRAW_TRIANGLES, 4 * envLight.waveCount);
+
+        const star = this.instances[0];
+
+        const fovYAdj = 0.0;
+
+        // Compute star points.
+        const starSize = 0.9 - (fovYAdj * 0.6);
+        vec3.set(scratchVec3b, 0.0, starSize, 0.0);
+        vec3.set(scratchVec3c, starSize, -0.5 * starSize, 0.0);
+        vec3.set(scratchVec3d, -starSize, -0.5 * starSize, 0.0);
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
+        mat4.rotateZ(scratchMatrix, scratchMatrix, this.rot * MathConstants.DEG_TO_RAD);
+
+        vec3.transformMat4(scratchVec3b, scratchVec3b, scratchMatrix);
+        vec3.transformMat4(scratchVec3c, scratchVec3c, scratchMatrix);
+        vec3.transformMat4(scratchVec3d, scratchVec3d, scratchMatrix);
+
+        // Projected moon position.
+        mDoLib_project(scratchVec3e, envLight.moonPos, viewerInput);
+
+        let radius = 0.0, angle: number = -Math.PI, angleIncr = 0.0;
+        for (let i = 0; i < envLight.starCount; i++) {
+            let scale: number;
+            if (i < this.hokuto_pos.length) {
+                // Orion.
+                const baseScale = (i < 8 ? 190.0 : 290.0) + star.animWave;
+                scale = baseScale - (fovYAdj * 0.5 * baseScale);
+
+                vec3.copy(scratchVec3a, this.hokuto_pos[i]);
+            } else {
+                scale = star.animWave + (0.066 * (i & 0x0F));
+                if (scale > 1.0)
+                    scale = (1.0 - (scale - 1.0));
+
+                const radiusXZ = 1.0 - (radius / 202.0);
+                scratchVec3a[0] = radiusXZ * -300.0 * Math.sin(angle);
+                scratchVec3a[1] = radius + 45.0;
+                scratchVec3a[2] = radiusXZ * 300.0 * Math.cos(angle);
+
+                angle += angleIncr;
+                angleIncr += uShortTo2PI(0x09C4);
+
+                radius += (1.0 + 3.0 * Math.pow(radius / 200.0, 3.0));
+                if (radius > 200.0)
+                    radius = (20.0 * i) / 1000.0;
+            }
+
+            vec3.add(scratchVec3a, scratchVec3a, globals.cameraPosition);
+
+            mDoLib_project(scratchVec3, scratchVec3a, viewerInput);
+            const distToMoon = vec3.dist(scratchVec3, scratchVec3e);
+            if (distToMoon < 80.0)
+                continue;
+
+            let whichColor: number;
+            if (i === 6 || i === 8) {
+                whichColor = 1;
+            } else if ((i & 0x3F) === 0) {
+                whichColor = (i >>> 4) & 0x03;
+            } else {
+                whichColor = 0;
+            }
+
+            const color = this.star_col[whichColor];
+
+            // Triangle 1.
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3b, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3c, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3d, scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            // Triangle 2.
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3b, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3c, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+
+            vec3.scaleAndAdd(scratchVec3, scratchVec3a, scratchVec3d, -scale);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4color(GX.Attr.CLR0, color);
+        }
+
+        ddraw.end();
+
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        submitScratchRenderInst(device, renderInstManager, this.materialHelper, renderInst, viewerInput);
+
+        this.ddraw.endAndUpload(device, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+export function dKyr_get_vectle_calc(p0: vec3, p1: vec3, dst: vec3): void {
     vec3.sub(dst, p1, p0);
     vec3.normalize(dst, dst);
 }
@@ -997,13 +1352,40 @@ function project(dst: vec3, v: vec3, camera: Camera, v4 = scratchVec4): void {
     vec3.set(dst, v4[0], v4[1], v4[2]);
 }
 
-function shouldCull(p: vec3, offsX: number, offsY: number): boolean {
-    if (p[2] < -1 || p[2] > 1)
-        return true;
+function mDoLib_project(dst: vec3, v: vec3, viewerInput: ViewerRenderInput): void {
+    project(dst, v, viewerInput.camera);
+    // Put in viewport framebuffer space.
+    dst[0] = (dst[0] * 0.5 + 0.5) * viewerInput.viewport.w * viewerInput.backbufferWidth;
+    dst[1] = (dst[1] * 0.5 + 0.5) * viewerInput.viewport.h * viewerInput.backbufferHeight;
+    dst[2] = 0.0;
+}
 
-    const x = p[0] + offsX;
-    const y = p[1] + offsY;
-    return x < -1 || x > 1 || y < -1 || y > 1;
+const enum SunPeekZResult {
+    Visible, Obscured, Culled,
+}
+
+function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, offs: vec2): SunPeekZResult {
+    // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
+    // This was meant to be used against a 640x480 FB space, so:
+    const scaleX = 1/640, scaleY = 1/480;
+    peekZ.newData(dst, v[0] + offs[0] * scaleX, v[1] + offs[1] * scaleY);
+
+    if (dst.triviallyCulled)
+        return SunPeekZResult.Culled;
+
+    // Value is not available yet; consider it visible.
+    if (dst.value === null)
+        return SunPeekZResult.Visible;
+
+    // Test if the depth buffer is less than our projected Z coordinate.
+    // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
+    // Put projected coordinate in 0-1 normalized space.
+    const projectedZ = v[2] * 0.5 + 0.5;
+
+    // Point is visible if our projected Z is in front of the depth buffer.
+    const visible = compareDepthValues(projectedZ, dst.value, GfxCompareMode.LESS);
+
+    return visible ? SunPeekZResult.Visible : SunPeekZResult.Obscured;
 }
 
 function dKyr_sun_move(globals: dGlobals): void {
@@ -1018,37 +1400,48 @@ function dKyr_sun_move(globals: dGlobals): void {
     }
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
+    let sunCanGlare = true;
+    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
+        // Sun should not glare during non-sunny weather.
+        sunCanGlare = false;
+    } else if (roomType === 2) {
+        // Sun should not glare indoors.
+        sunCanGlare = false;
+    } else if (envLight.curTime < 120.0 || envLight.curTime > 270.0) {
+        // Sun should not glare during strange hours of night.
+        sunCanGlare = false;
+    }
+
+    let numCenterPointsVisible = 0, numPointsVisible = 0, numCulledPoints = 0;
+
     let staringAtSunAmount = 0.0;
-
-    let numPointsTested = 0, numPointsVisible = 0;
-
     if (dKyr__sun_arrival_check(envLight)) {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 1.0, 0.5, 0.1, 0.01);
-        // The game does a peek-Z visibility check to determine whether it can see the point.
-        // That's going to be royally slow to do a readback on WebGL (I think), so just do
-        // a geometric test for now. Maybe it's worth it to build a PBO-based depth readback
-        // system though, lol.
 
-        // Original game projects the vector into viewport space, and gets distance to 320, 240.
-        project(scratchVec3, pkt.sunPos, globals.camera);
+        if (sunCanGlare) {
+            // Original game projects the vector into viewport space, and gets distance to 320, 240.
+            project(scratchVec3, pkt.sunPos, globals.camera);
 
-        if (!shouldCull(scratchVec3, 0, 0))
-            numPointsVisible++;
+            const peekZ = globals.dlst.peekZ;
 
-        // Original game tests for rotated disco pattern: -10,-20, 10,20, -20,10, 20,-10
-        // This was meant to be used against a 640x480 FB space, so:
-        const scaleX = 1/640, scaleY = 1/480;
+            for (let i = 0; i < pkt.chkPoints.length; i++) {
+                const res = dKyr_sun_move__PeekZ(pkt.peekZResults[i], peekZ, scratchVec3, pkt.chkPoints[i]);
 
-        if (!shouldCull(scratchVec3, -10*scaleX, -20*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3,  10*scaleX,  20*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3, -20*scaleX,  10*scaleY))
-            numPointsVisible++;
-        if (!shouldCull(scratchVec3,  20*scaleX, -10*scaleY))
-            numPointsVisible++;
+                if (res === SunPeekZResult.Culled) {
+                    numCulledPoints++;
+                } else if (res === SunPeekZResult.Visible) {
+                    numPointsVisible++;
 
-        numPointsTested = 5;
+                    if (i === 0)
+                        numCenterPointsVisible++;
+                }
+            }
+
+            if (numCulledPoints !== 0 && numPointsVisible !== 0 && numCenterPointsVisible !== 0) {
+                numCenterPointsVisible = 1;
+                numPointsVisible = 5;
+            }
+        }
 
         scratchVec3[2] = 0.0;
         const distance = vec3.length(scratchVec3) * 320.0;
@@ -1061,22 +1454,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         pkt.sunAlpha = cLib_addCalc(pkt.sunAlpha, 0.0, 0.5, 0.1, 0.01);
     }
 
-    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (roomType === 2) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (envLight.curTime < 120.0 || envLight.curTime > 270.0) {
-        numPointsTested = 0;
-        numPointsVisible = 0;
-    }
-
-    if (numPointsTested === 0) {
+    if (numCenterPointsVisible === 0) {
         if (numPointsVisible >= 3)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
         else
@@ -1093,7 +1471,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     pkt.hideLenz = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
-        const pulsePos = 1.0 - sqr(1.0 - clamp(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0, 0.0, 1.0));
+        const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
 
         dKy_set_actcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
         dKy_set_bgcol_ratio(envLight, 1.0 - (staringAtSunAmount * pkt.visibility));
@@ -1286,7 +1664,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 }
             }
 
-            const swerveT = clamp(eff.swerveAnimCounter / MathConstants.TAU, 0.0, 1.0);
+            const swerveT = saturate(eff.swerveAnimCounter / MathConstants.TAU);
             const swervePosMag = (1.3 * swerveSize - (0.2 * swerveSize * (1.0 - windPow))) * swerveT;
 
             // Swerve coordinates
@@ -1338,8 +1716,13 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
 function wether_move_windline(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
-    const windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
-    if (windlineCount <= 0.0)
+    let windlineCount = 0;
+    const fili = globals.roomStatus[globals.mStayNo].fili;
+    if (fili !== null && !!(fili.param & 0x100000) && globals.stageName !== 'GTower') {
+        windlineCount = (10.0 * dKyw_get_wind_pow(envLight)) | 0;
+    }
+
+    if (windlineCount <= 0)
         return;
 
     if (envLight.windline === null)
@@ -1362,20 +1745,20 @@ function wether_move_sun(globals: dGlobals): void {
         return;
 
     if (envLight.sunPacket === null)
-        envLight.sunPacket = new dKankyo_sun_packet(globals);
+        envLight.sunPacket = new dKankyo_sun_Packet(globals);
 
     dKyr_sun_move(globals);
     dKyr_lenzflare_move(globals);
 }
 
-function wether_move_rain(globals: dGlobals): void {
+function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     const envLight = globals.g_env_light;
 
     if (envLight.rainCount === 0)
         return;
 
     if (envLight.rainPacket === null)
-        envLight.rainPacket = new dKankyo_rain_packet(globals);
+        envLight.rainPacket = new dKankyo_rain_Packet(globals);
 
     const pkt = envLight.rainPacket;
 
@@ -1386,57 +1769,111 @@ function wether_move_rain(globals: dGlobals): void {
     if (pkt.rainCount === 0)
         return;
 
+    // TODO(jstpierre): Center delta
+    // dKyr_get_vectle_calc(pkt.camEyePos)
+
     dKy_set_eyevect_calc2(globals, scratchVec3, 700.0, 600.0);
 
     for (let i = 0; i < pkt.rainCount; i++) {
         const rain = pkt.instances[i];
 
         if (rain.initialized) {
-            rain.relPos[0] += 20.0 * scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07);
-            rain.relPos[1] += 20.0 * (-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul));
-            rain.relPos[2] += 20.0 * scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03);
+            rain.pos[0] += deltaTimeInFrames * 20.0 * (scratchVec3a[0] + (10.0 * pkt.centerDelta[0] * pkt.centerDeltaMul) + 0.08 * (i & 0x07));
+            rain.pos[1] += deltaTimeInFrames * 20.0 * ((-2.0 + scratchVec3a[1] + (10.0 * pkt.centerDelta[1] + pkt.centerDeltaMul)));
+            rain.pos[2] += deltaTimeInFrames * 20.0 * (scratchVec3a[2] + (10.0 * pkt.centerDelta[2] * pkt.centerDeltaMul) + 0.08 * (i & 0x03));
 
-            vec3.set(scratchVec3c, rain.basePos[0] + rain.relPos[0], scratchVec3[1], rain.basePos[2] + rain.relPos[2]);
+            vec3.set(scratchVec3c, rain.basePos[0] + rain.pos[0], scratchVec3[1], rain.basePos[2] + rain.pos[2]);
             const distXZ = vec3.distance(scratchVec3c, scratchVec3);
-            if (rain.timer === 0) {
+            if (rain.timer <= 0) {
                 if (distXZ > 800) {
                     rain.timer = 10;
                     vec3.copy(rain.basePos, scratchVec3);
-                    if (false && distXZ < 850) {
-                        // todo
+                    if (distXZ <= 850) {
+                        dKyr_get_vectle_calc(scratchVec3c, scratchVec3, scratchVec3b);
+                        vec3.scale(rain.pos, scratchVec3b, 800.0 + cM_rndFX(40.0));
                     } else {
-                        vec3.set(rain.relPos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
+                        vec3.set(rain.pos, cM_rndFX(800), cM_rndFX(800), cM_rndFX(800));
                     }
                     rain.minY = -800 + globals.cameraPosition[1];
                 }
 
-                const posY = rain.basePos[1] + rain.relPos[1];
+                const posY = rain.basePos[1] + rain.pos[1];
                 if (posY < 20.0 + rain.minY) {
                     vec3.copy(rain.basePos, scratchVec3);
-                    vec3.set(rain.relPos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
+                    vec3.set(rain.pos, cM_rndFX(800.0), 200.0, cM_rndFX(800.0));
                     rain.minY = -800 + globals.cameraPosition[1];
                     rain.timer = 10;
                 }
             } else {
-                rain.timer--;
+                rain.timer -= deltaTimeInFrames;
             }
         } else {
             vec3.copy(rain.basePos, scratchVec3);
-            vec3.set(rain.relPos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
+            vec3.set(rain.pos, cM_rndFX(800.0), cM_rndFX(600.0), cM_rndFX(800.0));
             rain.alpha = 1.0;
             rain.timer = 0;
             rain.minY = -800 + globals.cameraPosition[1];
             rain.initialized = true;
         }
 
+        // TODO(jstpierre): Set rain alpha
         rain.alpha = 1.0;
     }
+
+    if (envLight.rainCount < pkt.rainCount)
+        pkt.rainCount = envLight.rainCount;
 }
 
 function wether_move_snow(globals: dGlobals): void {
 }
 
-function wether_move_star(globals: dGlobals): void {
+function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    const isName = globals.stageName === 'Name';
+    if (!isName && (envLight.vrboxInvisible || globals.stageName === 'M_DragB'))
+        return;
+
+    let starAmount = 1.0;
+
+    const curTime = envLight.curTime;
+    if (isName) {
+        // TODO(jstpierre): Name
+        starAmount = 1.0;
+    } else {
+        if (curTime >= 60.0 && curTime < 75.0)
+            starAmount = 1.0 - invlerp(60.0, 75.0, curTime);
+        else if (curTime >= 75.0 && curTime < 270.0)
+            starAmount = 0.0;
+        else if (curTime >= 270.0 && curTime < 315.0)
+            starAmount = invlerp(270.0, 315.0, curTime);
+        else
+            starAmount = 1.0;
+    }
+
+    if (envLight.weatherPselIdx !== 0)
+        starAmount = 0.0;
+    else if (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)
+        starAmount = 0.0;
+
+    envLight.starAmount = cLib_addCalc(envLight.starAmount, starAmount, 0.1, 0.01, 0.000001);
+    envLight.starCount = (envLight.starAmount * 1000.0) | 0;
+
+    if (envLight.starCount === 0)
+        return;
+
+    if (envLight.starPacket === null)
+        envLight.starPacket = new dKankyo_star_Packet(globals);
+
+    const pkt = envLight.starPacket;
+
+    const star = pkt.instances[0];
+    star.animCounter += 0.01 * deltaTimeInFrames;
+    star.animWave = Math.sin(star.animCounter);
+
+    // cLib_addCalc here for no reason?
+
+    pkt.rot += deltaTimeInFrames;
 }
 
 function wether_move_poison(globals: dGlobals): void {
@@ -1448,21 +1885,153 @@ function wether_move_housi(globals: dGlobals): void {
 function wether_move_moya(globals: dGlobals): void {
 }
 
-function wether_move_wave(globals: dGlobals): void {
+function wether_move_wave__FadeStrengthEnv(wave: WAVE_EFF, dist: number, innerRadius: number, outerRadius: number): void {
+    if (dist < outerRadius) {
+        if (dist < innerRadius || innerRadius > outerRadius) {
+            wave.strengthEnv = 0.0;
+        } else {
+            const speedFade = (dist - innerRadius) / (outerRadius - innerRadius);
+            if (speedFade < wave.strengthEnv)
+                wave.strengthEnv = speedFade;
+        }
+    }
 }
 
-export function dKyw_wether_move_draw(globals: dGlobals): void {
+function wether_move_wave(globals: dGlobals, deltaTimeInFrames: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.waveCount === 0)
+        return;
+
+    if (envLight.wavePacket === null)
+        envLight.wavePacket = new dKankyo_wave_Packet(globals);
+
+    const pkt = envLight.wavePacket;
+
+    if (envLight.waveFlatInter >= 1.0)
+        return;
+
+    // wave_move
+
+    dKyw_get_wind_vecpow(scratchVec3, envLight);
+    dKy_set_eyevect_calc2(globals, scratchVec3b, envLight.waveSpawnDist, 0.0);
+
+    const windVec = dKyw_get_wind_vec(envLight);
+    let windPow = dKyw_get_wind_pow(envLight);
+
+    // noclip modification: max wind power is 0.6. Anything above this and the skew looks pretty awful.
+    windPow = Math.min(windPow, 0.6);
+
+    let windX = windVec[0];
+    let windY = windVec[1];
+    let windZ = windVec[2];
+
+    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    if (roomType === 2) {
+        // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
+    }
+
+    const fili = globals.roomStatus[globals.mStayNo].fili;
+    let skyboxY = 0.0;
+    if (fili !== null)
+        skyboxY = fili.skyboxY;
+
+    // Camera forward in XZ plane
+    vec3.copy(scratchVec3a, globals.cameraFwd);
+    scratchVec3a[1] = 0;
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    pkt.skewDirection = ((-windX * scratchVec3a[2]) - (-windZ * scratchVec3a[0]));
+    const skewWidth = (1.0 - Math.abs(windX * scratchVec3a[0] + windZ * scratchVec3a[2])) * (1.0 - windY) * Math.abs(pkt.skewDirection);
+    pkt.skewWidth = windPow * 0.6 * skewWidth;
+
+    for (let i = 0; i < envLight.waveCount; i++) {
+        const wave = pkt.instances[i];
+
+        if (envLight.waveReset)
+            wave.initialized = false;
+
+        if (!wave.initialized) {
+            wave.basePos[0] = scratchVec3b[0];
+            wave.basePos[1] = skyboxY;
+            wave.basePos[2] = scratchVec3b[2];
+            wave.pos[0] = cM_rndFX(envLight.waveSpawnRadius);
+            wave.pos[1] = 0.0;
+            wave.pos[2] = cM_rndFX(envLight.waveSpawnRadius);
+            wave.animCounter = cM_rndF(65536.0);
+            wave.alpha = 0.0;
+            wave.strengthEnv = 1.0;
+            wave.scale = envLight.waveScaleRand + cM_rndF(1.0 - envLight.waveScaleRand);
+            wave.speed = wave.scale;
+            wave.animCounterSpeed = (0.02 + 0.05 * (1.0 - wave.scale)) * envLight.waveCounterSpeedScale;
+            wave.initialized = true;
+        }
+
+        const speed = (0.2 + 0.8 * wave.alpha) * (0.5 + 0.5 * wave.strengthEnv) * wave.speed * envLight.waveSpeed;
+        wave.pos[0] += speed * scratchVec3[0] * deltaTimeInFrames;
+        wave.pos[2] += speed * scratchVec3[2] * deltaTimeInFrames;
+        wave.animCounter += wave.animCounterSpeed * deltaTimeInFrames;
+
+        // Reached end of animation, recycle.
+        vec3.add(scratchVec3d, wave.basePos, wave.pos);
+        const dist = Math.hypot(scratchVec3b[0] - scratchVec3d[0], scratchVec3b[2] - scratchVec3d[2]);
+        if (dist > envLight.waveSpawnRadius) {
+            wave.basePos[0] = scratchVec3b[0];
+            wave.basePos[2] = scratchVec3b[2];
+
+            if (dist <= envLight.waveSpawnRadius + 350) {
+                dKyr_get_vectle_calc(scratchVec3d, scratchVec3b, scratchVec3c);
+                wave.pos[0] = scratchVec3c[0] * envLight.waveSpawnRadius;
+                wave.pos[2] = scratchVec3c[2] * envLight.waveSpawnRadius;
+            } else {
+                wave.pos[0] = cM_rndFX(envLight.waveSpawnRadius);
+                wave.pos[2] = cM_rndFX(envLight.waveSpawnRadius);
+            }
+
+            wave.alpha = 0.0;
+        }
+
+        wave.strengthEnv = 1.0;
+
+        // Wave influence fade.
+        for (let i = 0; i < envLight.waveInfluences.length; i++) {
+            const infl = envLight.waveInfluences[i];
+            const dist = Math.hypot(infl.pos[0] - scratchVec3d[0], infl.pos[2] - scratchVec3d[2]);
+            wether_move_wave__FadeStrengthEnv(wave, dist, infl.innerRadius, infl.outerRadius);
+        }
+
+        // Sea flat fade.
+        if (envLight.waveFlatInter > 0.0) {
+            const dist = Math.hypot(globals.cameraPosition[0] - scratchVec3d[0], globals.cameraPosition[2] - scratchVec3d[2]);
+            const innerRadius = envLight.waveFlatInter * 1.5 * envLight.waveSpawnRadius;
+            const outerRadius = innerRadius + 1000.0;
+            wether_move_wave__FadeStrengthEnv(wave, dist, innerRadius, outerRadius);
+        }
+
+        // Player location fade.
+        const playerDist = Math.hypot(globals.playerPosition[0] - scratchVec3d[0], globals.playerPosition[2] - scratchVec3d[2]);
+        wether_move_wave__FadeStrengthEnv(wave, playerDist, 200.0, 2000.0);
+
+        vec3.add(scratchVec3d, wave.basePos, wave.pos);
+        const windSpeed = Math.max(windPow, vec3.distance(scratchVec3d, globals.cameraPosition));
+        const alphaTarget = saturate(1.03 * (1.0 - (windSpeed / (2.0 * envLight.waveSpawnDist))) * Math.sin(wave.animCounter));
+        wave.alpha = cLib_addCalc(wave.alpha, alphaTarget, 0.5, 0.5, 0.001);
+        wave.basePos[1] = skyboxY;
+    }
+}
+
+export function dKyw_wether_move_draw(globals: dGlobals, deltaTimeInFrames: number): void {
     if (globals.stageName !== 'Name') {
         wether_move_sun(globals);
-        wether_move_rain(globals);
+        wether_move_rain(globals, deltaTimeInFrames);
         wether_move_snow(globals);
     }
-    wether_move_star(globals);
+    wether_move_star(globals, deltaTimeInFrames);
     if (globals.stageName !== 'Name') {
         wether_move_poison(globals);
         wether_move_housi(globals);
         wether_move_moya(globals);
-        wether_move_wave(globals);
+        wether_move_wave(globals, deltaTimeInFrames);
     }
 }
 
@@ -1564,7 +2133,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     const envLight = globals.g_env_light;
 
     if (envLight.vrkumoPacket === null) {
-        envLight.vrkumoPacket = new dKankyo_vrkumo_packet(globals);
+        envLight.vrkumoPacket = new dKankyo_vrkumo_Packet(globals);
 
         // envcolor_init has this
         if (dKy_checkEventNightStop(globals))
@@ -1612,9 +2181,17 @@ export function dKyw_wether_draw(globals: dGlobals, renderInstManager: GfxRender
     const envLight = globals.g_env_light;
 
     if (globals.stageName !== 'Name') {
+        if (envLight.wavePacket !== null)
+            envLight.wavePacket.draw(globals, renderInstManager, viewerInput);
+    }
+
+    if (globals.stageName !== 'Name') {
         if (envLight.sunPacket !== null)
             envLight.sunPacket.draw(globals, renderInstManager, viewerInput);
     }
+
+    if (envLight.starPacket !== null)
+        envLight.starPacket.draw(globals, renderInstManager, viewerInput);
 
     if (globals.stageName !== 'Name') {
         if (envLight.rainPacket !== null)
@@ -1639,6 +2216,38 @@ export function dKyw_get_wind_pow(envLight: dScnKy_env_light_c): number {
 
 export function dKyw_get_wind_vecpow(dst: vec3, envLight: dScnKy_env_light_c): void {
     vec3.scale(dst, envLight.windVec, envLight.windPower);
+}
+
+export function dKy_wave_chan_init(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    envLight.waveSpeed = 0.1;
+    envLight.waveSpawnDist = 3000.0;
+    envLight.waveSpawnRadius = 3150.0;
+    envLight.waveScale = 250.0;
+    envLight.waveScaleRand = 0.217;
+    envLight.waveCounterSpeedScale = 1.6;
+    envLight.waveScaleBottom = 5.0;
+    envLight.waveCount = 0;
+    envLight.waveReset = false;
+}
+
+export function dKy_usonami_set(globals: dGlobals, waveFlatInter: number): void {
+    const envLight = globals.g_env_light;
+
+    if (envLight.waveCount < 200) {
+        envLight.waveSpawnDist = 20000.0;
+        envLight.waveSpawnRadius = 22000.0;
+        envLight.waveReset = false;
+        envLight.waveScale = 300.0;
+        envLight.waveScaleRand = 0.001;
+        envLight.waveCounterSpeedScale = 1.2;
+        envLight.waveScaleBottom = 6.0;
+        envLight.waveCount = 300;
+        envLight.waveSpeed = 30.0;
+    }
+
+    envLight.waveFlatInter = waveFlatInter;
 }
 
 export class d_thunder extends kankyo_class {

@@ -8,7 +8,7 @@ import * as Assets from './assets';
 import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { MeshFragData, Texture, rwTexture } from '../GrandTheftAuto3/render';
 import { vec3, vec2, mat4, quat } from 'gl-matrix';
-import { colorNewCopy, White, colorNew, Color, colorCopy, TransparentBlack } from '../Color';
+import { colorNewCopy, White, colorNewFromRGBA, Color, colorCopy, TransparentBlack } from '../Color';
 import { filterDegenerateTriangleIndexBuffer, convertToTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { DeviceProgram } from '../Program';
 import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
@@ -80,7 +80,8 @@ export class TextureData {
     constructor(public texture: Texture, public name: string, public filter: GfxTexFilterMode, public wrapS: GfxWrapMode, public wrapT: GfxWrapMode) {}
 
     public setup(device: GfxDevice) {
-        if (this.isSetup) return;
+        if (this.isSetup)
+            return;
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
         const hostAccessPass = device.createHostAccessPass();
@@ -108,6 +109,9 @@ export class TextureData {
     }
 
     public destroy(device: GfxDevice): void {
+        if (!this.isSetup)
+            return;
+
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
         if (this.gfxSampler !== null)
@@ -193,7 +197,7 @@ class RWMeshFragData implements MeshFragData {
         }
 
         if (color)
-            this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
+            this.baseColor = colorNewFromRGBA(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
 
         this.transparentColors = false;
         this.transparentTexture = false;
@@ -706,6 +710,8 @@ export class FragRenderer extends BaseRenderer {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         device.destroyProgram(this.gfxProgram);
+        if (this.frag.textureData !== undefined)
+            this.frag.textureData.destroy(device);
     }
 }
 
@@ -725,7 +731,7 @@ export class MeshRenderer extends BaseRenderer {
                 frag.textureData.setup(device);
                 fragDefines.USE_TEXTURE = '1';
             }
-            
+
             this.addRenderer(new FragRenderer(this, device, cache, fragDefines, frag, pipeInfo, subObject));
         }
 
@@ -1083,7 +1089,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearColorPassDescriptor);
             renderInstManager.setVisibleByFilterKeyExact(BFBBPass.SKYDOME);
             renderInstManager.drawOnPassRenderer(device, skydomePassRenderer);
-            skydomePassRenderer.endPass(null);
+            skydomePassRenderer.endPass();
             device.submitPass(skydomePassRenderer);
         }
 

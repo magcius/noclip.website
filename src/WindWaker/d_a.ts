@@ -1,48 +1,69 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
 import { dGlobals } from "./zww_scenes";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, quat } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
-import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance } from "./d_kankyo";
-import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm } from "./m_do_ext";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
+import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2 } from "./SComponent";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
-import { TTK1, LoopMode, TRK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
-import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
+import { d_a_sea } from "./d_a_sea";
+import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { dBgW, cBgW_Flags } from "./d_bg";
 
 // Framework'd actors
 
+const kUshortTo2PI = Math.PI / 0x7FFF;
+
 export function mDoMtx_XrotM(dst: mat4, n: number): void {
-    mat4.rotateX(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateX(dst, dst, n * kUshortTo2PI);
+}
+
+export function mDoMtx_YrotS(dst: mat4, n: number): void {
+    mat4.identity(dst);
+    mat4.rotateY(dst, dst, n * kUshortTo2PI);
 }
 
 export function mDoMtx_YrotM(dst: mat4, n: number): void {
-    mat4.rotateY(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateY(dst, dst, n * kUshortTo2PI);
 }
 
 export function mDoMtx_ZrotM(dst: mat4, n: number): void {
-    mat4.rotateZ(dst, dst, n * Math.PI / 0x7FFF);
+    mat4.rotateZ(dst, dst, n * kUshortTo2PI);
+}
+
+export function mDoMtx_ZYXrotM(dst: mat4, v: vec3): void {
+    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
+    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
+    mat4.rotateZ(dst, dst, v[0] * kUshortTo2PI);
 }
 
 export const calc_mtx = mat4.create();
 
 export function MtxTrans(pos: vec3, concat: boolean, m: mat4 = calc_mtx): void {
     if (concat) {
-        mat4.translate(calc_mtx, calc_mtx, pos);
+        mat4.translate(m, m, pos);
     } else {
-        mat4.fromTranslation(calc_mtx, pos);
+        mat4.fromTranslation(m, pos);
     }
 }
 
 export function MtxPosition(dst: vec3, src: vec3 = dst, m: mat4 = calc_mtx): void {
     vec3.transformMat4(dst, src, m);
+}
+
+export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
+    mat4.fromQuat(scratch, q);
+    mat4.mul(dst, dst, scratch);
 }
 
 const scratchMat4a = mat4.create();
@@ -385,8 +406,11 @@ class d_a_bg extends fopAc_ac_c {
     private bgBtkAnm: (daBg_btkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgBrkAnm: (daBg_brkAnm_c | null)[] = nArray(this.numBg, () => null);
     private bgTevStr: (dKy_tevstr_c | null)[] = nArray(this.numBg, () => null);
+    private bgW = new dBgW();
 
     public subload(globals: dGlobals): cPhs__Status {
+        const resCtrl = globals.resCtrl;
+
         const roomNo = this.parameters;
         const arcName = `Room` + roomNo;
 
@@ -397,9 +421,9 @@ class d_a_bg extends fopAc_ac_c {
 
         // createHeap
         for (let i = 0; i < this.numBg; i++) {
-            let modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName[i]);
+            let modelData = resCtrl.getStageResByName(ResType.Model, arcName, modelName[i]);
             if (modelData === null)
-                modelData = globals.resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
+                modelData = resCtrl.getStageResByName(ResType.Model, arcName, modelName2[i]);
             if (modelData === null)
                 continue;
             this.bgModel[i] = new J3DModelInstance(modelData);
@@ -415,9 +439,12 @@ class d_a_bg extends fopAc_ac_c {
             const tevStr = new dKy_tevstr_c();
             this.bgTevStr[i] = tevStr;
             dKy_tevstr_init(tevStr, roomNo, -1);
-
-            // Load BgW
         }
+
+        const bgDt = assertExists(resCtrl.getStageResByName(ResType.Dzb, arcName, 'room.dzb'));
+
+        this.bgW.Set(bgDt, cBgW_Flags.Global, null);
+        globals.scnPlay.bgS.Regist(this.bgW, this);
 
         // create
         for (let i = 0; i < this.numBg; i++) {
@@ -465,6 +492,10 @@ class d_a_bg extends fopAc_ac_c {
 
         const roomNo = this.parameters;
         settingTevStruct(globals, LightType.BG0, null, globals.roomStatus[roomNo].tevStr);
+    }
+
+    public delete(globals: dGlobals): void {
+        globals.scnPlay.bgS.Release(this.bgW);
     }
 }
 
@@ -536,9 +567,9 @@ class d_a_vrbox extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
-        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
-        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
+        sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0) {
             envLight.vrboxInvisible = true;
         } else {
@@ -546,9 +577,9 @@ class d_a_vrbox extends fopAc_ac_c {
 
             // Can't use overrides because it's per-material.
             const m0 = this.model.modelMaterialData.materialData![0].material;
-            colorCopy(m0.colorConstants[0], envLight.vrKasumiMaeColor);
+            colorCopy(m0.colorConstants[0], envLight.vrKasumiMaeCol);
             const m1 = this.model.modelMaterialData.materialData![1].material;
-            colorCopy(m1.colorConstants[0], envLight.vrSkyColor);
+            colorCopy(m1.colorConstants[0], envLight.vrSkyCol);
         }
     }
 
@@ -563,10 +594,10 @@ class d_a_vrbox extends fopAc_ac_c {
         let skyboxOffsY = 0;
         const fili = globals.roomStatus[globals.mStayNo].fili;
         if (fili !== null)
-            skyboxOffsY = 0.09 * (globals.cameraPosition[1] - fili.skyboxY);
+            skyboxOffsY = fili.skyboxY;
 
         MtxTrans(globals.cameraPosition, false);
-        calc_mtx[13] -= skyboxOffsY;
+        calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
         mat4.copy(this.model.modelMatrix, calc_mtx);
 
         dKy_setLight__OnModelInstance(envLight, this.model, viewerInput.camera);
@@ -578,6 +609,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_vrbox2;
     private backCloud: J3DModelInstance;
     private kasumiMae: J3DModelInstance | null = null;
+    private kasumiMaeC0 = colorNewCopy(TransparentBlack);
     private kasumiMaeK0 = colorNewCopy(TransparentBlack);
     private usoUmi: J3DModelInstance | null = null;
 
@@ -600,9 +632,9 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
-        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
-        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
+        sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0)
             return;
 
@@ -614,7 +646,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
         const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
         if (roomType === 2) {
-            // TODO(jstpierre): Overwrite with tact wind.
+            // TODO(jstpierre): #TACT_WIND. Overwrite with tact wind. LinkRM / Orichh / Ojhous2 / Omasao / Onobuta
         }
 
         // Camera forward in XZ plane
@@ -651,16 +683,17 @@ class d_a_vrbox2 extends fopAc_ac_c {
         mtx[12] = (mtx[12] + scrollSpeed0 + scrollSpeed2) % 1.0;
 
         // Overwrite colors.
-        this.backCloud.setColorOverride(ColorKind.K0, envLight.vrKumoColor);
+        this.backCloud.setColorOverride(ColorKind.K0, envLight.vrKumoCol);
 
         if (this.kasumiMae !== null) {
-            this.kasumiMae.setColorOverride(ColorKind.C0, envLight.vrKasumiMaeColor);
-            this.kasumiMaeK0.r = envLight.vrKumoColor.r;
+            colorCopy(this.kasumiMaeC0, envLight.vrKasumiMaeCol, 0.0);
+            this.kasumiMaeK0.r = envLight.vrKumoCol.a;
+            this.kasumiMae.setColorOverride(ColorKind.C0, this.kasumiMaeC0);
             this.kasumiMae.setColorOverride(ColorKind.K0, this.kasumiMaeK0);
         }
 
         if (this.usoUmi !== null)
-            this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiColor);
+            this.usoUmi.setColorOverride(ColorKind.K0, envLight.vrUsoUmiCol);
     }
 
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -671,9 +704,9 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const envLight = globals.g_env_light;
 
         let sum = 0;
-        sum += envLight.vrKasumiMaeColor.r + envLight.vrKasumiMaeColor.g + envLight.vrKasumiMaeColor.b;
-        sum += envLight.vrSkyColor.r + envLight.vrSkyColor.g + envLight.vrSkyColor.b;
-        sum += envLight.vrKumoColor.r + envLight.vrKumoColor.g + envLight.vrKumoColor.b;
+        sum += envLight.vrKasumiMaeCol.r + envLight.vrKasumiMaeCol.g + envLight.vrKasumiMaeCol.b;
+        sum += envLight.vrSkyCol.r + envLight.vrSkyCol.g + envLight.vrSkyCol.b;
+        sum += envLight.vrKumoCol.r + envLight.vrKumoCol.g + envLight.vrKumoCol.b;
         if (sum === 0)
             return;
 
@@ -703,6 +736,415 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
+class d_a_kytag00 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
+
+    private pselIdx = 0;
+    private effectMode = 0;
+    private invert = false;
+    private alwaysCheckPlayerPos = false;
+    private target = 0.0;
+    private effectSet = false;
+    private pselSet = false;
+
+    // Cylinder
+    private innerFadeY = 0.0;
+    private innerRadius = 0.0;
+    private outerRadius = 0.0;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        this.pselIdx = this.parameters & 0xFF;
+        this.effectMode = (this.parameters >>> 8) & 0xFF;
+        this.invert = !!((this.rot[0] >>> 8) & 0xFF);
+        this.alwaysCheckPlayerPos = !!(this.rot[2] & 0xFF);
+
+        if (this.invert) {
+            this.target = 1.0;
+        } else {
+            this.target = 0.0;
+        }
+
+        this.innerFadeY = ((this.parameters >> 24) & 0xFF) * 100.0;
+
+        const paramRadius = (this.parameters >>> 16) & 0xFF;
+        if (this.alwaysCheckPlayerPos) {
+            this.innerRadius = this.scale[0] * 500.0;
+            this.outerRadius = this.innerRadius + paramRadius * 10.0;
+        } else {
+            this.innerRadius = this.scale[0] * 5000.0;
+            this.outerRadius = this.innerRadius + paramRadius * 100.0;
+        }
+
+        this.wether_tag_efect_move(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    private get_check_pos(globals: dGlobals): vec3 {
+        // Return the closer of the two.
+        if (this.alwaysCheckPlayerPos || vec3.distance(this.pos, globals.playerPosition) < vec3.distance(this.pos, globals.cameraPosition))
+            return globals.playerPosition;
+        else
+            return globals.cameraPosition;
+    }
+
+    private wether_tag_efect_move(globals: dGlobals): void {
+        // Moved inside wether_tag_move.
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.invert) {
+            this.target = cLib_addCalc(this.target, 0.0, 0.1, 0.01, 0.0001);
+        } else {
+            this.target = cLib_addCalc(this.target, 1.0, 0.1, 0.01, 0.0001);
+        }
+
+        this.wether_tag_move(globals);
+    }
+
+    private raincnt_set(globals: dGlobals, target: number): void {
+        const envLight = globals.g_env_light;
+
+        let newRainCount = (saturate(target * target * target) * 250.0) | 0;
+
+        if (dKy_checkEventNightStop(globals)) {
+            if (newRainCount < envLight.rainCount)
+                newRainCount = envLight.rainCount;
+        }
+
+        if (newRainCount > envLight.rainCountOrig)
+            envLight.rainCount = newRainCount;
+    }
+
+    private raincnt_cut(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        if (!dKy_checkEventNightStop(globals))
+            envLight.rainCount = envLight.rainCountOrig;
+    }
+
+    private wether_tag_move(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        const checkPos = this.get_check_pos(globals);
+
+        const distXZ = Math.hypot(checkPos[0] - this.pos[0], checkPos[2] - this.pos[2]);
+
+        const innerBottomY = this.pos[1], outerBottomY = innerBottomY - this.innerFadeY;
+        const innerTopY = this.pos[1] + (this.scale[1] * 5000.0), outerTopY = innerTopY + this.innerFadeY;
+
+        if (distXZ < this.outerRadius && checkPos[1] > outerBottomY && checkPos[1] <= outerTopY) {
+            const fadeRadius = this.outerRadius - this.innerRadius;
+            const blendXZ = Math.min((this.outerRadius - distXZ) / fadeRadius, 1.0);
+
+            let blendY = 1.0;
+            if (this.innerFadeY !== 0) {
+                if (checkPos[1] > innerBottomY)
+                    blendY = 1.0 - saturate((checkPos[1] - outerTopY) / this.innerFadeY);
+                else
+                    blendY = 1.0 - saturate((innerBottomY - checkPos[1]) / this.innerFadeY);
+            }
+
+            const target = this.target * blendXZ * blendY;
+
+            if (envLight.envrIdxPrev === envLight.envrIdxCurr && this.pselIdx < 4) {
+                this.pselSet = true;
+
+                if (target > 0.5) {
+                    envLight.blendPselGather = target;
+                    envLight.pselIdxPrevGather = envLight.weatherPselIdx;
+                    envLight.pselIdxCurrGather = this.pselIdx;
+                    envLight.colSetModeGather = 1;
+                } else {
+                    envLight.blendPselGather = 1.0 - target;
+                    envLight.pselIdxPrevGather = this.pselIdx;
+                    envLight.pselIdxCurrGather = envLight.weatherPselIdx;
+                    envLight.colSetModeGather = 1;
+                }
+            }
+
+            // wether_tag_efect_move
+            this.effectSet = true;
+
+            if (this.effectMode === 1) {
+                this.raincnt_set(globals, target);
+            } else if (this.effectMode === 7) {
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+            } else if (this.effectMode === 8) {
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+                this.raincnt_set(globals, target);
+            } else if (this.effectMode === 9) {
+                // TODO(jstpierre): moya
+                if (envLight.thunderMode === 0)
+                    envLight.thunderMode = 2;
+                this.raincnt_set(globals, target);
+            } else {
+                // TODO(jstpierre): The rest of the modes.
+            }
+        } else {
+            if (this.pselSet) {
+                this.pselSet = false;
+                envLight.pselIdxPrevGather = envLight.weatherPselIdx;
+                envLight.pselIdxCurrGather = envLight.weatherPselIdx;
+                envLight.blendPselGather = 0.0;
+                envLight.colSetModeGather = 1;
+            }
+
+            if (this.effectSet) {
+                this.effectSet = false;
+
+                if (this.effectMode === 1) {
+                    this.raincnt_cut(globals);
+                } else if (this.effectMode === 7) {
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                } else if (this.effectMode === 8) {
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                    this.raincnt_cut(globals);
+                } else if (this.effectMode === 9) {
+                    // TODO(jstpierre): moya
+                    if (envLight.thunderMode === 2)
+                        envLight.thunderMode = 0;
+                    this.raincnt_cut(globals);
+                }
+            }
+        }
+    }
+}
+
+class d_a_kytag01 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_kytag01;
+
+    private influence = new WAVE_INFLUENCE();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        vec3.copy(this.influence.pos, this.pos);
+
+        this.influence.innerRadius = this.scale[0] * 5000.0;
+        this.influence.outerRadius = Math.max(this.scale[2] * 5000.0, this.influence.innerRadius + 500.0);
+        dKy__waveinfl_set(globals.g_env_light, this.influence);
+
+        // TODO(jstpierre): Need a Create/Destroy hook that happens on room load / unload.
+        // this.wave_make(globals);
+
+        return cPhs__Status.Next;
+    }
+
+    public delete(globals: dGlobals): void {
+        dKy__waveinfl_cut(globals.g_env_light, this.influence);
+    }
+}
+
+class d_a_obj_Ygush00 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_Ygush00;
+
+    private type: number;
+    private model: J3DModelInstance;
+    private btkAnm = new mDoExt_btkAnm();
+    private bckAnm = new mDoExt_bckAnm();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Ygush00`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        this.type = this.parameters & 0x03;
+        const mdl_table = [0x0A, 0x09, 0x09, 0x09];
+        const btk_table = [0x0E, 0x0D, 0x0D, 0x0D];
+        const bck_table = [0x06, 0x05, 0x05, 0x05];
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Ygush00`, mdl_table[this.type]));
+        this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
+        this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
+
+        vec3.copy(this.model.baseScale, this.scale);
+        mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
+
+        return cPhs__Status.Next;
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        if (this.type !== 3) {
+            this.btkAnm.play(deltaTimeInFrames);
+            this.bckAnm.play(deltaTimeInFrames);
+        }
+
+        if (this.type === 1) {
+            // Judge for Gryw00 nearby
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG1, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        this.btkAnm.entry(this.model);
+        this.bckAnm.entry(this.model);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
+class d_a_obj_lpalm extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_lpalm;
+
+    private model: J3DModelInstance;
+
+    private baseQuat = quat.create();
+    private baseQuatTarget = quat.create();
+    private animDir = nArray(2, () => 0);
+    private animWave = nArray(2, () => 0);
+    private animMtxQuat = nArray(2, () => quat.create());
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Oyashi`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Oyashi`, 0x04));
+        this.model.jointMatrixCalcCallback = this.nodeCallBack;
+
+        mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
+        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+
+        return cPhs__Status.Next;
+    }
+
+    private nodeCallBack = (dst: mat4, i: number): void => {
+        if (i === 2 || i === 3) {
+            mDoMtx_ZrotM(dst, -0x4000);
+            quatM(this.baseQuat, dst);
+            if (i === 2)
+                quatM(this.animMtxQuat[0], dst);
+            else
+                quatM(this.animMtxQuat[1], dst);
+            mDoMtx_ZrotM(dst, 0x4000);
+        }
+    };
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const envLight = globals.g_env_light;
+
+        const windVec = dKyw_get_wind_vec(envLight);
+        const windPow = dKyw_get_wind_pow(envLight);
+
+        mDoMtx_YrotS(calc_mtx, -this.rot[1]);
+        MtxPosition(scratchVec3a, windVec);
+
+        vec3.set(scratchVec3b, 0, 1, 0);
+        vec3.cross(scratchVec3b, scratchVec3b, scratchVec3a);
+
+        if (vec3.length(scratchVec3b) >= 0.00000001) {
+            vec3.normalize(scratchVec3b, scratchVec3b);
+            quat.setAxisAngle(this.baseQuatTarget, scratchVec3b, windPow * (0x600 * kUshortTo2PI));
+        } else {
+            quat.identity(this.baseQuatTarget);
+        }
+
+        quat.slerp(this.baseQuat, this.baseQuat, this.baseQuatTarget, 0.25);
+
+        for (let i = 0; i < 2; i++) {
+            const animDirTarget = Math.min(windPow * 0x180, 0x100);
+            this.animDir[i] = cLib_addCalcAngleRad2(this.animDir[i], animDirTarget * kUshortTo2PI, 0x04 * kUshortTo2PI, 0x20 * kUshortTo2PI);
+
+            // Rock back and forth.
+            this.animWave[i] += ((windPow * 0x800) + cM_rndFX(0x80)) * kUshortTo2PI * deltaTimeInFrames;
+            const wave = Math.sin(this.animWave[i]);
+
+            vec3.set(scratchVec3a, wave, 0, wave);
+            quat.setAxisAngle(this.animMtxQuat[i], scratchVec3a, this.animDir[i]);
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
+function vecHalfAngle(dst: vec3, a: vec3, b: vec3): void {
+    vec3.negate(a, a);
+    vec3.negate(b, b);
+    vec3.normalize(a, a);
+    vec3.normalize(b, b);
+    vec3.add(dst, a, b);
+    if (vec3.dot(dst, dst) > 0.0)
+        vec3.normalize(dst, dst);
+    else
+        vec3.set(dst, 0, 0, 0);
+}
+
+class d_a_obj_zouK1 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_zouK1;
+
+    private model: J3DModelInstance;
+    private bckAnm = new mDoExt_bckAnm();
+    private effectMtx = mat4.create();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `VzouK`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `VzouK`, 0x08));
+
+        const anm = resCtrl.getObjectRes(ResType.Bck, `VzouK`, 0x05);
+        this.bckAnm.init(this.model.modelData, anm, true, LoopMode.ONCE, 0.0, anm.duration);
+        this.bckAnm.play(0.0);
+
+        for (let i = 0; i < this.model.materialInstances.length; i++)
+            this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
+
+        return cPhs__Status.Next;
+    }
+
+    private effectMtxCallback = (dst: mat4, texMtx: TexMtx): void => {
+        mat4.copy(dst, this.effectMtx);
+    }
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.set_mtx();
+    }
+
+    private setEffectMtx(globals: dGlobals, pos: vec3, refl: number): void {
+        const scale = 1.0 / refl;
+        computeModelMatrixS(this.effectMtx, scale, scale, 1.0);
+
+        // Remap.
+        buildEnvMtx(scratchMat4a, 1.0);
+        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
+
+        // Half-vector lookAt transform.
+        vec3.sub(scratchVec3a, pos, globals.cameraPosition);
+        dKyr_get_vectle_calc(this.tevStr.lightObj.Position, pos, scratchVec3b);
+        vecHalfAngle(scratchVec3a, scratchVec3a, scratchVec3b);
+        mat4.lookAt(scratchMat4a, Vec3Zero, scratchVec3a, Vec3UnitY);
+        mat4.mul(this.effectMtx, this.effectMtx, scratchMat4a);
+
+        computeMatrixWithoutTranslation(this.effectMtx, this.effectMtx);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        this.setEffectMtx(globals, this.pos, 0.5);
+        this.bckAnm.entry(this.model);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -717,4 +1159,10 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_bg);
     R(d_a_vrbox);
     R(d_a_vrbox2);
+    R(d_a_sea);
+    R(d_a_kytag00);
+    R(d_a_kytag01);
+    R(d_a_obj_Ygush00);
+    R(d_a_obj_lpalm);
+    R(d_a_obj_zouK1);
 }

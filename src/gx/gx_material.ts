@@ -8,11 +8,11 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
-import { assert } from '../util';
-import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { assert, nArray } from '../util';
+import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
-import { preprocessShader_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
+import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 import { DisplayListRegisters } from './gx_displaylist';
 
 // TODO(jstpierre): Move somewhere better...
@@ -45,6 +45,7 @@ export interface GXMaterial {
     useTexMtxIdx?: boolean[];
     hasPostTexMtxBlock?: boolean;
     hasLightsBlock?: boolean;
+    hasFogBlock?: boolean;
 }
 
 export class Light {
@@ -75,75 +76,31 @@ export class Light {
     }
 }
 
-const scratchVec4 = vec4.create();
-export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    vec4.set(v, x, y, z, 1.0);
-    vec4.transformMat4(v, v, viewMatrix);
-    vec3.set(light.Position, v[0], v[1], v[2]);
-}
+export class FogBlock {
+    public Color = colorNewCopy(TransparentBlack);
+    public A: number = 0;
+    public B: number = 0;
+    public C: number = 0;
+    public AdjTable: Uint16Array = new Uint16Array(10);
+    public AdjCenter: number = 0;
 
-export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
-}
-
-export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    vec4.set(v, x, y, z, 0.0);
-    vec4.transformMat4(v, v, normalMatrix);
-    vec4.normalize(v, v);
-    vec3.set(light.Direction, v[0], v[1], v[2]);
-}
-
-export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
-    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
-    // However, I don't want to calculate that right now, and it shouldn't matter too much...
-    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
-}
-
-export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
-    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
-    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
-    vec3.copy(dst.DistAtten, worldLight.DistAtten);
-    vec3.copy(dst.CosAtten, worldLight.CosAtten);
-    colorCopy(dst.Color, worldLight.Color);
-}
-
-export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
-    if (cutoff <= 0 || cutoff >= 90)
-        spotFunc = GX.SpotFunction.OFF;
-
-    const cr = Math.cos(cutoff * MathConstants.DEG_TO_RAD);
-    if (spotFunc === GX.SpotFunction.FLAT) {
-        vec3.set(light.CosAtten, -1000.0 * cr, 1000.0, 0.0);
-    } else if (spotFunc === GX.SpotFunction.COS) {
-        vec3.set(light.CosAtten, -cr / (1.0 - cr), 1.0 / (1.0 - cr), 0.0);
-    } else if (spotFunc === GX.SpotFunction.COS2) {
-        vec3.set(light.CosAtten, 0.0, -cr / (1.0 - cr), 1.0 / (1.0 - cr));
-    } else if (spotFunc === GX.SpotFunction.SHARP) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, cr * (cr - 2.0) / d, 2.0 / d, -1.0 / d);
-    } else if (spotFunc === GX.SpotFunction.RING1) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, -4.0 * cr / d, 4.0 * (1.0 + cr) / d, -4.0 / d);
-    } else if (spotFunc === GX.SpotFunction.RING2) {
-        const d = (1.0 - cr) * (1.0 - cr);
-        vec3.set(light.CosAtten, 1.0 - 2.0 * cr * cr / d, 4.0 * cr / d, -2.0 / d);
-    } else if (spotFunc === GX.SpotFunction.OFF) {
-        vec3.set(light.CosAtten, 1.0, 0.0, 0.0);
+    public reset(): void {
+        colorFromRGBA(this.Color, 0, 0, 0, 0);
+        this.A = 0;
+        this.B = 0;
+        this.C = 0;
+        this.AdjTable.fill(0);
+        this.AdjCenter = 0;
     }
-}
 
-export function lightSetDistAttn(light: Light, refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
-    if (refDist < 0 || refBrightness <= 0 || refBrightness >= 1)
-        distFunc = GX.DistAttnFunction.OFF;
-
-    if (distFunc === GX.DistAttnFunction.GENTLE)
-        vec3.set(light.DistAtten, 1.0, (1.0 - refBrightness) / (refBrightness * refDist), 0.0);
-    else if (distFunc === GX.DistAttnFunction.MEDIUM)
-        vec3.set(light.DistAtten, 1.0, 0.5 * (1.0 - refBrightness) / (refBrightness * refDist), 0.5 * (1.0 - refBrightness) / (refBrightness * refDist * refDist));
-    else if (distFunc === GX.DistAttnFunction.STEEP)
-        vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
-    else if (distFunc === GX.DistAttnFunction.OFF)
-        vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
+    public copy(o: FogBlock): void {
+        colorCopy(this.Color, o.Color);
+        this.A = o.A;
+        this.B = o.B;
+        this.C = o.C;
+        this.AdjTable.set(o.AdjTable);
+        this.AdjCenter = o.AdjCenter;
+    }
 }
 
 export interface ColorChannelControl {
@@ -228,18 +185,16 @@ export interface AlphaTest {
     referenceB: number;
 }
 
-export interface BlendMode {
-    type: GX.BlendMode;
-    srcFactor: GX.BlendFactor;
-    dstFactor: GX.BlendFactor;
-    logicOp: GX.LogicOp;
-}
-
 export interface RopInfo {
-    blendMode: BlendMode;
+    fogType: GX.FogType;
+    fogAdjEnabled: boolean;
     depthTest: boolean;
     depthFunc: GX.CompareType;
     depthWrite: boolean;
+    blendMode: GX.BlendMode;
+    blendSrcFactor: GX.BlendFactor;
+    blendDstFactor: GX.BlendFactor;
+    blendLogicOp: GX.LogicOp;
 }
 // #endregion
 
@@ -312,7 +267,11 @@ export function materialHasLightsBlock(material: { hasLightsBlock?: boolean }): 
     return material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
 }
 
-function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean }): string {
+export function materialHasFogBlock(material: { hasFogBlock?: boolean }): boolean {
+    return material.hasFogBlock !== undefined ? material.hasFogBlock : false;
+}
+
+function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
@@ -328,6 +287,15 @@ struct Light {
     vec4 Direction;
     vec4 DistAtten;
     vec4 CosAtten;
+};
+
+struct FogBlock {
+    // A, B, C, Center
+    vec4 Param;
+    // 10 items
+    vec4 AdjTable[3];
+    // Fog color is RGB
+    vec4 Color;
 };
 
 // Expected to change with each material.
@@ -348,6 +316,9 @@ ${materialHasPostTexMtxBlock(material) ? `
 ${materialHasLightsBlock(material) ? `
     Light u_LightParams[8];
 ` : ``}
+${materialHasFogBlock(material) ? `
+    FogBlock u_FogBlock;
+` : ``}
 };
 
 // Expected to change with each shape packet.
@@ -360,14 +331,17 @@ uniform sampler2D u_Texture[8];
 }
 
 export function getMaterialParamsBlockSize(material: GXMaterial): number {
-    const hasPostTexMtxBlock = material.hasPostTexMtxBlock !== undefined ? material.hasPostTexMtxBlock : true;
-    const hasLightsBlock = material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
+    const hasPostTexMtxBlock = materialHasPostTexMtxBlock(material);
+    const hasLightsBlock = materialHasLightsBlock(material);
+    const hasFogBlock = materialHasFogBlock(material);
 
     let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*2*3 + 4*8;
     if (hasPostTexMtxBlock)
         size += 4*3*20;
     if (hasLightsBlock)
         size += 4*5*8;
+    if (hasFogBlock)
+        size += 4*5;
 
     return size;
 }
@@ -1057,12 +1031,12 @@ ${this.generateLightAttnFn(chan, lightName)}
         const ref = this.generateFloat(reference);
         switch (compare) {
         case GX.CompareType.NEVER:   return `false`;
-        case GX.CompareType.LESS:    return `t_TevOutput.a <  ${ref}`;
-        case GX.CompareType.EQUAL:   return `t_TevOutput.a == ${ref}`;
-        case GX.CompareType.LEQUAL:  return `t_TevOutput.a <= ${ref}`;
-        case GX.CompareType.GREATER: return `t_TevOutput.a >  ${ref}`;
-        case GX.CompareType.NEQUAL:  return `t_TevOutput.a != ${ref}`;
-        case GX.CompareType.GEQUAL:  return `t_TevOutput.a >= ${ref}`;
+        case GX.CompareType.LESS:    return `t_PixelOut.a <  ${ref}`;
+        case GX.CompareType.EQUAL:   return `t_PixelOut.a == ${ref}`;
+        case GX.CompareType.LEQUAL:  return `t_PixelOut.a <= ${ref}`;
+        case GX.CompareType.GREATER: return `t_PixelOut.a >  ${ref}`;
+        case GX.CompareType.NEQUAL:  return `t_PixelOut.a != ${ref}`;
+        case GX.CompareType.GEQUAL:  return `t_PixelOut.a >= ${ref}`;
         case GX.CompareType.ALWAYS:  return `true`;
         }
     }
@@ -1086,6 +1060,66 @@ ${this.generateLightAttnFn(chan, lightName)}
     bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
         discard;`;
+    }
+
+    private generateFogZCoord() {
+        const isDepthReversed = IS_DEPTH_REVERSED;
+        if (isDepthReversed)
+            return `(1.0 - gl_FragCoord.z)`;
+        else
+            return `gl_FragCoord.z`;
+    }
+
+    private generateFogBase() {
+        const ropInfo = this.material.ropInfo;
+        const proj = !!(ropInfo.fogType >>> 3);
+
+        const A = `u_FogBlock.Param.x`;
+        const B = `u_FogBlock.Param.y`;
+        const z = this.generateFogZCoord();
+
+        if (proj) {
+            // Orthographic
+            return `${A} * ${z}`;
+        } else {
+            // Perspective
+            return `${A} / (${B} - ${z})`;
+        }
+    }
+
+    private generateFogAdj(base: string) {
+        if (this.material.ropInfo.fogAdjEnabled) {
+            // TODO(jstpierre): Fog adj
+            return ``;
+        } else {
+            return ``;
+        }
+    }
+
+    private generateFogFunc(base: string) {
+        const fogType = (this.material.ropInfo.fogType & 0x07);
+        if (fogType === GX.FogType.PERSP_LIN) {
+            return ``;
+        } else {
+            // TODO(jstpierre): Other fog types.
+            return ``;
+        }
+    }
+
+    private generateFog() {
+        const ropInfo = this.material.ropInfo;
+        if (ropInfo.fogType === GX.FogType.NONE)
+            return "";
+
+        const C = `u_FogBlock.Param.z`;
+
+        return `
+    float t_FogBase = ${this.generateFogBase()};
+${this.generateFogAdj(`t_FogBase`)}
+    float t_Fog = TevSaturate(t_FogBase - ${C});
+${this.generateFogFunc(`t_Fog`)}
+    t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_Fog);
+`;
     }
 
     private generateAttributeStorageType(fmt: GfxFormat): string {
@@ -1146,9 +1180,7 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        const vendorInfo = device.queryVendorInfo();
-
-        const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', `
+        const vert = `
 ${both}
 ${this.generateVertAttributeDefs()}
 
@@ -1178,9 +1210,9 @@ ${this.generateLightChannels()}
 ${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
-`);
+`;
 
-        const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', `
+        const frag = `
 ${both}
 ${this.generateTexCoordGetters()}
 
@@ -1219,13 +1251,13 @@ ${this.generateIndTexStages()}
 ${this.generateTevStages()}
 
 ${this.generateTevStagesLastMinuteFixup()}
-    t_TevOutput = TevOverflow(t_TevOutput);
+    vec4 t_PixelOut = TevOverflow(t_TevOutput);
 ${this.generateAlphaTest()}
-    gl_FragColor = t_TevOutput;
-}
-`);
+${this.generateFog()}
+    gl_FragColor = t_PixelOut;
+}`;
 
-        return { preprocessedVert, preprocessedFrag };
+        return preprocessProgramObj_GLSL(device, { vert, frag });
     }
 }
 // #endregion
@@ -1314,19 +1346,19 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
 
     const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
 
-    if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
+    if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
+    } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
-        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
+        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
+        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
+    } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
         attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
-    } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
+    } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
         // Sonic Colors uses this? WTF?
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
         attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
@@ -1594,22 +1626,23 @@ export function parseIndirectStages(r: DisplayListRegisters, numInds: number): I
 }
 
 export function parseRopInfo(r: DisplayListRegisters): RopInfo {
+    // Fog state.
+    // TODO(jstpierre): Support Fog
+    const fogType = GX.FogType.NONE;
+    const fogAdjEnabled = false;
+
     // Blend mode.
     const cm0 = r.bp[GX.BPRegister.PE_CMODE0_ID];
     const bmboe = (cm0 >>> 0) & 0x01;
     const bmloe = (cm0 >>> 1) & 0x01;
     const bmbop = (cm0 >>> 11) & 0x01;
 
-    const blendType: GX.BlendMode =
+    const blendMode: GX.BlendMode =
         bmboe ? (bmbop ? GX.BlendMode.SUBTRACT : GX.BlendMode.BLEND) :
         bmloe ? GX.BlendMode.LOGIC : GX.BlendMode.NONE;;
-    const dstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
-    const srcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
-    const logicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
-    const blendMode: BlendMode = {
-        type: blendType,
-        dstFactor, srcFactor, logicOp,
-    };
+    const blendDstFactor: GX.BlendFactor = (cm0 >>> 5) & 0x07;
+    const blendSrcFactor: GX.BlendFactor = (cm0 >>> 8) & 0x07;
+    const blendLogicOp: GX.LogicOp = (cm0 >>> 12) & 0x0F;
 
     // Depth state.
     const zm = r.bp[GX.BPRegister.PE_ZMODE_ID];
@@ -1618,7 +1651,7 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const depthWrite = !!((zm >>> 4) & 0x01);
 
     const ropInfo: RopInfo = {
-        blendMode, depthFunc, depthTest, depthWrite,
+        fogType, fogAdjEnabled, blendMode, blendDstFactor, blendSrcFactor, blendLogicOp, depthFunc, depthTest, depthWrite,
     };
 
     return ropInfo;
@@ -1721,5 +1754,92 @@ export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID
         return GX.RasColorChannelID.COLOR_ZERO;
     default:
         throw "whoops";
+    }
+}
+
+const scratchVec4 = vec4.create();
+export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 1.0);
+    vec4.transformMat4(v, v, viewMatrix);
+    vec3.set(light.Position, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 0.0);
+    vec4.transformMat4(v, v, normalMatrix);
+    vec4.normalize(v, v);
+    vec3.set(light.Direction, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
+    // However, I don't want to calculate that right now, and it shouldn't matter too much...
+    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetFromWorldLight(dst: Light, worldLight: Light, camera: Camera): void {
+    lightSetWorldPosition(dst, camera, worldLight.Position[0], worldLight.Position[1], worldLight.Position[2]);
+    lightSetWorldDirection(dst, camera, worldLight.Direction[0], worldLight.Direction[1], worldLight.Direction[2]);
+    vec3.copy(dst.DistAtten, worldLight.DistAtten);
+    vec3.copy(dst.CosAtten, worldLight.CosAtten);
+    colorCopy(dst.Color, worldLight.Color);
+}
+
+export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
+    if (cutoff <= 0 || cutoff >= 90)
+        spotFunc = GX.SpotFunction.OFF;
+
+    const cr = Math.cos(cutoff * MathConstants.DEG_TO_RAD);
+    if (spotFunc === GX.SpotFunction.FLAT) {
+        vec3.set(light.CosAtten, -1000.0 * cr, 1000.0, 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS) {
+        vec3.set(light.CosAtten, -cr / (1.0 - cr), 1.0 / (1.0 - cr), 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS2) {
+        vec3.set(light.CosAtten, 0.0, -cr / (1.0 - cr), 1.0 / (1.0 - cr));
+    } else if (spotFunc === GX.SpotFunction.SHARP) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, cr * (cr - 2.0) / d, 2.0 / d, -1.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING1) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, -4.0 * cr / d, 4.0 * (1.0 + cr) / d, -4.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING2) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, 1.0 - 2.0 * cr * cr / d, 4.0 * cr / d, -2.0 / d);
+    } else if (spotFunc === GX.SpotFunction.OFF) {
+        vec3.set(light.CosAtten, 1.0, 0.0, 0.0);
+    }
+}
+
+export function lightSetDistAttn(light: Light, refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
+    if (refDist < 0 || refBrightness <= 0 || refBrightness >= 1)
+        distFunc = GX.DistAttnFunction.OFF;
+
+    if (distFunc === GX.DistAttnFunction.GENTLE)
+        vec3.set(light.DistAtten, 1.0, (1.0 - refBrightness) / (refBrightness * refDist), 0.0);
+    else if (distFunc === GX.DistAttnFunction.MEDIUM)
+        vec3.set(light.DistAtten, 1.0, 0.5 * (1.0 - refBrightness) / (refBrightness * refDist), 0.5 * (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.STEEP)
+        vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.OFF)
+        vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
+}
+
+export function fogBlockSet(fog: FogBlock, type: GX.FogType, startZ: number, endZ: number, nearZ: number, farZ: number): void {
+    const proj = !!(type >>> 3);
+
+    assert(Number.isFinite(farZ));
+
+    if (proj) {
+        // Orthographic
+        // TODO(jstpierre)
+        fog.A;
+    } else {
+        fog.A = (farZ * nearZ) / ((farZ - nearZ) * (endZ - startZ));
+        fog.B = (farZ) / (farZ - nearZ);
+        fog.C = (startZ) / (endZ - startZ);
     }
 }

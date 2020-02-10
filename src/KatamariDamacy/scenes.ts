@@ -151,17 +151,12 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
         this.renderHelper.renderInstManager.resetRenderInsts();
 
-        // Copy to the scene texture for next time.
-        passRenderer.endPass(this.sceneTexture.gfxTexture);
-        device.submitPass(passRenderer);
-
-        const passRenderer2 = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
-        return passRenderer2;
+        return passRenderer;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {

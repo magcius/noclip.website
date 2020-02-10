@@ -6,10 +6,10 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, Gfx
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
+import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { TextureMapping } from '../TextureHolder';
-import { nArray, getTextDecoder } from '../util';
+import { nArray } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { DeviceProgram } from '../Program';
 import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -291,8 +291,8 @@ class FurObj {
     public poreInd = new IndSettings();
 
     // TODO(jstpierre): Color picker UI
-    public rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
-    public tipColor = colorNew(1.0, 1.0, 1.0, 0.2);
+    public rootColor = colorNewFromRGBA(0.2, 0.2, 0.2, 1.0);
+    public tipColor = colorNewFromRGBA(1.0, 1.0, 1.0, 0.2);
 
     constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
         this.bodyTex = makeTextureFromImageData(device, bodyImgData);
@@ -477,7 +477,7 @@ export class FoxFur implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
-        const foxFurObjText = getTextDecoder('utf8')!.decode(foxFurObjBuffer.arrayBuffer);
+        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer);
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);

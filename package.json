@@ -26,6 +26,7 @@
     "raw-loader": "^3.1.0",
     "thread-loader": "^2.1.3",
     "ts-loader": "^6.2.1",
+    "ts-node": "^8.6.2",
     "typescript": "^3.3.3333",
     "webpack": "^4.41.2",
     "webpack-cli": "^3.3.10",
@@ -46,6 +47,7 @@
     "asbuild:yaz0": "npx asc Yaz0_as.ts --baseDir ./src/assembly -O3 --runtime none --noAssert -b Yaz0_as.wasm -t Yaz0_as.wat",
     "asbuild": "yarn asbuild:gx_tex && yarn asbuild:yaz0 && node src/build_wat.js",
     "build": "webpack --config webpack.prod.js",
+    "build:zww": "cd src/WindWaker/tools && ts-node zww_extractor.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "browserslist": [

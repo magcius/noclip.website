@@ -2,7 +2,7 @@
 import { vec3, mat4 } from "gl-matrix";
 import { nArray } from "./util";
 
-class Plane {
+export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
     // Plane normal
     public x: number;
@@ -16,10 +16,14 @@ class Plane {
         return this.d + dot;
     }
 
+    public getNormal(dst: vec3): void {
+        vec3.set(dst, this.x, this.y, this.z);
+    }
+
     public set(p0: vec3, p1: vec3, p2: vec3): void {
         const scratch = Plane.scratchVec3;
-        vec3.sub(scratch[0], p2, p0);
-        vec3.sub(scratch[1], p1, p0);
+        vec3.sub(scratch[0], p1, p0);
+        vec3.sub(scratch[1], p2, p0);
         vec3.cross(scratch[0], scratch[0], scratch[1]);
         vec3.normalize(scratch[0], scratch[0]);
         this.x = scratch[0][0];
@@ -75,7 +79,20 @@ export class AABB {
         this.maxZ = dstMax[2];
     }
 
-    public set(points: vec3[]): void {
+    public set(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
+        this.minX = minX;
+        this.minY = minY;
+        this.minX = minZ;
+        this.maxX = maxX;
+        this.maxY = maxY;
+        this.maxX = maxZ;
+    }
+
+    public setInf(): void {
+        this.set(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    }
+
+    public setFromPoints(points: vec3[]): void {
         this.minX = this.minY = this.minZ = Infinity;
         this.maxX = this.maxY = this.maxZ = -Infinity;
 
@@ -266,14 +283,14 @@ export class Frustum {
         for (let i = 0; i < 9; i++)
             vec3.transformMat4(scratch[i], scratch[i], worldMatrix);
 
-        this.aabb.set(scratch);
+        this.aabb.setFromPoints(scratch);
 
-        this.planes[0].set(scratch[8], scratch[3], scratch[0]); // left plane
-        this.planes[1].set(scratch[8], scratch[1], scratch[2]); // right plane
-        this.planes[2].set(scratch[0], scratch[1], scratch[2]); // near plane
-        this.planes[3].set(scratch[4], scratch[7], scratch[6]); // far plane
-        this.planes[4].set(scratch[8], scratch[0], scratch[1]); // top plane
-        this.planes[5].set(scratch[8], scratch[2], scratch[3]); // bottom plane
+        this.planes[0].set(scratch[8], scratch[0], scratch[3]); // left plane
+        this.planes[1].set(scratch[8], scratch[2], scratch[1]); // right plane
+        this.planes[2].set(scratch[0], scratch[2], scratch[1]); // near plane
+        this.planes[3].set(scratch[4], scratch[6], scratch[7]); // far plane
+        this.planes[4].set(scratch[8], scratch[1], scratch[0]); // top plane
+        this.planes[5].set(scratch[8], scratch[3], scratch[2]); // bottom plane
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;

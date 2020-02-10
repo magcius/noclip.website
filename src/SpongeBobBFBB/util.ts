@@ -3,7 +3,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { vec3, quat, mat4, mat3 } from 'gl-matrix';
 import { align } from '../util';
 import * as rw from 'librw';
-import { Color, colorNew } from '../Color';
+import { Color, colorNewFromRGBA } from '../Color';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../Camera';
 import { AABB } from '../Geometry';
 import { clamp } from '../MathHelpers';
@@ -159,7 +159,7 @@ export class DataStream {
         const b = this.readFloat();
         const a = this.readFloat();
 
-        return colorNew(r, g, b, a);
+        return colorNewFromRGBA(r, g, b, a);
     }
 
     public readColor8(): Color {
@@ -168,7 +168,7 @@ export class DataStream {
         const b = this.readUInt8() / 255;
         const a = this.readUInt8() / 255;
 
-        return colorNew(r, g, b, a);
+        return colorNewFromRGBA(r, g, b, a);
     }
 
     public align(multiple: number): void {

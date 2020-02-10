@@ -113,7 +113,7 @@ class BKRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
+        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);

@@ -17,7 +17,7 @@ const mtxD3DFromOpenGL = mat4.fromValues(
     1, 0,   0, 0,
     0, 1,   0, 0,
     0, 0, 0.5, 0,
-    0, 0,   1, 1,
+    0, 0, 0.5, 1,
 );
 
 // Converts a projection matrix from OpenGL-style Z range [-1, 1] to D3D-style Z range [0, 1]

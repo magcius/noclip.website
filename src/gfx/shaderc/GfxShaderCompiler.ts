@@ -92,6 +92,8 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 `;
     }
 
+    const hasFragColor = rest.includes('gl_FragColor');
+
     return `
 ${vendorInfo.glslVersion}
 ${precision}
@@ -99,18 +101,25 @@ ${precision}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
+${hasFragColor ? `
 #define gl_FragColor o_color
+${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
+` : ``}
 ${matrixDefines}
 ${definesString}
-${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
 ${rest}
 `.trim();
 }
 
-export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimple {
+interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {
+    vert: string;
+    frag: string;
+}
+
+export function preprocessProgram_GLSL(vendorInfo: GfxVendorInfo, vert: string, frag: string, defines: DefineMap | null = null): GfxProgramDescriptorSimpleWithOrig {
     const preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', vert, defines);
     const preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', frag, defines);
-    return { preprocessedVert, preprocessedFrag };
+    return { vert, frag, preprocessedVert, preprocessedFrag };
 }
 
 export interface GfxProgramObjBag {
@@ -120,7 +129,7 @@ export interface GfxProgramObjBag {
     defines?: DefineMap;
 }
 
-export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimple {
+export function preprocessProgramObj_GLSL(device: GfxDevice, obj: GfxProgramObjBag): GfxProgramDescriptorSimpleWithOrig {
     const defines = obj.defines !== undefined ? obj.defines : null;
     const vert = obj.both !== undefined ? obj.both + obj.vert : obj.vert;
     const frag = obj.both !== undefined ? obj.both + obj.frag : obj.frag;

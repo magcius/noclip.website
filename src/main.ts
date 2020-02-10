@@ -50,6 +50,7 @@ import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
+import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -96,7 +97,6 @@ const sceneGroups = [
     Scenes_Zelda_TwilightPrincess.sceneGroup,
     Scenes_Zelda_TheWindWaker.sceneGroup,
     "Nintendo 3DS",
-    Scenes_LuigisMansion3D.sceneGroup,
     Scenes_Zelda_MajorasMask3D.sceneGroup,
     Scenes_Zelda_OcarinaOfTime3D.sceneGroup,
     "Nintendo DS",
@@ -122,13 +122,15 @@ const sceneGroups = [
     Scenes_Fez.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_LuigisMansion3D.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
-    Scenes_Zelda_OcarinaOfTime.sceneGroup,
+    Scenes_PokemonSnap.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];

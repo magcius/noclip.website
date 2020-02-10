@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -120,6 +120,13 @@ export interface GfxSamplerDescriptor {
     maxLOD: number;
 }
 
+export interface GfxAttachmentDescriptor {
+    format: GfxFormat;
+    width: number;
+    height: number;
+    numSamples: number;
+}
+
 export interface GfxBufferBinding {
     buffer: GfxBuffer;
     wordOffset: number;
@@ -204,8 +211,8 @@ export interface GfxMegaStateDescriptor {
 }
 
 export interface GfxRenderTargetDescriptor {
-    colorAttachment: GfxColorAttachment | null;
-    depthStencilAttachment: GfxDepthStencilAttachment | null;
+    colorAttachment: GfxAttachment | null;
+    depthStencilAttachment: GfxAttachment | null;
 }
 
 export interface GfxRenderPipelineDescriptor {
@@ -226,10 +233,12 @@ export interface GfxColor {
 
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
-    colorAttachment: GfxColorAttachment | null;
+    colorAttachment: GfxAttachment | null;
+    colorResolveTo: GfxTexture | null;
     colorLoadDisposition: GfxLoadDisposition;
     colorClearColor: GfxColor;
-    depthStencilAttachment: GfxDepthStencilAttachment | null;
+    depthStencilAttachment: GfxAttachment | null;
+    depthStencilResolveTo: GfxTexture | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
     stencilLoadDisposition: GfxLoadDisposition;
@@ -292,7 +301,7 @@ export interface GfxRenderPass {
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 
     // Pass resolution.
-    endPass(resolveColorAttachmentTo: GfxTexture | null): void;
+    endPass(): void;
 };
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
@@ -301,25 +310,26 @@ export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
-    createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
-    createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
+    createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment;
+    createAttachmentFromTexture(texture: GfxTexture): GfxAttachment;
     createProgram(program: GfxProgramDescriptor): GfxProgram;
     createProgramSimple(program: GfxProgramDescriptorSimple): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
+    createReadback(elemCount: number): GfxReadback;
 
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
-    destroyColorAttachment(o: GfxColorAttachment): void;
-    destroyDepthStencilAttachment(o: GfxDepthStencilAttachment): void;
+    destroyAttachment(o: GfxAttachment): void;
     destroyProgram(o: GfxProgram): void;
     destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
+    destroyReadback(o: GfxReadback): void;
 
     // Command submission.
     createHostAccessPass(): GfxHostAccessPass;
@@ -327,13 +337,20 @@ export interface GfxDevice {
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
 
+    // Readback system.
+    readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
+    submitReadback(o: GfxReadback): void;
+    queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
+
+    // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
+    queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor;
 
-    // Debugging and high-level queries.
+    // Debugging.
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
@@ -341,5 +358,5 @@ export interface GfxDevice {
     popDebugGroup(): void;
 }
 
-export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
+export { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };

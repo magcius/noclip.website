@@ -98,7 +98,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass(null);
+        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);

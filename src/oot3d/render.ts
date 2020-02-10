@@ -11,7 +11,7 @@ import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
+import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -459,7 +459,7 @@ export function fillSceneParamsDataOnTemplate(template: GfxRenderInst, camera: C
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
-const scratchColor = colorNew(0, 0, 0, 1);
+const scratchColor = colorNewFromRGBA(0, 0, 0, 1);
 class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];

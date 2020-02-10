@@ -19,6 +19,15 @@ export interface Fez_VertexPositionNormalTextureInstance {
     texcoord: vec2;
 }
 
+const normals = [
+    vec3.fromValues(-1, 0, 0),
+    vec3.fromValues(0, -1, 0),
+    vec3.fromValues(0, 0, -1),
+    vec3.fromValues(1, 0, 0),
+    vec3.fromValues(0, 1, 0),
+    vec3.fromValues(0, 0, 1),
+];
+
 function Fez_VertexPositionNormalTextureInstanceReader(reader: ContentReader): Fez_VertexPositionNormalTextureInstance {
     const position = reader.ReadVector3();
     const normalByte = reader.ReadByte();
@@ -763,15 +772,6 @@ function Fez_ShaderInstancedIndexedPrimitivesReader_Factory(typeReaders: Content
         return { primitiveType, vertices, indices };
     };
 }
-
-const normals = [
-    vec3.fromValues(-1, 0, 0),
-    vec3.fromValues(0, -1, 0),
-    vec3.fromValues(0, 0, -1),
-    vec3.fromValues(1, 0, 0),
-    vec3.fromValues(0, 1, 0),
-    vec3.fromValues(0, 0, 1),
-];
 
 export class FezContentTypeReaderManager extends ContentTypeReaderManager {
     constructor() {

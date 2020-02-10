@@ -1,6 +1,6 @@
-Applies to all code in src/
+Note some implementations of game engines were reverse engineered, and not in a "clean-room" manner. Please consult your lawyer if you wish to reuse some code from this project.
 
-All other files belong to their respective owners.
+Files written specifically for the noclip project have not been reverse engineered. Please contact me for further details.
 
 MIT License
 

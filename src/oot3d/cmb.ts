@@ -5,7 +5,7 @@ import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxColorWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { Color, colorNewFromRGBA8, colorNew } from '../Color';
+import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export interface VatrChunk {
@@ -430,7 +430,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const blendColorG = view.getFloat32(offs + 0x150, true);
         const blendColorB = view.getFloat32(offs + 0x154, true);
         const blendColorA = view.getFloat32(offs + 0x158, true);
-        const blendConstant = colorNew(blendColorR, blendColorG, blendColorB, blendColorA);
+        const blendConstant = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
 
         const isTransparent = blendEnabled;
         const renderFlags = makeMegaState({
@@ -446,7 +446,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             cullMode,
         });
 
-        const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
+        const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
         cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
 

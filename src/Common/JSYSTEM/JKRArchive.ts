@@ -22,6 +22,7 @@ export const enum JKRCompressionType {
 }
 
 export interface RARCFile {
+    index: number;
     id: number;
     name: string;
     flags: JKRFileAttr;
@@ -121,7 +122,8 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
 
         // Go through and parse the file table.
         let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
-        for (let i = 0; i < fileEntryCount; i++) {
+        for (let j = 0; j < fileEntryCount; j++) {
+            const index = (fileEntryIdx - fileEntryTableOffs) / 0x14;
             const id = view.getUint16(fileEntryIdx + 0x00);
             const nameHash = view.getUint16(fileEntryIdx + 0x02);
             const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04);
@@ -164,7 +166,7 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
                     fileBuffer = rawFileBuffer;
                 }
 
-                const file: RARCFile = { id, name, flags, compressionType, buffer: fileBuffer };
+                const file: RARCFile = { index, id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
             }

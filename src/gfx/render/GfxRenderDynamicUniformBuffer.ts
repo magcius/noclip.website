@@ -58,8 +58,14 @@ export class GfxRenderDynamicUniformBuffer {
         }
     }
 
-    // TODO(jstpierre): This API is kind of bad for initial performance...
+    /**
+     * Return the shadow buffer used internally. Note that due to GC performance reasons, a slice is not
+     * returned, but instead, the full shadow buffer, so you will need to write to the buffer with the same
+     * {@param wordOffset} that was passed in. The {@param wordOffset} and {@param wordCount} fields are
+     * simply used to allocate more shadow buffer space if required.
+     */
     public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
+        // TODO(jstpierre): This API is kind of bad for initial performance...
         this.ensureShadowBuffer(wordOffset, wordCount);
         return assertExists(this.shadowBufferF32);
     }

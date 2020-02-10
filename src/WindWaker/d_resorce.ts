@@ -1,8 +1,6 @@
 
 import { BMD, BMT, BCK, BPK, BTK, BRK, ANK1, TRK1, TTK1, BVA, VAF1, BTP, TPT1, JSystemFileReaderHelper } from "../Common/JSYSTEM/J3D/J3DLoader";
 
-import * as DZB from './DZB';
-
 import { JKRArchive, RARCFile } from "../Common/JSYSTEM/JKRArchive";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -13,6 +11,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Destroyable } from "../SceneBase";
 import { dGlobals } from "./zww_scenes";
 import { cPhs__Status } from "./framework";
+import { cBgD_t } from "./d_bg";
 
 export interface DZSChunkHeader {
     type: string;
@@ -55,13 +54,11 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Btp ? TPT1 :
     T extends ResType.Btk ? TTK1 :
     T extends ResType.Bti ? BTIData :
-    T extends ResType.Dzb ? DZB.DZB :
+    T extends ResType.Dzb ? cBgD_t :
     T extends ResType.Dzs ? DZS :
     T extends ResType.Bva ? VAF1 :
     T extends ResType.Raw ? ArrayBufferSlice :
     never;
-
-type OptionalGfx<T extends ResType> = T extends ResType.Bti ? true : false;
 
 export class dRes_control_c {
     public resObj: dRes_info_c[] = [];
@@ -96,7 +93,7 @@ export class dRes_control_c {
 
     public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
-        return resInfo.getResByID(resType, resID);
+        return resInfo.getResByIndex(resType, resID);
     }
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
@@ -119,7 +116,7 @@ export class dRes_control_c {
     }
 }
 
-interface ResEntry<T> {
+export interface ResEntry<T> {
     file: RARCFile;
     res: T;
 }
@@ -160,6 +157,14 @@ export class dRes_info_c {
         return resEntry.res;
     }
 
+    private getResEntryByIndex<T extends ResType>(resType: T, resIndex: number): ResEntry<ResAssetType<T>> {
+        const resList: ResEntry<ResAssetType<T>>[] = this.res;
+        for (let i = 0; i < resList.length; i++)
+            if (resList[i].file.index === resIndex)
+                return resList[i];
+        throw "whoops";
+    }
+
     private getResEntryByID<T extends ResType>(resType: T, resID: number): ResEntry<ResAssetType<T>> {
         const resList: ResEntry<ResAssetType<T>>[] = this.res;
         for (let i = 0; i < resList.length; i++)
@@ -174,6 +179,10 @@ export class dRes_info_c {
             if (resList[i].file.name === resName)
                 return resList[i];
         return null;
+    }
+
+    public getResByIndex<T extends ResType>(resType: T, resIndex: number): ResAssetType<T> {
+        return this.lazyLoadResource(resType, this.getResEntryByIndex(resType, resIndex));
     }
 
     public getResByID<T extends ResType>(resType: T, resID: number): ResAssetType<T> {
@@ -210,7 +219,7 @@ export class dRes_info_c {
             // TODO(jstpierre): BCKS sound data.
             resEntry.res = BCK.parse(file.buffer);
         } else if (type === `DZB `) {
-            resEntry.res = DZB.parse(file.buffer);
+            resEntry.res = new cBgD_t(file.buffer);
         }
 
         // This is a bit of a hack. dRes_info_c::loadResource doesn't normally preprocess texture data,

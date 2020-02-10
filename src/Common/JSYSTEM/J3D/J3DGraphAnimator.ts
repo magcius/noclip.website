@@ -1,11 +1,12 @@
 
 // Animation support.
 
-import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1 } from './J3DLoader';
+import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, ANK1, Joint } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
-import { J3DModelInstance } from './J3DGraphBase';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance } from './J3DGraphBase';
 import { mat4 } from 'gl-matrix';
+import { computeModelMatrixSRT } from '../../../MathHelpers';
 
 export const enum J3DFrameCtrl__UpdateFlags {
     HasStopped  = 0b0001,
@@ -134,12 +135,19 @@ export class J3DTexRegAnm {
     }
 }
 
+function findMaterialInstance(modelInstance: J3DModelInstance, name: string): MaterialInstance | null {
+    for (let i = 0; i < modelInstance.materialInstances.length; i++)
+        if (modelInstance.materialInstances[i].name === name)
+            return modelInstance.materialInstances[i];
+    return null;
+}
+
 // TODO(jstpierre): Replace this with something that the J3DTexRegAnm, etc. structs directly.
 export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, trk1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.colorCalc[entry.colorKind])
             (materialInstance.colorCalc[entry.colorKind] as J3DTexRegAnm).set(frameCtrl, entry);
@@ -151,8 +159,8 @@ export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1,
 export function removeTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === trk1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, trk1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.colorCalc[entry.colorKind] = null;
     }
@@ -190,8 +198,8 @@ export class J3DTexMtxAnm {
 export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.texMtxCalc[entry.texGenIndex])
             (materialInstance.texMtxCalc[entry.texGenIndex] as J3DTexMtxAnm).set(frameCtrl, ttk1, entry);
@@ -203,8 +211,8 @@ export function entryTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1,
 export function removeTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1): void {
     for (let i = 0; i < ttk1.uvAnimationEntries.length; i++) {
         const entry = ttk1.uvAnimationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === ttk1.uvAnimationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, ttk1.uvAnimationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.texMtxCalc[entry.texGenIndex] = null;
     }
@@ -227,8 +235,8 @@ export class J3DTexNoAnm {
 export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, tpt1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         if (materialInstance.texNoCalc[entry.texMapIndex])
             (materialInstance.texNoCalc[entry.texMapIndex] as J3DTexNoAnm).set(frameCtrl, entry);
@@ -240,9 +248,57 @@ export function entryTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1, 
 export function removeTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1): void {
     for (let i = 0; i < tpt1.animationEntries.length; i++) {
         const entry = tpt1.animationEntries[i];
-        const materialInstance = modelInstance.materialInstances.find((m) => m.name === tpt1.animationEntries[i].materialName);
-        if (materialInstance === undefined)
+        const materialInstance = findMaterialInstance(modelInstance, tpt1.animationEntries[i].materialName);
+        if (materialInstance === null)
             continue;
         materialInstance.texMtxCalc[entry.texMapIndex] = null;
     }
+}
+
+export class J3DJointMatrixAnm {
+    constructor(private frameCtrl: J3DFrameCtrl, private ank1: ANK1) {}
+
+    public set(frameCtrl: J3DFrameCtrl, ank1: ANK1): void {
+        this.frameCtrl = frameCtrl;
+    }
+
+    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+        const animFrame = this.frameCtrl.currentTimeInFrames;
+        const entry = this.ank1.jointAnimationEntries[i];
+
+        if (entry !== undefined) {
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame);
+            const translationY = sampleAnimationData(entry.translationY, animFrame);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        } else {
+            const scaleX = jnt1.scaleX;
+            const scaleY = jnt1.scaleY;
+            const scaleZ = jnt1.scaleZ;
+            const rotationX = jnt1.rotationX;
+            const rotationY = jnt1.rotationY;
+            const rotationZ = jnt1.rotationZ;
+            const translationX = jnt1.translationX;
+            const translationY = jnt1.translationY;
+            const translationZ = jnt1.translationZ;
+            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        }
+    }
+}
+
+export function entryJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1, frameCtrl: J3DFrameCtrl): void {
+    if (modelInstance.jointMatrixCalc instanceof J3DJointMatrixAnm)
+        modelInstance.jointMatrixCalc.set(frameCtrl, ank1);
+    else
+        modelInstance.jointMatrixCalc = new J3DJointMatrixAnm(frameCtrl, ank1);
+}
+
+export function removeJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1): void {
+    modelInstance.jointMatrixCalc = new JointMatrixCalcNoAnm();
 }

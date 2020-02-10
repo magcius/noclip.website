@@ -22,7 +22,7 @@ import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexAttribLocation } from "../../gx/gx_material";
-import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../../MathHelpers";
@@ -3260,13 +3260,13 @@ const enum JPACVersion {
     JPAC2_10 = 'JPAC2-10',
 }
 
-const scratchColor = colorNew(0, 0, 0, 0);
+const scratchColor = colorNewFromRGBA(0, 0, 0, 0);
 function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: number): Color[] {
     const view = buffer.createDataView();
 
     assert(entryCount > 0 && duration > 0);
 
-    const dst = nArray(duration + 1, () => colorNew(0, 0, 0, 0));
+    const dst = nArray(duration + 1, () => colorNewFromRGBA(0, 0, 0, 0));
     let dstIdx = 0;
 
     const color0 = view.getUint32(0x02);

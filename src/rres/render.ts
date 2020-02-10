@@ -114,11 +114,14 @@ class ShapeInstance {
             if (!instVisible)
                 continue;
 
-            const renderInst = this.shapeData.pushRenderInst(renderInstManager, packet);
+            const renderInst = renderInstManager.newRenderInst();
+            this.shapeData.setOnRenderInst(renderInst, packet);
             this.shapeData.fillPacketParams(packetParams, renderInst);
 
             if (usesSkinning)
                 materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
+
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

@@ -880,7 +880,10 @@ class SceneDesc implements Viewer.SceneDesc {
         ]);
 
         const textureHolder = new CtrTextureHolder();
+        context.destroyablePool.push(textureHolder);
+
         const modelCache = new ModelCache(dataFetcher);
+        context.destroyablePool.push(modelCache);
 
         const gar = ZAR.parse(maybeDecompress(zarBuffer));
 
@@ -935,7 +938,7 @@ class SceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "mm3d";
-const name = "Majora's Mask 3D";
+const name = "The Legend of Zelda: Majora's Mask 3D";
 // Names graciously provided by James Knight on Twitter, and organized by Starschulz. Thanks!
 const sceneDescs = [
     "Intro",
