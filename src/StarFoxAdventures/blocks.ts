@@ -130,8 +130,9 @@ export class BlockRenderer implements BlockRendererBase {
                 listOffset: 0x68,
                 listCount: 0x9f,
                 listSize: 0x34,
-                // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                // FIXME: Yet another format occurs in sfademo/frontend!
+                numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+                // numListBits: 8, // ??? should be 6 according to decompilation of demo????
                 numLayersOffset: 0x3b,
                 bitstreamOffset: 0x74, // Whoa...
                 // FIXME: There are three bitstreams, probably for opaque and transparent objects
@@ -579,7 +580,7 @@ export class AncientBlockRenderer implements BlockRendererBase {
                 shader.hasTexCoord[j] = true;
             }
             shader.flags = blockDv.getUint32(offs + 0x3c);
-            shader.enableCull = false;
+            shader.enableCull = true; // FIXME
             
             // console.log(`PolyType: ${JSON.stringify(polyType)}`);
             // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
@@ -702,7 +703,7 @@ export class AncientBlockRenderer implements BlockRendererBase {
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
                     mb.setZMode(true, GX.CompareType.LESS, true);
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-                    // mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
+                    mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
                     let tevStage = 0;
                     let texcoordId = GX.TexCoordID.TEXCOORD0;
                     let texmapId = GX.TexMapID.TEXMAP0;

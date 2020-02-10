@@ -50,6 +50,7 @@ export function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
         return new ArrayBufferSlice(loadZLB(data));
     case stringToFourCC('DIRn'): // FIXME: actually just "DIR"
         return new ArrayBufferSlice(loadDIRn(data));
+        // TODO: handle LZOn format
     default:
         console.warn(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
         return data;

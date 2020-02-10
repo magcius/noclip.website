@@ -196,18 +196,33 @@ export abstract class TextureCollection {
     public abstract getTexture(device: GfxDevice, num: number): DecodedTexture | null;
 }
 
-export class SFATextureCollection implements TextureCollection {
-    decodedTextures: (DecodedTexture | null)[] = [];
+function makeFalseTexture(device: GfxDevice): DecodedTexture {
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
+    const gfxSampler = device.createSampler({
+        wrapS: GfxWrapMode.REPEAT,
+        wrapT: GfxWrapMode.REPEAT,
+        minFilter: GfxTexFilterMode.BILINEAR,
+        magFilter: GfxTexFilterMode.BILINEAR,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0,
+        maxLOD: 100,
+    });
 
-    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false) {
-    }
+    const pixels = new Uint8Array(4 * 4);
+    pixels.set([0xcc, 0xcc, 0xcc, 0xff], 0);
+    pixels.set([0xff, 0xff, 0xff, 0xff], 4);
+    pixels.set([0xff, 0xff, 0xff, 0xff], 8);
+    pixels.set([0xcc, 0xcc, 0xcc, 0xff], 12);
 
-    public getTexture(device: GfxDevice, num: number): DecodedTexture | null {
-        if (this.decodedTextures[num] === undefined) {
-            this.decodedTextures[num] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, num, this.isAncient);
-        }
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+    device.submitPass(hostAccessPass);
 
-        return this.decodedTextures[num];
+    return {
+        gfxTexture,
+        gfxSampler,
+        width: 2,
+        height: 2,
     }
 }
 
@@ -215,36 +230,35 @@ export class FalseTextureCollection implements TextureCollection {
     texture: DecodedTexture;
 
     constructor(device: GfxDevice) {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
-        const gfxSampler = device.createSampler({
-            wrapS: GfxWrapMode.REPEAT,
-            wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0,
-            maxLOD: 100,
-        });
-
-        const pixels = new Uint8Array(4 * 4);
-        pixels.set([0xcc, 0xcc, 0xcc, 0xff], 0);
-        pixels.set([0xff, 0xff, 0xff, 0xff], 4);
-        pixels.set([0xff, 0xff, 0xff, 0xff], 8);
-        pixels.set([0xcc, 0xcc, 0xcc, 0xff], 12);
-
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        device.submitPass(hostAccessPass);
-
-        this.texture = {
-            gfxTexture,
-            gfxSampler,
-            width: 2,
-            height: 2,
-        }
+        this.texture = makeFalseTexture(device);
     }
 
     public getTexture(device: GfxDevice, num: number): DecodedTexture | null {
         return this.texture;
+    }
+}
+
+export class SFATextureCollection implements TextureCollection {
+    decodedTextures: (DecodedTexture | null)[] = [];
+    falseTexture: DecodedTexture | null = null;
+
+    constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false) {
+    }
+
+    public getTexture(device: GfxDevice, num: number): DecodedTexture | null {
+        if (this.decodedTextures[num] === undefined) {
+            try {
+                this.decodedTextures[num] = loadTextureFromTable(device, this.tex1Tab, this.tex1Bin, num, this.isAncient);
+            } catch (e) {
+                console.warn(`Failed to load texture 0x${num.toString(16)} due to exception:`);
+                console.error(e);
+                if (!this.falseTexture) {
+                    this.falseTexture = makeFalseTexture(device);
+                }
+                return this.falseTexture;
+            }
+        }
+
+        return this.decodedTextures[num];
     }
 }
