@@ -496,15 +496,15 @@ export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst):
     return a.sortKey - b.sortKey;
 }
 
-function bisectLeft<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
+function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
     let lo = 0, hi = L.length;
     while (lo < hi) {
         const mid = lo + ((hi - lo) >>> 1);
-        const cmp = compare(L[mid], e);
+        const cmp = compare(e, L[mid]);
         if (cmp < 0)
-            lo = mid + 1;
-        else
             hi = mid;
+        else
+            lo = mid + 1;
     }
     return lo;
 }
@@ -540,7 +540,7 @@ export class GfxRenderInstList {
     public insertSorted(renderInst: GfxRenderInst): void {
         this.flushSort();
         if (this.compareFunction !== null) {
-            const idx = bisectLeft(this.renderInsts, renderInst, this.compareFunction);
+            const idx = bisectRight(this.renderInsts, renderInst, this.compareFunction);
             this.renderInsts.splice(idx, 0, renderInst);
         } else {
             this.renderInsts.push(renderInst);
