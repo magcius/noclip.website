@@ -196,7 +196,7 @@ export abstract class TextureCollection {
     public abstract getTexture(device: GfxDevice, num: number): DecodedTexture | null;
 }
 
-function makeFalseTexture(device: GfxDevice): DecodedTexture {
+function makeFalseTexture(device: GfxDevice, num: number): DecodedTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
     const gfxSampler = device.createSampler({
         wrapS: GfxWrapMode.REPEAT,
@@ -208,11 +208,25 @@ function makeFalseTexture(device: GfxDevice): DecodedTexture {
         maxLOD: 100,
     });
 
+
+    // Thanks, StackOverflow.
+    let seed = num;
+    console.log(`making false texture with seed ${seed}`);
+    function random() {
+        let x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+
+    const baseColor = [127 + random() * 127, 127 + random() * 127, 127 + random() * 127];
+    const darkBase = [baseColor[0] * 0.7, baseColor[1] * 0.7, baseColor[2] * 0.7];
+    const light = [baseColor[0], baseColor[1], baseColor[2], 0xff];
+    const dark = [darkBase[0], darkBase[1], darkBase[2], 0xff];
+
     const pixels = new Uint8Array(4 * 4);
-    pixels.set([0xcc, 0xcc, 0xcc, 0xff], 0);
-    pixels.set([0xff, 0xff, 0xff, 0xff], 4);
-    pixels.set([0xff, 0xff, 0xff, 0xff], 8);
-    pixels.set([0xcc, 0xcc, 0xcc, 0xff], 12);
+    pixels.set(dark, 0);
+    pixels.set(light, 4);
+    pixels.set(light, 8);
+    pixels.set(dark, 12);
 
     const hostAccessPass = device.createHostAccessPass();
     hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
@@ -227,20 +241,21 @@ function makeFalseTexture(device: GfxDevice): DecodedTexture {
 }
 
 export class FalseTextureCollection implements TextureCollection {
-    texture: DecodedTexture;
+    textures: DecodedTexture[] = [];
 
     constructor(device: GfxDevice) {
-        this.texture = makeFalseTexture(device);
     }
 
     public getTexture(device: GfxDevice, num: number): DecodedTexture | null {
-        return this.texture;
+        if (this.textures[num] === undefined) {
+            this.textures[num] = makeFalseTexture(device, num);
+        }
+        return this.textures[num];
     }
 }
 
 export class SFATextureCollection implements TextureCollection {
     decodedTextures: (DecodedTexture | null)[] = [];
-    falseTexture: DecodedTexture | null = null;
 
     constructor(public tex1Tab: ArrayBufferSlice, public tex1Bin: ArrayBufferSlice, private isAncient: boolean = false) {
     }
@@ -252,10 +267,7 @@ export class SFATextureCollection implements TextureCollection {
             } catch (e) {
                 console.warn(`Failed to load texture 0x${num.toString(16)} due to exception:`);
                 console.error(e);
-                if (!this.falseTexture) {
-                    this.falseTexture = makeFalseTexture(device);
-                }
-                return this.falseTexture;
+                this.decodedTextures[num] = makeFalseTexture(device, num);
             }
         }
 
