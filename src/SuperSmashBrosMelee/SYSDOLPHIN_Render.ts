@@ -1,5 +1,5 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_FObj__JointTrackType, HSD_AObjFlags } from "./SYSDOLPHIN";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_FObj__JointTrackType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn } from "./SYSDOLPHIN";
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { GfxDevice, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -16,6 +16,7 @@ import { calcMipChain } from "../gx/gx_texture";
 import { assert } from "../util";
 import { Camera } from "../Camera";
 import { getPointHermite } from "../Spline";
+import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp";
 
 class HSD_TObj_Data {
     public texImage: HSD__TexImageData_Data;
@@ -156,13 +157,229 @@ export class HSD_JObjRoot_Data {
     }
 }
 
-class HSD_TObj_Instance {
+interface HSD_MakeTExp {
+    c: HSD_TExp;
+    a: HSD_TExp;
+}
+
+export class HSD_TObj_Instance {
     public textureMatrix = mat4.create();
-    public texMapID: GX.TexMapID = GX.TexMapID.TEXMAP_NULL;
     public texMtxID: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
+    public texMapID: GX.TexMapID = GX.TexMapID.TEXMAP_NULL;
     public texCoordID: GX.TexCoordID = GX.TexCoordID.TEXCOORD_NULL;
 
     constructor(public data: HSD_TObj_Data) {
+    }
+
+    private makeColorGenTExp(list: HSD_TExpList, tobjIdx: number, params: HSD_MakeTExp): void {
+        const tev = this.data.tobj.tevDesc!;
+
+        const e0 = HSD_TExpTev(list);
+        HSD_TExpOrder(e0, this, GX.ColorChannelID.COLOR_NULL);
+
+        const sel: HSD_TEInput[] = [];
+        const exp: (HSD_TExp | null)[] = [];
+
+        if (!!(tev.active & HSD_TObjTevActive.COLOR_TEV)) {
+            for (let i = 0; i < 4; i++) {
+                const colorIn = tev.colorIn[i];
+                if (colorIn === HSD_TObjTevColorIn.ZERO) {
+                    sel[i] = HSD_TEInput.TE_0;
+                    exp[i] = null;
+                } else if (colorIn === HSD_TObjTevColorIn.ONE) {
+                    sel[i] = HSD_TEInput.TE_1;
+                    exp[i] = null;
+                } else if (colorIn === HSD_TObjTevColorIn.HALF) {
+                    sel[i] = HSD_TEInput.TE_4_8;
+                    exp[i] = null;
+                } else if (colorIn === HSD_TObjTevColorIn.TEXC) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    exp[i] = HSD_TEXP_TEX;
+                } else if (colorIn === HSD_TObjTevColorIn.TEXA) {
+                    sel[i] = HSD_TEInput.TE_A;
+                    exp[i] = HSD_TEXP_TEX;
+                } else if (colorIn === HSD_TObjTevColorIn.KONST_RGB) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_RGB, HSD_TEInput.TE_RGB);
+                } else if (colorIn === HSD_TObjTevColorIn.KONST_RRR) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_R, HSD_TEInput.TE_X);
+                } else if (colorIn === HSD_TObjTevColorIn.KONST_GGG) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_G, HSD_TEInput.TE_X);
+                } else if (colorIn === HSD_TObjTevColorIn.KONST_BBB) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_B, HSD_TEInput.TE_X);
+                } else if (colorIn === HSD_TObjTevColorIn.KONST_AAA) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_A, HSD_TEInput.TE_X);
+                } else if (colorIn === HSD_TObjTevColorIn.TEX0_RGB) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_RGB, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_RGB, HSD_TEInput.TE_RGB));
+                    exp[i] = tmp;
+                } else if (colorIn === HSD_TObjTevColorIn.TEX0_AAA) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_A, HSD_TEInput.TE_X));
+                    exp[i] = tmp;
+                } else if (colorIn === HSD_TObjTevColorIn.TEX1_RGB) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_RGB, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_RGB, HSD_TEInput.TE_RGB));
+                    exp[i] = tmp;
+                } else if (colorIn === HSD_TObjTevColorIn.TEX1_AAA) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
+                    exp[i] = tmp;
+                } else {
+                    throw "whoops";
+                }
+            }
+
+            HSD_TExpColorOp(e0, tev.colorOp, tev.colorBias, tev.colorScale, tev.colorClamp);
+            HSD_TExpColorIn(e0, sel[0], exp[0], sel[1], exp[1], sel[2], exp[2], sel[3], exp[3]);
+            params.c = e0;
+        }
+
+        if (!!(tev.active & HSD_TObjTevActive.ALPHA_TEV)) {
+            for (let i = 0; i < 4; i++) {
+                const alphaIn = tev.alphaIn[i];
+                if (alphaIn === HSD_TObjTevAlphaIn.ZERO) {
+                    sel[i] = HSD_TEInput.TE_0;
+                    exp[i] = null;
+                } else if (alphaIn === HSD_TObjTevAlphaIn.TEXA) {
+                    sel[i] = HSD_TEInput.TE_A;
+                    exp[i] = HSD_TEXP_TEX;
+                } else if (alphaIn === HSD_TObjTevAlphaIn.KONST_R) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_R, HSD_TEInput.TE_X);
+                } else if (alphaIn === HSD_TObjTevAlphaIn.KONST_G) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_G, HSD_TEInput.TE_X);
+                } else if (alphaIn === HSD_TObjTevAlphaIn.KONST_B) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_B, HSD_TEInput.TE_X);
+                } else if (alphaIn === HSD_TObjTevAlphaIn.KONST_A) {
+                    sel[i] = HSD_TEInput.TE_X;
+                    exp[i] = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_CONSTANT_A, HSD_TEInput.TE_X);
+                } else if (alphaIn === HSD_TObjTevAlphaIn.TEX0_A) {
+                    sel[i] = HSD_TEInput.TE_A;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpAlphaOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpAlphaIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_A, HSD_TEInput.TE_X));
+                    exp[i] = tmp;
+                } else if (alphaIn === HSD_TObjTevAlphaIn.TEX1_A) {
+                    sel[i] = HSD_TEInput.TE_RGB;
+                    const tmp = HSD_TExpTev(list);
+                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpAlphaOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                    HSD_TExpAlphaIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
+                        HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
+                    exp[i] = tmp;
+                } else {
+                    throw "whoops";
+                }
+            }
+
+            HSD_TExpAlphaOp(e0, tev.alphaOp, tev.alphaBias, tev.alphaScale, tev.alphaClamp);
+            HSD_TExpAlphaIn(e0, sel[0], exp[0], sel[1], exp[1], sel[2], exp[2], sel[3], exp[3]);
+            params.a = e0;
+        }
+    }
+
+    public makeTExp(list: HSD_TExpList, tobjIdx: number, done: HSD_TObjFlags, last: HSD_MakeTExp): void {
+        const tobj = this.data.tobj;
+
+        const repeat = !!(done & this.data.tobj.flags);
+
+        const src = {
+            c: HSD_TEXP_TEX,
+            a: HSD_TEXP_TEX,
+        };
+
+        const e0 = HSD_TExpTev(list);
+
+        if (tobj.tevDesc !== null && !!(tobj.tevDesc.active & (HSD_TObjTevActive.COLOR_TEV | HSD_TObjTevActive.ALPHA_TEV)))
+            this.makeColorGenTExp(list, tobjIdx, src);
+
+        HSD_TExpOrder(e0, this, GX.ColorChannelID.COLOR_NULL);
+
+        const colormap = this.data.tobj.flags & HSD_TObjFlags.COLORMAP_MASK;
+        if (colormap === HSD_TObjFlags.COLORMAP_ALPHA_MASK) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, last.c, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_RGB_MASK) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, last.c, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_0, null);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_BLEND) {
+            const blend = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_BLENDING, HSD_TEInput.TE_X);
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, last.c, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_X, blend, HSD_TEInput.TE_0, null);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_MODULATE) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, last.c, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_0, null);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_REPLACE) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, src.c);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_NONE || colormap === HSD_TObjFlags.COLORMAP_PASS) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, last.c);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_ADD) {
+            HSD_TExpColorOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, last.c);
+        } else if (colormap === HSD_TObjFlags.COLORMAP_SUB) {
+            HSD_TExpColorOp(e0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(e0, HSD_TEInput.TE_RGB, src.c, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, last.c);
+        } else {
+            throw "whoops";
+        }
+        last.c = e0;
+
+        if (!repeat) {
+            const alphamap = this.data.tobj.flags & HSD_TObjFlags.ALPHAMAP_MASK;
+            if (alphamap === HSD_TObjFlags.ALPHAMAP_ALPHA_MASK) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_BLEND) {
+                const blend = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_BLENDING, HSD_TEInput.TE_X);
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_X, blend, HSD_TEInput.TE_0, null);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_MODULATE) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_REPLACE) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, src.a);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_NONE || alphamap === HSD_TObjFlags.ALPHAMAP_PASS) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_ADD) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+            } else if (alphamap === HSD_TObjFlags.ALPHAMAP_SUB) {
+                HSD_TExpAlphaOp(e0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+            } else {
+                throw "whoops";
+            }
+            last.a = e0;
+        }
     }
 
     public calcMtx(): void {
@@ -198,37 +415,10 @@ class HSD_MObj_Instance {
         for (let i = 0; i < this.data.tobj.length; i++)
             this.tobj.push(new HSD_TObj_Instance(this.data.tobj[i]));
 
-        // Assign TObj resources.
-        let texID: number = 0;
-        let texCoordID: GX.TexCoordID = GX.TexCoordID.TEXCOORD0;
-        for (let i = 0; i < this.tobj.length; i++) {
-            const tobj = this.tobj[i], flags = tobj.data.tobj.flags;
-            const coord = (flags & HSD_TObjFlags.COORD_MASK);
-            if (coord === HSD_TObjFlags.COORD_TOON) {
-                // Toon is special.
-            } else if (coord === HSD_TObjFlags.BUMP) {
-                // Bump is special.
-            } else {
-                const tobjID = texID++;
-                tobj.texMapID = GX.TexMapID.TEXMAP0 + tobjID;
-                tobj.texMtxID = GX.PostTexGenMatrix.PTTEXMTX0 + (tobjID * 3);
-
-                // Reflection/Hilight/Shadow get assigned first (??)
-                if (coord === HSD_TObjFlags.COORD_REFLECTION || coord === HSD_TObjFlags.COORD_HILIGHT || coord === HSD_TObjFlags.COORD_SHADOW)
-                    tobj.texCoordID = texCoordID++;
-            }
-        }
-
-        for (let i = 0; i < this.tobj.length; i++) {
-            const tobj = this.tobj[i];
-            const coord = (tobj.data.tobj.flags & HSD_TObjFlags.COORD_MASK);
-            if (coord === HSD_TObjFlags.COORD_UV)
-                tobj.texCoordID = texCoordID++;
-        }
-
         const mobj = this.data.mobj;
 
         const mb = new GXMaterialBuilder();
+        this.compileTev(mb);
 
         // setupTextureCoordGen
         for (let i = 0; i < this.tobj.length; i++) {
@@ -259,6 +449,189 @@ class HSD_MObj_Instance {
         mb.setCullMode(GX.CullMode.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    private assignResources(): void {
+        // Assign TObj resources.
+        let texID: number = 0;
+        let texCoordID: GX.TexCoordID = GX.TexCoordID.TEXCOORD0;
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i], flags = tobj.data.tobj.flags;
+            const coord = (flags & HSD_TObjFlags.COORD_MASK);
+            if (coord === HSD_TObjFlags.COORD_TOON) {
+                // Toon is special.
+            } else if (coord === HSD_TObjFlags.BUMP) {
+                // Bump is special.
+            } else {
+                const tobjID = texID++;
+                tobj.texMapID = GX.TexMapID.TEXMAP0 + tobjID;
+                tobj.texMtxID = GX.PostTexGenMatrix.PTTEXMTX0 + (tobjID * 3);
+
+                // Reflection/Hilight/Shadow get assigned first (??)
+                if (coord === HSD_TObjFlags.COORD_REFLECTION || coord === HSD_TObjFlags.COORD_HILIGHT || coord === HSD_TObjFlags.COORD_SHADOW)
+                    tobj.texCoordID = texCoordID++;
+            }
+        }
+
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i];
+            const coord = (tobj.data.tobj.flags & HSD_TObjFlags.COORD_MASK);
+            if (coord === HSD_TObjFlags.COORD_UV)
+                tobj.texCoordID = texCoordID++;
+        }
+    }
+
+    protected makeTExp(): HSD_TExpList {
+        let toon: HSD_TObj_Instance | null = null;
+
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i];
+            const coord = (tobj.data.tobj.flags & HSD_TObjFlags.COORD_MASK);
+            if (coord === HSD_TObjFlags.COORD_TOON)
+                toon = tobj;
+        }
+
+        const mobj = this.data.mobj;
+
+        let diffuseMode = mobj.renderMode & HSD_RenderModeFlags.DIFFUSE_MODE_MASK;
+        if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_MAT0)
+            diffuseMode = HSD_RenderModeFlags.DIFFUSE_MODE_MAT;
+
+        let alphaMode = mobj.renderMode & HSD_RenderModeFlags.ALPHA_MODE_MASK;
+        if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_COMPAT)
+            alphaMode = diffuseMode << 13;
+
+        let list = new HSD_TExpList();
+
+        let exp = HSD_TExpTev(list);
+
+        // Diffuse.
+        if (!!(mobj.renderMode & HSD_RenderModeFlags.DIFFUSE)) {
+            if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_VTX) {
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_1, null);
+            } else {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_DIFFUSE, HSD_TEInput.TE_RGB);
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, cnst);
+            }
+
+            if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_VTX) {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.ONE, HSD_TEInput.TE_X);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_X, cnst);
+            } else {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_ALPHA, HSD_TEInput.TE_X);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_X, cnst);
+            }
+        } else {
+            if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_MAT) {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_DIFFUSE, HSD_TEInput.TE_RGB);
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, cnst);
+            } else if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_VTX) {
+                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, toon ? HSD_TEXP_TEX : HSD_TEXP_RAS);
+            } else {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_DIFFUSE, HSD_TEInput.TE_RGB);
+                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_RGB, toon ? HSD_TEXP_TEX : HSD_TEXP_RAS, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, cnst);
+            }
+
+            if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_MAT) {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_ALPHA, HSD_TEInput.TE_X);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_X, cnst);
+            } else if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_VTX) {
+                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, HSD_TEXP_RAS);
+            } else {
+                const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_ALPHA, HSD_TEInput.TE_X);
+                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, HSD_TEXP_RAS, HSD_TEInput.TE_X, cnst, HSD_TEInput.TE_0, null);
+            }
+        }
+
+        const params: HSD_MakeTExp = { c: exp, a: exp };
+
+        let done: HSD_TObjFlags = 0;
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i];
+            if (!!(tobj.data.tobj.flags & (HSD_TObjFlags.LIGHTMAP_DIFFUSE | HSD_TObjFlags.LIGHTMAP_AMBIENT)) && tobj.texMapID !== GX.TexMapID.TEXMAP_NULL)
+                tobj.makeTExp(list, i, done, params);
+        }
+        done |= HSD_TObjFlags.LIGHTMAP_DIFFUSE | HSD_TObjFlags.LIGHTMAP_AMBIENT;
+
+        if (!!(mobj.renderMode & HSD_RenderModeFlags.DIFFUSE)) {
+            if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
+                const exp = HSD_TExpTev(list);
+                HSD_TExpOrder(exp, null, GX.ColorChannelID.COLOR1A1);
+                HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, params.c);
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp, HSD_TEInput.TE_A, params.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, HSD_TEXP_RAS, HSD_TEInput.TE_0, null);
+                params.c = exp;
+                params.a = exp;
+            }
+
+            const exp = HSD_TExpTev(list);
+            HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+            HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(exp,
+                HSD_TEInput.TE_0, null,
+                HSD_TEInput.TE_RGB, params.c,
+                HSD_TEInput.TE_RGB, (toon !== null) ? HSD_TEXP_TEX : HSD_TEXP_RAS,
+                HSD_TEInput.TE_0, null);
+            params.c = exp;
+
+            if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp,
+                    HSD_TEInput.TE_0, null,
+                    HSD_TEInput.TE_A, params.a,
+                    HSD_TEInput.TE_A, HSD_TEXP_RAS,
+                    HSD_TEInput.TE_0, null);
+            } else {
+                HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+                HSD_TExpAlphaIn(exp,
+                    HSD_TEInput.TE_A, params.a,
+                    HSD_TEInput.TE_0, null,
+                    HSD_TEInput.TE_A, HSD_TEXP_RAS,
+                    HSD_TEInput.TE_0, null);
+            }
+            params.a = exp;
+        }
+
+        if (!!(mobj.renderMode & HSD_RenderModeFlags.SPECULAR)) {
+            // TODO(jstpierre): Specular
+        }
+
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i];
+            if (!!(tobj.data.tobj.flags & (HSD_TObjFlags.LIGHTMAP_EXT)) && tobj.texMapID !== GX.TexMapID.TEXMAP_NULL)
+                tobj.makeTExp(list, i, done, params);
+        }
+
+        if (params.c !== params.a || HSD_TExpGetType(params.c) !== HSD_TExpType.TE_TEV || HSD_TExpGetType(params.a) !== HSD_TExpType.TE_TEV) {
+            const exp = HSD_TExpTev(list);
+            HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, params.c);
+            HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
+            HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, params.a);
+        }
+
+        return list;
+    }
+
+    private compileTev(mb: GXMaterialBuilder): void {
+        this.assignResources();
+        const texp = this.makeTExp();
+        HSD_TExpCompile(texp, mb);
     }
 
     public calcMtx(): void {

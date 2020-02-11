@@ -185,6 +185,8 @@ export const enum TevOp {
     COMP_BGR24_EQ = 13,
     COMP_RGB8_GT = 14,
     COMP_RGB8_EQ = 15,
+    COMP_A8_GT = COMP_RGB8_GT,
+    COMP_A8_EQ = COMP_RGB8_EQ,
 }
 
 export const enum TevBias {

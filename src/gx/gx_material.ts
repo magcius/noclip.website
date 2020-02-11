@@ -132,6 +132,8 @@ export interface IndTexStage {
     scaleT: GX.IndTexScale;
 }
 
+export type SwapTable = readonly [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan];
+
 export interface TevStage {
     colorInA: GX.CombineColorInput;
     colorInB: GX.CombineColorInput;
@@ -163,8 +165,8 @@ export interface TevStage {
 
     // SetTevSwapMode / SetTevSwapModeTable
     // TODO(jstpierre): Make these non-optional at some point?
-    rasSwapTable?: GX.TevColorChan[];
-    texSwapTable?: GX.TevColorChan[];
+    rasSwapTable?: SwapTable;
+    texSwapTable?: SwapTable;
 
     // SetTevIndirect
     indTexStage: GX.IndTexStageID;
@@ -765,14 +767,14 @@ ${this.generateLightAttnFn(chan, lightName)}
         return this.generateTextureSample(stage.texMap, `t_TexCoord`);
     }
 
-    private generateComponentSwizzle(swapTable: GX.TevColorChan[] | undefined, channel: GX.TevColorChan): string {
+    private generateComponentSwizzle(swapTable: SwapTable | undefined, channel: GX.TevColorChan): string {
         const suffixes = ['r', 'g', 'b', 'a'];
         if (swapTable)
             channel = swapTable[channel];
         return suffixes[channel];
     }
 
-    private generateColorSwizzle(swapTable: GX.TevColorChan[] | undefined, colorIn: GX.CombineColorInput): string {
+    private generateColorSwizzle(swapTable: SwapTable | undefined, colorIn: GX.CombineColorInput): string {
         const swapR = this.generateComponentSwizzle(swapTable, GX.TevColorChan.R);
         const swapG = this.generateComponentSwizzle(swapTable, GX.TevColorChan.G);
         const swapB = this.generateComponentSwizzle(swapTable, GX.TevColorChan.B);
@@ -1574,7 +1576,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
         const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
 
-        const rasSwapTable: number[] = [
+        const rasSwapTable: [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan] = [
             (rasSwapTableRG >>> 0) & 0x03,
             (rasSwapTableRG >>> 2) & 0x03,
             (rasSwapTableBA >>> 0) & 0x03,
@@ -1584,7 +1586,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const texSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2)];
         const texSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2) + 1];
 
-        const texSwapTable: number[] = [
+        const texSwapTable: [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan] = [
             (texSwapTableRG >>> 0) & 0x03,
             (texSwapTableRG >>> 2) & 0x03,
             (texSwapTableBA >>> 0) & 0x03,

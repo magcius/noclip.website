@@ -4,11 +4,11 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero, hexdump } from "../util";
+import { readString, assert, hexzero } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
-import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8 } from "../Color";
+import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { calcTextureSize, calcPaletteSize } from "../gx/gx_texture";
 
 export interface HSD_ArchiveSymbol {
@@ -102,16 +102,111 @@ export interface HSD__TexImageData {
 }
 
 export const enum HSD_TObjFlags {
-    COORD_MASK       = 0x0F,
-    COORD_UV         = 0 << 0,
-    COORD_REFLECTION = 1 << 0,
-    COORD_HILIGHT    = 2 << 0,
-    COORD_SHADOW     = 3 << 0,
-    COORD_TOON       = 4 << 0,
-    COORD_GRADATION  = 5 << 0,
-    COORD_BACKLIGHT  = 6 << 0,
+    COORD_UV            = 0 << 0,
+    COORD_REFLECTION    = 1 << 0,
+    COORD_HILIGHT       = 2 << 0,
+    COORD_SHADOW        = 3 << 0,
+    COORD_TOON          = 4 << 0,
+    COORD_GRADATION     = 5 << 0,
+    COORD_BACKLIGHT     = 6 << 0,
+    COORD_MASK          = 0x0F << 0,
 
-    BUMP             = 1 << 24,
+    LIGHTMAP_DIFFUSE    = 1 << 4,
+    LIGHTMAP_SPECULAR   = 1 << 5,
+    LIGHTMAP_AMBIENT    = 1 << 6,
+    LIGHTMAP_EXT        = 1 << 7,
+    LIGHTMAP_SHADOW     = 1 << 8,
+    LIGHTMAP_MASK       = LIGHTMAP_DIFFUSE | LIGHTMAP_SPECULAR | LIGHTMAP_AMBIENT | LIGHTMAP_EXT | LIGHTMAP_SHADOW,
+
+    COLORMAP_NONE       = 0 << 16,
+    COLORMAP_ALPHA_MASK = 1 << 16,
+    COLORMAP_RGB_MASK   = 2 << 16,
+    COLORMAP_BLEND      = 3 << 16,
+    COLORMAP_MODULATE   = 4 << 16,
+    COLORMAP_REPLACE    = 5 << 16,
+    COLORMAP_PASS       = 6 << 16,
+    COLORMAP_ADD        = 7 << 16,
+    COLORMAP_SUB        = 8 << 16,
+    COLORMAP_MASK       = 0x0F << 16,
+
+    ALPHAMAP_NONE       = 0 << 20,
+    ALPHAMAP_ALPHA_MASK = 1 << 20,
+    ALPHAMAP_BLEND      = 2 << 20,
+    ALPHAMAP_MODULATE   = 3 << 20,
+    ALPHAMAP_REPLACE    = 4 << 20,
+    ALPHAMAP_PASS       = 5 << 20,
+    ALPHAMAP_ADD        = 6 << 20,
+    ALPHAMAP_SUB        = 7 << 20,
+    ALPHAMAP_MASK       = 0x0F << 20,
+
+    BUMP                = 1 << 24,
+}
+
+export const enum HSD_TObjTevColorIn {
+    // Some bits are from GX.CombineColorInput
+    ZERO      = GX.CombineColorInput.ZERO,
+    ONE       = GX.CombineColorInput.ONE,
+    HALF      = GX.CombineColorInput.HALF,
+    TEXC      = GX.CombineColorInput.TEXC,
+    TEXA      = GX.CombineColorInput.TEXA,
+    KONST_RGB = 0x80,
+    KONST_RRR = 0x81,
+    KONST_GGG = 0x82,
+    KONST_BBB = 0x83,
+    KONST_AAA = 0x84,
+    TEX0_RGB  = 0x85,
+    TEX0_AAA  = 0x86,
+    TEX1_RGB  = 0x87,
+    TEX1_AAA  = 0x88,
+}
+
+export const enum HSD_TObjTevAlphaIn {
+    // Some bits are from GX.CombineColorInput
+    ZERO      = GX.CombineAlphaInput.ZERO,
+    TEXA      = GX.CombineAlphaInput.TEXA,
+    KONST_R   = 0x40,
+    KONST_G   = 0x41,
+    KONST_B   = 0x42,
+    KONST_A   = 0x43,
+    TEX0_A    = 0x44,
+    TEX1_A    = 0x45,
+}
+
+export const enum HSD_TObjTevActive {
+    KONST_R   = 1 << 0,
+    KONST_G   = 1 << 1,
+    KONST_B   = 1 << 2,
+    KONST_A   = 1 << 3,
+    KONST     = KONST_R | KONST_G | KONST_B | KONST_A,
+    TEV0_R    = 1 << 4,
+    TEV0_G    = 1 << 5,
+    TEV0_B    = 1 << 6,
+    TEV0_A    = 1 << 7,
+    TEV0      = TEV0_R  | TEV0_G  | TEV0_B  | TEV0_A,
+    TEV1_R    = 1 << 8,
+    TEV1_G    = 1 << 9,
+    TEV1_B    = 1 << 10,
+    TEV1_A    = 1 << 11,
+    TEV1      = TEV1_R  | TEV1_G  | TEV1_B  | TEV1_A,
+    COLOR_TEV = 1 << 30,
+    ALPHA_TEV = 1 << 31,
+}
+
+export interface HSD_TObjTev {
+    colorOp: GX.TevOp;
+    alphaOp: GX.TevOp;
+    colorBias: GX.TevBias;
+    alphaBias: GX.TevBias;
+    colorScale: GX.TevScale;
+    alphaScale: GX.TevScale;
+    colorClamp: boolean;
+    alphaClamp: boolean;
+    colorIn: readonly [HSD_TObjTevColorIn, HSD_TObjTevColorIn, HSD_TObjTevColorIn, HSD_TObjTevColorIn];
+    alphaIn: readonly [HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn];
+    constant: Color;
+    tev0: Color;
+    tev1: Color;
+    active: HSD_TObjTevActive;
 }
 
 export interface HSD_TObj {
@@ -134,6 +229,7 @@ export interface HSD_TObj {
     magFilt: GX.TexFilter;
 
     // HSD_TObjTevDesc
+    tevDesc: HSD_TObjTev | null;
 }
 
 function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
@@ -214,13 +310,48 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
     const maxLOD = imageView.getFloat32(0x14);
 
     const texLODDescOffs = view.getUint32(0x54);
+
     const tevDescOffs = view.getUint32(0x58);
+    let tevDesc: HSD_TObjTev | null = null;
+    if (tevDescOffs !== 0) {
+        const tevBuffer = HSD_LoadContext__ResolvePtr(ctx, tevDescOffs);
+        const tevView = tevBuffer.createDataView();
+
+        const colorOp: GX.TevOp = tevView.getUint8(0x00);
+        const alphaOp: GX.TevOp = tevView.getUint8(0x01);
+        const colorBias: GX.TevBias = tevView.getUint8(0x02);
+        const alphaBias: GX.TevBias = tevView.getUint8(0x03);
+        const colorScale: GX.TevScale = tevView.getUint8(0x04);
+        const alphaScale: GX.TevScale = tevView.getUint8(0x05);
+        const colorClamp: boolean = !!tevView.getUint8(0x06);
+        const alphaClamp: boolean = !!tevView.getUint8(0x07);
+        const colorA: HSD_TObjTevColorIn = tevView.getUint8(0x08);
+        const colorB: HSD_TObjTevColorIn = tevView.getUint8(0x09);
+        const colorC: HSD_TObjTevColorIn = tevView.getUint8(0x0A);
+        const colorD: HSD_TObjTevColorIn = tevView.getUint8(0x0B);
+        const alphaA: HSD_TObjTevAlphaIn = tevView.getUint8(0x0C);
+        const alphaB: HSD_TObjTevAlphaIn = tevView.getUint8(0x0D);
+        const alphaC: HSD_TObjTevAlphaIn = tevView.getUint8(0x0E);
+        const alphaD: HSD_TObjTevAlphaIn = tevView.getUint8(0x0F);
+        const constant: Color = colorNewFromRGBA8(tevView.getUint32(0x10));
+        const tev0: Color = colorNewFromRGBA8(tevView.getUint8(0x14));
+        const tev1: Color = colorNewFromRGBA8(tevView.getUint8(0x18));
+        const active: number = tevView.getUint32(0x1C);
+
+        const colorIn = [colorA, colorB, colorC, colorD] as const;
+        const alphaIn = [alphaA, alphaB, alphaC, alphaD] as const;
+
+        tevDesc = {
+            colorOp, alphaOp, colorBias, alphaBias, colorScale, alphaScale, colorClamp, alphaClamp,
+            colorIn, alphaIn, constant, tev0, tev1, active,
+        };
+    }
 
     const minFilt = GX.TexFilter.LIN_MIP_LIN;
 
     tobj.push({
         flags, id, src, rotation, scale, translation, texImageIdx,
-        minLOD, maxLOD, wrapS, wrapT, minFilt, magFilt,
+        minLOD, maxLOD, wrapS, wrapT, minFilt, magFilt, tevDesc,
     });
 
     if (nextSiblingOffs !== 0)
@@ -229,7 +360,21 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
 //#endregion
 
 //#region MObj
-const enum RenderModeFlags {
+export const enum HSD_RenderModeFlags {
+    DIFFUSE_MODE_MAT0 = 0x00 << 0,
+    DIFFUSE_MODE_MAT  = 0x01 << 0,
+    DIFFUSE_MODE_VTX  = 0x02 << 0,
+    DIFFUSE_MODE_BOTH = 0x03 << 0,
+    DIFFUSE_MODE_MASK = 0x03 << 0,
+
+    DIFFUSE           = 0x01 << 2,
+    SPECULAR          = 0x01 << 3,
+
+    ALPHA_MODE_COMPAT = 0x00 << 13,
+    ALPHA_MODE_MAT    = 0x01 << 13,
+    ALPHA_MODE_VTX    = 0x02 << 13,
+    ALPHA_MODE_BOTH   = 0x03 << 13,
+    ALPHA_MODE_MASK   = 0x03 << 13,
 }
 
 export const enum HSD_PEFlags {
@@ -238,7 +383,7 @@ export const enum HSD_PEFlags {
 }
 
 export interface HSD_MObj {
-    renderMode: RenderModeFlags;
+    renderMode: HSD_RenderModeFlags;
 
     tobj: HSD_TObj[];
 
@@ -268,7 +413,7 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
-    const renderMode: RenderModeFlags = view.getUint32(0x04);
+    const renderMode: HSD_RenderModeFlags = view.getUint32(0x04);
 
     const texDescOffs = view.getUint32(0x08);
     const tobj: HSD_TObj[] = [];
