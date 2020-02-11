@@ -12,7 +12,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 const pathBaseIn  = `../../../data/PokemonSnap_Raw`;
 const pathBaseOut = `../../../data/PokemonSnap`;
 
-function extractMap(romData: ArrayBufferSlice, sceneID: number, roomStart: number, objectStart = 0) {
+function extractMap(romData: ArrayBufferSlice, sceneID: number, roomStart = 0, objectStart = 0, collisionStart = 0) {
     const view = romData.createDataView(0x57580 + sceneID * 0x24);
 
     const romStart = view.getUint32(0x00);
@@ -31,6 +31,7 @@ function extractMap(romData: ArrayBufferSlice, sceneID: number, roomStart: numbe
         CodeStartAddress,
         Rooms: roomStart,
         Objects: objectStart,
+        Collision: collisionStart,
     };
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));
@@ -56,13 +57,13 @@ interface OverlaySpec {
 function main() {
     const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);
 
-    extractMap(romData, 14, 0, 0); // common data
-    extractMap(romData, 16, 0X80135DBC, 0x802CBEE4); // beach
-    extractMap(romData, 18, 0X8012FE80, 0x802EDFAC); // tunnel
-    extractMap(romData, 24, 0X80113624, 0X802E0D44); // volcano
-    extractMap(romData, 22, 0x80143AE8, 0x802E271C); // river
-    extractMap(romData, 20, 0x80141500, 0x802C6234); // cave
-    extractMap(romData, 26, 0x8011850C, 0x802D282C); // valley
+    extractMap(romData, 14); // common data
+    extractMap(romData, 16, 0X80135DBC, 0x802CBEE4, 0x80318F00); // beach
+    extractMap(romData, 18, 0X8012FE80, 0x802EDFAC, 0x80326EE0); // tunnel
+    extractMap(romData, 24, 0X80113624, 0X802E0D44, 0x8031D4D0); // volcano
+    extractMap(romData, 22, 0x80143AE8, 0x802E271C, 0x80321560); // river
+    extractMap(romData, 20, 0x80141500, 0x802C6234, 0x80317610); // cave
+    extractMap(romData, 26, 0x8011850C, 0x802D282C, 0x8031F9C0); // valley
     extractMap(romData, 28, 0x80116A50, 0x8034AB34); // rainbow cloud
 
     // pokemon shared across levels are loaded separately

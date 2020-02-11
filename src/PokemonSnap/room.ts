@@ -15,6 +15,7 @@ export interface Level {
     skybox: GFXNode | null;
     rooms: Room[];
     objectInfo: ObjectDef[];
+    collision: CollisionTree | null;
 }
 
 export interface Room {
@@ -41,7 +42,7 @@ export interface ObjectDef {
     sharedOutput: RSPSharedOutput;
     scale: vec3;
     flags: number;
-    flying: boolean;
+    spawn: SpawnType;
 }
 
 export interface LevelArchive {
@@ -52,6 +53,7 @@ export interface LevelArchive {
     CodeStartAddress: number,
     Rooms: number,
     Objects: number,
+    Collision: number,
 };
 
 export interface DataRange {
@@ -81,8 +83,23 @@ export class DataMap {
     }
 }
 
-const groundSpawn = 0x80362EE0;
-const flyingSpawn = 0x802C7E38;
+export const enum SpawnType {
+    GROUND,
+    FLYING,
+    OTHER,
+}
+
+function getSpawnType(addr: number): SpawnType {
+    switch(addr) {
+        case 0x362EE0: // normal spawn
+        case 0x362E10: // spawn plus some other gfx function?
+            return SpawnType.GROUND;
+        case 0x362E5C: // normal flying
+        case 0x362DC4: // flying plus other gfx function
+            return SpawnType.FLYING;
+    }
+    return SpawnType.OTHER;
+}
 
 export function parseLevel(archives: LevelArchive[]): Level {
     const level = archives[0];
@@ -188,7 +205,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const objectState = new F3DEX2.RSPState([], sharedOutput, dataMap);
             try {
                 const graph = parseGraph(dataMap, graphStart, materials, animationList, renderer, objectState);
-                objectInfo.push({ id, flags, graph, scale, sharedOutput, flying: initData.address === flyingSpawn });
+                objectInfo.push({ id, flags, graph, scale, sharedOutput, spawn: getSpawnType(initData.spawnFunc) });
             } catch (e) {
                 console.warn("failed parse", e);
             }
@@ -196,7 +213,11 @@ export function parseLevel(archives: LevelArchive[]): Level {
         }
     }
 
-    return { rooms, skybox, sharedCache, objectInfo };
+    let collision: CollisionTree | null = null;
+    if (level.Collision !== 0)
+        collision = parseCollisionTree(dataMap, level.Collision)
+
+    return { rooms, skybox, sharedCache, objectInfo, collision };
 }
 
 const enum MIPSOpcode {
@@ -892,4 +913,94 @@ function parseAnimationTrack(dataMap: DataMap, addr: number): AnimationTrack | n
         }
         entries.push(newEntry);
     }
+}
+
+interface GroundPlane {
+    normal: vec3; // not actually normalized, really the equation coefficients
+    offset: number;
+    type: number;
+}
+
+export interface CollisionTree {
+    line: vec3;
+    posSubtree: CollisionTree | null;
+    posPlane: GroundPlane | null;
+    negSubtree: CollisionTree | null;
+    negPlane: GroundPlane | null;
+}
+
+export function findGroundHeight(tree: CollisionTree | null, x: number, z: number): number {
+    const plane = findGroundPlane(tree, x/100, z/100);
+    if (plane === null)
+        return 0;
+    if (plane.normal[1] === 0)
+        return 0;
+    return -100*(x*plane.normal[0]/100 + z*plane.normal[2]/100 + plane.offset)/plane.normal[1];
+}
+
+function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+    if (tree === null)
+        return null;
+    while (true) {
+        const test = x*tree.line[0] + z*tree.line[1] + tree.line[2];
+        if (test > 0) {
+            if (tree.posPlane)
+                return tree.posPlane
+            if (tree.posSubtree === null)
+                return null
+            tree = tree.posSubtree;
+        } else {
+            if (tree.negPlane)
+                return tree.negPlane
+            if (tree.negSubtree === null)
+                return null
+            tree = tree.negSubtree;
+        }
+    }
+}
+
+function parseCollisionTree(dataMap: DataMap, addr: number): CollisionTree {
+    const view = dataMap.getView(addr);
+    const planeData = view.getUint32(0x00);
+    const treeData = view.getUint32(0x04);
+    // can be followed by another pair for ceilings
+
+    const planeList: GroundPlane[] = [];
+    const planeView = dataMap.getView(planeData);
+    const treeView = dataMap.getView(treeData);
+
+    return parseCollisionSubtree(treeView, planeView, planeList, 0);
+}
+
+function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeList: GroundPlane[], index: number): CollisionTree {
+    const offs = index * 0x1C;
+    const line = getVec3(treeView, offs + 0x00);
+    const posTreeIdx = treeView.getInt32(offs + 0x0C);
+    const negTreeIdx = treeView.getInt32(offs + 0x10);
+    const posPlaneIdx = treeView.getInt32(offs + 0x14);
+    const negPlaneIdx = treeView.getInt32(offs + 0x18);
+
+    function getPlane(index: number): GroundPlane | null {
+        if (index === -1)
+            return null;
+        while (planeList.length < index + 1) {
+            const start = planeList.length * 0x14;
+            const x = planeView.getFloat32(start + 0x00);
+            const y = planeView.getFloat32(start + 0x04);
+            const z = planeView.getFloat32(start + 0x08);
+            planeList.push({
+                normal: vec3.fromValues(x, z, y), // the plane equation uses z up
+                offset: planeView.getFloat32(start + 0x0C),
+                type: planeView.getUint32(start + 0x10),
+            });
+        }
+        return planeList[index];
+    }
+
+    const posSubtree = posTreeIdx > -1 ? parseCollisionSubtree(treeView, planeView, planeList, posTreeIdx) : null;
+    const negSubtree = negTreeIdx > -1 ? parseCollisionSubtree(treeView, planeView, planeList, negTreeIdx) : null;
+    const posPlane = getPlane(posPlaneIdx);
+    const negPlane = getPlane(negPlaneIdx);
+
+    return {line, posSubtree, posPlane, negSubtree, negPlane};
 }

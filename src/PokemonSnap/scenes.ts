@@ -7,11 +7,11 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { ModelRenderer, SnapPass, buildTransform } from './render';
-import { LevelArchive, parseLevel, Model } from './room';
+import { ModelRenderer, SnapPass } from './render';
+import { LevelArchive, parseLevel, findGroundHeight, SpawnType } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
-import { mat4, vec3 } from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { hexzero } from '../util';
 
 const pathBase = `PokemonSnap`;
@@ -105,8 +105,6 @@ class SnapRenderer implements Viewer.SceneGfx {
 
 }
 
-const transformScratch = mat4.create();
-const scaleScratch = vec3.create();
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) { }
 
@@ -123,7 +121,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=1`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=2`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
@@ -166,8 +164,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     const objectRenderer = new ModelRenderer(objectDatas[objIndex], level.objectInfo[objIndex].graph);
                     // set transform components
                     vec3.copy(objectRenderer.translation, objects[j].pos);
-                    if (level.objectInfo[objIndex].flying)
-                        vec3.sub(objectRenderer.translation, objectRenderer.translation, level.rooms[i].graph.translation);
+                    if (level.objectInfo[objIndex].spawn === SpawnType.GROUND)
+                        objectRenderer.translation[1] = findGroundHeight(level.collision!, objects[j].pos[0], objects[j].pos[2]);
 
                     vec3.copy(objectRenderer.euler, objects[j].euler);
 
