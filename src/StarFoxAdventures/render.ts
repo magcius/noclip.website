@@ -69,7 +69,8 @@ export class ModelInstance {
         const packetParams = new PacketParams();
         packetParams.clear();
 
-        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.shapeHelper.setOnRenderInst(renderInst);
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
         for (let i = 0; i < 8; i++) {
             if (this.textures[i]) {
@@ -91,6 +92,7 @@ export class ModelInstance {
         this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera, modelMatrix);
         this.shapeHelper.fillPacketParams(packetParams, renderInst);
 
+        renderInstManager.submitRenderInst(renderInst);
         // renderInstManager.popTemplateRenderInst();
     }
 }
