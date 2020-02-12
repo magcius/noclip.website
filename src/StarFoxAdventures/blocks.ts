@@ -1,27 +1,28 @@
-import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
-import { MapInfo } from './maps';
+import { GfxDevice} from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
+import { mat4 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
+import { nArray } from '../util';
+import * as GX from '../gx/gx_enum';
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+
 import { ModelInstance, SFARenderer } from './render';
 import { TextureCollection, SFATextureCollection, FalseTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { mat4 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
-import { hexzero, nArray } from '../util';
-import * as GX from '../gx/gx_enum';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterial } from '../gx/gx_material';
+import { IBlockCollection } from './maps';
 
 export abstract class BlockFetcher {
     public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
 }
 
-abstract class BlockRendererBase {
+export abstract class BlockRendererBase {
     public abstract addToRenderer(renderer: SFARenderer, modelMatrix: mat4): void;
 }
 
-export class BlockCollection {
+export class BlockCollection implements IBlockCollection {
+    gfxDevice: GfxDevice;
     blockRenderers: BlockRendererBase[] = []; // Address by blockRenderers[sub]
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
@@ -30,6 +31,7 @@ export class BlockCollection {
     }
 
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
+        this.gfxDevice = device;
         const dataFetcher = context.dataFetcher;
         const pathBase = gameInfo.pathBase;
         this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
@@ -43,9 +45,15 @@ export class BlockCollection {
             this.texColl = new FalseTextureCollection(device);
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
-            const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
-            const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
-            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, this.isAncient);
+            try {
+                const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
+                const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
+                this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, this.isAncient);
+            } catch (e) {
+                console.warn(`Failed to load textures for subdirectory ${subdir}. Using fake textures instead. Exception:`);
+                console.error(e);
+                this.texColl = new FalseTextureCollection(device);
+            }
         }
     }
 
@@ -62,6 +70,10 @@ export class BlockCollection {
         }
 
         return this.blockRenderers[sub];
+    }
+
+    public getBlock(mod: number, sub: number): BlockRendererBase | null {
+        return this.getBlockRenderer(this.gfxDevice, sub);
     }
 }
 
@@ -131,8 +143,8 @@ export class BlockRenderer implements BlockRendererBase {
                 listCount: 0x9f,
                 listSize: 0x34,
                 // FIXME: Yet another format occurs in sfademo/frontend!
-                numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                // numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+                numListBits: 8, // ??? should be 6 according to decompilation of demo????
                 numLayersOffset: 0x3b,
                 bitstreamOffset: 0x74, // Whoa...
                 // FIXME: There are three bitstreams, probably for opaque and transparent objects
@@ -500,8 +512,7 @@ export class AncientBlockRenderer implements BlockRendererBase {
             shaderCount: 0x9a, // Polygon attributes and material information
             shaderSize: 0x3c,
             listCount: 0x99,
-            numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort!
-            //numListBits: 8, // ??? should be 6 according to decompilation of demo????
+            numListBits: 6,
             numLayersOffset: 0x3b,
             // FIXME: There are three bitstreams, probably for opaque and transparent objects
             bitstreamByteCount: 0x86,

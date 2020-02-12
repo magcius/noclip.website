@@ -1,23 +1,11 @@
-import * as pako from 'pako';
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import * as GX_Material from '../gx/gx_material';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import * as GX_Texture from '../gx/gx_texture';
-
 import { DataFetcher } from '../DataFetcher';
-import { hexzero, nArray } from '../util';
-import * as GX from '../gx/gx_enum';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix } from '../Camera';
 import { mat4 } from 'gl-matrix';
 
-import { SFAMapDesc, SFASandboxDesc } from './maps';
+import { SFAMapDesc, SFASandboxDesc, AncientMapDesc } from './maps';
 import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFARenderer } from './render';
@@ -45,8 +33,10 @@ class SFABlockFetcher implements BlockFetcher {
         const subdir = getSubdir(locationNum, gameInfo);
         if (this.isDeletedMap) {
             console.log(`isDeletedMap; subdir ${subdir}`);
-            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
+            // this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
+            // this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
+            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`)).createDataView();
+            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`);
         } else {
             this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
             this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
@@ -265,7 +255,7 @@ class AncientBlockFetcher implements BlockFetcher {
 const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher(false); // Change to true if you want to see earlier prototype blocks!
+        const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
         await result.create(locationNum, dataFetcher, gameInfo);
         return result;
     },
@@ -279,11 +269,11 @@ const SFADEMO_GAME_INFO: GameInfo = {
         6: 'dfptop',
         7: 'volcano',
         8: 'animtest',
-        9: 'animtest',
+        9: 'mazecave', // 9: 'animtest',
         10: 'dragrockbot',
         11: 'dfalls',
         12: 'swaphol',
-        13: 'animtest',
+        13: 'shipbattle', // 13: 'animtest',
         14: 'nwastes',
         15: 'warlock',
         16: 'shop',
@@ -324,14 +314,29 @@ const SFADEMO_GAME_INFO: GameInfo = {
         51: 'bossdrakor',
         52: 'animtest',
         53: 'bosstrex',
-        54: 'animtest',
-        // The following entries are erased from the executable...
+        54: 'linkb', // 54: 'animtest',
+        // The following entries are missing from the demo executable.
+        57: 'arwingdarkice',
+        58: 'arwingcloud',
+        59: 'arwingcity',
+        60: 'arwingdragon',
+        61: 'gamefront',
+        62: 'linklevel',
         63: 'greatfox',
+        64: 'linka',
+        65: 'linkc',
+        66: 'linkd',
+        67: 'linke',
+        68: 'linkf',
+        69: 'linkg',
+        70: 'linkh',
+        71: 'linkj',
+        72: 'linki',
     }
 }
 
 const ANCIENT_DP_GAME_INFO: GameInfo = {
-    pathBase: 'sfademo',
+    pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new AncientBlockFetcher();
         await result.create(dataFetcher, gameInfo);
@@ -638,79 +643,118 @@ const sceneDescs = [
     // new SFABlockExhibitDesc('wallcity', 'mod21', 'Wall City Blocks'),
     // new SFABlockExhibitDesc('warlock', 'mod16', 'Warlock Blocks'),
 
-    // 'Demo',
+    // 'Demo Maps',
+    // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(2, 'demo2', 'Early Dragon Rock', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(3, 'demo3', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(4, 'demo4', 'Early Volcano Force Point Temple', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(5, 'demo5', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(6, 'demo6', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(7, 'demo7', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(8, 'demo8', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(9, 'demo9', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(10, 'demo10', 'Location 10', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(11, 'demo11', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(12, 'demo12', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(13, 'demo13', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(14, 'demo14', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(15, 'demo15', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(16, 'demo16', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(17, 'demo17', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(18, 'demo18', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(19, 'demo19', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(7, 'demo7', 'Early ThornTail Hollow', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(8, 'demo8', 'Early ThornTail Hollow Cave', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(9, 'demo9', 'Early Maze Cave', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(10, 'demo10', 'Early Ice Mountain', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(11, 'demo11', 'Early Krazoa Palace', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(12, 'demo12', 'Early CloudRunner Fortress', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(13, 'demo13', 'Early Walled City', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(14, 'demo14', 'Early LightFoot Village', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(15, 'demo15', 'Early CloudRunner Treasure Vault', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(16, 'demo16', 'Early CloudRunner Dungeon', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(17, 'demo17', 'Location 17', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(18, 'demo18', 'Early Moon Mountain Pass', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(19, 'demo19', 'Early Ice Mountain', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(20, 'demo20', 'Location 20', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(21, 'demo21', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(22, 'demo22', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(23, 'demo23', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(21, 'demo21', 'Early Volcano Force Point Temple 2?', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(22, 'demo22', 'Location', SFADEMO_GAME_INFO, false), // frontend
+    // new SFAMapDesc(23, 'demo23', 'Early Ice Mountain Race', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(24, 'demo24', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(25, 'demo25', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(26, 'demo26', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(27, 'demo27', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(28, 'demo28', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(29, 'demo29', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(30, 'demo30', 'Location 30', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(31, 'demo31', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(32, 'demo32', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(33, 'demo33', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(26, 'demo26', 'Early Test Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(27, 'demo27', 'Early DarkIce Mines', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(28, 'demo28', 'Early Volcano Boss', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(29, 'demo29', 'Early Cape Claw', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(30, 'demo30', 'Unused Galleon Interior?', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(31, 'demo31', 'Early Blue Shrine Trial', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(32, 'demo32', 'Early Green Shrine Trial', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(33, 'demo33', 'Early Yellow Shrine Trial', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(34, 'demo34', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(35, 'demo35', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(36, 'demo36', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(37, 'demo37', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(38, 'demo38', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(39, 'demo39', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(40, 'demo40', 'Location 40', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(38, 'demo38', 'Early Arwing Arena', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(39, 'demo39', 'Early Purple Shrine Trial', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(40, 'demo40', 'Early Purple Shrine Arena', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(41, 'demo41', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(42, 'demo42', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(43, 'demo43', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(44, 'demo44', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(45, 'demo45', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(43, 'demo43', 'Early CloudRunner Race', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(44, 'demo44', 'Early Volcano Boss', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(45, 'demo45', 'Early Ice Mountain Arena', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(46, 'demo46', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(47, 'demo47', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(48, 'demo48', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(48, 'demo48', 'Early Boss T-rex', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(49, 'demo49', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(50, 'demo50', 'Location 50', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(51, 'demo51', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(50, 'demo50', 'Early Ocean Force Temple', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(51, 'demo51', 'Early Shop', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(52, 'demo52', 'Location', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(53, 'demo53', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(54, 'demo54', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(55, 'demo55', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(56, 'demo56', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(54, 'demo54', 'Early Magic Cave', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(55, 'demo55', 'Early Ice Mountain Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(56, 'demo56', 'Early Ice Volcano Link', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(57, 'demo57', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(58, 'demo58', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(59, 'demo59', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(60, 'demo60', 'Location 60', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(61, 'demo61', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(62, 'demo62', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(63, 'demo63', 'Location', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(58, 'demo58', 'Early Arwing 1', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(59, 'demo59', 'Early Arwing 2', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(60, 'demo60', 'Early Arwing 3', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(61, 'demo61', 'Early Arwing 4', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(62, 'demo62', 'Early Arwing 5', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(63, 'demo63', 'Early Great Fox', SFADEMO_GAME_INFO, false),
     // new SFAMapDesc(64, 'demo64', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(65, 'demo65', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(66, 'demo66', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(67, 'demo67', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(68, 'demo68', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(69, 'demo69', 'Location', SFADEMO_GAME_INFO, false),
-    // new SFAMapDesc(70, 'demo70', 'Location 70', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(65, 'demo65', 'Early Great Fox 2', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(66, 'demo66', 'Early Space Area', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(67, 'demo67', 'Early Grates Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(68, 'demo68', 'Early Race Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(69, 'demo69', 'Early Dragon Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(70, 'demo70', 'Early Volcano Plant 2', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(71, 'demo71', 'Early Grassy Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(72, 'demo72', 'Early Pit Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(73, 'demo73', 'Early Temple Link', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(74, 'demo74', 'Early Box Cage', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(75, 'demo75', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(76, 'demo76', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(77, 'demo77', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(78, 'demo78', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(79, 'demo79', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(80, 'demo80', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(81, 'demo81', 'Early Map', SFADEMO_GAME_INFO, false),
+    // new SFAMapDesc(82, 'demo82', 'Early Map', SFADEMO_GAME_INFO, false),
+    // ...
+    // new SFAMapDesc(100, 'demo100', 'Early Map', SFADEMO_GAME_INFO, false),
+    // ...
+    // new SFAMapDesc(105, 'demo105', 'Early Map', SFADEMO_GAME_INFO, false),
+    // ...
+    // new SFAMapDesc(109, 'demo109', 'Early Map', SFADEMO_GAME_INFO, false),
+    // (end)
 
     // 'Ancient Block Exhibits',
     // new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),
 
-    // 'Ancient',
-    // new SFASandboxDesc('ancientdp', 'Ancient Map Sandbox', ANCIENT_DP_GAME_INFO),
+    'Ancient Maps',
+    new AncientMapDesc('ancient0', "Ancient Pit Room", ANCIENT_DP_GAME_INFO, 0),
+    new AncientMapDesc('ancient1', "Ancient River, Mound and Pit Area", ANCIENT_DP_GAME_INFO, 1),
+    new AncientMapDesc('ancient2', "Ancient Mine Area", ANCIENT_DP_GAME_INFO, 2),
+    new AncientMapDesc('ancient3', "Ancient Swap Hollow", ANCIENT_DP_GAME_INFO, 3),
+    new AncientMapDesc('ancient4', "Ancient River Area", ANCIENT_DP_GAME_INFO, 4),
+    new AncientMapDesc('ancient5', "Ancient Warlock Mountain", ANCIENT_DP_GAME_INFO, 5),
+    new AncientMapDesc('ancient6', "Ancient Shop", ANCIENT_DP_GAME_INFO, 6),
+    new AncientMapDesc('ancient7', "Ancient CloudRunner Fortress", ANCIENT_DP_GAME_INFO, 7),
+    new AncientMapDesc('ancient8', "Ancient Ice Mountain", ANCIENT_DP_GAME_INFO, 8),
+    new AncientMapDesc('ancient9', "Ancient Mountain Pass", ANCIENT_DP_GAME_INFO, 9),
+    new AncientMapDesc('ancient10', "Ancient Ice Mountain Race", ANCIENT_DP_GAME_INFO, 10),
+    new AncientMapDesc('ancient11', "Ancient Ice Mountain Race 2", ANCIENT_DP_GAME_INFO, 11),
+    new AncientMapDesc('ancient12', "Ancient DarkIce Mines", ANCIENT_DP_GAME_INFO, 12),
+    new AncientMapDesc('ancient13', "Ancient Tiny Cave", ANCIENT_DP_GAME_INFO, 13),
+    new AncientMapDesc('ancient14', "Ancient CloudRunner Race", ANCIENT_DP_GAME_INFO, 14),
+    new AncientMapDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
+    // new SFASandboxDesc('ancientdp', 'Ancient Map Sandbox', ANCIENT_DP_GAME_INFO, true),
 ];
 
 const id = 'sfa';
