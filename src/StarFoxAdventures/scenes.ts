@@ -98,7 +98,7 @@ class SFABlockFetcher implements BlockFetcher {
 }
 
 export const SFA_GAME_INFO: GameInfo = {
-    pathBase: 'sfa',
+    pathBase: 'StarFoxAdventures',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new SFABlockFetcher(false);
         await result.create(locationNum, dataFetcher, gameInfo);
@@ -263,7 +263,7 @@ class AncientBlockFetcher implements BlockFetcher {
 }
 
 const SFADEMO_GAME_INFO: GameInfo = {
-    pathBase: 'sfademo',
+    pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new SFABlockFetcher(false); // Change to true if you want to see earlier prototype blocks!
         await result.create(locationNum, dataFetcher, gameInfo);
