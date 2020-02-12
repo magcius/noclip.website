@@ -21,7 +21,6 @@
         "module": "commonjs",
         "types": [
             "gl-matrix",
-            "webgl2",
             "pako",
             "filesystem"
         ]
