@@ -144,11 +144,11 @@ export const enum HSD_TObjFlags {
 
 export const enum HSD_TObjTevColorIn {
     // Some bits are from GX.CombineColorInput
-    ZERO      = GX.CombineColorInput.ZERO,
-    ONE       = GX.CombineColorInput.ONE,
-    HALF      = GX.CombineColorInput.HALF,
-    TEXC      = GX.CombineColorInput.TEXC,
-    TEXA      = GX.CombineColorInput.TEXA,
+    ZERO      = GX.CC.ZERO,
+    ONE       = GX.CC.ONE,
+    HALF      = GX.CC.HALF,
+    TEXC      = GX.CC.TEXC,
+    TEXA      = GX.CC.TEXA,
     KONST_RGB = 0x80,
     KONST_RRR = 0x81,
     KONST_GGG = 0x82,
@@ -162,8 +162,8 @@ export const enum HSD_TObjTevColorIn {
 
 export const enum HSD_TObjTevAlphaIn {
     // Some bits are from GX.CombineColorInput
-    ZERO      = GX.CombineAlphaInput.ZERO,
-    TEXA      = GX.CombineAlphaInput.TEXA,
+    ZERO      = GX.CA.ZERO,
+    TEXA      = GX.CA.TEXA,
     KONST_R   = 0x40,
     KONST_G   = 0x41,
     KONST_B   = 0x42,

@@ -304,15 +304,15 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const konstColorSel: GX.KonstColorSel = stream.readUint8();
             const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(stream.readUint8());
 
-            const colorInA: GX.CombineColorInput = (colorInputSel >>>  0) & 0x1F;
-            const colorInB: GX.CombineColorInput = (colorInputSel >>>  5) & 0x1F;
-            const colorInC: GX.CombineColorInput = (colorInputSel >>> 10) & 0x1F;
-            const colorInD: GX.CombineColorInput = (colorInputSel >>> 15) & 0x1F;
+            const colorInA: GX.CC = (colorInputSel >>>  0) & 0x1F;
+            const colorInB: GX.CC = (colorInputSel >>>  5) & 0x1F;
+            const colorInC: GX.CC = (colorInputSel >>> 10) & 0x1F;
+            const colorInD: GX.CC = (colorInputSel >>> 15) & 0x1F;
 
-            const alphaInA: GX.CombineAlphaInput = (alphaInputSel >>>  0) & 0x1F;
-            const alphaInB: GX.CombineAlphaInput = (alphaInputSel >>>  5) & 0x1F;
-            const alphaInC: GX.CombineAlphaInput = (alphaInputSel >>> 10) & 0x1F;
-            const alphaInD: GX.CombineAlphaInput = (alphaInputSel >>> 15) & 0x1F;
+            const alphaInA: GX.CA = (alphaInputSel >>>  0) & 0x1F;
+            const alphaInB: GX.CA = (alphaInputSel >>>  5) & 0x1F;
+            const alphaInC: GX.CA = (alphaInputSel >>> 10) & 0x1F;
+            const alphaInD: GX.CA = (alphaInputSel >>> 15) & 0x1F;
 
             const colorOp: GX.TevOp       = (colorCombineFlags >>> 0) & 0x0F;
             const colorBias: GX.TevBias   = (colorCombineFlags >>> 4) & 0x03;
@@ -1167,20 +1167,20 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
     const tevStage: GX_Material.TevStage = {
         channelId: GX.RasColorChannelID.COLOR0A0,
 
-        colorInA: GX.CombineColorInput.ZERO,
-        colorInB: GX.CombineColorInput.ZERO,
-        colorInC: GX.CombineColorInput.ZERO,
-        colorInD: GX.CombineColorInput.CPREV,
+        colorInA: GX.CC.ZERO,
+        colorInB: GX.CC.ZERO,
+        colorInC: GX.CC.ZERO,
+        colorInD: GX.CC.CPREV,
         colorBias: GX.TevBias.ZERO,
         colorOp: GX.TevOp.ADD,
         colorClamp: true,
         colorScale: GX.TevScale.SCALE_1,
         colorRegId: GX.Register.PREV,
 
-        alphaInA: GX.CombineAlphaInput.ZERO,
-        alphaInB: GX.CombineAlphaInput.ZERO,
-        alphaInC: GX.CombineAlphaInput.ZERO,
-        alphaInD: GX.CombineAlphaInput.APREV,
+        alphaInA: GX.CA.ZERO,
+        alphaInB: GX.CA.ZERO,
+        alphaInC: GX.CA.ZERO,
+        alphaInD: GX.CA.APREV,
         alphaBias: GX.TevBias.ZERO,
         alphaOp: GX.TevOp.ADD,
         alphaClamp: true,
@@ -1206,16 +1206,16 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
         tevStage.konstColorSel = GX.KonstColorSel.KCSEL_K0;
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K0_A;
 
-        tevStage.colorInB = GX.CombineColorInput.KONST;
-        tevStage.colorInC = GX.CombineColorInput.TEXC;
-        tevStage.colorInD = GX.CombineColorInput.RASC;
+        tevStage.colorInB = GX.CC.KONST;
+        tevStage.colorInC = GX.CC.TEXC;
+        tevStage.colorInD = GX.CC.RASC;
 
-        tevStage.alphaInD = GX.CombineAlphaInput.KONST;
+        tevStage.alphaInD = GX.CA.KONST;
     } else if (passType === 'CLR ') {
-        tevStage.colorInB = (hasDIFF ? GX.CombineColorInput.CPREV : GX.CombineColorInput.RASC);
-        tevStage.colorInC = GX.CombineColorInput.TEXC;
-        tevStage.colorInD = GX.CombineColorInput.ZERO;
-        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
+        tevStage.colorInB = (hasDIFF ? GX.CC.CPREV : GX.CC.RASC);
+        tevStage.colorInC = GX.CC.TEXC;
+        tevStage.colorInD = GX.CC.ZERO;
+        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CA.TEXA : GX.CA.APREV;
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K1_A;
     } else if (passType === 'TRAN') {
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_1;
@@ -1223,37 +1223,37 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
 
         // Invert.
         if (passFlags & 0x10)
-            tevStage.alphaInA = GX.CombineAlphaInput.KONST;
+            tevStage.alphaInA = GX.CA.KONST;
         else
-            tevStage.alphaInB = GX.CombineAlphaInput.KONST;
-        tevStage.alphaInC = GX.CombineAlphaInput.TEXA;
-        tevStage.alphaInD = GX.CombineAlphaInput.ZERO;
+            tevStage.alphaInB = GX.CA.KONST;
+        tevStage.alphaInC = GX.CA.TEXA;
+        tevStage.alphaInD = GX.CA.ZERO;
     } else if (passType === 'INCA') {
         // Emissive.
-        tevStage.colorInB = GX.CombineColorInput.TEXC;
-        tevStage.colorInC = GX.CombineColorInput.ONE;
-        tevStage.colorInD = GX.CombineColorInput.CPREV;
+        tevStage.colorInB = GX.CC.TEXC;
+        tevStage.colorInC = GX.CC.ONE;
+        tevStage.colorInD = GX.CC.CPREV;
     } else if (passType === 'BLOL') {
         // Bloom lightmap.
         // This actually works by drawing to the framebuffer alpha channel. During the post-process pass, the alpha channel
         // is sampled to determine the intensity of the bloom effect at this pixel. We don't support bloom for MP3, so instead
         // we just essentially multiply the color by 2 to simulate the increase in brightness that the bloom effect provides.
         tevStage.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
-        tevStage.colorInB = GX.CombineColorInput.CPREV;
-        tevStage.colorInC = GX.CombineColorInput.ONE;
-        tevStage.colorInD = GX.CombineColorInput.CPREV;
+        tevStage.colorInB = GX.CC.CPREV;
+        tevStage.colorInC = GX.CC.ONE;
+        tevStage.colorInD = GX.CC.CPREV;
     } else if (passType === 'RFLV') {
-        tevStage.colorInA = GX.CombineColorInput.ZERO;
-        tevStage.colorInB = GX.CombineColorInput.ZERO;
-        tevStage.colorInC = GX.CombineColorInput.ZERO;
-        tevStage.colorInD = GX.CombineColorInput.TEXC;
+        tevStage.colorInA = GX.CC.ZERO;
+        tevStage.colorInB = GX.CC.ZERO;
+        tevStage.colorInC = GX.CC.ZERO;
+        tevStage.colorInD = GX.CC.TEXC;
         tevStage.colorRegId = GX.Register.REG2;
         tevStage.alphaRegId = GX.Register.REG2;
     } else if (passType === 'RFLD') {
-        tevStage.colorInA = GX.CombineColorInput.ZERO;
-        tevStage.colorInB = GX.CombineColorInput.C2;
-        tevStage.colorInC = GX.CombineColorInput.TEXC;
-        tevStage.colorInD = GX.CombineColorInput.CPREV;
+        tevStage.colorInA = GX.CC.ZERO;
+        tevStage.colorInB = GX.CC.C2;
+        tevStage.colorInC = GX.CC.TEXC;
+        tevStage.colorInD = GX.CC.CPREV;
     }
 
     return tevStage;

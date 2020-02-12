@@ -380,17 +380,17 @@ const st_bm: GX.BlendMode[]   = [ GX.BlendMode.NONE, GX.BlendMode.BLEND, GX.Blen
 const st_bf: GX.BlendFactor[] = [ GX.BlendFactor.ZERO, GX.BlendFactor.ONE, GX.BlendFactor.SRCCLR, GX.BlendFactor.INVSRCCLR, GX.BlendFactor.SRCCLR, GX.BlendFactor.INVSRCCLR, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.BlendFactor.DSTALPHA, GX.BlendFactor.INVDSTALPHA ];
 const st_c: GX.CompareType[]  = [ GX.CompareType.NEVER, GX.CompareType.LESS, GX.CompareType.LEQUAL, GX.CompareType.EQUAL, GX.CompareType.NEQUAL, GX.CompareType.GEQUAL, GX.CompareType.GREATER, GX.CompareType.ALWAYS ];
 const st_ao: GX.AlphaOp[]     = [ GX.AlphaOp.AND, GX.AlphaOp.OR, GX.AlphaOp.XOR, GX.AlphaOp.XNOR ];
-const st_ca: GX.CombineColorInput[] = [
-    GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.ONE,  GX.CombineColorInput.ZERO,
-    GX.CombineColorInput.ZERO, GX.CombineColorInput.C0,   GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO,
-    GX.CombineColorInput.C0,   GX.CombineColorInput.ONE,  GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO,
-    GX.CombineColorInput.C1,   GX.CombineColorInput.C0,   GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO,
-    GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.C0,   GX.CombineColorInput.C1  ,
-    GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.C0  ,
+const st_ca: GX.CC[] = [
+    GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE,  GX.CC.ZERO,
+    GX.CC.ZERO, GX.CC.C0,   GX.CC.TEXC, GX.CC.ZERO,
+    GX.CC.C0,   GX.CC.ONE,  GX.CC.TEXC, GX.CC.ZERO,
+    GX.CC.C1,   GX.CC.C0,   GX.CC.TEXC, GX.CC.ZERO,
+    GX.CC.ZERO, GX.CC.TEXC, GX.CC.C0,   GX.CC.C1  ,
+    GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.C0  ,
 ];
-const st_aa: GX.CombineAlphaInput[] = [
-    GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.A0,   GX.CombineAlphaInput.ZERO,
-    GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0  ,
+const st_aa: GX.CA[] = [
+    GX.CA.ZERO, GX.CA.TEXA, GX.CA.A0,   GX.CA.ZERO,
+    GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A0  ,
 ];
 
 function shapeTypeSupported(shapeType: ShapeType): boolean {
@@ -551,8 +551,8 @@ export class JPAResourceData {
                 mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
                 mb.setTevOrder(1, texCoordId, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO);
-                mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO);
-                mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO);
+                mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.TEXC, GX.CC.CPREV, GX.CC.ZERO);
+                mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
                 mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
                 mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
             }

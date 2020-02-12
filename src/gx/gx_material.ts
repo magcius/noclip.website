@@ -135,20 +135,20 @@ export interface IndTexStage {
 export type SwapTable = readonly [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan];
 
 export interface TevStage {
-    colorInA: GX.CombineColorInput;
-    colorInB: GX.CombineColorInput;
-    colorInC: GX.CombineColorInput;
-    colorInD: GX.CombineColorInput;
+    colorInA: GX.CC;
+    colorInB: GX.CC;
+    colorInC: GX.CC;
+    colorInD: GX.CC;
     colorOp: GX.TevOp;
     colorBias: GX.TevBias;
     colorScale: GX.TevScale;
     colorClamp: boolean;
     colorRegId: GX.Register;
 
-    alphaInA: GX.CombineAlphaInput;
-    alphaInB: GX.CombineAlphaInput;
-    alphaInC: GX.CombineAlphaInput;
-    alphaInD: GX.CombineAlphaInput;
+    alphaInA: GX.CA;
+    alphaInB: GX.CA;
+    alphaInC: GX.CA;
+    alphaInD: GX.CA;
     alphaOp: GX.TevOp;
     alphaBias: GX.TevBias;
     alphaScale: GX.TevScale;
@@ -686,11 +686,11 @@ ${this.generateLightAttnFn(chan, lightName)}
         switch (konstColor) {
         case GX.KonstColorSel.KCSEL_1:    return 'vec3(8.0/8.0)';
         case GX.KonstColorSel.KCSEL_7_8:  return 'vec3(7.0/8.0)';
-        case GX.KonstColorSel.KCSEL_3_4:  return 'vec3(6.0/8.0)';
+        case GX.KonstColorSel.KCSEL_6_8:  return 'vec3(6.0/8.0)';
         case GX.KonstColorSel.KCSEL_5_8:  return 'vec3(5.0/8.0)';
-        case GX.KonstColorSel.KCSEL_1_2:  return 'vec3(4.0/8.0)';
+        case GX.KonstColorSel.KCSEL_4_8:  return 'vec3(4.0/8.0)';
         case GX.KonstColorSel.KCSEL_3_8:  return 'vec3(3.0/8.0)';
-        case GX.KonstColorSel.KCSEL_1_4:  return 'vec3(2.0/8.0)';
+        case GX.KonstColorSel.KCSEL_2_8:  return 'vec3(2.0/8.0)';
         case GX.KonstColorSel.KCSEL_1_8:  return 'vec3(1.0/8.0)';
         case GX.KonstColorSel.KCSEL_K0:   return 's_kColor0.rgb';
         case GX.KonstColorSel.KCSEL_K0_R: return 's_kColor0.rrr';
@@ -719,11 +719,11 @@ ${this.generateLightAttnFn(chan, lightName)}
         switch (konstAlpha) {
         case GX.KonstAlphaSel.KASEL_1:    return '(8.0/8.0)';
         case GX.KonstAlphaSel.KASEL_7_8:  return '(7.0/8.0)';
-        case GX.KonstAlphaSel.KASEL_3_4:  return '(6.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_6_8:  return '(6.0/8.0)';
         case GX.KonstAlphaSel.KASEL_5_8:  return '(5.0/8.0)';
-        case GX.KonstAlphaSel.KASEL_1_2:  return '(4.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_4_8:  return '(4.0/8.0)';
         case GX.KonstAlphaSel.KASEL_3_8:  return '(3.0/8.0)';
-        case GX.KonstAlphaSel.KASEL_1_4:  return '(2.0/8.0)';
+        case GX.KonstAlphaSel.KASEL_2_8:  return '(2.0/8.0)';
         case GX.KonstAlphaSel.KASEL_1_8:  return '(1.0/8.0)';
         case GX.KonstAlphaSel.KASEL_K0_R: return 's_kColor0.r';
         case GX.KonstAlphaSel.KASEL_K0_G: return 's_kColor0.g';
@@ -774,55 +774,55 @@ ${this.generateLightAttnFn(chan, lightName)}
         return suffixes[channel];
     }
 
-    private generateColorSwizzle(swapTable: SwapTable | undefined, colorIn: GX.CombineColorInput): string {
+    private generateColorSwizzle(swapTable: SwapTable | undefined, colorIn: GX.CC): string {
         const swapR = this.generateComponentSwizzle(swapTable, GX.TevColorChan.R);
         const swapG = this.generateComponentSwizzle(swapTable, GX.TevColorChan.G);
         const swapB = this.generateComponentSwizzle(swapTable, GX.TevColorChan.B);
         const swapA = this.generateComponentSwizzle(swapTable, GX.TevColorChan.A);
 
         switch (colorIn) {
-        case GX.CombineColorInput.TEXC:
-        case GX.CombineColorInput.RASC:
+        case GX.CC.TEXC:
+        case GX.CC.RASC:
             return `${swapR}${swapG}${swapB}`;
-        case GX.CombineColorInput.TEXA:
-        case GX.CombineColorInput.RASA:
+        case GX.CC.TEXA:
+        case GX.CC.RASA:
             return `${swapA}${swapA}${swapA}`;
         default:
             throw "whoops";
         }
     }
 
-    private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
+    private generateColorIn(stage: TevStage, colorIn: GX.CC) {
         switch (colorIn) {
-        case GX.CombineColorInput.CPREV: return `t_ColorPrev.rgb`;
-        case GX.CombineColorInput.APREV: return `t_ColorPrev.aaa`;
-        case GX.CombineColorInput.C0:    return `t_Color0.rgb`;
-        case GX.CombineColorInput.A0:    return `t_Color0.aaa`;
-        case GX.CombineColorInput.C1:    return `t_Color1.rgb`;
-        case GX.CombineColorInput.A1:    return `t_Color1.aaa`;
-        case GX.CombineColorInput.C2:    return `t_Color2.rgb`;
-        case GX.CombineColorInput.A2:    return `t_Color2.aaa`;
-        case GX.CombineColorInput.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CombineColorInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CombineColorInput.RASC:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
-        case GX.CombineColorInput.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
-        case GX.CombineColorInput.ONE:   return `vec3(1)`;
-        case GX.CombineColorInput.HALF:  return `vec3(1.0/2.0)`;
-        case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
-        case GX.CombineColorInput.ZERO:  return `vec3(0)`;
+        case GX.CC.CPREV: return `t_ColorPrev.rgb`;
+        case GX.CC.APREV: return `t_ColorPrev.aaa`;
+        case GX.CC.C0:    return `t_Color0.rgb`;
+        case GX.CC.A0:    return `t_Color0.aaa`;
+        case GX.CC.C1:    return `t_Color1.rgb`;
+        case GX.CC.A1:    return `t_Color1.aaa`;
+        case GX.CC.C2:    return `t_Color2.rgb`;
+        case GX.CC.A2:    return `t_Color2.aaa`;
+        case GX.CC.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CC.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
+        case GX.CC.RASC:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.ONE:   return `vec3(1)`;
+        case GX.CC.HALF:  return `vec3(1.0/2.0)`;
+        case GX.CC.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
+        case GX.CC.ZERO:  return `vec3(0)`;
         }
     }
 
-    private generateAlphaIn(stage: TevStage, alphaIn: GX.CombineAlphaInput) {
+    private generateAlphaIn(stage: TevStage, alphaIn: GX.CA) {
         switch (alphaIn) {
-        case GX.CombineAlphaInput.APREV: return `t_ColorPrev.a`;
-        case GX.CombineAlphaInput.A0:    return `t_Color0.a`;
-        case GX.CombineAlphaInput.A1:    return `t_Color1.a`;
-        case GX.CombineAlphaInput.A2:    return `t_Color2.a`;
-        case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
-        case GX.CombineAlphaInput.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
-        case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
-        case GX.CombineAlphaInput.ZERO:  return `0.0`;
+        case GX.CA.APREV: return `t_ColorPrev.a`;
+        case GX.CA.A0:    return `t_Color0.a`;
+        case GX.CA.A1:    return `t_Color1.a`;
+        case GX.CA.A2:    return `t_Color2.a`;
+        case GX.CA.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
+        case GX.CA.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
+        case GX.CA.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
+        case GX.CA.ZERO:  return `0.0`;
         default:
             throw "whoops";
         }
@@ -1531,10 +1531,10 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
     for (let i = 0; i < tevOrders.length; i++) {
         const color = r.bp[GX.BPRegister.TEV_COLOR_ENV_0_ID + (i * 2)];
 
-        const colorInD: GX.CombineColorInput = (color >>>  0) & 0x0F;
-        const colorInC: GX.CombineColorInput = (color >>>  4) & 0x0F;
-        const colorInB: GX.CombineColorInput = (color >>>  8) & 0x0F;
-        const colorInA: GX.CombineColorInput = (color >>> 12) & 0x0F;
+        const colorInD: GX.CC = (color >>>  0) & 0x0F;
+        const colorInC: GX.CC = (color >>>  4) & 0x0F;
+        const colorInB: GX.CC = (color >>>  8) & 0x0F;
+        const colorInA: GX.CC = (color >>> 12) & 0x0F;
         const colorBias: GX.TevBias =          (color >>> 16) & 0x03;
         const colorSub: boolean =           !!((color >>> 18) & 0x01);
         const colorClamp: boolean =         !!((color >>> 19) & 0x01);
@@ -1548,10 +1548,10 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
 
         const rswap: number =                  (alpha >>>  0) & 0x03;
         const tswap: number =                  (alpha >>>  2) & 0x03;
-        const alphaInD: GX.CombineAlphaInput = (alpha >>>  4) & 0x07;
-        const alphaInC: GX.CombineAlphaInput = (alpha >>>  7) & 0x07;
-        const alphaInB: GX.CombineAlphaInput = (alpha >>> 10) & 0x07;
-        const alphaInA: GX.CombineAlphaInput = (alpha >>> 13) & 0x07;
+        const alphaInD: GX.CA = (alpha >>>  4) & 0x07;
+        const alphaInC: GX.CA = (alpha >>>  7) & 0x07;
+        const alphaInB: GX.CA = (alpha >>> 10) & 0x07;
+        const alphaInA: GX.CA = (alpha >>> 13) & 0x07;
         const alphaBias: GX.TevBias =          (alpha >>> 16) & 0x03;
         const alphaSub: boolean =           !!((alpha >>> 18) & 0x01);
         const alphaClamp: boolean =         !!((alpha >>> 19) & 0x01);

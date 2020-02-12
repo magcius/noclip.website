@@ -204,33 +204,33 @@ function HSD_TExpColorInSub(tev: HSD_TETev, idx: number, sel: HSD_TEInput, exp: 
         input.type = HSD_TExpType.TE_ZERO;
     } else if (sel === HSD_TEInput.TE_1) {
         input.type = HSD_TExpType.TE_IMM;
-        input.arg = GX.CombineColorInput.ONE;
+        input.arg = GX.CC.ONE;
         input.exp = null;
     } else if (sel === HSD_TEInput.TE_4_8) {
         input.type = HSD_TExpType.TE_IMM;
-        input.arg = GX.CombineColorInput.HALF;
+        input.arg = GX.CC.HALF;
         input.exp = null;
     } else if (sel >= HSD_TEInput.TE_1_8 && sel <= HSD_TEInput.TE_7_8) {
         input.type = HSD_TExpType.TE_KONST;
-        input.arg = GX.CombineColorInput.KONST;
+        input.arg = GX.CC.KONST;
 
         if (sel === HSD_TEInput.TE_1_8)
             tev.kcsel = GX.KonstColorSel.KCSEL_1_8;
         else if (sel === HSD_TEInput.TE_2_8)
-            tev.kcsel = GX.KonstColorSel.KCSEL_1_4;
+            tev.kcsel = GX.KonstColorSel.KCSEL_2_8;
         else if (sel === HSD_TEInput.TE_3_8)
             tev.kcsel = GX.KonstColorSel.KCSEL_3_8;
         else if (sel === HSD_TEInput.TE_5_8)
             tev.kcsel = GX.KonstColorSel.KCSEL_5_8;
         else if (sel === HSD_TEInput.TE_6_8)
-            tev.kcsel = GX.KonstColorSel.KCSEL_3_4;
+            tev.kcsel = GX.KonstColorSel.KCSEL_6_8;
         else if (sel === HSD_TEInput.TE_7_8)
             tev.kcsel = GX.KonstColorSel.KCSEL_7_8;
     }
 
     if (input.type === HSD_TExpType.TE_ZERO) {
         input.sel = HSD_TEInput.TE_0;
-        input.arg = GX.CombineColorInput.ZERO;
+        input.arg = GX.CC.ZERO;
     } else if (input.type === HSD_TExpType.TE_TEV) {
         assert(sel === HSD_TEInput.TE_RGB || sel === HSD_TEInput.TE_A);
         assert(HSD_TExpGetType(exp) === HSD_TExpType.TE_TEV);
@@ -240,33 +240,33 @@ function HSD_TExpColorInSub(tev: HSD_TETev, idx: number, sel: HSD_TEInput, exp: 
         HSD_TExpRef(input.exp, input.sel);
     } else if (input.type === HSD_TExpType.TE_TEX) {
         if (sel === HSD_TEInput.TE_RGB) {
-            input.arg = GX.CombineColorInput.TEXC;
+            input.arg = GX.CC.TEXC;
         } else if (sel === HSD_TEInput.TE_R) {
-            input.arg = GX.CombineColorInput.TEXC;
+            input.arg = GX.CC.TEXC;
             tev.texSwapTable = [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R];
         } else if (sel === HSD_TEInput.TE_G) {
-            input.arg = GX.CombineColorInput.TEXC;
+            input.arg = GX.CC.TEXC;
             tev.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
         } else if (sel === HSD_TEInput.TE_B) {
-            input.arg = GX.CombineColorInput.TEXC;
+            input.arg = GX.CC.TEXC;
             tev.texSwapTable = [GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B];
         } else if (sel === HSD_TEInput.TE_A) {
-            input.arg = GX.CombineColorInput.TEXA;
+            input.arg = GX.CC.TEXA;
         }
     } else if (input.type === HSD_TExpType.TE_RAS) {
         if (sel === HSD_TEInput.TE_RGB) {
-            input.arg = GX.CombineColorInput.RASC;
+            input.arg = GX.CC.RASC;
         } else if (sel === HSD_TEInput.TE_R) {
-            input.arg = GX.CombineColorInput.RASC;
+            input.arg = GX.CC.RASC;
             tev.rasSwapTable = [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R];
         } else if (sel === HSD_TEInput.TE_G) {
-            input.arg = GX.CombineColorInput.RASC;
+            input.arg = GX.CC.RASC;
             tev.rasSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
         } else if (sel === HSD_TEInput.TE_B) {
-            input.arg = GX.CombineColorInput.RASC;
+            input.arg = GX.CC.RASC;
             tev.rasSwapTable = [GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B, GX.TevColorChan.B];
         } else if (sel === HSD_TEInput.TE_A) {
-            input.arg = GX.CombineColorInput.RASA;
+            input.arg = GX.CC.RASA;
         }
     } else if (input.type === HSD_TExpType.TE_CNST) {
         assert(HSD_TExpGetType(exp) === HSD_TExpType.TE_CNST);
@@ -310,25 +310,25 @@ function HSD_TExpAlphaInSub(tev: HSD_TETev, idx: number, sel: HSD_TEInput, exp: 
         input.type = HSD_TExpType.TE_ZERO;
     } else if (sel >= HSD_TEInput.TE_1 && sel <= HSD_TEInput.TE_7_8) {
         input.type = HSD_TExpType.TE_KONST;
-        input.arg = GX.CombineAlphaInput.KONST;
+        input.arg = GX.CA.KONST;
 
         if (sel === HSD_TEInput.TE_1_8)
             tev.kasel = GX.KonstAlphaSel.KASEL_1_8;
         else if (sel === HSD_TEInput.TE_2_8)
-            tev.kasel = GX.KonstAlphaSel.KASEL_1_4;
+            tev.kasel = GX.KonstAlphaSel.KASEL_2_8;
         else if (sel === HSD_TEInput.TE_3_8)
             tev.kasel = GX.KonstAlphaSel.KASEL_3_8;
         else if (sel === HSD_TEInput.TE_5_8)
             tev.kasel = GX.KonstAlphaSel.KASEL_5_8;
         else if (sel === HSD_TEInput.TE_6_8)
-            tev.kasel = GX.KonstAlphaSel.KASEL_3_4;
+            tev.kasel = GX.KonstAlphaSel.KASEL_6_8;
         else if (sel === HSD_TEInput.TE_7_8)
             tev.kasel = GX.KonstAlphaSel.KASEL_7_8;
     }
 
     if (input.type === HSD_TExpType.TE_ZERO) {
         input.sel = HSD_TEInput.TE_0;
-        input.arg = GX.CombineAlphaInput.ZERO;
+        input.arg = GX.CA.ZERO;
     } else if (input.type === HSD_TExpType.TE_TEV) {
         assert(sel === HSD_TEInput.TE_A);
         assert(HSD_TExpGetType(exp) === HSD_TExpType.TE_TEV);
@@ -336,9 +336,9 @@ function HSD_TExpAlphaInSub(tev: HSD_TETev, idx: number, sel: HSD_TEInput, exp: 
         assert(idx === 3 || expTev.alphaClamp);
         HSD_TExpRef(input.exp, input.sel);
     } else if (input.type === HSD_TExpType.TE_TEX) {
-        input.arg = GX.CombineAlphaInput.TEXA;
+        input.arg = GX.CA.TEXA;
     } else if (input.type === HSD_TExpType.TE_RAS) {
-        input.arg = GX.CombineAlphaInput.RASA;
+        input.arg = GX.CA.RASA;
     } else if (input.type === HSD_TExpType.TE_CNST) {
         assert(sel === HSD_TEInput.TE_A || sel === HSD_TEInput.TE_X);
         assert(HSD_TExpGetType(exp) === HSD_TExpType.TE_CNST);
@@ -926,9 +926,9 @@ function HSD_TExpSchedule(resource: HSD_TExpRes, dags: HSD_TExpDag[]): HSD_TETev
     const fullDepMtx = make_full_dependency_mtx(depMtx);
     const order = order_dag(dags, depMtx, fullDepMtx);
 
-    const colorInRGB = [ GX.CombineColorInput.C0, GX.CombineColorInput.C1, GX.CombineColorInput.C2, GX.CombineColorInput.CPREV ];
-    const colorInA   = [ GX.CombineColorInput.A0, GX.CombineColorInput.A1, GX.CombineColorInput.A2, GX.CombineColorInput.APREV ];
-    const alphaIn    = [ GX.CombineAlphaInput.A0, GX.CombineAlphaInput.A1, GX.CombineAlphaInput.A2, GX.CombineAlphaInput.APREV ];
+    const colorInRGB = [ GX.CC.C0, GX.CC.C1, GX.CC.C2, GX.CC.CPREV ];
+    const colorInA   = [ GX.CC.A0, GX.CC.A1, GX.CC.A2, GX.CC.APREV ];
+    const alphaIn    = [ GX.CA.A0, GX.CA.A1, GX.CA.A2, GX.CA.APREV ];
 
     const result: HSD_TETev[] = [];
     for (let i = 0; i < order.length; i++) {
@@ -1012,7 +1012,7 @@ function AssignColorKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
     if (cnst.reg !== null && cnst.reg < 4 && cnst.idx !== null) {
         // Constant allocated, just set on TEV.
         tev.colorIn[idx].type = HSD_TExpType.TE_KONST;
-        tev.colorIn[idx].arg = GX.CombineColorInput.KONST;
+        tev.colorIn[idx].arg = GX.CC.KONST;
         if (cnst.comp === HSD_TEInput.TE_X)
             tev.kcsel = xsel[cnst.reg][cnst.idx];
         else
@@ -1025,8 +1025,8 @@ function AssignColorKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
 }
 
 function AssignColorReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boolean {
-    const cin = [ GX.CombineColorInput.C0, GX.CombineColorInput.C0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV ];
-    const ain = [ GX.CombineColorInput.A0, GX.CombineColorInput.A0, GX.CombineColorInput.A0, GX.CombineColorInput.APREV ];
+    const cin = [ GX.CC.C0, GX.CC.C0, GX.CC.C0, GX.CC.CPREV ];
+    const ain = [ GX.CC.A0, GX.CC.A0, GX.CC.A0, GX.CC.APREV ];
 
     const cnst = tev.colorIn[idx].exp as HSD_TECnst;
 
@@ -1102,7 +1102,7 @@ function AssignAlphaKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
     if (cnst.reg !== null && cnst.reg < 4 && cnst.idx !== null) {
         // Constant allocated, just set on TEV.
         tev.alphaIn[idx].type = HSD_TExpType.TE_KONST;
-        tev.alphaIn[idx].arg = GX.CombineAlphaInput.KONST;
+        tev.alphaIn[idx].arg = GX.CA.KONST;
         tev.kasel = xsel[cnst.reg][cnst.idx];
         return true;
     } else {
@@ -1112,7 +1112,7 @@ function AssignAlphaKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
 }
 
 function AssignAlphaReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boolean {
-    const ain = [ GX.CombineAlphaInput.A0, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.APREV ];
+    const ain = [ GX.CA.A0, GX.CA.A0, GX.CA.A0, GX.CA.APREV ];
 
     const cnst = tev.alphaIn[idx].exp as HSD_TECnst;
 
@@ -1242,32 +1242,32 @@ function TExp2TevDesc(mb: GXMaterialBuilder, i: number, tev: HSD_TETev, init: TE
 
     if (tev.colorOp === null || (tev.refColor === 0 && tev.alphaOp !== GX.TevOp.COMP_R8_GT && tev.alphaOp !== GX.TevOp.COMP_R8_EQ && tev.alphaOp !== GX.TevOp.COMP_GR16_GT && tev.alphaOp !== GX.TevOp.COMP_GR16_EQ && tev.alphaOp !== GX.TevOp.COMP_BGR24_GT && tev.alphaOp !== GX.TevOp.COMP_BGR24_EQ)) {
         mb.setTevColorOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setTevColorIn(i, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, init.initCPREV ? GX.CombineColorInput.ZERO : GX.CombineColorInput.CPREV);
+        mb.setTevColorIn(i, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, init.initCPREV ? GX.CC.ZERO : GX.CC.CPREV);
         init.initCPREV = false;
     } else {
         const dstRegColor = dstReg[tev.dstRegColor!];
         mb.setTevColorOp(i, tev.colorOp, tev.colorBias, tev.colorScale, tev.colorClamp, dstRegColor);
         mb.setTevColorIn(i,
-            tev.colorIn[0].arg ?? GX.CombineColorInput.ZERO,
-            tev.colorIn[1].arg ?? GX.CombineColorInput.ZERO,
-            tev.colorIn[2].arg ?? GX.CombineColorInput.ZERO,
-            tev.colorIn[3].arg ?? GX.CombineColorInput.ZERO);
+            tev.colorIn[0].arg ?? GX.CC.ZERO,
+            tev.colorIn[1].arg ?? GX.CC.ZERO,
+            tev.colorIn[2].arg ?? GX.CC.ZERO,
+            tev.colorIn[3].arg ?? GX.CC.ZERO);
         if (dstRegColor === GX.Register.PREV)
             init.initCPREV = false;
     }
 
     if (tev.alphaOp === null || tev.refAlpha === 0) {
         mb.setTevAlphaOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
-        mb.setTevAlphaIn(i, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, init.initAPREV ? GX.CombineAlphaInput.ZERO : GX.CombineAlphaInput.APREV);
+        mb.setTevAlphaIn(i, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, init.initAPREV ? GX.CA.ZERO : GX.CA.APREV);
         init.initAPREV = false;
     } else {
         const dstRegAlpha = dstReg[tev.dstRegAlpha!];
         mb.setTevAlphaOp(i, tev.alphaOp, tev.alphaBias, tev.alphaScale, tev.alphaClamp, dstRegAlpha);
         mb.setTevAlphaIn(i,
-            tev.alphaIn[0].arg ?? GX.CombineAlphaInput.ZERO,
-            tev.alphaIn[1].arg ?? GX.CombineAlphaInput.ZERO,
-            tev.alphaIn[2].arg ?? GX.CombineAlphaInput.ZERO,
-            tev.alphaIn[3].arg ?? GX.CombineAlphaInput.ZERO);
+            tev.alphaIn[0].arg ?? GX.CA.ZERO,
+            tev.alphaIn[1].arg ?? GX.CA.ZERO,
+            tev.alphaIn[2].arg ?? GX.CA.ZERO,
+            tev.alphaIn[3].arg ?? GX.CA.ZERO);
         if (dstRegAlpha === GX.Register.PREV)
             init.initAPREV = false;
     }

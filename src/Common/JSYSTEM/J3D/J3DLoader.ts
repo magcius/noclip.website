@@ -828,20 +828,20 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const tevStageOffs = tevStageTableOffs + tevStageIndex * 0x14;
 
             // const unknown0 = view.getUint8(tevStageOffs + 0x00);
-            const colorInA: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x01);
-            const colorInB: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x02);
-            const colorInC: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x03);
-            const colorInD: GX.CombineColorInput = view.getUint8(tevStageOffs + 0x04);
+            const colorInA: GX.CC = view.getUint8(tevStageOffs + 0x01);
+            const colorInB: GX.CC = view.getUint8(tevStageOffs + 0x02);
+            const colorInC: GX.CC = view.getUint8(tevStageOffs + 0x03);
+            const colorInD: GX.CC = view.getUint8(tevStageOffs + 0x04);
             const colorOp: GX.TevOp = view.getUint8(tevStageOffs + 0x05);
             const colorBias: GX.TevBias = view.getUint8(tevStageOffs + 0x06);
             const colorScale: GX.TevScale = view.getUint8(tevStageOffs + 0x07);
             const colorClamp: boolean = !!view.getUint8(tevStageOffs + 0x08);
             const colorRegId: GX.Register = view.getUint8(tevStageOffs + 0x09);
 
-            const alphaInA: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0A);
-            const alphaInB: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0B);
-            const alphaInC: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0C);
-            const alphaInD: GX.CombineAlphaInput = view.getUint8(tevStageOffs + 0x0D);
+            const alphaInA: GX.CA = view.getUint8(tevStageOffs + 0x0A);
+            const alphaInB: GX.CA = view.getUint8(tevStageOffs + 0x0B);
+            const alphaInC: GX.CA = view.getUint8(tevStageOffs + 0x0C);
+            const alphaInD: GX.CA = view.getUint8(tevStageOffs + 0x0D);
             const alphaOp: GX.TevOp = view.getUint8(tevStageOffs + 0x0E);
             const alphaBias: GX.TevBias = view.getUint8(tevStageOffs + 0x0F);
             const alphaScale: GX.TevScale = view.getUint8(tevStageOffs + 0x10);

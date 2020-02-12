@@ -236,23 +236,23 @@ export class d_a_sea extends fopAc_ac_c {
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX2);
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CombineColorInput.C0, GX.CombineColorInput.KONST, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.KONST, GX.CC.TEXC, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG2);
-        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.KONST, GX.CA.TEXA, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
         // mb.setTevColorOp(0, GX.CombineColorInput.C0, GX.CombineColorInput.KONST, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
 
         mb.setTevOrder(1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(1, GX.CombineColorInput.C0, GX.CombineColorInput.KONST, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
+        mb.setTevColorIn(1, GX.CC.C0, GX.CC.KONST, GX.CC.TEXC, GX.CC.ZERO);
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(1, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
         mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(2, GX.CombineColorInput.CPREV, GX.CombineColorInput.C2, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO);
+        mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.C2, GX.CC.APREV, GX.CC.ZERO);
         mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.KONST, GX.CA.APREV, GX.CA.ZERO);
         mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
