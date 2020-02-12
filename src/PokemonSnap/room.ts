@@ -7,7 +7,6 @@ import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
-import { getPointHermite } from "../Spline";
 
 
 export interface Level {
@@ -19,7 +18,7 @@ export interface Level {
 }
 
 export interface Room {
-    graph: GFXNode;
+    node: GFXNode;
     objects: ObjectSpawn[];
 }
 
@@ -38,7 +37,8 @@ export interface ObjectSpawn {
 
 export interface ObjectDef {
     id: number;
-    graph: GFXNode;
+    nodes: GFXNode[];
+    animations: AnimationData[];
     sharedOutput: RSPSharedOutput;
     scale: vec3;
     flags: number;
@@ -90,7 +90,7 @@ export const enum SpawnType {
 }
 
 function getSpawnType(addr: number): SpawnType {
-    switch(addr) {
+    switch (addr) {
         case 0x362EE0: // normal spawn
         case 0x362E10: // spawn plus some other gfx function?
             return SpawnType.GROUND;
@@ -137,8 +137,8 @@ export function parseLevel(archives: LevelArchive[]): Level {
             translation: vec3.create(),
             euler: vec3.create(),
             scale: vec3.fromValues(1, 1, 1),
-            children: [],
-            track: null,
+            parent: -1,
+            materials,
         };
     }
 
@@ -186,26 +186,19 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const graphStart = objectView.getUint32(0x00);
             const materials = objectView.getUint32(0x04);
             const renderer = objectView.getUint32(0x08);
-            const animations = objectView.getUint32(0x0C);
+            const animationData = objectView.getUint32(0x0C);
             const scale = getVec3(objectView, 0x10);
             vec3.scale(scale, scale, 0.1);
             // four floats
             const flags = objectView.getUint16(0x2C);
             const extraTransforms = objectView.getUint32(0x2E) >>> 8;
 
-            let animationList = 0;
-            if (animations !== 0) {
-                // just use first animation for now
-                const firstAnimation = dataMap.deref(animations);
-                if (firstAnimation !== 0)
-                    animationList = dataMap.deref(firstAnimation + 0x08);
-            }
-
             const sharedOutput = new RSPSharedOutput();
             const objectState = new F3DEX2.RSPState([], sharedOutput, dataMap);
             try {
-                const graph = parseGraph(dataMap, graphStart, materials, animationList, renderer, objectState);
-                objectInfo.push({ id, flags, graph, scale, sharedOutput, spawn: getSpawnType(initData.spawnFunc) });
+                const nodes = parseGraph(dataMap, graphStart, materials, renderer, objectState);
+                const animations = parseAnimations(dataMap, animationData, nodes);
+                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(initData.spawnFunc), animations });
             } catch (e) {
                 console.warn("failed parse", e);
             }
@@ -215,7 +208,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
-        collision = parseCollisionTree(dataMap, level.Collision)
+        collision = parseCollisionTree(dataMap, level.Collision);
 
     return { rooms, skybox, sharedCache, objectInfo, collision };
 }
@@ -279,11 +272,11 @@ function findObjectData(dataMap: DataMap, addr: number): InitParams {
 
 export interface GFXNode {
     model?: Model;
-    children: GFXNode[];
+    parent: number;
     translation: vec3;
     euler: vec3;
     scale: vec3;
-    track: AnimationTrack | null;
+    materials: Material[];
 }
 
 interface TileParams {
@@ -331,7 +324,7 @@ const enum UVScrollFlags {
     Scroll0 = 0x0020, // set tile0 position
     Scroll1 = 0x0040, // set tile1 position, variable dimensions
     Scale   = 0x0080, // emit texture command, enabling tile0 and scaling
-    // unused
+
     Prim    = 0x0200, // set prim color
     Env     = 0x0400,
     Blend   = 0x0800,
@@ -349,10 +342,10 @@ function getVec3(view: DataView, offs: number): vec3 {
 
 function getColor(view: DataView, offs: number): vec4 {
     return vec4.fromValues(
-        view.getUint8(offs + 0x00),
-        view.getUint8(offs + 0x01),
-        view.getUint8(offs + 0x02),
-        view.getUint8(offs + 0x03),
+        view.getUint8(offs + 0x00) / 0xFF,
+        view.getUint8(offs + 0x01) / 0xFF,
+        view.getUint8(offs + 0x02) / 0xFF,
+        view.getUint8(offs + 0x03) / 0xFF,
     );
 }
 
@@ -477,46 +470,40 @@ function selectRenderer(addr: number): graphRenderer | null {
     return null;
 }
 
-function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, animatorList: number, renderFunc: number, state: F3DEX2.RSPState, rootNode: GFXNode | null = null): GFXNode {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, state: F3DEX2.RSPState): GFXNode[] {
     const view = dataMap.getView(graphStart);
-    const parentList: GFXNode[] = [];
+    const nodes: GFXNode[] = [];
+
+    const parentIndices: number[] = [];
 
     let currIndex = 0;
     let offs = 0;
     while (true) {
-        const id = view.getUint32(offs + 0x00) & 0xFFF;
-        if (id === 0x12)
+        const depth = view.getUint32(offs + 0x00) & 0xFFF;
+        if (depth === 0x12)
             break;
         let dl = view.getUint32(offs + 0x04);
         const translation = getVec3(view, offs + 0x08);
         const euler = getVec3(view, offs + 0x14);
         const scale = getVec3(view, offs + 0x20);
-        const node: GFXNode = { translation, euler, scale, children: [], track: null };
+
+        const parent = depth === 0 ? -1 : assertExists(parentIndices[depth - 1]);
+        parentIndices[depth] = currIndex;
+
+        const node: GFXNode = { translation, euler, scale, parent, materials: [] };
         if (dl > 0) {
-            const materials = materialList === 0 ? [] : parseMaterialData(dataMap, dataMap.deref(materialList + currIndex));
+            node.materials = materialList === 0 ? [] : parseMaterialData(dataMap, dataMap.deref(materialList + currIndex * 4));
             const renderer = selectRenderer(renderFunc);
             if (renderer !== null) {
-                node.model = renderer(dataMap, dl, state, materials);
+                node.model = renderer(dataMap, dl, state, node.materials);
                 state.clear();
             }
-            if (animatorList !== 0)
-                node.track = parseAnimationTrack(dataMap, dataMap.deref(animatorList + currIndex));
         }
-        if (id === 0) {
-            assert(rootNode === null);
-            rootNode = node;
-        } else {
-            const parent = assertExists(parentList[id - 1]);
-            parent.children.push(node);
-        }
-        parentList[id] = node;
+        nodes.push(node);
         offs += 0x2c;
-        currIndex += 4;
+        currIndex++;
     }
-    if (rootNode === null)
-        throw `empty graph`;
-    else
-        return rootNode;
+    return nodes;
 }
 
 function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.TextureCache): Room {
@@ -544,13 +531,13 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     const materials: Material[] = materialData !== 0 ? parseMaterialData(dataMap, dataMap.deref(materialData)) : [];
     // for now, materials are just handled statically, using their initial state
     const model = runRoomDL(dataMap, dlStart, rspState, materials);
-    const graph: GFXNode = {
+    const node: GFXNode = {
         model,
+        parent: -1,
         translation: pos,
         euler: vec3.create(),
         scale: vec3.fromValues(1, 1, 1),
-        children: [],
-        track: null,
+        materials,
     };
 
     const objects: ObjectSpawn[] = [];
@@ -571,7 +558,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
             offs += 0x30;
         }
     }
-    return { graph, objects };
+    return { node, objects };
 }
 
 function runOpaqueDL(dataMap: DataMap, dlStart: number, rspState: F3DEX2.RSPState, materials: Material[] = []): F3DEX2.RSPState {
@@ -651,7 +638,7 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
         }
         // skip lights, env, blend for now
         if (scroll.flags & (UVScrollFlags.Prim | UVScrollFlags.Special | UVScrollFlags.PrimLOD))
-            state.gSPSetPrimColor(scroll.primLOD, scroll.primColor[0], scroll.primColor[1], scroll.primColor[2], scroll.primColor[3]);
+            state.gSPSetPrimColor(scroll.primLOD, scroll.primColor[0] * 0xFF, scroll.primColor[1] * 0xFF, scroll.primColor[2] * 0xFF, scroll.primColor[3] * 0xFF);
         if (scroll.flags & (UVScrollFlags.Tex2 | UVScrollFlags.Special)) {
             const siz2 = scroll.textures[1].siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
             state.gDPSetTextureImage(scroll.textures[1].fmt, siz2, 0, scroll.textureAddresses[0]);
@@ -688,23 +675,12 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
     };
 }
 
-export const enum AnimatorValue {
-    Pitch,
-    Yaw,
-    Roll,
-    Path,
-    X,
-    Y,
-    Z,
-    ScaleX,
-    ScaleY,
-    ScaleZ,
-}
 
 export const enum EntryKind {
     Exit            = 0x00,
     InitFunc        = 0x01,
     Block           = 0x02,
+    // for both models and materials, though the bits map to different fields
     LerpBlock       = 0x03,
     Lerp            = 0x04,
     SplineVelBlock  = 0x05,
@@ -714,19 +690,19 @@ export const enum EntryKind {
     Spline          = 0x09,
     StepBlock       = 0x0A,
     Step            = 0x0B,
-    Skip             = 0x0C,
-    Path            = 0x0D,
+    Skip            = 0x0C,
+    Path            = 0x0D, // only models
     Loop            = 0x0E,
+    // model animation only
     SetFlags        = 0x0F,
     Func            = 0x10,
     MultiFunc       = 0x11,
-}
-
-export const enum AnimatorOP {
-    NOP,
-    STEP,
-    LERP,
-    SPLINE,
+    // material color only
+    ColorStepBlock  = 0x12,
+    ColorStep       = 0x13,
+    ColorLerpBlock  = 0x14,
+    ColorLerp       = 0x15,
+    SetColor        = 0x16, // choose based on flags, also directly sets update time???
 }
 
 export const enum PathKind {
@@ -753,42 +729,11 @@ export interface AnimatorData {
     data: Float32Array,
 }
 
-export class Animator {
-    public op = AnimatorOP.NOP;
-    public start = 0;
-    public len = 1;
-    public p0 = 0;
-    public p1 = 0;
-    public v0 = 0;
-    public v1 = 0;
-    public path: Path | null = null;
-
-    constructor(public value: AnimatorValue) { }
-
-    public getValue(t: number): number {
-        switch (this.op) {
-            case AnimatorOP.NOP: return 0;
-            case AnimatorOP.STEP: return (t - this.start) > this.len ? this.p1 : this.p0;
-            case AnimatorOP.LERP: return this.p0 + (t - this.start) * this.v0;
-            case AnimatorOP.SPLINE: return getPointHermite(this.p0, this.p1, this.v0 / this.len, this.v1 / this.len, (t - this.start) * this.len);
-        }
-    }
-
-    public reset(): void {
-        this.op = AnimatorOP.NOP;
-        this.start = 0;
-        this.len = 1;
-        this.p0 = 0;
-        this.p1 = 0;
-        this.v0 = 0;
-        this.v1 = 0;
-    }
-}
-interface Animation {
-    increment: number;
+export interface AnimationData {
+    fps: number;
     frames: number;
-    // per node list of animators
-    // per node per mat list of animators
+    tracks: (AnimationTrack | null)[];
+    materialTracks: (AnimationTrack | null)[][];
 }
 
 function parsePath(dataMap: DataMap, addr: number): Path {
@@ -826,6 +771,7 @@ export interface TrackEntry {
     block: boolean;
     data: Float32Array;
     path: Path | null;
+    colors: vec4[];
 }
 
 function bitCount(bits: number): number {
@@ -841,20 +787,20 @@ function bitCount(bits: number): number {
 
 function entryDataSize(kind: EntryKind, count: number): number {
     switch (kind) {
-        case EntryKind.Lerp:
-        case EntryKind.LerpBlock:
-        case EntryKind.SplineEnd:
-        case EntryKind.Spline:
-        case EntryKind.SplineBlock:
-        case EntryKind.Step:
-        case EntryKind.StepBlock:
-        case EntryKind.MultiFunc: // not actually floats
-            return count;
+        case EntryKind.Exit:
+        case EntryKind.InitFunc:
+        case EntryKind.Block:
+        case EntryKind.Skip:
+        case EntryKind.Path:
+        case EntryKind.Loop:
+        case EntryKind.SetFlags:
+        case EntryKind.Func:
+            return 0;
         case EntryKind.SplineVel:
         case EntryKind.SplineVelBlock:
             return 2 * count;
     }
-    return 0;
+    return count;
 }
 
 // return whether the animation should wait for the current transitions to finish
@@ -869,6 +815,8 @@ function entryShouldBlock(kind: EntryKind): boolean {
         case EntryKind.SetFlags:
         case EntryKind.Func:
         case EntryKind.MultiFunc:
+        case EntryKind.ColorStepBlock:
+        case EntryKind.ColorLerpBlock:
             return true;
     }
     return false;
@@ -902,17 +850,82 @@ function parseAnimationTrack(dataMap: DataMap, addr: number): AnimationTrack | n
 
         const block = entryShouldBlock(kind);
 
-        const count = entryDataSize(kind, bitCount(flags));
-        const data = range.data.createTypedArray(Float32Array, offs, count, Endianness.BIG_ENDIAN);
-        offs += count * 4;
+        let data: Float32Array;
+        const colors: vec4[] = [];
 
-        const newEntry: TrackEntry = { kind, flags, increment, block, data, path: null };
+        const count = entryDataSize(kind, bitCount(flags));
+        if (kind >= EntryKind.ColorStepBlock) {
+            for (let i = 0; i < count; i++) {
+                colors.push(getColor(view, offs));
+                offs += 4;
+            }
+            data = new Float32Array(0);
+        } else {
+            data = range.data.createTypedArray(Float32Array, offs, count, Endianness.BIG_ENDIAN);
+            offs += count * 4;
+        }
+
+        const newEntry: TrackEntry = { kind, flags, increment, block, data, path: null, colors };
         if (kind === EntryKind.Path) {
             newEntry.path = parsePath(dataMap, view.getUint32(offs));
             offs += 4;
         }
         entries.push(newEntry);
     }
+}
+
+function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): AnimationData[] {
+    const animationStart = dataMap.deref(addr);
+    const initFunc = dataMap.deref(addr + 0x04); // used to set initial state
+
+    if (animationStart === 0)
+        return [];
+
+    const view = dataMap.getView(animationStart);
+    const anims: AnimationData[] = [];
+
+    let offs = 0;
+    while (true) {
+        let fps = 30 * view.getFloat32(offs + 0x00);
+        if (fps === 0)
+            fps = 30; // TODO: understand what's going on here
+
+        const frames = view.getFloat32(offs + 0x04);
+        const trackList = view.getUint32(offs + 0x08);
+        const materialData = view.getUint32(offs + 0x0C);
+        const someIDs = view.getUint32(offs + 0x10);
+        offs += 0x14;
+
+        // there's no clear indicator for the number of animations, and animations might not be contiguous
+        // so until we parse the state machine, guess based on reasonable values
+        if (fps > 100 || isNaN(fps) || fps < 0 || (fps > 0 && fps < .01) || (frames > 0 && frames < .01) || (trackList >>> 24) !== 0x80)
+            break;
+
+        const tracks: (AnimationTrack | null)[] = [];
+        const trackView = dataMap.getView(trackList);
+        for (let i = 0; i < nodes.length; i++) {
+            const trackStart = trackView.getUint32(4 * i);
+            tracks.push(parseAnimationTrack(dataMap, trackStart));
+        }
+
+        const materialTracks: (AnimationTrack | null)[][] = [];
+        if (materialData !== 0) {
+            const materialView = dataMap.getView(materialData);
+            for (let i = 0; i < nodes.length; i++) {
+                const matListStart = materialView.getUint32(4 * i);
+                const nodeMats: (AnimationTrack | null)[] = [];
+                if (matListStart !== 0) {
+                    for (let j = 0; j < nodes[i].materials.length; j++) {
+                        const trackStart = dataMap.deref(matListStart + 4 * j);
+                        nodeMats.push(parseAnimationTrack(dataMap, trackStart));
+                    }
+                }
+                materialTracks.push(nodeMats);
+            }
+        }
+        anims.push({ fps, frames, tracks, materialTracks });
+    }
+    return anims;
 }
 
 interface GroundPlane {
@@ -930,30 +943,30 @@ export interface CollisionTree {
 }
 
 export function findGroundHeight(tree: CollisionTree | null, x: number, z: number): number {
-    const plane = findGroundPlane(tree, x/100, z/100);
+    const plane = findGroundPlane(tree, x / 100, z / 100);
     if (plane === null)
         return 0;
     if (plane.normal[1] === 0)
         return 0;
-    return -100*(x*plane.normal[0]/100 + z*plane.normal[2]/100 + plane.offset)/plane.normal[1];
+    return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
 function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
     if (tree === null)
         return null;
     while (true) {
-        const test = x*tree.line[0] + z*tree.line[1] + tree.line[2];
+        const test = x * tree.line[0] + z * tree.line[1] + tree.line[2];
         if (test > 0) {
             if (tree.posPlane)
-                return tree.posPlane
+                return tree.posPlane;
             if (tree.posSubtree === null)
-                return null
+                return null;
             tree = tree.posSubtree;
         } else {
             if (tree.negPlane)
-                return tree.negPlane
+                return tree.negPlane;
             if (tree.negSubtree === null)
-                return null
+                return null;
             tree = tree.negSubtree;
         }
     }
@@ -1002,5 +1015,5 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
     const posPlane = getPlane(posPlaneIdx);
     const negPlane = getPlane(negPlaneIdx);
 
-    return {line, posSubtree, posPlane, negSubtree, negPlane};
+    return { line, posSubtree, posPlane, negSubtree, negPlane };
 }

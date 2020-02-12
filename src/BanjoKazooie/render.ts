@@ -850,7 +850,7 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
 
 // an animation controller that makes it easier to change fps
 // and preserve control over the new phase
-class AdjustableAnimationController {
+export class AdjustableAnimationController {
     private time = 0;
     private initialized = false;
     private phaseFrames = 0;

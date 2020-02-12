@@ -67,6 +67,8 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
+
+
     constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
     }
 
@@ -515,6 +517,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             } break;
 
             case F3DEX2_GBI.G_MOVEWORD: {
+                // TODO: lights
+                assert(((w0 >>> 16) & 0xFF) === 0x0A)
             } break;
 
             case F3DEX2_GBI.G_CULLDL:

@@ -3,8 +3,9 @@ import * as RDP from '../Common/N64/RDP';
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
-import { RenderData, F3DEX_Program } from '../BanjoKazooie/render';
-import { GFXNode, Animator, AnimatorOP, AnimatorValue, Path, PathKind, EntryKind, AnimationTrack, TrackEntry } from './room';
+import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
+import { GFXNode, AnimationData, ObjectDef } from './room';
+import { Animator, AObjOP, AObjTarget, getPathPoint } from './animation';
 import { vec4, mat4, vec3 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
 import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
@@ -14,9 +15,7 @@ import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { lerp, clamp } from '../MathHelpers';
-import { getPointBezier, getPointHermite, getPointBasis } from '../Spline';
-import AnimationController from '../AnimationController';
+import { clamp } from '../MathHelpers';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -115,12 +114,12 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            m[0] = 1/entry.width;
-            m[5] = 1/entry.height;
+            m[0] = 1 / entry.width;
+            m[5] = 1 / entry.height;
 
             // shift by 10.2 UL coords, rescaled by texture size
-            m[12] = -entry.tile.uls/4/entry.width;
-            m[13] = -entry.tile.ult/4/entry.height;
+            m[12] = -entry.tile.uls / 4 / entry.width;
+            m[13] = -entry.tile.ult / 4 / entry.height;
         } else {
             mat4.identity(m);
         }
@@ -174,35 +173,6 @@ export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): 
     mat4.scale(dst, dst, scale);
 }
 
-function getPathPoint(dst: vec3, path: Path, t: number): void {
-    let segment = 0;
-    while (segment + 1 < path.length && t > path.times[segment + 1])
-        segment++;
-    // TODO: modify this using quartics
-    const frac = (t - path.times[segment])/(path.times[segment + 1] - path.times[segment]);
-
-    const offs = segment * (path.kind === PathKind.Bezier ? 9 : 3);
-    switch(path.kind) {
-        case PathKind.Linear:{
-            for (let i = 0; i < 3; i++)
-                dst[i] = lerp(path.points[offs + i], path.points[offs + 3 + i], frac);
-        }break;
-        case PathKind.Bezier:{
-            for (let i = 0; i < 3; i++)
-                dst[i] = getPointBezier(path.points[offs + i], path.points[offs + 3 + i], path.points[offs + 6 + i], path.points[offs + 9 + i], frac)
-        }break;
-        case PathKind.BSpline:{
-            for (let i = 0; i < 3; i++)
-                dst[i] = getPointBasis(path.points[offs + i], path.points[offs + 3 + i], path.points[offs + 6 + i], path.points[offs + 9 + i], frac)
-        }break;
-        case PathKind.Hermite:{
-            for (let i = 0; i < 3; i++)
-                dst[i] = getPointHermite(path.points[offs + 3 + i], path.points[offs + 6 + i],
-                    (path.points[offs + 6 + i] - path.points[offs + i]) * path.segmentRate, (path.points[offs + 9 + i] - path.points[offs + 3 + i]) * path.segmentRate, frac)
-        }break;
-    }
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
@@ -210,249 +180,171 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 const lookatScratch = vec3.create();
 const vec3up = vec3.fromValues(0, 1, 0);
 const vec3Zero = vec3.create();
-export class ModelRenderer {
+export class NodeRenderer {
     private visible = true;
     public modelMatrix = mat4.create();
     public transform = mat4.create();
 
-    public children: ModelRenderer[] = [];
+    public children: NodeRenderer[] = [];
     public drawCalls: DrawCallInstance[] = [];
 
     public translation = vec3.create();
     public euler = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
-    public animators: Animator[] = [];
 
-    public track: AnimationTrack | null;
-    private trackIndex = 0;
-    private nextUpdate = 0;
-    private animationController = new AnimationController(30);
+    public animator = new Animator();
 
-    constructor(private renderData: RenderData, graph: GFXNode, parent: mat4 | null = null, public isSkybox = false) {
-        const drawMatrices = [this.modelMatrix];
-        if (parent !== null)
-            drawMatrices.push(parent);
+    constructor(private renderData: RenderData, private graph: GFXNode, public parent: mat4, public isSkybox = false) {
+        const drawMatrices = [this.modelMatrix, parent];
 
         if (graph.model !== undefined && graph.model.rspOutput !== null)
             for (let i = 0; i < graph.model.rspOutput.drawCalls.length; i++)
                 this.drawCalls.push(new DrawCallInstance(renderData, graph.model.rspOutput.drawCalls[i], drawMatrices));
-        for (let i = 0; i < graph.children.length; i++)
-            this.children.push(new ModelRenderer(renderData, graph.children[i], this.modelMatrix));
 
         vec3.copy(this.translation, graph.translation);
         vec3.copy(this.euler, graph.euler);
         vec3.copy(this.scale, graph.scale);
-
-        this.track = graph.track;
-        if (this.track !== null)
-            for (let i = 0; i < 10; i++)
-                this.animators[i] = new Animator(i);
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].setBackfaceCullingEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setBackfaceCullingEnabled(v);
-    }
+    public animate(time: number): void {
+        this.animator.update(time);
 
-    public setVertexColorsEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].setVertexColorsEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setVertexColorsEnabled(v);
-    }
+        const interps = this.animator.interpolators;
 
-    public setTexturesEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].setTexturesEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setTexturesEnabled(v);
-    }
-
-    public setMonochromeVertexColorsEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].setMonochromeVertexColorsEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setMonochromeVertexColorsEnabled(v);
-    }
-
-    public setAlphaVisualizerEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].setAlphaVisualizerEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setAlphaVisualizerEnabled(v);
-    }
-
-    private resetAnimators(): void {
-        for (let i = 0; i < this.animators.length; i++)
-            this.animators[i].reset();
-    }
-
-    private updateAnimators(): void {
-        if (this.track === null)
-            return;
-
-        const time = this.animationController.getTimeInFrames();
-        while (this.nextUpdate <= time) {
-            if (this.trackIndex === this.track.entries.length) {
-                if (this.track.loopStart >= 0)
-                    this.trackIndex = this.track.loopStart;
-                else {
-                    // not actually a looping animation, force reset
-                    this.trackIndex = 0;
-                    this.nextUpdate = time;
-                    this.resetAnimators();
-                }
-            }
-
-            const entry: TrackEntry = this.track.entries[this.trackIndex++];
-            let offs = 0;
-            switch (entry.kind) {
-                case EntryKind.Lerp:
-                case EntryKind.LerpBlock: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i)) {
-                            this.animators[i].op = AnimatorOP.LERP;
-                            this.animators[i].p0 = this.animators[i].p1;
-                            this.animators[i].p1 = entry.data[offs++];
-                            this.animators[i].v1 = 0;
-                            if (entry.increment !== 0)
-                                this.animators[i].v0 = (this.animators[i].p1 - this.animators[i].p0) / entry.increment;
-                            this.animators[i].start = time;
-                        }
-                    }
-                } break;
-                case EntryKind.SplineVel:
-                case EntryKind.SplineVelBlock: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i)) {
-                            this.animators[i].op = AnimatorOP.SPLINE;
-                            this.animators[i].p0 = this.animators[i].p1;
-                            this.animators[i].p1 = entry.data[offs++];
-                            this.animators[i].v0 = this.animators[i].v1;
-                            this.animators[i].v1 = entry.data[offs++];
-                            if (entry.increment !== 0)
-                                this.animators[i].len = 1 / entry.increment;
-                            this.animators[i].start = time;
-                        }
-                    }
-                } break;
-                case EntryKind.SplineEnd: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i))
-                            this.animators[i].v1 = entry.data[offs++];
-                    }
-                } break;
-                case EntryKind.Spline:
-                case EntryKind.SplineBlock: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i)) {
-                            this.animators[i].op = AnimatorOP.SPLINE;
-                            this.animators[i].p0 = this.animators[i].p1;
-                            this.animators[i].p1 = entry.data[offs++];
-                            this.animators[i].v0 = this.animators[i].v1;
-                            this.animators[i].v1 = 0;
-                            if (entry.increment !== 0)
-                                this.animators[i].len = 1 / entry.increment;
-                            this.animators[i].start = time;
-                        }
-                    }
-                } break;
-                case EntryKind.Step:
-                case EntryKind.StepBlock: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i)) {
-                            this.animators[i].op = AnimatorOP.STEP;
-                            this.animators[i].p0 = this.animators[i].p1;
-                            this.animators[i].p1 = entry.data[offs++];
-                            this.animators[i].v1 = 0;
-                            this.animators[i].len = entry.increment;
-                            this.animators[i].start = time;
-                        }
-                    }
-                } break;
-                case EntryKind.Skip: {
-                    for (let i = 0; i < 10; i++) {
-                        if (entry.flags & (1 << i))
-                            this.animators[i].start -= entry.increment;
-                    }
-                } break;
-                case EntryKind.SetFlags: {
-                    // TODO: implement this properly
-                    if (entry.flags & 0x1) {
-                        this.visible = false;
-                    }
-                } break;
-                case EntryKind.Path: {
-                    this.animators[AnimatorValue.Path].path = entry.path;
-                } break;
-            }
-            if (entry.block)
-                this.nextUpdate += entry.increment;
-        }
-        return;
-    }
-
-    private animate(): void {
-        this.updateAnimators();
-
-        const time = this.animationController.getTimeInFrames();
-        for (let i = 0; i < this.animators.length; i++) {
-            if (this.animators[i].op === AnimatorOP.NOP)
+        for (let i = 0; i < interps.length; i++) {
+            if (interps[i].op === AObjOP.NOP)
                 continue;
-            const value = this.animators[i].getValue(time);
+            const value = interps[i].compute(time);
             switch (i) {
-                case AnimatorValue.Pitch: this.euler[0] = value; break;
-                case AnimatorValue.Yaw: this.euler[1] = value; break;
-                case AnimatorValue.Roll: this.euler[2] = value; break;
-                case AnimatorValue.Path: getPathPoint(this.translation, assertExists(this.animators[i].path), clamp(value, 0, 1)); break;
-                case AnimatorValue.X: this.translation[0] = value; break;
-                case AnimatorValue.Y: this.translation[1] = value; break;
-                case AnimatorValue.Z: this.translation[2] = value; break;
-                case AnimatorValue.ScaleX: this.scale[0] = value; break;
-                case AnimatorValue.ScaleY: this.scale[1] = value; break;
-                case AnimatorValue.ScaleZ: this.scale[2] = value; break;
+                case AObjTarget.Pitch: this.euler[0] = value; break;
+                case AObjTarget.Yaw: this.euler[1] = value; break;
+                case AObjTarget.Roll: this.euler[2] = value; break;
+                case AObjTarget.Path: getPathPoint(this.translation, assertExists(interps[i].path), clamp(value, 0, 1)); break;
+                case AObjTarget.X: this.translation[0] = value; break;
+                case AObjTarget.Y: this.translation[1] = value; break;
+                case AObjTarget.Z: this.translation[2] = value; break;
+                case AObjTarget.ScaleX: this.scale[0] = value; break;
+                case AObjTarget.ScaleY: this.scale[1] = value; break;
+                case AObjTarget.ScaleZ: this.scale[2] = value; break;
             }
         }
+
         buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, parentMatrix?: mat4): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
+
+        mat4.mul(this.modelMatrix, this.parent, this.transform);
+        // hide flag just skips this node's draw calls, doesn't affect matrix or children
+        if (!(this.animator.stateFlags & 1))
+            for (let i = 0; i < this.drawCalls.length; i++)
+                this.drawCalls[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].prepareToRender(device, renderInstManager, viewerInput);
+    }
+}
+
+export class ModelRenderer {
+    public modelMatrix = mat4.create();
+    public renderers: NodeRenderer[] = [];
+    public animationController = new AdjustableAnimationController(30);
+    public animations: AnimationData[] = [];
+
+    public objectDef: ObjectDef | null = null;
+
+    public static fromObject(renderData: RenderData, def: ObjectDef): ModelRenderer {
+        const obj = new ModelRenderer(renderData, def.nodes);
+
+        obj.objectDef = def;
+        obj.animations = def.animations;
+        // for now, randomly choose an animation
+        if (def.animations.length > 0)
+            obj.setAnimation(Math.floor(Math.random() * def.animations.length));
+        return obj;
+    }
+
+    constructor(private renderData: RenderData, public nodes: GFXNode[], public isSkybox = false) {
+        for (let i = 0; i < nodes.length; i++) {
+            const p = nodes[i].parent;
+            if (p === -1)
+                this.renderers.push(new NodeRenderer(renderData, nodes[i], this.modelMatrix, isSkybox));
+            else {
+                this.renderers.push(new NodeRenderer(renderData, nodes[i], this.renderers[p].modelMatrix, isSkybox));
+                this.renderers[p].children.push(this.renderers[i]);
+            }
+        }
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            for (let j = 0; j < this.renderers[i].drawCalls.length; j++)
+                this.renderers[i].drawCalls[j].setBackfaceCullingEnabled(v);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            for (let j = 0; j < this.renderers[i].drawCalls.length; j++)
+                this.renderers[i].drawCalls[j].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            for (let j = 0; j < this.renderers[i].drawCalls.length; j++)
+                this.renderers[i].drawCalls[j].setTexturesEnabled(v);
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            for (let j = 0; j < this.renderers[i].drawCalls.length; j++)
+                this.renderers[i].drawCalls[j].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            for (let j = 0; j < this.renderers[i].drawCalls.length; j++)
+                this.renderers[i].drawCalls[j].setAlphaVisualizerEnabled(v);
+    }
+
+    private setAnimation(index: number): void {
+        this.animationController.adjust(this.animations[index].fps);
+        for (let i = 0; i < this.renderers.length; i++) {
+            this.renderers[i].animator.track = this.animations[index].tracks[i];
+            this.renderers[i].animator.reset(0);
+        }
+    }
+
+    private animate(): void {
+        const time = this.animationController.getTimeInFrames();
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].animate(time);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animate();
 
-        if (parentMatrix === undefined) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setInputLayoutAndState(this.renderData.inputLayout, this.renderData.inputState);
 
-            mat4.copy(this.modelMatrix, this.transform);
+        template.filterKey = this.isSkybox ? SnapPass.SKYBOX : SnapPass.MAIN;
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16 + 2 * 4);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-            const template = renderInstManager.pushTemplateRenderInst();
-            template.setBindingLayouts(bindingLayouts);
-            template.setInputLayoutAndState(this.renderData.inputLayout, this.renderData.inputState);
+        mat4.getTranslation(lookatScratch, this.modelMatrix);
+        vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-            template.filterKey = this.isSkybox ? SnapPass.SKYBOX : SnapPass.MAIN;
-            let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16 + 2 * 4);
-            const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
-            offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+        offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
+        offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
 
-            mat4.getTranslation(lookatScratch, this.modelMatrix);
-            vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
+        this.renderers[0].prepareToRender(device, renderInstManager, viewerInput);
 
-            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
-        } else
-            mat4.mul(this.modelMatrix, parentMatrix, this.transform);
-
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
-
-        if (parentMatrix === undefined)
-            renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
     }
 }
