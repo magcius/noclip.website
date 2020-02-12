@@ -57,7 +57,7 @@ export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
                     let dstPixel: u32 = w * yyy + xxx;
                     let dstOffs = pDst + dstPixel * 4;
                     let ii: u8 = get(pSrc + (srcOffs >>> 1));
-                    let i4: u8 = ii >>> ((srcOffs & 1) << 2 as u8) & 0x0F;
+                    let i4: u8 = ii >>> (((srcOffs & 1) << 2) as u8) & 0x0F;
                     let i: u8 = expand4to8(i4);
                     set32(dstOffs, <u32>i * 0x01010101);
                 }
