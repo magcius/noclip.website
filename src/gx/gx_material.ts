@@ -876,7 +876,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.TevOp.COMP_RGB8_GT:   return `(TevPerCompGT(${a}, ${b}) * ${c}) + ${d}`;
         case GX.TevOp.COMP_RGB8_EQ:   return `(TevPerCompEQ(${a}, ${b}) * ${c}) + ${d}`;
         default:
-            throw Error(`Invalid GX.TevOp ${op}`);
+            debugger;
+            throw new Error("whoops");
         }
     }
 
