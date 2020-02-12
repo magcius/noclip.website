@@ -4,7 +4,7 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero } from "../util";
+import { readString, assert, hexzero, hexdump } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
@@ -942,7 +942,8 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
     const fracValue = view.getUint8(0x0D);
     const fracSlope = view.getUint8(0x0E);
     const dataOffs = view.getUint32(0x10);
-    const dataView = HSD_LoadContext__ResolvePtr(ctx, dataOffs).createDataView();
+    const dataBuf = HSD_LoadContext__ResolvePtr(ctx, dataOffs);
+    const dataView = dataBuf.createDataView();
 
     let dataIdx = 0;
     function parseValue(frac: number): number {
@@ -986,56 +987,73 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
     let p0 = 0.0, p1 = 0.0, d0 = 0.0, d1 = 0.0;
     let time = 0;
 
+    let hasSLP = false;
+
     const keyframes: HSD_FObj__Keyframe[] = [];
+    let op_intrp = FObjOpcode.NONE, duration = 0;
     while (dataIdx < length) {
         const headerByte = parseVLQ();
-        const opcode: FObjOpcode = headerByte & 0x0F;
+        const op: FObjOpcode = headerByte & 0x0F;
         let nbPack = (headerByte >>> 4) + 1;
 
         for (let i = 0; i < nbPack; i++) {
-            // SLP is special, as it doesn't mark a keyframe by itself.
-            if (opcode === FObjOpcode.SLP) {
+            // SLP is special, as it doesn't mark a keyframe by itself, but modifies the next one...
+            if (op === FObjOpcode.SLP) {
                 d0 = d1;
                 d1 = parseValue(fracSlope);
+                hasSLP = true;
                 continue;
             }
 
-            if (opcode === FObjOpcode.CON) {
+            if (op === FObjOpcode.CON) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Constant', time, p0 });
-                time += duration;
-            } else if (opcode === FObjOpcode.LIN) {
+                if (!hasSLP) {
+                    d0 = d1;
+                    d1 = 0.0;
+                }
+            } else if (op === FObjOpcode.LIN) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.SPL0) {
+                if (!hasSLP) {
+                    d0 = d1;
+                    d1 = 0.0;
+                }
+            } else if (op === FObjOpcode.SPL0) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
                 d1 = 0.0;
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.SPL) {
+            } else if (op === FObjOpcode.SPL) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
                 d1 = parseValue(fracSlope);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.KEY) {
+            } else if (op === FObjOpcode.KEY) {
                 p0 = p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Constant', time, p0 });
-                time += duration;
             } else {
                 debugger;
             }
+            hasSLP = false;
+
+            if (op_intrp === FObjOpcode.CON || op_intrp === FObjOpcode.KEY) {
+                keyframes.push({ kind: 'Constant', time, p0 });
+            } else if (op_intrp === FObjOpcode.LIN) {
+                keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
+            } else if (op_intrp === FObjOpcode.SPL0 || op_intrp === FObjOpcode.SPL) {
+                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
+            } else if (op_intrp === FObjOpcode.NONE) {
+                // Nothing.
+            } else {
+                debugger;
+            }
+
+            op_intrp = op;
+
+            time += duration;
+
+            // Load wait.
+            duration = parseVLQ();
         }
     }
 
@@ -1088,7 +1106,7 @@ function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadCon
         aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
 
     animJoints.push({ children, aobj });
-    
+
     if (nextSiblingOffs !== 0)
         HSD_AObjLoadAnimJointInternal(animJoints, ctx, nextSiblingOffs);
 }

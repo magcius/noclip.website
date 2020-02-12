@@ -8,7 +8,7 @@ import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
@@ -181,10 +181,10 @@ class HSD_AObj_Instance {
         if (k0.kind === 'Constant') {
             callback(fobj.type, k0.p0, obj);
         } else if (k0.kind === 'Linear') {
-            const t = (time - k0.time) / k0.duration;
+            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
             callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
         } else if (k0.kind === 'Hermite') {
-            const t = (time - k0.time) / k0.duration;
+            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
             callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
         }
     }
@@ -1116,6 +1116,7 @@ class HSD_JObj_Instance {
     public translation = vec3.create();
     public rotation = vec3.create();
     public scale = vec3.create();
+    private parentScale = vec3.fromValues(1, 1, 1);
 
     public visible: boolean = true;
 
@@ -1210,12 +1211,19 @@ class HSD_JObj_Instance {
             this.children[i].calcAnim(deltaTimeInFrames);
     }
 
-    public calcMtx(parentJointMtx: mat4 | null = null): void {
-        // TODO(jstpierre): CLASSIC_SCALE
-        computeModelMatrixSRT(this.jointMtx,
+    public calcMtx(parentJointMtx: mat4 | null = null, parentScale: vec3 = Vec3One): void {
+        const useClassicScale = !!(this.data.jobj.flags & HSD_JObjFlags.CLASSICAL_SCALE);
+
+        if (useClassicScale)
+            vec3.copy(this.parentScale, parentScale);
+        else
+            vec3.mul(this.parentScale, this.scale, parentScale);
+
+        computeModelMatrixSRT_MayaSSC(this.jointMtx,
             this.scale[0], this.scale[1], this.scale[2],
             this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2]);
+            this.translation[0], this.translation[1], this.translation[2],
+            parentScale[0], parentScale[1], parentScale[2]);
 
         if (parentJointMtx !== null)
             mat4.mul(this.jointMtx, parentJointMtx, this.jointMtx);
@@ -1224,7 +1232,7 @@ class HSD_JObj_Instance {
             this.dobj[i].calcMtx();
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].calcMtx(this.jointMtx);
+            this.children[i].calcMtx(this.jointMtx, this.parentScale);
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, root: HSD_JObjRoot_Instance): void {
@@ -1255,7 +1263,7 @@ export class HSD_JObjRoot_Instance {
     }
 
     public addAnimAll(animJoint: HSD_AnimJointRoot | null, matAnimJoint: HSD_MatAnimJointRoot | null, shapeAnimJoint: HSD_ShapeAnimJointRoot | null): void {
-        console.log(matAnimJoint);
+        console.log(animJoint, matAnimJoint);
         this.rootInst.addAnimAll(
             animJoint !== null ? animJoint.root : null,
             matAnimJoint !== null ? matAnimJoint.root : null,
