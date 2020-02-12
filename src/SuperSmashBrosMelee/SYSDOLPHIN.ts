@@ -900,15 +900,18 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
     let dataIdx = 0;
     function parseValue(frac: number): number {
         const fmt: FObjFmt = frac >>> 5;
+        const shift = frac & 0x1F;
+
         let res: number;
         if (fmt === FObjFmt.HSD_A_FRAC_FLOAT) {
-            res = dataView.getFloat32(dataIdx + 0x00);
+            assert(shift === 0);
+            res = dataView.getFloat32(dataIdx + 0x00, true);
             dataIdx += 0x04;
         } else if (fmt === FObjFmt.HSD_A_FRAC_S16) {
-            res = dataView.getInt16(dataIdx + 0x00);
+            res = dataView.getInt16(dataIdx + 0x00, true);
             dataIdx += 0x02;
         } else if (fmt === FObjFmt.HSD_A_FRAC_U16) {
-            res = dataView.getUint16(dataIdx + 0x00);
+            res = dataView.getUint16(dataIdx + 0x00, true);
             dataIdx += 0x02;
         } else if (fmt === FObjFmt.HSD_A_FRAC_S8) {
             res = dataView.getInt8(dataIdx + 0x00);
@@ -920,7 +923,6 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
             throw "whoops";
         }
 
-        const shift = frac & 0x1F;
         return res / (1 << shift);
     }
 
