@@ -52,6 +52,10 @@ export class ModelInstance {
 
     private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
         computeViewMatrix(dst, camera);
+        // Rotate camera 90 degrees clockwise to more reliably get something in
+        // view when loading a scene. TODO: A better way to set the initial camera
+        // is to make default save states for each scene.
+        mat4.rotateY(dst, dst, Math.PI / 2);
         mat4.mul(dst, dst, modelMatrix);
     }
 
