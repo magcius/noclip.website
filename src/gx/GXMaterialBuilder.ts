@@ -1,5 +1,5 @@
 
-import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo } from "./gx_material";
+import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, SwapTable } from "./gx_material";
 import * as GX from "./gx_enum";
 import { autoOptimizeMaterial } from "./gx_render";
 
@@ -247,6 +247,12 @@ export class GXMaterialBuilder {
     public setTevKAlphaSel(idx: number, sel: GX.KonstAlphaSel): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.konstAlphaSel = sel;
+    }
+
+    public setTevSwapMode(idx: number, rasSwapTable: SwapTable | undefined, texSwapTable: SwapTable | undefined): void {
+        const tevStage = this.ensureTevStage(idx);
+        tevStage.rasSwapTable = rasSwapTable;
+        tevStage.texSwapTable = texSwapTable;
     }
 
     public setTevIndirect(tevStageIdx: number, indTexStage: GX.IndTexStageID, format: GX.IndTexFormat, biasSel: GX.IndTexBiasSel, matrixSel: GX.IndTexMtxID, wrapS: GX.IndTexWrap, wrapT: GX.IndTexWrap, addPrev: boolean, utcLod: boolean, alphaSel: GX.IndTexAlphaSel): void {

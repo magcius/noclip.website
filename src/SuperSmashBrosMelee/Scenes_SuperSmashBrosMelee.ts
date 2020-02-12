@@ -5,7 +5,7 @@ import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data } from "./SYSDOLPHIN_Render";
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint } from "./SYSDOLPHIN";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint } from "./SYSDOLPHIN";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 
 class ModelCache {
@@ -93,11 +93,17 @@ class MeleeTitleDesc implements SceneDesc {
         const scene = new MeleeRenderer(device);
 
         const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`))));
-        bg.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)), null, null);
+        bg.addAnimAll(
+            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
+            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
+            null);
         scene.jobjRoots.push(bg);
 
         const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`))));
-        moji.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), null, null);
+        moji.addAnimAll(
+            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
+            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
+            null);
         scene.jobjRoots.push(moji);
 
         return scene;

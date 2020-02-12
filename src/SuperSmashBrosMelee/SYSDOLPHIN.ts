@@ -211,11 +211,12 @@ export interface HSD_TObjTev {
 
 export interface HSD_TObj {
     flags: HSD_TObjFlags;
-    id: GX.TexMapID;
+    animID: number;
     src: GX.TexGenSrc;
     rotation: vec3;
     scale: vec3;
     translation: vec3;
+    blending: number;
 
     texImageIdx: number;
 
@@ -225,6 +226,8 @@ export interface HSD_TObj {
 
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
+    repeatS: number;
+    repeatT: number;
     minFilt: GX.TexFilter;
     magFilt: GX.TexFilter;
 
@@ -238,7 +241,7 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
     // const classNameOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
 
-    const id: GX.TexMapID = view.getUint32(0x08);
+    const animID: number = view.getUint32(0x08);
     const src: GX.TexGenSrc = view.getUint32(0x0C);
 
     const rotationX = view.getFloat32(0x10);
@@ -260,6 +263,7 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
     const wrapT: GX.WrapMode = view.getUint32(0x38);
     const repeatS = view.getUint8(0x3C);
     const repeatT = view.getUint8(0x3D);
+    assert(repeatS > 0 && repeatT > 0);
 
     const flags = view.getUint32(0x40);
     const blending = view.getFloat32(0x44);
@@ -350,8 +354,8 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
     const minFilt = GX.TexFilter.LIN_MIP_LIN;
 
     tobj.push({
-        flags, id, src, rotation, scale, translation, texImageIdx,
-        minLOD, maxLOD, wrapS, wrapT, minFilt, magFilt, tevDesc,
+        flags, animID, src, rotation, scale, translation, blending, texImageIdx,
+        minLOD, maxLOD, wrapS, wrapT, repeatS, repeatT, minFilt, magFilt, tevDesc,
     });
 
     if (nextSiblingOffs !== 0)
@@ -854,36 +858,79 @@ export interface HSD_AObj {
 }
 
 const enum FObjFmt {
-    HSD_A_FRAC_FLOAT,
-    HSD_A_FRAC_S16,
-    HSD_A_FRAC_U16,
-    HSD_A_FRAC_S8,
-    HSD_A_FRAC_U8,
+    FLOAT,
+    S16,
+    U16,
+    S8,
+    U8,
 }
 
 const enum FObjOpcode {
-    HSD_A_OP_NONE,
-    HSD_A_OP_CON,
-    HSD_A_OP_LIN,
-    HSD_A_OP_SPL0,
-    HSD_A_OP_SPL,
-    HSD_A_OP_SLP,
-    HSD_A_OP_KEY,
+    NONE,
+    CON,
+    LIN,
+    SPL0,
+    SPL,
+    SLP,
+    KEY,
 }
 
-export const enum HSD_FObj__JointTrackType {
-    HSD_A_J_ROTX = 1,
-    HSD_A_J_ROTY,
-    HSD_A_J_ROTZ,
-    HSD_A_J_PATH,
-    HSD_A_J_TRAX,
-    HSD_A_J_TRAY,
-    HSD_A_J_TRAZ,
-    HSD_A_J_SCAX,
-    HSD_A_J_SCAY,
-    HSD_A_J_SCAZ,
-    HSD_A_J_NODE,
-    HSD_A_J_BRANCH,
+export const enum HSD_JObjAnmType {
+    ROTX = 1,
+    ROTY,
+    ROTZ,
+    PATH,
+    TRAX,
+    TRAY,
+    TRAZ,
+    SCAX,
+    SCAY,
+    SCAZ,
+    NODE,
+    BRANCH,
+}
+
+export const enum HSD_MObjAnmType {
+    AMBIENT_R = 1,
+    AMBIENT_G,
+    AMBIENT_B,
+    DIFFUSE_R,
+    DIFFUSE_G,
+    DIFFUSE_B,
+    SPECULAR_R,
+    SPECULAR_G,
+    SPECULAR_B,
+    ALPHA,
+    PE_REF0,
+    PE_REF1,
+    PE_DSTALPHA,
+}
+
+export const enum HSD_TObjAnmType {
+    TIMG = 1,
+    TRAU,
+    TRAV,
+    SCAU,
+    SCAV,
+    ROTX,
+    ROTY,
+    ROTZ,
+    BLEND,
+    TCLT,
+    LOD_BIAS,
+    KONST_R,
+    KONST_G,
+    KONST_B,
+    KONST_A,
+    TEV0_R,
+    TEV0_G,
+    TEV0_B,
+    TEV0_A,
+    TEV1_R,
+    TEV1_G,
+    TEV1_B,
+    TEV1_A,
+    TS_BLEND,
 }
 
 function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
@@ -903,20 +950,20 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
         const shift = frac & 0x1F;
 
         let res: number;
-        if (fmt === FObjFmt.HSD_A_FRAC_FLOAT) {
+        if (fmt === FObjFmt.FLOAT) {
             assert(shift === 0);
             res = dataView.getFloat32(dataIdx + 0x00, true);
             dataIdx += 0x04;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_S16) {
+        } else if (fmt === FObjFmt.S16) {
             res = dataView.getInt16(dataIdx + 0x00, true);
             dataIdx += 0x02;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_U16) {
+        } else if (fmt === FObjFmt.U16) {
             res = dataView.getUint16(dataIdx + 0x00, true);
             dataIdx += 0x02;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_S8) {
+        } else if (fmt === FObjFmt.S8) {
             res = dataView.getInt8(dataIdx + 0x00);
             dataIdx += 0x01;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_U8) {
+        } else if (fmt === FObjFmt.U8) {
             res = dataView.getUint8(dataIdx + 0x00);
             dataIdx += 0x01;
         } else {
@@ -947,25 +994,25 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
 
         for (let i = 0; i < nbPack; i++) {
             // SLP is special, as it doesn't mark a keyframe by itself.
-            if (opcode === FObjOpcode.HSD_A_OP_SLP) {
+            if (opcode === FObjOpcode.SLP) {
                 d0 = d1;
                 d1 = parseValue(fracSlope);
                 continue;
             }
 
-            if (opcode === FObjOpcode.HSD_A_OP_CON) {
+            if (opcode === FObjOpcode.CON) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 const duration = parseVLQ();
                 keyframes.push({ kind: 'Constant', time, p0 });
                 time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_LIN) {
+            } else if (opcode === FObjOpcode.LIN) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 const duration = parseVLQ();
                 keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
                 time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_SPL0) {
+            } else if (opcode === FObjOpcode.SPL0) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
@@ -973,7 +1020,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
                 const duration = parseVLQ();
                 keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
                 time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_SPL) {
+            } else if (opcode === FObjOpcode.SPL) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
@@ -981,7 +1028,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
                 const duration = parseVLQ();
                 keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
                 time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_KEY) {
+            } else if (opcode === FObjOpcode.KEY) {
                 p0 = p1 = parseValue(fracValue);
                 const duration = parseVLQ();
                 keyframes.push({ kind: 'Constant', time, p0 });
@@ -1057,16 +1104,117 @@ export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveS
     return { root };
 }
 
+export interface HSD_TexAnim {
+    aobj: HSD_AObj | null;
+    animID: number;
+}
+
+export interface HSD_RenderAnim {
+}
+
+export interface HSD_MatAnim {
+    aobj: HSD_AObj | null;
+    texAnim: HSD_TexAnim[];
+    renderAnim: HSD_RenderAnim | null;
+}
+
 export interface HSD_MatAnimJoint {
     children: HSD_MatAnimJoint[];
+    matAnim: HSD_MatAnim[];
 }
 
 export interface HSD_MatAnimJointRoot {
     root: HSD_MatAnimJoint;
 }
 
+function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    const nextSiblingOffs = view.getUint32(0x00);
+    const animID: number = view.getUint8(0x04);
+    const aobjDescOffs = view.getUint32(0x08);
+    const imageDescOffs = view.getUint32(0x0C);
+    const tlutDescOffs = view.getUint32(0x10);
+    const imageDescCount = view.getUint16(0x14);
+    const tlutDescCount = view.getUint16(0x16);
+
+    let aobj: HSD_AObj | null = null;
+    if (aobj !== 0)
+        aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
+
+    texAnims.push({ animID, aobj });
+
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadTexAnim(texAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
+}
+
+function HSD_AObjLoadRenderAnim(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_RenderAnim {
+    // TODO(jstpierre): Is this even used?
+    return {};
+}
+
+function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    const nextSiblingOffs = view.getUint32(0x00);
+    const aobjDescOffs = view.getUint32(0x04);
+    const texAnimOffs = view.getUint32(0x08);
+    const renderAnimOffs = view.getUint32(0x0C);
+
+    let aobj: HSD_AObj | null = null;
+    if (aobjDescOffs !== 0)
+        aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
+
+    let texAnim: HSD_TexAnim[] = [];
+    if (texAnimOffs !== 0)
+        HSD_AObjLoadTexAnim(texAnim, ctx, HSD_LoadContext__ResolvePtr(ctx, texAnimOffs));
+
+    let renderAnim: HSD_RenderAnim | null = null;
+    if (renderAnimOffs !== 0)
+        renderAnim = HSD_AObjLoadRenderAnim(ctx, HSD_LoadContext__ResolvePtr(ctx, texAnimOffs));
+
+    matAnims.push({ aobj, texAnim, renderAnim });
+
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadMatAnim(matAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
+}
+
+function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: LoadContext, offs: number): void {
+    assert(offs !== 0);
+    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+    const view = buffer.createDataView();
+    const firstChildOffs = view.getUint32(0x00);
+    const nextSiblingOffs = view.getUint32(0x04);
+    const matAnimOffs = view.getUint32(0x08);
+
+    const children: HSD_MatAnimJoint[] = [];
+    if (firstChildOffs !== 0)
+    HSD_AObjLoadMatAnimJointInternal(children, ctx, firstChildOffs);
+
+    let matAnim: HSD_MatAnim[] = [];
+    if (matAnimOffs !== 0)
+        HSD_AObjLoadMatAnim(matAnim, ctx, HSD_LoadContext__ResolvePtr(ctx, matAnimOffs));
+
+    matAnimJoints.push({ children, matAnim });
+    
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, nextSiblingOffs);
+}
+
+export function HSD_AObjLoadMatAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_MatAnimJointRoot {
+    const ctx = new LoadContext(archive);
+
+    const matAnimJoints: HSD_MatAnimJoint[] = [];
+    HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, symbol.offset);
+    assert(matAnimJoints.length === 1);
+    const root = matAnimJoints[0];
+
+    return { root };
+}
+
 export interface HSD_ShapeAnimJoint {
     children: HSD_ShapeAnimJoint[];
+    aobj: HSD_AObj[];
 }
 
 export interface HSD_ShapeAnimJointRoot {

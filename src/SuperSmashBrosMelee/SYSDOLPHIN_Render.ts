@@ -1,6 +1,6 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_FObj__JointTrackType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn } from "./SYSDOLPHIN";
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType } from "./SYSDOLPHIN";
+import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
 import { GfxDevice, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
@@ -8,7 +8,7 @@ import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
@@ -17,6 +17,7 @@ import { assert } from "../util";
 import { Camera } from "../Camera";
 import { getPointHermite } from "../Spline";
 import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp";
+import { colorNewCopy, White, Color, colorCopy } from "../Color";
 
 class HSD_TObj_Data {
     public texImage: HSD__TexImageData_Data;
@@ -157,6 +158,52 @@ export class HSD_JObjRoot_Data {
     }
 }
 
+class HSD_AObj_Instance {
+    public framerate: number = 1.0;
+    public currFrame: number = 0;
+
+    constructor(public aobj: HSD_AObj) {
+    }
+
+    private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        const time = this.currFrame;
+
+        let i = 0;
+        for (; i < fobj.keyframes.length; i++) {
+            if (time < fobj.keyframes[i].time)
+                break;
+        }
+
+        if (i > 0)
+            i--;
+
+        const k0 = fobj.keyframes[i];
+        if (k0.kind === 'Constant') {
+            callback(fobj.type, k0.p0, obj);
+        } else if (k0.kind === 'Linear') {
+            const t = (time - k0.time) / k0.duration;
+            callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
+        } else if (k0.kind === 'Hermite') {
+            const t = (time - k0.time) / k0.duration;
+            callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
+        }
+    }
+
+    public calcAnim<T>(deltaTimeInFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        this.currFrame += this.framerate * deltaTimeInFrames;
+
+        if (!!(this.aobj.flags & HSD_AObjFlags.ANIM_LOOP)) {
+            while (this.currFrame >= this.aobj.endFrame) {
+                // TODO(jstpierre): Rewind Frame
+                this.currFrame -= this.aobj.endFrame;
+            }
+        }
+
+        for (let i = 0; i < this.aobj.fobj.length; i++)
+            this.calcFObj(this.aobj.fobj[i], callback, obj);
+    }
+}
+
 interface HSD_MakeTExp {
     c: HSD_TExp;
     a: HSD_TExp;
@@ -167,15 +214,108 @@ export class HSD_TObj_Instance {
     public texMtxID: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
     public texMapID: GX.TexMapID = GX.TexMapID.TEXMAP_NULL;
     public texCoordID: GX.TexCoordID = GX.TexCoordID.TEXCOORD_NULL;
+    private aobj: HSD_AObj_Instance | null = null;
+
+    private scale = vec3.create();
+    private rotation = vec3.create();
+    private translation = vec3.create();
+    private blending: number;
+    private constant: Color | null = null;
+    private tev0: Color | null = null;
+    private tev1: Color | null = null;
 
     constructor(public data: HSD_TObj_Data) {
+        const tobj = this.data.tobj;
+        vec3.copy(this.scale, tobj.scale);
+        vec3.copy(this.rotation, tobj.rotation);
+        vec3.copy(this.translation, tobj.translation);
+        this.blending = tobj.blending;
+        if (tobj.tevDesc !== null) {
+            this.constant = colorNewCopy(tobj.tevDesc.constant);
+            this.tev0 = colorNewCopy(tobj.tevDesc.tev0);
+            this.tev1 = colorNewCopy(tobj.tevDesc.tev1);
+        }
+    }
+
+    public addAnim(texAnim: HSD_TexAnim): void {
+        if (texAnim.aobj !== null)
+            this.aobj = new HSD_AObj_Instance(texAnim.aobj);
+    }
+
+    private static updateAnim(trackType: HSD_TObjAnmType, value: number, tobj: HSD_TObj_Instance): void {
+        if (trackType === HSD_TObjAnmType.TIMG) {
+            // TODO(jstpierre)
+        } else if (trackType === HSD_TObjAnmType.TRAU) {
+            tobj.translation[0] = value;
+        } else if (trackType === HSD_TObjAnmType.TRAV) {
+            tobj.translation[1] = value;
+        } else if (trackType === HSD_TObjAnmType.SCAU) {
+            tobj.scale[0] = value;
+        } else if (trackType === HSD_TObjAnmType.SCAV) {
+            tobj.scale[1] = value;
+        } else if (trackType === HSD_TObjAnmType.ROTX) {
+            tobj.rotation[0] = value;
+        } else if (trackType === HSD_TObjAnmType.ROTY) {
+            tobj.rotation[1] = value;
+        } else if (trackType === HSD_TObjAnmType.ROTZ) {
+            tobj.rotation[2] = value;
+        } else if (trackType === HSD_TObjAnmType.BLEND) {
+            tobj.blending = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TCLT) {
+            // TODO(jstpierre)
+        } else if (trackType === HSD_TObjAnmType.LOD_BIAS) {
+            // TODO(jstpierre)
+        } else if (trackType === HSD_TObjAnmType.KONST_R) {
+            if (tobj.constant !== null)
+                tobj.constant.r = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.KONST_G) {
+            if (tobj.constant !== null)
+                tobj.constant.g = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.KONST_B) {
+            if (tobj.constant !== null)
+                tobj.constant.b = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.KONST_A) {
+            if (tobj.constant !== null)
+                tobj.constant.a = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV0_R) {
+            if (tobj.tev0 !== null)
+                tobj.tev0.r = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV0_G) {
+            if (tobj.tev0 !== null)
+                tobj.tev0.g = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV0_B) {
+            if (tobj.tev0 !== null)
+                tobj.tev0.b = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV0_A) {
+            if (tobj.tev0 !== null)
+                tobj.tev0.a = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV1_R) {
+            if (tobj.tev1 !== null)
+                tobj.tev1.r = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV1_G) {
+            if (tobj.tev1 !== null)
+                tobj.tev1.g = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV1_B) {
+            if (tobj.tev1 !== null)
+                tobj.tev1.b = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TEV1_A) {
+            if (tobj.tev1 !== null)
+                tobj.tev1.a = saturate(value);
+        } else if (trackType === HSD_TObjAnmType.TS_BLEND) {
+            tobj.blending = saturate(value);
+        }
+    }
+
+    public calcAnim(deltaTimeInFrames: number): void {
+        if (this.aobj !== null)
+            this.aobj.calcAnim(deltaTimeInFrames, HSD_TObj_Instance.updateAnim, this);
     }
 
     private makeColorGenTExp(list: HSD_TExpList, tobjIdx: number, params: HSD_MakeTExp): void {
         const tev = this.data.tobj.tevDesc!;
 
         const e0 = HSD_TExpTev(list);
-        HSD_TExpOrder(e0, this, GX.ColorChannelID.COLOR_NULL);
+        HSD_TExpOrder(e0, this, GX.RasColorChannelID.COLOR_ZERO);
 
         const sel: HSD_TEInput[] = [];
         const exp: (HSD_TExp | null)[] = [];
@@ -216,7 +356,7 @@ export class HSD_TObj_Instance {
                 } else if (colorIn === HSD_TObjTevColorIn.TEX0_RGB) {
                     sel[i] = HSD_TEInput.TE_RGB;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_RGB, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_RGB, HSD_TEInput.TE_RGB));
@@ -224,7 +364,7 @@ export class HSD_TObj_Instance {
                 } else if (colorIn === HSD_TObjTevColorIn.TEX0_AAA) {
                     sel[i] = HSD_TEInput.TE_RGB;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_A, HSD_TEInput.TE_X));
@@ -232,7 +372,7 @@ export class HSD_TObj_Instance {
                 } else if (colorIn === HSD_TObjTevColorIn.TEX1_RGB) {
                     sel[i] = HSD_TEInput.TE_RGB;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_RGB, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_RGB, HSD_TEInput.TE_RGB));
@@ -240,7 +380,7 @@ export class HSD_TObj_Instance {
                 } else if (colorIn === HSD_TObjTevColorIn.TEX1_AAA) {
                     sel[i] = HSD_TEInput.TE_RGB;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpColorOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpColorIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
@@ -279,7 +419,7 @@ export class HSD_TObj_Instance {
                 } else if (alphaIn === HSD_TObjTevAlphaIn.TEX0_A) {
                     sel[i] = HSD_TEInput.TE_A;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpAlphaOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpAlphaIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV0_A, HSD_TEInput.TE_X));
@@ -287,7 +427,7 @@ export class HSD_TObj_Instance {
                 } else if (alphaIn === HSD_TObjTevAlphaIn.TEX1_A) {
                     sel[i] = HSD_TEInput.TE_RGB;
                     const tmp = HSD_TExpTev(list);
-                    HSD_TExpOrder(tmp, null, GX.ColorChannelID.COLOR_NULL);
+                    HSD_TExpOrder(tmp, null, GX.RasColorChannelID.COLOR_ZERO);
                     HSD_TExpAlphaOp(tmp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                     HSD_TExpAlphaIn(tmp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null,
                         HSD_TEInput.TE_X, HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_TEV1_A, HSD_TEInput.TE_X));
@@ -318,7 +458,7 @@ export class HSD_TObj_Instance {
         if (tobj.tevDesc !== null && !!(tobj.tevDesc.active & (HSD_TObjTevActive.COLOR_TEV | HSD_TObjTevActive.ALPHA_TEV)))
             this.makeColorGenTExp(list, tobjIdx, src);
 
-        HSD_TExpOrder(e0, this, GX.ColorChannelID.COLOR_NULL);
+        HSD_TExpOrder(e0, this, GX.RasColorChannelID.COLOR_ZERO);
 
         const colormap = this.data.tobj.flags & HSD_TObjFlags.COLORMAP_MASK;
         if (colormap === HSD_TObjFlags.COLORMAP_ALPHA_MASK) {
@@ -355,26 +495,26 @@ export class HSD_TObj_Instance {
             const alphamap = this.data.tobj.flags & HSD_TObjFlags.ALPHAMAP_MASK;
             if (alphamap === HSD_TObjFlags.ALPHAMAP_ALPHA_MASK) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_BLEND) {
                 const blend = HSD_TExpCnstTObj(list, tobjIdx, HSD_TExpCnstVal.TOBJ_BLENDING, HSD_TEInput.TE_X);
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_X, blend, HSD_TEInput.TE_0, null);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, last.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_X, blend, HSD_TEInput.TE_0, null);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_MODULATE) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.a, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_REPLACE) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, src.a);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_NONE || alphamap === HSD_TObjFlags.ALPHAMAP_PASS) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.a);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_ADD) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.a);
             } else if (alphamap === HSD_TObjFlags.ALPHAMAP_SUB) {
                 HSD_TExpAlphaOp(e0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
-                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.c);
+                HSD_TExpAlphaIn(e0, HSD_TEInput.TE_A, src.a, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, last.a);
             } else {
                 throw "whoops";
             }
@@ -383,6 +523,57 @@ export class HSD_TObj_Instance {
     }
 
     public calcMtx(): void {
+        const tobj = this.data.tobj;
+
+        computeModelMatrixSRT(this.textureMatrix,
+            Math.abs(this.scale[0]) < MathConstants.EPSILON ? 0.0 : (tobj.repeatS / this.scale[0]),
+            Math.abs(this.scale[1]) < MathConstants.EPSILON ? 0.0 : (tobj.repeatS / this.scale[1]),
+            this.scale[2],
+
+            this.rotation[0],
+            this.rotation[1],
+            -this.rotation[2],
+
+            -this.translation[0],
+            -(this.translation[1] + (tobj.wrapT === GX.WrapMode.MIRROR ? 1.0 / (tobj.repeatT / this.scale[1]) : 0.0)),
+            this.translation[2],
+        );
+    }
+
+    public fillTExpConstantInput(dst: Color, val: HSD_TExpCnstVal, comp: HSD_TEInput): void {
+        assert(val >= HSD_TExpCnstVal.TOBJ_START);
+
+        if (val === HSD_TExpCnstVal.TOBJ_CONSTANT_RGB) {
+            assert(comp === HSD_TEInput.TE_RGB);
+            colorCopy(dst, this.constant!);
+        } else if (val === HSD_TExpCnstVal.TOBJ_CONSTANT_R) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.constant!.r;
+        } else if (val === HSD_TExpCnstVal.TOBJ_CONSTANT_G) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.constant!.g;
+        } else if (val === HSD_TExpCnstVal.TOBJ_CONSTANT_B) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.constant!.b;
+        } else if (val === HSD_TExpCnstVal.TOBJ_CONSTANT_A) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.constant!.a;
+        } else if (val === HSD_TExpCnstVal.TOBJ_TEV0_RGB) {
+            assert(comp === HSD_TEInput.TE_RGB);
+            colorCopy(dst, this.tev0!);
+        } else if (val === HSD_TExpCnstVal.TOBJ_TEV0_A) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.tev0!.a;
+        } else if (val === HSD_TExpCnstVal.TOBJ_TEV1_RGB) {
+            assert(comp === HSD_TEInput.TE_RGB);
+            colorCopy(dst, this.tev1!);
+        } else if (val === HSD_TExpCnstVal.TOBJ_TEV1_A) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.tev1!.a;
+        } else if (val === HSD_TExpCnstVal.TOBJ_BLENDING) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.blending;
+        }
     }
 
     public fillTexMtx(materialParams: MaterialParams): void {
@@ -407,15 +598,28 @@ export class HSD_TObj_Instance {
 
 const materialParams = new MaterialParams();
 
+const scratchColor = colorNewCopy(White);
 class HSD_MObj_Instance {
     private materialHelper: GXMaterialHelperGfx;
     private tobj: HSD_TObj_Instance[] = [];
+    private aobj: HSD_AObj_Instance | null = null;
+
+    private ambient = colorNewCopy(White);
+    private diffuse = colorNewCopy(White);
+    private specular = colorNewCopy(White);
+    private alpha: number = 1.0;
+
+    private texp: HSD_TExpList;
 
     constructor(public data: HSD_MObj_Data) {
         for (let i = 0; i < this.data.tobj.length; i++)
             this.tobj.push(new HSD_TObj_Instance(this.data.tobj[i]));
 
         const mobj = this.data.mobj;
+        colorCopy(this.ambient, mobj.ambient);
+        colorCopy(this.diffuse, mobj.diffuse);
+        colorCopy(this.specular, mobj.specular);
+        this.alpha = mobj.alpha;
 
         const mb = new GXMaterialBuilder();
         this.compileTev(mb);
@@ -434,12 +638,6 @@ class HSD_MObj_Instance {
                 mb.setTexCoordGen(tobj.texCoordID, GX.TexGenType.MTX2x4, tobj.data.tobj.src, GX.TexGenMatrix.IDENTITY, false, tobj.texMtxID);
         }
 
-        // TODO(jstpierre): TExp
-        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
         // PE.
         mb.setAlphaCompare(mobj.alphaComp0, mobj.alphaRef0, mobj.alphaOp, mobj.alphaComp1, mobj.alphaRef1);
         mb.setBlendMode(mobj.type, mobj.srcFactor, mobj.dstFactor, mobj.logicOp);
@@ -449,6 +647,61 @@ class HSD_MObj_Instance {
         mb.setCullMode(GX.CullMode.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public addAnim(matAnim: HSD_MatAnim): void {
+        if (matAnim.aobj !== null)
+            this.aobj = new HSD_AObj_Instance(matAnim.aobj);
+
+        for (let i = 0; i < this.tobj.length; i++) {
+            const tobj = this.tobj[i];
+            const anim = matAnim.texAnim.find((a) => a.animID === tobj.data.tobj.animID);
+            if (anim !== undefined)
+                tobj.addAnim(anim);
+        }
+    }
+
+    private static updateAnim(trackType: HSD_MObjAnmType, value: number, mobj: HSD_MObj_Instance): void {
+        if (trackType === HSD_MObjAnmType.AMBIENT_R) {
+            mobj.ambient.r = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.AMBIENT_G) {
+            mobj.ambient.g = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.AMBIENT_B) {
+            mobj.ambient.b = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.DIFFUSE_R) {
+            mobj.diffuse.r = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.DIFFUSE_G) {
+            mobj.diffuse.g = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.DIFFUSE_B) {
+            mobj.diffuse.b = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.SPECULAR_R) {
+            mobj.specular.r = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.SPECULAR_G) {
+            mobj.specular.g = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.SPECULAR_B) {
+            mobj.specular.b = saturate(value);
+        } else if (trackType === HSD_MObjAnmType.ALPHA) {
+            mobj.alpha = saturate(1.0 - value);
+        } else if (trackType === HSD_MObjAnmType.PE_REF0) {
+            debugger;
+        } else if (trackType === HSD_MObjAnmType.PE_REF1) {
+            debugger;
+        } else if (trackType === HSD_MObjAnmType.PE_DSTALPHA) {
+            debugger;
+        }
+    }
+
+    public calcAnim(deltaTimeInFrames: number): void {
+        if (this.aobj !== null)
+            this.aobj.calcAnim(deltaTimeInFrames, HSD_MObj_Instance.updateAnim, this);
+
+        for (let i = 0; i < this.tobj.length; i++)
+            this.tobj[i].calcAnim(deltaTimeInFrames);
+    }
+
+    public calcMtx(): void {
+        for (let i = 0; i < this.tobj.length; i++)
+            this.tobj[i].calcMtx();
     }
 
     private assignResources(): void {
@@ -502,6 +755,9 @@ class HSD_MObj_Instance {
             alphaMode = diffuseMode << 13;
 
         let list = new HSD_TExpList();
+        if (this.tobj.length === 2) {
+            // list.debug = true;
+        }
 
         let exp = HSD_TExpTev(list);
 
@@ -531,12 +787,12 @@ class HSD_MObj_Instance {
                 HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, cnst);
             } else if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_VTX) {
-                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpOrder(exp, toon, GX.RasColorChannelID.COLOR0A0);
                 HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, toon ? HSD_TEXP_TEX : HSD_TEXP_RAS);
             } else {
                 const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_DIFFUSE, HSD_TEInput.TE_RGB);
-                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpOrder(exp, toon, GX.RasColorChannelID.COLOR0A0);
                 HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpColorIn(exp, HSD_TEInput.TE_RGB, toon ? HSD_TEXP_TEX : HSD_TEXP_RAS, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, cnst);
             }
@@ -546,12 +802,12 @@ class HSD_MObj_Instance {
                 HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_X, cnst);
             } else if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_VTX) {
-                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpOrder(exp, toon, GX.RasColorChannelID.COLOR0A0);
                 HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, HSD_TEXP_RAS);
             } else {
                 const cnst = HSD_TExpCnst(list, HSD_TExpCnstVal.MOBJ_ALPHA, HSD_TEInput.TE_X);
-                HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+                HSD_TExpOrder(exp, toon, GX.RasColorChannelID.COLOR0A0);
                 HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, HSD_TEXP_RAS, HSD_TEInput.TE_X, cnst, HSD_TEInput.TE_0, null);
             }
@@ -570,7 +826,7 @@ class HSD_MObj_Instance {
         if (!!(mobj.renderMode & HSD_RenderModeFlags.DIFFUSE)) {
             if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
                 const exp = HSD_TExpTev(list);
-                HSD_TExpOrder(exp, null, GX.ColorChannelID.COLOR1A1);
+                HSD_TExpOrder(exp, null, GX.RasColorChannelID.COLOR1A1);
                 HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, params.c);
                 HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
@@ -580,7 +836,7 @@ class HSD_MObj_Instance {
             }
 
             const exp = HSD_TExpTev(list);
-            HSD_TExpOrder(exp, toon, GX.ColorChannelID.COLOR0A0);
+            HSD_TExpOrder(exp, toon, GX.RasColorChannelID.COLOR0A0);
             HSD_TExpColorOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
             HSD_TExpColorIn(exp,
                 HSD_TEInput.TE_0, null,
@@ -623,6 +879,9 @@ class HSD_MObj_Instance {
             HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_RGB, params.c);
             HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
             HSD_TExpColorIn(exp, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_0, null, HSD_TEInput.TE_A, params.a);
+            list.root = exp;
+        } else {
+            list.root = params.c;
         }
 
         return list;
@@ -630,13 +889,77 @@ class HSD_MObj_Instance {
 
     private compileTev(mb: GXMaterialBuilder): void {
         this.assignResources();
-        const texp = this.makeTExp();
-        HSD_TExpCompile(texp, mb);
+        this.texp = this.makeTExp();
+        HSD_TExpCompile(this.texp, mb);
     }
 
-    public calcMtx(): void {
-        for (let i = 0; i < this.tobj.length; i++)
-            this.tobj[i].calcMtx();
+    private fillTExpConstantInput(dst: Color, val: HSD_TExpCnstVal, comp: HSD_TEInput): void {
+        if (val === HSD_TExpCnstVal.ONE) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = 1.0;
+        } else if (val === HSD_TExpCnstVal.MOBJ_DIFFUSE) {
+            assert(comp === HSD_TEInput.TE_RGB);
+            colorCopy(dst, this.diffuse);
+        } else if (val === HSD_TExpCnstVal.MOBJ_ALPHA) {
+            assert(comp === HSD_TEInput.TE_X);
+            dst.a = this.alpha;
+        } else if (val >= HSD_TExpCnstVal.TOBJ_START) {
+            const idx = val >>> HSD_TExpCnstVal.TOBJ_IDX_SHIFT;
+            this.tobj[idx].fillTExpConstantInput(dst, val & HSD_TExpCnstVal.TOBJ_VAL_MASK, comp);
+        }
+    }
+
+    private setupTExpConstants(dst: MaterialParams): void {
+        for (let i = 0; i < this.texp.cnsts.length; i++) {
+            const cnst = this.texp.cnsts[i];
+            if (cnst.reg === null) {
+                // Unallocated register, shouldn't happen!
+                // debugger;
+                continue;
+            }
+
+            this.fillTExpConstantInput(scratchColor, cnst.val, cnst.comp);
+
+            const reg = cnst.reg!;
+
+            let dstColor: Color;
+            if (reg < 4) {
+                // Konst
+                dstColor = dst.u_Color[ColorKind.K0 + reg];
+            } else {
+                // Register
+                dstColor = dst.u_Color[ColorKind.C0 + reg - 4];
+            }
+
+            if (cnst.comp === HSD_TEInput.TE_RGB) {
+                dstColor.r = scratchColor.r;
+                dstColor.g = scratchColor.g;
+                dstColor.b = scratchColor.b;
+            } else {
+                const x = scratchColor.a;
+
+                if (reg < 4) {
+                    // Konst
+                    if (cnst.idx === 0)
+                        dstColor.r = x;
+                    else if (cnst.idx === 1)
+                        dstColor.g = x;
+                    else if (cnst.idx === 2)
+                        dstColor.b = x;
+                    else
+                        dstColor.a = x;
+                } else {
+                    // Register
+                    if (cnst.idx === 0) {
+                        dstColor.a = x;
+                    } else {
+                        dstColor.r = x;
+                        dstColor.g = x;
+                        dstColor.b = x;
+                    }
+                }
+            }
+        }
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -651,6 +974,7 @@ class HSD_MObj_Instance {
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         const offs = this.materialHelper.allocateMaterialParams(renderInst);
+        this.setupTExpConstants(materialParams);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
@@ -695,6 +1019,16 @@ class HSD_DObj_Instance {
     constructor(public data: HSD_DObj_Data) {
         if (this.data.mobj !== null)
             this.mobj = new HSD_MObj_Instance(this.data.mobj);
+    }
+
+    public addAnimAll(matAnim: HSD_MatAnim | null, shapeAnim: /* HSD_ShapeAnim | */ null): void {
+        if (this.mobj !== null && matAnim !== null)
+            this.mobj.addAnim(matAnim);
+    }
+
+    public calcAnim(deltaTimeInFrames: number): void {
+        if (this.mobj !== null)
+            this.mobj.calcAnim(deltaTimeInFrames);
     }
 
     public calcMtx(): void {
@@ -773,52 +1107,6 @@ class HSD_DObj_Instance {
     }
 }
 
-class HSD_AObj_Instance {
-    public framerate: number = 1.0;
-    public currFrame: number = 0;
-
-    constructor(public aobj: HSD_AObj) {
-    }
-
-    private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
-        const time = this.currFrame;
-
-        let i = 0;
-        for (; i < fobj.keyframes.length; i++) {
-            if (time < fobj.keyframes[i].time)
-                break;
-        }
-
-        if (i > 0)
-            i--;
-
-        const k0 = fobj.keyframes[i];
-        if (k0.kind === 'Constant') {
-            callback(fobj.type, k0.p0, obj);
-        } else if (k0.kind === 'Linear') {
-            const t = (time - k0.time) / k0.duration;
-            callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
-        } else if (k0.kind === 'Hermite') {
-            const t = (time - k0.time) / k0.duration;
-            callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
-        }
-    }
-
-    public calcAnim<T>(deltaTimeInFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
-        this.currFrame += this.framerate * deltaTimeInFrames;
-
-        if (!!(this.aobj.flags & HSD_AObjFlags.ANIM_LOOP)) {
-            while (this.currFrame >= this.aobj.endFrame) {
-                // TODO(jstpierre): Rewind Frame
-                this.currFrame -= this.aobj.endFrame;
-            }
-        }
-
-        for (let i = 0; i < this.aobj.fobj.length; i++)
-            this.calcFObj(this.aobj.fobj[i], callback, obj);
-    }
-}
-
 class HSD_JObj_Instance {
     private dobj: HSD_DObj_Instance[] = [];
     private aobj: HSD_AObj_Instance | null = null;
@@ -858,6 +1146,14 @@ class HSD_JObj_Instance {
     public addAnim(animJoint: HSD_AnimJoint | null, matAnimJoint: HSD_MatAnimJoint | null, shapeAnimJoint: HSD_ShapeAnimJoint | null): void {
         if (animJoint !== null && animJoint.aobj !== null)
             this.aobj = new HSD_AObj_Instance(animJoint.aobj);
+
+        for (let i = 0; i < this.dobj.length; i++) {
+            const dobj = this.dobj[i];
+            dobj.addAnimAll(
+                matAnimJoint !== null ? matAnimJoint.matAnim[i] : null,
+                shapeAnimJoint !== null ? null /* shapeAnimJoint.shapeAnim[i] */ : null,
+            );
+        }
     }
 
     public addAnimAll(animJoint: HSD_AnimJoint | null, matAnimJoint: HSD_MatAnimJoint | null, shapeAnimJoint: HSD_ShapeAnimJoint | null): void {
@@ -866,37 +1162,37 @@ class HSD_JObj_Instance {
         for (let i = 0; i < this.children.length; i++) {
             const child = this.children[i];
             child.addAnimAll(
-                animJoint !== null ? animJoint.children[i] : null,
-                matAnimJoint !== null ? matAnimJoint.children[i] : null,
-                shapeAnimJoint !== null ? shapeAnimJoint.children[i] : null,
+                (animJoint !== null && i < animJoint.children.length) ? animJoint.children[i] : null,
+                (matAnimJoint !== null && i < matAnimJoint.children.length) ? matAnimJoint.children[i] : null,
+                (shapeAnimJoint !== null && i < shapeAnimJoint.children.length) ? shapeAnimJoint.children[i] : null,
             );
         }
     }
 
-    private static updateAnim(trackType: HSD_FObj__JointTrackType, value: number, jobj: HSD_JObj_Instance): void {
-        if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTX) {
+    private static updateAnim(trackType: HSD_JObjAnmType, value: number, jobj: HSD_JObj_Instance): void {
+        if (trackType === HSD_JObjAnmType.ROTX) {
             jobj.rotation[0] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTY) {
+        } else if (trackType === HSD_JObjAnmType.ROTY) {
             jobj.rotation[1] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_ROTZ) {
+        } else if (trackType === HSD_JObjAnmType.ROTZ) {
             jobj.rotation[2] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_PATH) {
+        } else if (trackType === HSD_JObjAnmType.PATH) {
             // TODO
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAX) {
+        } else if (trackType === HSD_JObjAnmType.TRAX) {
             jobj.translation[0] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAY) {
+        } else if (trackType === HSD_JObjAnmType.TRAY) {
             jobj.translation[1] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_TRAZ) {
+        } else if (trackType === HSD_JObjAnmType.TRAZ) {
             jobj.translation[2] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAX) {
+        } else if (trackType === HSD_JObjAnmType.SCAX) {
             jobj.scale[0] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAY) {
+        } else if (trackType === HSD_JObjAnmType.SCAY) {
             jobj.scale[1] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_SCAZ) {
+        } else if (trackType === HSD_JObjAnmType.SCAZ) {
             jobj.scale[2] = value;
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_NODE) {
+        } else if (trackType === HSD_JObjAnmType.NODE) {
             jobj.setVisible(value >= 0.5);
-        } else if (trackType === HSD_FObj__JointTrackType.HSD_A_J_BRANCH) {
+        } else if (trackType === HSD_JObjAnmType.BRANCH) {
             jobj.setVisibleAll(value >= 0.5);
         } else {
             debugger;
@@ -906,6 +1202,9 @@ class HSD_JObj_Instance {
     public calcAnim(deltaTimeInFrames: number): void {
         if (this.aobj !== null)
             this.aobj.calcAnim(deltaTimeInFrames, HSD_JObj_Instance.updateAnim, this);
+
+        for (let i = 0; i < this.dobj.length; i++)
+            this.dobj[i].calcAnim(deltaTimeInFrames);
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].calcAnim(deltaTimeInFrames);
@@ -920,6 +1219,9 @@ class HSD_JObj_Instance {
 
         if (parentJointMtx !== null)
             mat4.mul(this.jointMtx, parentJointMtx, this.jointMtx);
+
+        for (let i = 0; i < this.dobj.length; i++)
+            this.dobj[i].calcMtx();
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].calcMtx(this.jointMtx);
@@ -953,6 +1255,7 @@ export class HSD_JObjRoot_Instance {
     }
 
     public addAnimAll(animJoint: HSD_AnimJointRoot | null, matAnimJoint: HSD_MatAnimJointRoot | null, shapeAnimJoint: HSD_ShapeAnimJointRoot | null): void {
+        console.log(matAnimJoint);
         this.rootInst.addAnimAll(
             animJoint !== null ? animJoint.root : null,
             matAnimJoint !== null ? matAnimJoint.root : null,

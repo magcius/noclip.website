@@ -58,7 +58,7 @@ export async function parseTimeCycle(text: string, name: string) {
             postfx1A, postfx1R, postfx1G, postfx1B,
             postfx2A, postfx2R, postfx2G, postfx2B,
             cloudAlpha, radiosityLimit, waterFogAlpha, dirMult,
-        ] = [] as (number | undefined)[];
+        ] = [] as number[];
         if (row.length === 40) { // III
             [
                 ambR, ambG, ambB,

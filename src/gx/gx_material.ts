@@ -823,6 +823,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CombineAlphaInput.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
         case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CombineAlphaInput.ZERO:  return `0.0`;
+        default:
+            throw "whoops";
         }
     }
 
@@ -1576,7 +1578,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
         const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
 
-        const rasSwapTable: [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan] = [
+        const rasSwapTable: SwapTable = [
             (rasSwapTableRG >>> 0) & 0x03,
             (rasSwapTableRG >>> 2) & 0x03,
             (rasSwapTableBA >>> 0) & 0x03,
@@ -1586,7 +1588,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const texSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2)];
         const texSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2) + 1];
 
-        const texSwapTable: [GX.TevColorChan, GX.TevColorChan, GX.TevColorChan, GX.TevColorChan] = [
+        const texSwapTable: SwapTable = [
             (texSwapTableRG >>> 0) & 0x03,
             (texSwapTableRG >>> 2) & 0x03,
             (texSwapTableBA >>> 0) & 0x03,
