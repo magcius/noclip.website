@@ -40,7 +40,6 @@ import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat';
 import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
-import { Format } from '../SuperMario64DS/nitro_tex';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -206,11 +205,10 @@ export function getAttributeByteSize(vat: GX_VtxAttrFmt[], vtxAttrib: GX.Attr): 
 export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.CompCnt): number {
     switch (vtxAttrib) {
     case GX.Attr.POS:
-        switch (compCnt) {
-        case GX.CompCnt.POS_XY: return FormatCompFlags.COMP_RG;
-        case GX.CompCnt.POS_XYZ: return FormatCompFlags.COMP_RGB;
-        default: throw Error(`Invalid GX.Attr.POS compCnt ${compCnt}`);
-        }
+        if (compCnt === GX.CompCnt.POS_XY)
+            return FormatCompFlags.COMP_RG;
+        else if (compCnt === GX.CompCnt.POS_XYZ)
+            return FormatCompFlags.COMP_RGB;
     case GX.Attr.NRM:
         if (compCnt === GX.CompCnt.NRM_XYZ)
             return FormatCompFlags.COMP_RGB;
@@ -243,7 +241,7 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
     case GX.Attr.NULL:
     default:
         // Shouldn't ever happen
-        throw Error(`Invalid GX.Attr ${vtxAttrib}`);
+        throw new Error("whoops");
     }
 }
 
@@ -879,7 +877,7 @@ class VtxLoaderImpl implements VtxLoader {
                 indexCount = ((vertexCount * 6) / 4) * 3;
                 break;
             default:
-                throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16) + " cmd " + cmd.toString(16));
+                throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16));
             }
 
             drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
