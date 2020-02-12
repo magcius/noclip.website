@@ -46,6 +46,7 @@ import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
+import * as Scenes_StarFoxAdventures from './StarFoxAdventures/scenes';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
@@ -128,6 +129,7 @@ const sceneGroups = [
     Scenes_PokemonSnap.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
+    Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
