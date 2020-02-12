@@ -87,8 +87,6 @@
             i32.const 4
             i32.shl
             i32.or
-            i32.const 255
-            i32.and
             i32.const 16843009
             i32.mul
             i32.store
@@ -308,13 +306,9 @@
             i32.const 4
             i32.shl
             i32.or
-            i32.const 255
-            i32.and
             i32.const 65793
             i32.mul
             local.get $9
-            i32.const 255
-            i32.and
             i32.const 24
             i32.shl
             i32.or
@@ -807,8 +801,6 @@
              i32.shl
              i32.or
              local.get $0
-             i32.const 255
-             i32.and
              i32.const 1
              i32.shr_u
              i32.or
@@ -1494,10 +1486,10 @@
                 i32.add
                 local.get $0
                 local.get $7
-                i32.const 255
-                i32.and
                 i32.const 6
                 i32.shr_u
+                i32.const 3
+                i32.and
                 i32.const 2
                 i32.shl
                 i32.add
