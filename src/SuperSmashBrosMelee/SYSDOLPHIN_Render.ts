@@ -1,5 +1,5 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD__TexImageData, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType } from "./SYSDOLPHIN";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc } from "./SYSDOLPHIN";
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
 import { GfxDevice, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -12,45 +12,36 @@ import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatri
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
-import { calcMipChain } from "../gx/gx_texture";
-import { assert } from "../util";
+import { calcMipChain, TextureInputGX } from "../gx/gx_texture";
+import { assert, hexzero, assertExists } from "../util";
 import { Camera } from "../Camera";
 import { getPointHermite } from "../Spline";
 import { HSD_TExp, HSD_TExpList, HSD_TExpTev, HSD_TExpColorIn, HSD_TExpColorOp, HSD_TExpAlphaIn, HSD_TExpAlphaOp, HSD_TExpOrder, HSD_TEInput, HSD_TExpCnst, HSD_TExpCnstVal, HSD_TEXP_TEX, HSD_TEXP_RAS, HSD_TExpCnstTObj, HSD_TExpGetType, HSD_TExpType, HSD_TExpCompile } from "./SYSDOLPHIN_TExp";
 import { colorNewCopy, White, Color, colorCopy } from "../Color";
 
 class HSD_TObj_Data {
-    public texImage: HSD__TexImageData_Data;
     public gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public tobj: HSD_TObj, texImageData: HSD__TexImageData_Data[]) {
-        this.texImage = texImageData[this.tobj.texImageIdx];
-
+    constructor(device: GfxDevice, cache: GfxRenderCache, public tobj: HSD_TObj) {
         const [minFilter, mipFilter] = translateTexFilterGfx(this.tobj.minFilt);
         const [magFilter]            = translateTexFilterGfx(this.tobj.magFilt);
-    
+
         this.gfxSampler = cache.createSampler(device, {
             wrapS: translateWrapModeGfx(this.tobj.wrapS),
             wrapT: translateWrapModeGfx(this.tobj.wrapT),
             minFilter, mipFilter, magFilter,
-            minLOD: this.tobj.minLOD,
-            maxLOD: this.tobj.maxLOD,
+            minLOD: this.tobj.imageDesc.minLOD,
+            maxLOD: this.tobj.imageDesc.maxLOD,
         });
-    }
-
-    public fillTextureMapping(m: TextureMapping): void {
-        this.texImage.fillTextureMapping(m);
-        m.gfxSampler = this.gfxSampler;
-        // m.lodBias = this.tobj.lodBias;
     }
 }
 
 class HSD_MObj_Data {
     public tobj: HSD_TObj_Data[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mobj: HSD_MObj, texImageData: HSD__TexImageData_Data[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mobj: HSD_MObj) {
         for (let i = 0; i < this.mobj.tobj.length; i++)
-            this.tobj.push(new HSD_TObj_Data(device, cache, this.mobj.tobj[i], texImageData));
+            this.tobj.push(new HSD_TObj_Data(device, cache, this.mobj.tobj[i]));
     }
 }
 
@@ -58,9 +49,9 @@ class HSD_DObj_Data {
     public shapeHelpers: GXShapeHelperGfx[] = [];
     public mobj: HSD_MObj_Data | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj, texImageData: HSD__TexImageData_Data[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
         if (this.dobj.mobj !== null)
-            this.mobj = new HSD_MObj_Data(device, cache, this.dobj.mobj, texImageData);
+            this.mobj = new HSD_MObj_Data(device, cache, this.dobj.mobj);
 
         for (let i = 0; i < this.dobj.pobj.length; i++) {
             const pobj = this.dobj.pobj[i];
@@ -78,13 +69,13 @@ class HSD_JObj_Data {
     public dobj: HSD_DObj_Data[] = [];
     public children: HSD_JObj_Data[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public jobj: HSD_JObj, texImageData: HSD__TexImageData_Data[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public jobj: HSD_JObj) {
         if (this.jobj.kind === 'DObj')
             for (let i = 0; i < this.jobj.dobj.length; i++)
-                this.dobj.push(new HSD_DObj_Data(device, cache, coalescedBuffers, this.jobj.dobj[i], texImageData));
+                this.dobj.push(new HSD_DObj_Data(device, cache, coalescedBuffers, this.jobj.dobj[i]));
 
         for (let i = 0; i < this.jobj.children.length; i++)
-            this.children.push(new HSD_JObj_Data(device, cache, coalescedBuffers, this.jobj.children[i], texImageData));
+            this.children.push(new HSD_JObj_Data(device, cache, coalescedBuffers, this.jobj.children[i]));
     }
 
     public destroy(device: GfxDevice): void {
@@ -95,12 +86,23 @@ class HSD_JObj_Data {
     }
 }
 
-class HSD__TexImageData_Data {
+class HSD__TexImageData {
     private gfxTexture: GfxTexture;
     public viewerTexture: Texture;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public data: HSD__TexImageData) {
-        const mipChain = calcMipChain(this.data, this.data.mipCount);
+    constructor(device: GfxDevice, public imageDesc: HSD_ImageDesc, public tlutDesc: HSD_TlutDesc | null) {
+        const name = `HSD Texture ${hexzero(imageDesc.offs, 8)}`;
+        const texture: TextureInputGX = {
+            name,
+            data: imageDesc.data,
+            format: imageDesc.format,
+            width: imageDesc.width,
+            height: imageDesc.height,
+            mipCount: imageDesc.mipCount,
+            paletteFormat: tlutDesc !== null ? tlutDesc.paletteFormat : null,
+            paletteData: tlutDesc !== null ? tlutDesc.paletteData : null,
+        };
+        const mipChain = calcMipChain(texture, imageDesc.mipCount);
         const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
         this.gfxTexture = gfxTexture;
         this.viewerTexture = viewerTexture;
@@ -108,8 +110,8 @@ class HSD__TexImageData_Data {
 
     public fillTextureMapping(m: TextureMapping): boolean {
         m.gfxTexture = this.gfxTexture;
-        m.width = this.data.width;
-        m.height = this.data.height;
+        m.width = this.imageDesc.width;
+        m.height = this.imageDesc.height;
         return true;
     }
 
@@ -118,12 +120,33 @@ class HSD__TexImageData_Data {
     }
 }
 
+class HSD__TexImageDataCache {
+    private imageDatas: HSD__TexImageData[] = [];
+
+    public getImageData(device: GfxDevice, imageDesc: HSD_ImageDesc, tlutDesc: HSD_TlutDesc | null): HSD__TexImageData {
+        for (let i = 0; i < this.imageDatas.length; i++) {
+            const imageData = this.imageDatas[i];
+            if (imageData.imageDesc === imageDesc && imageData.tlutDesc === tlutDesc)
+                return imageData;
+        }
+
+        const imageData = new HSD__TexImageData(device, imageDesc, tlutDesc);
+        this.imageDatas.push(imageData);
+        return imageData;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.imageDatas.length; i++)
+            this.imageDatas[i].destroy(device);
+    }
+}
+
 export class HSD_JObjRoot_Data {
     public coalescedBuffers: GfxBufferCoalescerCombo;
     public rootData: HSD_JObj_Data;
-    public texImageData: HSD__TexImageData_Data[] = [];
+    public texImageData: HSD__TexImageData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public root: HSD_JObjRoot) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public root: HSD_JObjRoot, public texImageDataCache = new HSD__TexImageDataCache()) {
         const loadedVertexDatas: LoadedVertexData[] = [];
 
         function collectDObj(dobj: HSD_DObj): void {
@@ -143,11 +166,8 @@ export class HSD_JObjRoot_Data {
 
         this.coalescedBuffers = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
 
-        for (let i = 0; i < this.root.texImageDatas.length; i++)
-            this.texImageData.push(new HSD__TexImageData_Data(device, cache, this.root.texImageDatas[i]));
-
         const coalescedBuffers = this.coalescedBuffers.coalescedBuffers.slice();
-        this.rootData = new HSD_JObj_Data(device, cache, coalescedBuffers, this.root.jobj, this.texImageData);
+        this.rootData = new HSD_JObj_Data(device, cache, coalescedBuffers, this.root.jobj);
     }
 
     public destroy(device: GfxDevice): void {
@@ -215,7 +235,9 @@ export class HSD_TObj_Instance {
     public texMapID: GX.TexMapID = GX.TexMapID.TEXMAP_NULL;
     public texCoordID: GX.TexCoordID = GX.TexCoordID.TEXCOORD_NULL;
     private aobj: HSD_AObj_Instance | null = null;
-
+    private texAnim: HSD_TexAnim | null = null;
+    private imageDesc: HSD_ImageDesc;
+    private tlutDesc: HSD_TlutDesc | null;
     private scale = vec3.create();
     private rotation = vec3.create();
     private translation = vec3.create();
@@ -224,8 +246,10 @@ export class HSD_TObj_Instance {
     private tev0: Color | null = null;
     private tev1: Color | null = null;
 
-    constructor(public data: HSD_TObj_Data) {
+    constructor(public data: HSD_TObj_Data, private texImageDataCache: HSD__TexImageDataCache) {
         const tobj = this.data.tobj;
+        this.imageDesc = tobj.imageDesc;
+        this.tlutDesc = tobj.tlutDesc;
         vec3.copy(this.scale, tobj.scale);
         vec3.copy(this.rotation, tobj.rotation);
         vec3.copy(this.translation, tobj.translation);
@@ -238,13 +262,14 @@ export class HSD_TObj_Instance {
     }
 
     public addAnim(texAnim: HSD_TexAnim): void {
+        this.texAnim = texAnim;
         if (texAnim.aobj !== null)
             this.aobj = new HSD_AObj_Instance(texAnim.aobj);
     }
 
     private static updateAnim(trackType: HSD_TObjAnmType, value: number, tobj: HSD_TObj_Instance): void {
         if (trackType === HSD_TObjAnmType.TIMG) {
-            // TODO(jstpierre)
+            tobj.imageDesc = assertExists(tobj.texAnim!.imageDescs[value]);
         } else if (trackType === HSD_TObjAnmType.TRAU) {
             tobj.translation[0] = value;
         } else if (trackType === HSD_TObjAnmType.TRAV) {
@@ -262,7 +287,7 @@ export class HSD_TObj_Instance {
         } else if (trackType === HSD_TObjAnmType.BLEND) {
             tobj.blending = saturate(value);
         } else if (trackType === HSD_TObjAnmType.TCLT) {
-            // TODO(jstpierre)
+            tobj.tlutDesc = assertExists(tobj.texAnim!.tlutDescs[value]);
         } else if (trackType === HSD_TObjAnmType.LOD_BIAS) {
             // TODO(jstpierre)
         } else if (trackType === HSD_TObjAnmType.KONST_R) {
@@ -591,8 +616,9 @@ export class HSD_TObj_Instance {
         }
     }
 
-    public fillTextureMapping(m: TextureMapping): void {
-        this.data.fillTextureMapping(m);
+    public fillTextureMapping(device: GfxDevice, m: TextureMapping): void {
+        const texImage = this.texImageDataCache.getImageData(device, this.imageDesc, this.tlutDesc);
+        texImage.fillTextureMapping(m);
     }
 }
 
@@ -611,9 +637,9 @@ class HSD_MObj_Instance {
 
     private texp: HSD_TExpList;
 
-    constructor(public data: HSD_MObj_Data) {
+    constructor(public data: HSD_MObj_Data, texImageDataCache: HSD__TexImageDataCache) {
         for (let i = 0; i < this.data.tobj.length; i++)
-            this.tobj.push(new HSD_TObj_Instance(this.data.tobj[i]));
+            this.tobj.push(new HSD_TObj_Instance(this.data.tobj[i], texImageDataCache));
 
         const mobj = this.data.mobj;
         colorCopy(this.ambient, mobj.ambient);
@@ -968,7 +994,7 @@ class HSD_MObj_Instance {
 
         for (let i = 0; i < this.tobj.length; i++) {
             const tobj = this.tobj[i];
-            tobj.fillTextureMapping(materialParams.m_TextureMapping[i]);
+            tobj.fillTextureMapping(device, materialParams.m_TextureMapping[i]);
             tobj.fillTexMtx(materialParams);
         }
 
@@ -1016,9 +1042,9 @@ class HSD_DObj_Instance {
 
     public visible: boolean = true;
 
-    constructor(public data: HSD_DObj_Data) {
+    constructor(public data: HSD_DObj_Data, texImageDataCache: HSD__TexImageDataCache) {
         if (this.data.mobj !== null)
-            this.mobj = new HSD_MObj_Instance(this.data.mobj);
+            this.mobj = new HSD_MObj_Instance(this.data.mobj, texImageDataCache);
     }
 
     public addAnimAll(matAnim: HSD_MatAnim | null, shapeAnim: /* HSD_ShapeAnim | */ null): void {
@@ -1120,11 +1146,11 @@ class HSD_JObj_Instance {
 
     public visible: boolean = true;
 
-    constructor(public data: HSD_JObj_Data, public parent: HSD_JObj_Instance | null = null) {
+    constructor(public data: HSD_JObj_Data, texImageDataCache: HSD__TexImageDataCache, public parent: HSD_JObj_Instance | null = null) {
         for (let i = 0; i < this.data.dobj.length; i++)
-            this.dobj.push(new HSD_DObj_Instance(this.data.dobj[i]));
+            this.dobj.push(new HSD_DObj_Instance(this.data.dobj[i], texImageDataCache));
         for (let i = 0; i < this.data.children.length; i++)
-            this.children.push(new HSD_JObj_Instance(this.data.children[i], this));
+            this.children.push(new HSD_JObj_Instance(this.data.children[i], texImageDataCache, this));
 
         const jobj = this.data.jobj;
         vec3.copy(this.translation, jobj.translation);
@@ -1249,7 +1275,7 @@ export class HSD_JObjRoot_Instance {
     private allJObjsByID = new Map<number, HSD_JObj_Instance>();
 
     constructor(public data: HSD_JObjRoot_Data) {
-        this.rootInst = new HSD_JObj_Instance(this.data.rootData);
+        this.rootInst = new HSD_JObj_Instance(this.data.rootData, this.data.texImageDataCache);
 
         // Traverse and register the JObjs.
         const registerJObj = (inst: HSD_JObj_Instance): void => {
@@ -1263,7 +1289,6 @@ export class HSD_JObjRoot_Instance {
     }
 
     public addAnimAll(animJoint: HSD_AnimJointRoot | null, matAnimJoint: HSD_MatAnimJointRoot | null, shapeAnimJoint: HSD_ShapeAnimJointRoot | null): void {
-        console.log(animJoint, matAnimJoint);
         this.rootInst.addAnimAll(
             animJoint !== null ? animJoint.root : null,
             matAnimJoint !== null ? matAnimJoint.root : null,

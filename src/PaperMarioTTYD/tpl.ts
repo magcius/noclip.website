@@ -7,7 +7,7 @@ import * as GX_Texture from '../gx/gx_texture';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert } from "../util";
 
-export interface TPLTexture extends GX_Texture.Texture {
+export interface TPLTexture extends GX_Texture.TextureInputGX {
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;

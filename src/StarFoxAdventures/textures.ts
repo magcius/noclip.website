@@ -9,7 +9,7 @@ import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_I4, decodeTex_RGBA32, decod
 
 interface LoadedTexture {
     offset: number;
-    texture: GX_Texture.Texture;
+    texture: GX_Texture.TextureInputGX;
     wrapS: number;
     wrapT: number;
     minFilt: number;
