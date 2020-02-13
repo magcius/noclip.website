@@ -1,7 +1,7 @@
 
-import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc } from "./SYSDOLPHIN";
+import { HSD_TObj, HSD_MObj, HSD_DObj, HSD_JObj, HSD_JObjRoot, HSD_PEFlags, HSD_JObjFlags, HSD_TObjFlags, HSD_AnimJointRoot, HSD_MatAnimJointRoot, HSD_ShapeAnimJointRoot, HSD_AnimJoint, HSD_MatAnimJoint, HSD_ShapeAnimJoint, HSD_AObj, HSD_FObj, HSD_JObjAnmType, HSD_AObjFlags, HSD_RenderModeFlags, HSD_TObjTevActive, HSD_TObjTevColorIn, HSD_TObjTevAlphaIn, HSD_MatAnim, HSD_TexAnim, HSD_MObjAnmType, HSD_TObjAnmType, HSD_ImageDesc, HSD_TlutDesc, HSD_PObj, HSD_PObjFlags } from "./SYSDOLPHIN";
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, GXMaterialHelperGfx, PacketParams, loadTextureFromMipChain, MaterialParams, translateTexFilterGfx, translateWrapModeGfx, ColorKind } from "../gx/gx_render";
-import { GfxDevice, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { LoadedVertexData } from "../gx/gx_displaylist";
@@ -627,7 +627,8 @@ const materialParams = new MaterialParams();
 
 const scratchColor = colorNewCopy(White);
 class HSD_MObj_Instance {
-    private materialHelper: GXMaterialHelperGfx;
+    public materialHelper: GXMaterialHelperGfx;
+
     private tobj: HSD_TObj_Instance[] = [];
     private aobj: HSD_AObj_Instance | null = null;
 
@@ -669,9 +670,6 @@ class HSD_MObj_Instance {
         mb.setAlphaCompare(mobj.alphaComp0, mobj.alphaRef0, mobj.alphaOp, mobj.alphaComp1, mobj.alphaRef1);
         mb.setBlendMode(mobj.type, mobj.srcFactor, mobj.dstFactor, mobj.logicOp);
         mb.setZMode(!!(mobj.peFlags & HSD_PEFlags.ENABLE_COMPARE), mobj.zComp, !!(mobj.peFlags & HSD_PEFlags.ENABLE_ZUPDATE));
-
-        // TODO(jstpierre): per-pobj cull overrides.
-        mb.setCullMode(GX.CullMode.NONE);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
@@ -1125,6 +1123,19 @@ class HSD_DObj_Instance {
             }
 
             const renderInst = renderInstManager.newRenderInst();
+            const megaStateFlags = renderInst.getMegaStateFlags();
+
+            // Override cull-mode.
+            const cullMode = pobj.flags & (HSD_PObjFlags.CULLBACK | HSD_PObjFlags.CULLFRONT);
+            if (cullMode === 0)
+                megaStateFlags.cullMode = GfxCullMode.NONE;
+            else if (cullMode === HSD_PObjFlags.CULLFRONT)
+                megaStateFlags.cullMode = GfxCullMode.FRONT;
+            else if (cullMode === HSD_PObjFlags.CULLBACK)
+                megaStateFlags.cullMode = GfxCullMode.BACK;
+            else
+                megaStateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
+
             shapeHelper.setOnRenderInst(renderInst);
             shapeHelper.fillPacketParams(packetParams, renderInst);
             renderInstManager.submitRenderInst(renderInst);

@@ -535,13 +535,16 @@ interface HSD_PObjShapeAnim extends HSD_PObjBase {
     kind: 'ShapeAnim';
 }
 
-type HSD_PObj = HSD_PObjRigid | HSD_PObjEnvelope | HSD_PObjShapeAnim;
+export type HSD_PObj = HSD_PObjRigid | HSD_PObjEnvelope | HSD_PObjShapeAnim;
 
 export const enum HSD_PObjFlags {
     OBJTYPE_SKIN      = 0 << 12,
     OBJTYPE_SHAPEANIM = 1 << 12,
     OBJTYPE_ENVELOPE  = 2 << 12,
     OBJTYPE_MASK      = 0x3000,
+
+    CULLFRONT         = 1 << 14,
+    CULLBACK          = 1 << 15,
 }
 
 function runVertices(ctx: LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer: ArrayBufferSlice) {
