@@ -619,6 +619,7 @@ export class HSD_TObj_Instance {
     public fillTextureMapping(device: GfxDevice, m: TextureMapping): void {
         const texImage = this.texImageDataCache.getImageData(device, this.imageDesc, this.tlutDesc);
         texImage.fillTextureMapping(m);
+        m.gfxSampler = this.data.gfxSampler;
     }
 }
 

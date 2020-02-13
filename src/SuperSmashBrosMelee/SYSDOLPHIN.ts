@@ -1170,7 +1170,7 @@ function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: LoadContext, buffer: 
     const view = buffer.createDataView();
 
     const nextSiblingOffs = view.getUint32(0x00);
-    const animID: number = view.getUint8(0x04);
+    const animID = view.getUint32(0x04);
     const aobjDescOffs = view.getUint32(0x08);
     const imageDescTblOffs = view.getUint32(0x0C);
     const tlutDescTblOffs = view.getUint32(0x10);
