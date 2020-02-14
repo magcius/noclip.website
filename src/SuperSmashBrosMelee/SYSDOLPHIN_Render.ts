@@ -652,6 +652,9 @@ class HSD_MObj_Instance {
         const mb = new GXMaterialBuilder();
         this.compileTev(mb);
 
+        // SetupRenderMode
+        this.setupChannelMode(mb);
+
         // setupTextureCoordGen
         for (let i = 0; i < this.tobj.length; i++) {
             const tobj = this.tobj[i], flags = tobj.data.tobj.flags;
@@ -672,6 +675,41 @@ class HSD_MObj_Instance {
         mb.setZMode(!!(mobj.peFlags & HSD_PEFlags.ENABLE_COMPARE), mobj.zComp, !!(mobj.peFlags & HSD_PEFlags.ENABLE_ZUPDATE));
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    private setupChannelMode(mb: GXMaterialBuilder): void {
+        const mobj = this.data.mobj;
+
+        const rendermode = mobj.renderMode;
+
+        let diffuseMode = rendermode & HSD_RenderModeFlags.DIFFUSE_MODE_MASK;
+        if (diffuseMode === HSD_RenderModeFlags.DIFFUSE_MODE_MAT0)
+            diffuseMode = HSD_RenderModeFlags.DIFFUSE_MODE_MAT;
+
+        let alphaMode = rendermode & HSD_RenderModeFlags.ALPHA_MODE_MASK;
+        if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_COMPAT)
+            alphaMode = diffuseMode << 13;
+
+        // TODO(jstpierre): Specular
+
+        if (!!(rendermode & HSD_RenderModeFlags.DIFFUSE)) {
+            const matSrc = !!(diffuseMode & HSD_RenderModeFlags.DIFFUSE_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, matSrc, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+
+            let alphaChan = GX.ColorChannelID.ALPHA0;
+            if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
+                mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+                alphaChan = GX.ColorChannelID.ALPHA1;
+            }
+
+            mb.setChanCtrl(alphaChan, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+        } else {
+            const matSrc = !!(diffuseMode & HSD_RenderModeFlags.DIFFUSE_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, matSrc, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+
+            const alphaSrc = !!(diffuseMode & HSD_RenderModeFlags.ALPHA_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
+            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, alphaSrc, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+        }
     }
 
     public addAnim(matAnim: HSD_MatAnim): void {
@@ -779,10 +817,7 @@ class HSD_MObj_Instance {
         if (alphaMode === HSD_RenderModeFlags.ALPHA_MODE_COMPAT)
             alphaMode = diffuseMode << 13;
 
-        let list = new HSD_TExpList();
-        if (this.tobj.length === 2) {
-            // list.debug = true;
-        }
+        const list = new HSD_TExpList();
 
         let exp = HSD_TExpTev(list);
 
@@ -848,6 +883,7 @@ class HSD_MObj_Instance {
         }
         done |= HSD_TObjFlags.LIGHTMAP_DIFFUSE | HSD_TObjFlags.LIGHTMAP_AMBIENT;
 
+/*
         if (!!(mobj.renderMode & HSD_RenderModeFlags.DIFFUSE)) {
             if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
                 const exp = HSD_TExpTev(list);
@@ -897,6 +933,7 @@ class HSD_MObj_Instance {
             if (!!(tobj.data.tobj.flags & (HSD_TObjFlags.LIGHTMAP_EXT)) && tobj.texMapID !== GX.TexMapID.TEXMAP_NULL)
                 tobj.makeTExp(list, i, done, params);
         }
+*/
 
         if (params.c !== params.a || HSD_TExpGetType(params.c) !== HSD_TExpType.TE_TEV || HSD_TExpGetType(params.a) !== HSD_TExpType.TE_TEV) {
             const exp = HSD_TExpTev(list);
@@ -975,7 +1012,7 @@ class HSD_MObj_Instance {
                         dstColor.a = x;
                 } else {
                     // Register
-                    if (cnst.idx === 0) {
+                    if (cnst.idx === 3) {
                         dstColor.a = x;
                     } else {
                         dstColor.r = x;

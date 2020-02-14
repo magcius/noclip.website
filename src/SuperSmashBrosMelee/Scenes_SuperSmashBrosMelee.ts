@@ -7,6 +7,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint } from "./SYSDOLPHIN";
 import { IS_DEVELOPMENT } from "../BuildVersion";
+import { colorFromRGBA8 } from "../Color";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -91,6 +92,7 @@ class MeleeTitleDesc implements SceneDesc {
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/GmTtAll.usd`));
 
         const scene = new MeleeRenderer(device);
+        colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
 
         const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`))));
         bg.addAnimAll(

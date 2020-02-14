@@ -4,7 +4,7 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
+import { readString, assert, hexdump } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
@@ -355,8 +355,8 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
         const alphaC: HSD_TObjTevAlphaIn = tevView.getUint8(0x0E);
         const alphaD: HSD_TObjTevAlphaIn = tevView.getUint8(0x0F);
         const constant: Color = colorNewFromRGBA8(tevView.getUint32(0x10));
-        const tev0: Color = colorNewFromRGBA8(tevView.getUint8(0x14));
-        const tev1: Color = colorNewFromRGBA8(tevView.getUint8(0x18));
+        const tev0: Color = colorNewFromRGBA8(tevView.getUint32(0x14));
+        const tev1: Color = colorNewFromRGBA8(tevView.getUint32(0x18));
         const active: number = tevView.getUint32(0x1C);
 
         const colorIn = [colorA, colorB, colorC, colorD] as const;
@@ -396,6 +396,11 @@ export const enum HSD_RenderModeFlags {
     ALPHA_MODE_VTX    = 0x02 << 13,
     ALPHA_MODE_BOTH   = 0x03 << 13,
     ALPHA_MODE_MASK   = 0x03 << 13,
+
+    SHADOW            = 0x01 << 26,
+    ZMODE_ALWAYS      = 0x01 << 27,
+    NO_ZUPDATE        = 0x01 << 29,
+    XLU               = 0x01 << 30,
 }
 
 export const enum HSD_PEFlags {
@@ -404,6 +409,8 @@ export const enum HSD_PEFlags {
 }
 
 export interface HSD_MObj {
+    offs: number;
+
     renderMode: HSD_RenderModeFlags;
 
     tobj: HSD_TObj[];
@@ -465,7 +472,7 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
     const renderDescOffs = view.getUint32(0x10);
 
     // HSD_PEDesc
-    let peFlags: HSD_PEFlags = HSD_PEFlags.ENABLE_ZUPDATE | HSD_PEFlags.ENABLE_COMPARE;
+    let peFlags: HSD_PEFlags = 0;
     let alphaRef0: number = 0.0;
     let alphaRef1: number = 0.0;
     let dstAlpha: number = 1.0;
@@ -474,7 +481,7 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
     let dstFactor: GX.BlendFactor = GX.BlendFactor.ZERO;
     let logicOp: GX.LogicOp = GX.LogicOp.CLEAR;
     let zComp: GX.CompareType = GX.CompareType.LEQUAL;
-    let alphaComp0: GX.CompareType = GX.CompareType.GREATER;
+    let alphaComp0: GX.CompareType = GX.CompareType.ALWAYS;
     let alphaOp: GX.AlphaOp = GX.AlphaOp.AND;
     let alphaComp1: GX.CompareType = GX.CompareType.ALWAYS;
 
@@ -495,9 +502,27 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
         alphaComp0 = peView.getUint8(0x09);
         alphaOp = peView.getUint8(0x0A);
         alphaComp1 = peView.getUint8(0x0B);
+    } else {
+        // Initialize from rendermode flags. See HSD_SetupPEMode.
+        type = !!(renderMode & HSD_RenderModeFlags.XLU) ? GX.BlendMode.BLEND : GX.BlendMode.NONE;
+        srcFactor = GX.BlendFactor.SRCALPHA;
+        dstFactor = GX.BlendFactor.INVSRCALPHA;
+
+        peFlags |= HSD_PEFlags.ENABLE_COMPARE;
+        zComp = !!(renderMode & HSD_RenderModeFlags.ZMODE_ALWAYS) ? GX.CompareType.ALWAYS : GX.CompareType.LEQUAL;
+        if (!(renderMode & HSD_RenderModeFlags.NO_ZUPDATE))
+            peFlags |= HSD_PEFlags.ENABLE_ZUPDATE;
+
+        if (!(renderMode & HSD_RenderModeFlags.NO_ZUPDATE) && !!(renderMode & HSD_RenderModeFlags.XLU)) {
+            alphaComp0 = GX.CompareType.GREATER;
+        } else {
+            alphaComp0 = GX.CompareType.ALWAYS;
+        }
     }
 
+    const offs = buffer.byteOffset;
     return {
+        offs,
         renderMode, tobj,
         // HSD_Material
         ambient, diffuse, specular, alpha, shininess,

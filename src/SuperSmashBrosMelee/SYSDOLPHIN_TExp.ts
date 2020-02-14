@@ -4,7 +4,7 @@ import { assert, nArray, assertExists } from "../util";
 import { SwapTable } from "../gx/gx_material";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
-export const enum HSD_TExpType {
+export enum HSD_TExpType {
     TE_ZERO = 0,
     TE_TEV = 1,
     TE_TEX = 2,
@@ -57,7 +57,7 @@ export const enum HSD_TExpCnstVal {
 }
 
 class HSD_TEArg {
-    public type: HSD_TExpType = HSD_TExpType.TE_ZERO;
+    public type: HSD_TExpType | null = null;
     public arg: number | null = null;
     public sel: HSD_TEInput = HSD_TEInput.TE_END;
     public exp: HSD_TExp | null = null;
@@ -394,12 +394,13 @@ function TEArg_Zero(dst: HSD_TEArg): void {
 }
 
 function TEArg_Copy(dst: HSD_TEArg, src: HSD_TEArg): void {
+    HSD_TExpRef(src.exp, src.sel);
     HSD_TExpUnref(dst.exp, dst.sel);
+
     dst.type = src.type;
     dst.sel = src.sel;
     dst.arg = src.arg;
     dst.exp = src.exp;
-    HSD_TExpRef(dst.exp, dst.sel);
 }
 
 function TEArg_Swap(a: HSD_TEArg, b: HSD_TEArg): void {
@@ -637,6 +638,7 @@ function SimplifyByMerge(tev: HSD_TETev): void {
 
             if (tev.colorIn[0].type === HSD_TExpType.TE_TEV && tev.colorIn[0].sel === HSD_TEInput.TE_RGB) {
                 // If A = TEV, and that TEV expression has no D, then merge it into us if we can.
+                const sel = tev.colorIn[0].sel;
                 const child = tev.colorIn[0].exp as HSD_TETev;
                 if ((child.colorOp === GX.TevOp.ADD || child.colorOp === GX.TevOp.SUB) && child.colorIn[3].sel === HSD_TEInput.TE_0 && child.colorScale === GX.TevScale.SCALE_1 && !ResConflict(tev, child)) {
                     const bias = CalcBias(child.colorOp, tev.colorBias, child.colorBias);
@@ -647,10 +649,12 @@ function SimplifyByMerge(tev: HSD_TETev): void {
                         for (let i = 0; i < 3; i++)
                             TEArg_Copy(tev.colorIn[i], child.colorIn[i]);
                         MergeResources(tev, child);
+                        HSD_TExpUnref(tev, sel);
                         matched = true;
                     }
                 }
             } else if (tev.colorIn[0].type !== HSD_TExpType.TE_TEV && tev.alphaOp === GX.TevOp.ADD && tev.colorIn[3].type === HSD_TExpType.TE_TEV && tev.colorIn[3].sel === HSD_TEInput.TE_RGB) {
+                const sel = tev.colorIn[3].sel;
                 const child = tev.colorIn[3].exp as HSD_TETev;
                 if (child.colorScale === GX.TevScale.SCALE_1 && (tev.colorBias === GX.TevBias.ZERO || tev.colorBias !== child.colorBias) && !ResConflict(tev, child)) {
                     for (let i = 0; i < 4; i++)
@@ -659,6 +663,7 @@ function SimplifyByMerge(tev: HSD_TETev): void {
                     tev.colorBias = assertExists(CalcBias(tev.colorOp!, tev.colorBias, child.colorBias));
                     tev.colorClamp = tev.colorClamp || child.colorClamp;
                     MergeResources(tev, child);
+                    HSD_TExpUnref(child, sel);
                     matched = true;
                 }
             }
@@ -1025,8 +1030,8 @@ function AssignColorKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
 }
 
 function AssignColorReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boolean {
-    const cin = [ GX.CC.C0, GX.CC.C0, GX.CC.C0, GX.CC.CPREV ];
-    const ain = [ GX.CC.A0, GX.CC.A0, GX.CC.A0, GX.CC.APREV ];
+    const cin = [ GX.CC.C0, GX.CC.C1, GX.CC.C2, GX.CC.CPREV ];
+    const ain = [ GX.CC.A0, GX.CC.A1, GX.CC.A2, GX.CC.APREV ];
 
     const cnst = tev.colorIn[idx].exp as HSD_TECnst;
 
@@ -1112,7 +1117,7 @@ function AssignAlphaKonst(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): b
 }
 
 function AssignAlphaReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boolean {
-    const ain = [ GX.CA.A0, GX.CA.A0, GX.CA.A0, GX.CA.APREV ];
+    const ain = [ GX.CA.A0, GX.CA.A1, GX.CA.A2, GX.CA.APREV ];
 
     const cnst = tev.alphaIn[idx].exp as HSD_TECnst;
 
@@ -1122,6 +1127,8 @@ function AssignAlphaReg(tev: HSD_TETev, idx: number, resource: HSD_TExpRes): boo
                 cnst.reg = i;
                 cnst.idx = 3;
                 resource.regsAlpha[i] = 1;
+                if (window.debug)
+                    console.log('assigning alpha reg!', i);
                 break;
             }
         }
@@ -1171,8 +1178,8 @@ function TExpAssignReg(tev: HSD_TETev, resource: HSD_TExpRes): boolean {
                     }
                 }
             } else {
-                if (!AssignAlphaKonst(tev, 3, resource))
-                    return AssignAlphaReg(tev, 3, resource);
+                if (!AssignAlphaReg(tev, 3, resource))
+                    return AssignAlphaKonst(tev, 3, resource);
             }
         } else {
             for (let i = 0; i < 4; i++) {
@@ -1274,7 +1281,7 @@ function TExp2TevDesc(mb: GXMaterialBuilder, i: number, tev: HSD_TETev, init: TE
 }
 
 function DumpTExp(root: HSD_TExp): void {
-    function DumpTEType(exp: HSD_TExp | null, type: HSD_TExpType = HSD_TExpGetType(exp), arg: number | null = null, sel: HSD_TEInput | null = null, indent: string = ''): string {
+    function DumpTEType(exp: HSD_TExp | null, type: HSD_TExpType | null = HSD_TExpGetType(exp), arg: number | null = null, sel: HSD_TEInput | null = null, indent: string = ''): string {
         function DumpTEArg(arg: HSD_TEArg): string {
             return DumpTEType(arg.exp, arg.type, arg.arg, arg.sel, indent + '    ');
         }
@@ -1311,7 +1318,7 @@ ${indent}}`;
             assert(sel !== null);
             return `TE_IMM  <${sel} / ${arg}>`;
         } else {
-            return `unk`;
+            return `UNDEF`;
         }
     }
 
@@ -1320,18 +1327,22 @@ ${indent}}`;
 
 function DumpTExpSchedule(order: HSD_TETev[]): void {
     function DumpTEArg(arg: HSD_TEArg): string {
-        return `${arg.type} / ${arg.arg}`;
+        if (arg.type === HSD_TExpType.TE_TEV)
+            return `${HSD_TExpType[arg.type]} / ${arg.arg} / ${order.length - order.indexOf(arg.exp as HSD_TETev) - 1}`;
+        else
+            return `${arg.type === null ? 'UNDEF' : HSD_TExpType[arg.type]} / ${arg.arg}`;
     }
 
     function DumpTExp(tev: HSD_TETev, i: number): string {
         return `[${i}] = TE_TEV {
-  CO: ${tev.colorOp}
+  CRef: ${tev.refColor}
+  CDst: ${tev.dstRegColor}
+  COp: ${tev.colorOp}
   CA: ${DumpTEArg(tev.colorIn[0])}
   CB: ${DumpTEArg(tev.colorIn[1])}
   CC: ${DumpTEArg(tev.colorIn[2])}
   CD: ${DumpTEArg(tev.colorIn[3])}
 
-  AO: ${tev.alphaOp}
   AA: ${DumpTEArg(tev.alphaIn[0])}
   AB: ${DumpTEArg(tev.alphaIn[1])}
   AC: ${DumpTEArg(tev.alphaIn[2])}
@@ -1341,7 +1352,7 @@ function DumpTExpSchedule(order: HSD_TETev[]): void {
 
     let str = '';
     for (let i = 0; i < order.length; i++)
-        str += DumpTExp(order[i], i) + '\n';
+        str += DumpTExp(order[order.length - i - 1], i) + '\n';
     console.log(str);
 }
 
@@ -1358,8 +1369,10 @@ export function HSD_TExpCompile(list: HSD_TExpList, mb: GXMaterialBuilder): void
 
     HSD_TExpSimplify(root);
 
-    // console.log("Simplify 1");
-    // DumpTExp(root);
+    if (list.debug) {
+        console.log("Simplify 1");
+        DumpTExp(root);
+    }
 
     const resource: HSD_TExpRes = {
         regsColor: nArray(8, () => 0),
@@ -1372,9 +1385,8 @@ export function HSD_TExpCompile(list: HSD_TExpList, mb: GXMaterialBuilder): void
     assert(order1.length >= 1);
 
     if (list.debug) {
-        console.log("Schedule 1");
+        console.log("Schedule 1 Pre");
         DumpTExpSchedule(order1);
-        console.log(JSON.stringify(resource));
     }
 
     for (let i = 0; i < order1.length; i++) {
@@ -1382,8 +1394,18 @@ export function HSD_TExpCompile(list: HSD_TExpList, mb: GXMaterialBuilder): void
         assert(ret);
     }
 
+    if (list.debug) {
+        console.log("Schedule 1 Assign");
+        DumpTExpSchedule(order1);
+    }
+
     for (let i = order1.length - 1; i >= 0; i--)
         HSD_TExpSimplify2(order1[i]);
+
+    if (list.debug) {
+        console.log("Simplify2");
+        DumpTExpSchedule(order1);
+    }
 
     const dags2 = HSD_TExpMakeDag(root);
     const order2 = HSD_TExpSchedule(resource, dags2);
