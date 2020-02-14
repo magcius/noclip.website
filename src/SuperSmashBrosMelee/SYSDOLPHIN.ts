@@ -1305,4 +1305,8 @@ export interface HSD_ShapeAnimJoint {
 export interface HSD_ShapeAnimJointRoot {
     root: HSD_ShapeAnimJoint;
 }
+
+export function HSD_AObjLoadShapeAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_ShapeAnimJointRoot | null {
+    return null;
+}
 //#endregion

@@ -8,7 +8,7 @@ import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
@@ -229,6 +229,8 @@ interface HSD_MakeTExp {
     a: HSD_TExp;
 }
 
+const scratchMatrix = mat4.create();
+const scratchVec3a = vec3.create();
 export class HSD_TObj_Instance {
     public textureMatrix = mat4.create();
     public texMtxID: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
@@ -550,19 +552,19 @@ export class HSD_TObj_Instance {
     public calcMtx(): void {
         const tobj = this.data.tobj;
 
-        computeModelMatrixSRT(this.textureMatrix,
+        mat4.identity(this.textureMatrix);
+        this.textureMatrix[12] = -this.translation[0];
+        this.textureMatrix[13] = -(this.translation[1] + (tobj.wrapT === GX.WrapMode.MIRROR ? 1.0 / (tobj.repeatT / this.scale[1]) : 0.0));
+        this.textureMatrix[14] = this.translation[2];
+
+        computeModelMatrixR(scratchMatrix, this.rotation[0], this.rotation[1], -this.rotation[2]);
+        mat4.mul(this.textureMatrix, scratchMatrix, this.textureMatrix);
+
+        computeModelMatrixS(scratchMatrix,
             Math.abs(this.scale[0]) < MathConstants.EPSILON ? 0.0 : (tobj.repeatS / this.scale[0]),
-            Math.abs(this.scale[1]) < MathConstants.EPSILON ? 0.0 : (tobj.repeatS / this.scale[1]),
-            this.scale[2],
-
-            this.rotation[0],
-            this.rotation[1],
-            -this.rotation[2],
-
-            -this.translation[0],
-            -(this.translation[1] + (tobj.wrapT === GX.WrapMode.MIRROR ? 1.0 / (tobj.repeatT / this.scale[1]) : 0.0)),
-            this.translation[2],
-        );
+            Math.abs(this.scale[1]) < MathConstants.EPSILON ? 0.0 : (tobj.repeatT / this.scale[1]),
+            this.scale[2]);
+        mat4.mul(this.textureMatrix, scratchMatrix, this.textureMatrix);
     }
 
     public fillTExpConstantInput(dst: Color, val: HSD_TExpCnstVal, comp: HSD_TEInput): void {
