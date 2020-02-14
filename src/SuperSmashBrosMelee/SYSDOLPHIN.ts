@@ -4,12 +4,13 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexdump } from "../util";
+import { readString, assert, hexdump, hexzero } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
 import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { calcTextureSize } from "../gx/gx_texture";
+import { Endianness } from "../endian";
 
 export interface HSD_ArchiveSymbol {
     name: string;
@@ -18,6 +19,7 @@ export interface HSD_ArchiveSymbol {
 
 export interface HSD_Archive {
     dataBuffer: ArrayBufferSlice;
+    validOffsets: number[];
     externs: HSD_ArchiveSymbol[];
     publics: HSD_ArchiveSymbol[];
 }
@@ -35,11 +37,25 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
 
     let baseIdx = 0x20;
 
-    const dataBuffer = buffer.subarray(baseIdx, dataSize);
+    const dataOffs = baseIdx;
+    const dataBuffer = buffer.subarray(dataOffs, dataSize);
     baseIdx += dataSize;
 
     // Relocation table.
-    baseIdx += nbReloc * 0x04;
+    const validOffsets: number[] = [];
+    for (let i = 0; i < nbReloc; i++) {
+        // This is an offset to a pointer to relocate.
+        const relocationTableEntryOffs = view.getUint32(baseIdx + 0x00);
+
+        // Retrieve the value where it would point. This is most likely the
+        // start of a structure. We will use this in HSD_LoadContext_GetStructSize.
+        const relocationTableValue = view.getUint32(dataOffs + relocationTableEntryOffs);
+
+        if (!validOffsets.includes(relocationTableValue))
+            validOffsets.push(relocationTableValue);
+
+        baseIdx += 0x04;
+    }
 
     const strOffs = baseIdx + (nbPublic * 0x08) + (nbExtern * 0x08);
 
@@ -48,6 +64,10 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
         const offset = view.getUint32(baseIdx + 0x00);
         const nameOffs = view.getUint32(baseIdx + 0x04);
         const name = readString(buffer, strOffs + nameOffs);
+
+        if (!validOffsets.includes(offset))
+            validOffsets.push(offset);
+
         publics.push({ name, offset });
         baseIdx += 0x08;
     }
@@ -61,18 +81,46 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
         baseIdx += 0x08;
     }
 
-    return { dataBuffer, publics, externs };
+    validOffsets.sort((a, b) => a - b);
+
+    return { dataBuffer, validOffsets, publics, externs };
 }
 
-export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol {
-    return arc.publics.find((sym) => sym.name === symbolName)!;
+export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol | null {
+    const obj = arc.publics.find((sym) => sym.name === symbolName);
+    if (obj !== undefined)
+        return obj;
+    else
+        return null;
+}
+
+// This is a kind of dumb hack to abuse the relocation table to get structure sizes.
+// Will not work in cases where the structures are non-contiguous (will receive a bit of extra padding),
+// or in cases where there are pointers ino 
+function HSD_Archive__GetStructSize(arc: HSD_Archive, offs: number): number {
+    const idx = arc.validOffsets.indexOf(offs);
+    assert(idx >= 0);
+
+    let nextIdx = idx + 1;
+
+    let nextOffs: number;
+    if (nextIdx >= arc.validOffsets.length) {
+        // No next structure, read until end of file.
+        nextOffs = arc.dataBuffer.byteLength;
+    } else {
+        nextOffs = arc.validOffsets[nextIdx];
+    }
+
+    return nextOffs - offs;
 }
 
 function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
+    // Ensure that this is somewhere within our relocation table.
+    assert(arc.validOffsets.indexOf(offs) >= 0);
     return arc.dataBuffer.subarray(offs, size);
 }
 
-class LoadContext {
+export class HSD_LoadContext {
     public imageDescs: HSD_ImageDesc[] = [];
     public tlutDescs: HSD_TlutDesc[] = [];
 
@@ -80,11 +128,16 @@ class LoadContext {
     }
 }
 
-function HSD_LoadContext__ResolvePtr(ctx: LoadContext, offs: number, size?: number): ArrayBufferSlice {
+export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice {
+    const size = HSD_Archive__GetStructSize(ctx.archive, offs);
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
 }
 
-function HSD_LoadContext__CacheImageDesc(ctx: LoadContext, offs: number): HSD_ImageDesc {
+export function HSD_LoadContext__ResolvePtr(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice {
+    return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
+}
+
+function HSD_LoadContext__CacheImageDesc(ctx: HSD_LoadContext, offs: number): HSD_ImageDesc {
     assert(offs !== 0);
     let imageDesc = ctx.imageDescs.find((imageDesc) => imageDesc.offs === offs);
     if (imageDesc === undefined) {
@@ -94,7 +147,7 @@ function HSD_LoadContext__CacheImageDesc(ctx: LoadContext, offs: number): HSD_Im
     return imageDesc;
 }
 
-function HSD_LoadContext__CacheTlutDesc(ctx: LoadContext, offs: number): HSD_TlutDesc | null {
+function HSD_LoadContext__CacheTlutDesc(ctx: HSD_LoadContext, offs: number): HSD_TlutDesc | null {
     if (offs === 0)
         return null;
     let tlutDesc = ctx.tlutDescs.find((tlutDesc) => tlutDesc.offs === offs);
@@ -256,7 +309,7 @@ export interface HSD_TObj {
     tevDesc: HSD_TObjTev | null;
 }
 
-function HSD_LoadImageDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_ImageDesc {
+function HSD_LoadImageDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_ImageDesc {
     const view = buffer.createDataView();
 
     const imageDataOffs = view.getUint32(0x00);
@@ -276,7 +329,7 @@ function HSD_LoadImageDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_Imag
     return { offs, format, width, height, mipCount, minLOD, maxLOD, data };
 }
 
-function HSD_LoadTlutDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_TlutDesc {
+function HSD_LoadTlutDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_TlutDesc {
     const view = buffer.createDataView();
 
     const paletteDataOffs = view.getUint32(0x00);
@@ -289,7 +342,7 @@ function HSD_LoadTlutDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_TlutD
     return { offs, paletteFormat, paletteData };
 }
 
-function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
@@ -437,7 +490,7 @@ export interface HSD_MObj {
     alphaComp1: GX.CompareType;
 }
 
-function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj {
+function HSD_MObjLoadDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_MObj {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
@@ -572,7 +625,7 @@ export const enum HSD_PObjFlags {
     CULLBACK          = 1 << 15,
 }
 
-function runVertices(ctx: LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer: ArrayBufferSlice) {
+function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer: ArrayBufferSlice) {
     const view = vtxDescBuffer.createDataView();
 
     const vatFormat: GX_VtxAttrFmt[] = [];
@@ -605,7 +658,7 @@ function runVertices(ctx: LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer
     return { loadedVertexLayout, loadedVertexData };
 }
 
-function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
@@ -672,7 +725,7 @@ export interface HSD_DObj {
     pobj: HSD_PObj[];
 }
 
-function HSD_DObjLoadDesc(dobjs: HSD_DObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_DObjLoadDesc(dobjs: HSD_DObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     // const classNameOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
@@ -762,7 +815,7 @@ export const enum HSD_JObjFlags {
     ROOT_TEXEDGE        = 1 << 30,
 }
 
-function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: LoadContext, offs: number): void {
+function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, offs: number): void {
     assert(offs !== 0);
     const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
     const view = buffer.createDataView();
@@ -772,6 +825,9 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: LoadContext, offs: nu
     const nextSiblingOffs = view.getUint32(0x0C);
 
     const contentsOffs = view.getUint32(0x10);
+
+    if (!!(flags & HSD_JObjFlags.USE_QUATERNION))
+        debugger;
 
     const rotationX = view.getFloat32(0x14);
     const rotationY = view.getFloat32(0x18);
@@ -848,7 +904,7 @@ export interface HSD_JObjRoot {
 }
 
 export function HSD_JObjLoadJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_JObjRoot {
-    const ctx = new LoadContext(archive);
+    const ctx = new HSD_LoadContext(archive);
 
     const jobjs: HSD_JObj[] = [];
     HSD_JObjLoadJointInternal(jobjs, ctx, symbol.offset);
@@ -980,7 +1036,7 @@ export const enum HSD_TObjAnmType {
     TS_BLEND,
 }
 
-function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     const nextSiblingOffs = view.getUint32(0x00);
     const length = view.getUint32(0x04);
@@ -1095,12 +1151,12 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
                 debugger;
             }
 
-            op_intrp = op;
-
             time += duration;
 
             // Load wait.
             duration = parseVLQ();
+
+            op_intrp = op;
         }
     }
 
@@ -1110,7 +1166,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
         HSD_FObjLoadDesc(fobj, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-function HSD_AObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_AObj {
+function HSD_AObjLoadDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_AObj {
     const view = buffer.createDataView();
 
     const flags = view.getUint32(0x00);
@@ -1134,7 +1190,7 @@ export interface HSD_AnimJointRoot {
     root: HSD_AnimJoint;
 }
 
-function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadContext, offs: number): void {
+function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_LoadContext, offs: number): void {
     assert(offs !== 0);
     const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
     const view = buffer.createDataView();
@@ -1158,8 +1214,11 @@ function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadCon
         HSD_AObjLoadAnimJointInternal(animJoints, ctx, nextSiblingOffs);
 }
 
-export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_AnimJointRoot {
-    const ctx = new LoadContext(archive);
+export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_AnimJointRoot | null {
+    if (symbol === null)
+        return null;
+
+    const ctx = new HSD_LoadContext(archive);
 
     const animJoints: HSD_AnimJoint[] = [];
     HSD_AObjLoadAnimJointInternal(animJoints, ctx, symbol.offset);
@@ -1194,7 +1253,7 @@ export interface HSD_MatAnimJointRoot {
     root: HSD_MatAnimJoint;
 }
 
-function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     const nextSiblingOffs = view.getUint32(0x00);
@@ -1233,12 +1292,12 @@ function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: LoadContext, buffer: 
         HSD_AObjLoadTexAnim(texAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-function HSD_AObjLoadRenderAnim(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_RenderAnim {
+function HSD_AObjLoadRenderAnim(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_RenderAnim {
     // TODO(jstpierre): Is this even used?
     return {};
 }
 
-function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     const nextSiblingOffs = view.getUint32(0x00);
@@ -1264,7 +1323,7 @@ function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: LoadContext, buffer: 
         HSD_AObjLoadMatAnim(matAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: LoadContext, offs: number): void {
+function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: HSD_LoadContext, offs: number): void {
     assert(offs !== 0);
     const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
     const view = buffer.createDataView();
@@ -1286,8 +1345,11 @@ function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx
         HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, nextSiblingOffs);
 }
 
-export function HSD_AObjLoadMatAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_MatAnimJointRoot {
-    const ctx = new LoadContext(archive);
+export function HSD_AObjLoadMatAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_MatAnimJointRoot | null {
+    if (symbol === null)
+        return null;
+
+    const ctx = new HSD_LoadContext(archive);
 
     const matAnimJoints: HSD_MatAnimJoint[] = [];
     HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, symbol.offset);
@@ -1306,7 +1368,7 @@ export interface HSD_ShapeAnimJointRoot {
     root: HSD_ShapeAnimJoint;
 }
 
-export function HSD_AObjLoadShapeAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_ShapeAnimJointRoot | null {
+export function HSD_AObjLoadShapeAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_ShapeAnimJointRoot | null {
     return null;
 }
 //#endregion

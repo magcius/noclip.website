@@ -230,7 +230,6 @@ interface HSD_MakeTExp {
 }
 
 const scratchMatrix = mat4.create();
-const scratchVec3a = vec3.create();
 export class HSD_TObj_Instance {
     public textureMatrix = mat4.create();
     public texMtxID: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY;
@@ -709,7 +708,7 @@ class HSD_MObj_Instance {
             const matSrc = !!(diffuseMode & HSD_RenderModeFlags.DIFFUSE_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
             mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, matSrc, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
 
-            const alphaSrc = !!(diffuseMode & HSD_RenderModeFlags.ALPHA_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
+            const alphaSrc = !!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX) ? GX.ColorSrc.VTX : GX.ColorSrc.REG;
             mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, alphaSrc, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
         }
     }
@@ -885,7 +884,6 @@ class HSD_MObj_Instance {
         }
         done |= HSD_TObjFlags.LIGHTMAP_DIFFUSE | HSD_TObjFlags.LIGHTMAP_AMBIENT;
 
-/*
         if (!!(mobj.renderMode & HSD_RenderModeFlags.DIFFUSE)) {
             if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
                 const exp = HSD_TExpTev(list);
@@ -935,7 +933,6 @@ class HSD_MObj_Instance {
             if (!!(tobj.data.tobj.flags & (HSD_TObjFlags.LIGHTMAP_EXT)) && tobj.texMapID !== GX.TexMapID.TEXMAP_NULL)
                 tobj.makeTExp(list, i, done, params);
         }
-*/
 
         if (params.c !== params.a || HSD_TExpGetType(params.c) !== HSD_TExpType.TE_TEV || HSD_TExpGetType(params.a) !== HSD_TExpType.TE_TEV) {
             const exp = HSD_TExpTev(list);

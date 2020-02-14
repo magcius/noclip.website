@@ -8,6 +8,7 @@ import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint } from "./SYSDOLPHIN";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { colorFromRGBA8 } from "../Color";
+import { assertExists } from "../util";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -83,7 +84,7 @@ class HSDDesc implements SceneDesc {
             }
             this.rootName = joint.name.slice(0, -6);
         }
-        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_joint`))));
+        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))));
         rootInst.addAnimAll(
             HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_animjoint`)),
             HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_matanim_joint`)),
@@ -103,14 +104,15 @@ class MeleeTitleDesc implements SceneDesc {
         const scene = new MeleeRenderer(device);
         colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
 
-        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`))));
+        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))));
         bg.addAnimAll(
             HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
             HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
             null);
         scene.jobjRoots.push(bg);
+        // debugger;
 
-        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`))));
+        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
         moji.addAnimAll(
             HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
             HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
@@ -126,6 +128,8 @@ const sceneDescs = [
     new HSDDesc(`PlFxNr.dat`),
     new HSDDesc(`PlKbNr.dat`),
     new HSDDesc(`MnExtAll.usd`, "MenMainBack_Top"),
+    new HSDDesc(`GmRgEBG3.dat`),
+    new HSDDesc(`GmRst.usd`),
 
     new HSDDesc(`TyZkPair.dat`),
     new HSDDesc(`TyZkWmen.dat`),
