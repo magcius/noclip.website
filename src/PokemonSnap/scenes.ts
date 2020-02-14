@@ -136,8 +136,12 @@ class SceneDesc implements Viewer.SceneDesc {
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
             if (level.skybox !== null) {
-                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.model!.sharedOutput);
-                const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox], true);
+                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
+                const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], true);
+                if (level.skybox.animation !== null) {
+                    skyboxRenderer.animations.push(level.skybox.animation!);
+                    skyboxRenderer.setAnimation(0);
+                }
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
             }
@@ -154,6 +158,10 @@ class SceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
                 const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node]);
+                if (level.rooms[i].animation !== null) {
+                    roomRenderer.animations.push(level.rooms[i].animation!);
+                    roomRenderer.setAnimation(0);
+                }
                 sceneRenderer.renderData.push(renderData);
                 sceneRenderer.modelRenderers.push(roomRenderer);
                 const objects = level.rooms[i].objects;

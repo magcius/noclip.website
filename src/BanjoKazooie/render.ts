@@ -128,13 +128,13 @@ void main() {
                 const coordRatio = (((tile.lrs - tile.uls) >>> 2) + 1) / RDP.getTileWidth(tile);
                 const comp = i === 0 ? 'x' : 'z';
                 if (coordRatio > 1)
-                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio - .05).toFixed(1)});\n`
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
             }
             if (tile.cmt & 0x2) {
                 const coordRatio = (((tile.lrt - tile.ult) >>> 2) + 1) / RDP.getTileHeight(tile);
                 const comp = i === 0 ? 'y' : 'w';
                 if (coordRatio > 1)
-                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio-.05).toFixed(1)});\n`
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
             }
         }
         return out;

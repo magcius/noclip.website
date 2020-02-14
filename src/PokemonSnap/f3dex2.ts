@@ -68,8 +68,7 @@ export class RSPState {
     public DP_Half1 = 0;
 
 
-
-    constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
+    constructor(public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
     }
 
     public finish(): RSPOutput | null {

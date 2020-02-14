@@ -248,6 +248,8 @@ export class NodeRenderer {
 }
 
 export class ModelRenderer {
+    private visible = true;
+
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
     public animationController = new AdjustableAnimationController(30);
@@ -308,11 +310,11 @@ export class ModelRenderer {
                 this.renderers[i].drawCalls[j].setAlphaVisualizerEnabled(v);
     }
 
-    private setAnimation(index: number): void {
+    public setAnimation(index: number): void {
         this.animationController.adjust(this.animations[index].fps);
+        const newAnim = this.animations[index];
         for (let i = 0; i < this.renderers.length; i++) {
-            this.renderers[i].animator.track = this.animations[index].tracks[i];
-            this.renderers[i].animator.reset(0);
+            this.renderers[i].animator.setTrack(newAnim.tracks[i]);
         }
     }
 
@@ -323,6 +325,8 @@ export class ModelRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animate();

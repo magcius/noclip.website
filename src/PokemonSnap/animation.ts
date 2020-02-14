@@ -37,7 +37,7 @@ class AObj {
     public compute(t: number): number {
         switch (this.op) {
             case AObjOP.NOP: return 0;
-            case AObjOP.STEP: return (t - this.start) > this.len ? this.p1 : this.p0;
+            case AObjOP.STEP: return (t - this.start) >= this.len ? this.p1 : this.p0;
             case AObjOP.LERP: return this.p0 + (t - this.start) * this.v0;
             case AObjOP.SPLINE: return getPointHermite(this.p0, this.p1, this.v0 / this.len, this.v1 / this.len, (t - this.start) * this.len);
         }
@@ -123,6 +123,11 @@ export class Animator {
     constructor(useColor = false) {
         if (useColor)
             this.colors = nArray(5, () => new ColorAObj());
+    }
+
+    public setTrack(track: AnimationTrack | null): void {
+        this.track = track;
+        this.reset(0);
     }
 
     public reset(time: number): void {
@@ -231,8 +236,8 @@ export class Animator {
                     for (let i = 0; i < 5; i++) {
                         if (entry.flags & (1 << i)) {
                             this.colors[i].op = AObjOP.STEP;
-                            this.colors[i].c0 = this.colors[i].c1;
-                            this.colors[i].c1 = assertExists(entry.colors[offs++]);
+                            vec4.copy(this.colors[i].c0, this.colors[i].c1);
+                            vec4.copy(this.colors[i].c1, assertExists(entry.colors[offs++]));
                             this.interpolators[i].len = entry.increment;
                             this.interpolators[i].start = time;
                         }
@@ -243,8 +248,8 @@ export class Animator {
                     for (let i = 0; i < 5; i++) {
                         if (entry.flags & (1 << i)) {
                             this.colors[i].op = AObjOP.LERP;
-                            this.colors[i].c0 = this.colors[i].c1;
-                            this.colors[i].c1 = assertExists(entry.colors[offs++]);
+                            vec4.copy(this.colors[i].c0, this.colors[i].c1);
+                            vec4.copy(this.colors[i].c1, assertExists(entry.colors[offs++]));
                             if (entry.increment !== 0)
                                 this.interpolators[i].len = 1 / entry.increment;
                             this.interpolators[i].start = time;

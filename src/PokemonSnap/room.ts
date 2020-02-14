@@ -11,7 +11,7 @@ import { Endianness } from "../endian";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
-    skybox: GFXNode | null;
+    skybox: Room | null;
     rooms: Room[];
     objectInfo: ObjectDef[];
     collision: CollisionTree | null;
@@ -20,6 +20,7 @@ export interface Level {
 export interface Room {
     node: GFXNode;
     objects: ObjectSpawn[];
+    animation: AnimationData | null;
 }
 
 export interface Model {
@@ -101,6 +102,23 @@ function getSpawnType(addr: number): SpawnType {
     return SpawnType.OTHER;
 }
 
+// the cart only appears during the intro and outro cutscenes
+// each level has a starting animation set in a function on level load,
+// and an ending animation set by the gate object when the player is close enough
+// these are just the intro animations for now
+function getCartAnimationAddresses(id: number): number[] {
+    switch (id) {
+        case 16: return [0x8013C580, 0x8013CEA0];
+        case 18: return [0x8013D920, 0x8013E3D0];
+        case 24: return [0x801174E0, 0x801182F0];
+        case 22: return [0x8014A660, 0x8014B450];
+        case 20: return [0x80147540, 0x80148420];
+        case 26: return [0x80120520, 0x801212A0];
+        case 28: return [0x80119AE0, 0x8011A970];
+    }
+    throw `bad level ID`;
+}
+
 export function parseLevel(archives: LevelArchive[]): Level {
     const level = archives[0];
     const view = level.Data.createDataView();
@@ -113,7 +131,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
     const sharedCache = new RDP.TextureCache();
 
-    let skybox: GFXNode | null = null;
+    let skybox: Room | null = null;
 
     const dataMap = new DataMap([
         { data: level.Data, start: level.StartAddress },
@@ -127,18 +145,34 @@ export function parseLevel(archives: LevelArchive[]): Level {
     }
 
     if (skyboxDescriptor > 0) {
-        const skyboxDL = view.getUint32(skyboxDescriptor - level.StartAddress);
-        const skyboxMats = view.getUint32(skyboxDescriptor + 0x08 - level.StartAddress);
+        const skyboxView = dataMap.getView(skyboxDescriptor);
+        const skyboxDL = skyboxView.getUint32(0x00);
+        const skyboxMats = skyboxView.getUint32(0x08);
+        const animData = skyboxView.getUint32(0x0C);
         const materials = skyboxMats !== 0 ? parseMaterialData(dataMap, dataMap.deref(skyboxMats)) : [];
-        const skyboxState = new F3DEX2.RSPState([], new RSPSharedOutput(), dataMap);
+        const skyboxState = new F3DEX2.RSPState(new RSPSharedOutput(), dataMap);
         const skyboxModel = runRoomDL(dataMap, skyboxDL, skyboxState, materials);
+
+        let animation: AnimationData | null = null;
+        if (animData !== 0) {
+            const animStart = dataMap.deref(animData);
+            const mats: AnimationTrack[] = [];
+            for (let i = 0; i < materials.length; i++)
+                mats.push(parseAnimationTrack(dataMap, dataMap.deref(animStart + 4*i))!);
+            animation = {fps: 30, frames: 0, tracks: [null], materialTracks: [mats]};
+        }
+
         skybox = {
-            model: skyboxModel,
-            translation: vec3.create(),
-            euler: vec3.create(),
-            scale: vec3.fromValues(1, 1, 1),
-            parent: -1,
-            materials,
+            node: {
+                model: skyboxModel,
+                translation: vec3.create(),
+                euler: vec3.create(),
+                scale: vec3.fromValues(1, 1, 1),
+                parent: -1,
+                materials,
+            },
+            objects: [],
+            animation,
         };
     }
 
@@ -148,6 +182,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
         offs += 4;
     }
 
+    // also different material handling?
     offs = nonPathRooms - level.StartAddress;
     while (view.getUint32(offs) !== 0) {
         rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
@@ -194,7 +229,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const extraTransforms = objectView.getUint32(0x2E) >>> 8;
 
             const sharedOutput = new RSPSharedOutput();
-            const objectState = new F3DEX2.RSPState([], sharedOutput, dataMap);
+            const objectState = new F3DEX2.RSPState(sharedOutput, dataMap);
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, objectState);
                 const animations = parseAnimations(dataMap, animationData, nodes);
@@ -205,6 +240,52 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
         }
     }
+
+    // get ZERO-ONE
+    {
+        const graphStart = 0x803AAA30;
+        const materials = 0x8039D938;
+        const sharedOutput = new RSPSharedOutput();
+        const objectState = new F3DEX2.RSPState(sharedOutput, dataMap);
+        const nodes = parseGraph(dataMap, graphStart, materials, 0x800A16B0, objectState);
+        const animAddrs = getCartAnimationAddresses(level.Name);
+        const tracks: (AnimationTrack | null)[] = [];
+        for (let i = 0; i < nodes.length; i++) {
+            const trackStart = dataMap.deref(animAddrs[0] + 4 * i);
+            tracks.push(parseAnimationTrack(dataMap, trackStart));
+        }
+
+        const materialTracks: (AnimationTrack | null)[][] = [];
+        for (let i = 0; i < nodes.length; i++) {
+            const matListStart = dataMap.deref(animAddrs[1] + 4 * i);
+            const nodeMats: (AnimationTrack | null)[] = [];
+            if (matListStart !== 0) {
+                for (let j = 0; j < nodes[i].materials.length; j++) {
+                    const trackStart = dataMap.deref(matListStart + 4 * j);
+                    const newTrack = parseAnimationTrack(dataMap, trackStart);
+                    nodeMats.push(newTrack);
+                }
+            }
+            materialTracks.push(nodeMats);
+        }
+        const animations: AnimationData[] = [{
+            fps: 15,
+            frames: 0,
+            tracks,
+            materialTracks,
+        }];
+        objectInfo.push({
+            id: 0,
+            flags: 0,
+            nodes,
+            scale: vec3.fromValues(1, 1, 1),
+            sharedOutput,
+            spawn: SpawnType.FLYING,
+            animations,
+        });
+    }
+    // zero-one spawn
+    rooms[0].objects.push({id: 0, pos: vec3.fromValues(0, 0, 0), euler: vec3.create(), scale: vec3.fromValues(1, 1, 1)});
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
@@ -315,14 +396,16 @@ interface Material {
     ambient: vec4;
 }
 
-const enum UVScrollFlags {
+export const ColorFlagStart = 9;
+
+export const enum MaterialFlags {
     Tex1    = 0x0001,
     Tex2    = 0x0002,
     Palette = 0x0004,
     PrimLOD = 0x0008,
     Special = 0x0010, // behaves like 0x203, with extra logic
-    Scroll0 = 0x0020, // set tile0 position
-    Scroll1 = 0x0040, // set tile1 position, variable dimensions
+    Tile0   = 0x0020, // set tile0 position
+    Tile1   = 0x0040, // set tile1 position, variable dimensions
     Scale   = 0x0080, // emit texture command, enabling tile0 and scaling
 
     Prim    = 0x0200, // set prim color
@@ -463,6 +546,7 @@ function selectRenderer(addr: number): graphRenderer | null {
         case 0x802DFAE4: // volcano smoke: disable TLUT, set xlu
             return runMultiDL;
         case 0x80359484: // object
+        case 0x800A16B0: // just the zero one?
             return runMultiSplitDL;
 
         default: console.warn('unknown renderfunc', hexzero(addr, 8));
@@ -519,14 +603,15 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     const roomView = dataMap.getView(roomGeoStart);
     const dlStart = roomView.getUint32(0x00);
     const materialData = roomView.getUint32(0x04);
+    const animData = roomView.getUint32(0x08);
     const renderer = roomView.getUint32(0x0C);
     const graphStart = roomView.getUint32(0x10);
-    const animData = roomView.getUint32(0x18);
+    const moreAnimData = roomView.getUint32(0x18); // TODO: understand relationship between this and animData
     const animTimeScale = roomView.getUint32(0x1C);
 
     const sharedOutput = new RSPSharedOutput();
     sharedOutput.textureCache = sharedCache;
-    const rspState = new F3DEX2.RSPState([], sharedOutput, dataMap);
+    const rspState = new F3DEX2.RSPState(sharedOutput, dataMap);
 
     const materials: Material[] = materialData !== 0 ? parseMaterialData(dataMap, dataMap.deref(materialData)) : [];
     // for now, materials are just handled statically, using their initial state
@@ -539,6 +624,15 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
         scale: vec3.fromValues(1, 1, 1),
         materials,
     };
+
+    let animation: AnimationData | null = null;
+    if (animData !== 0) {
+        const animStart = dataMap.deref(animData);
+        const mats: AnimationTrack[] = [];
+        for (let i = 0; i < materials.length; i++)
+            mats.push(parseAnimationTrack(dataMap, dataMap.deref(animStart + 4*i))!);
+        animation = {fps: 30, frames: 0, tracks: [null], materialTracks: [mats]};
+    }
 
     const objects: ObjectSpawn[] = [];
     if (objectSpawns > 0) {
@@ -558,7 +652,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
             offs += 0x30;
         }
     }
-    return { node, objects };
+    return { node, objects, animation};
 }
 
 function runOpaqueDL(dataMap: DataMap, dlStart: number, rspState: F3DEX2.RSPState, materials: Material[] = []): F3DEX2.RSPState {
@@ -629,20 +723,26 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
         assert((addr >>> 24) === 0x0E, `bad dl jump address ${hexzero(addr, 8)}`);
         // insert the display list that would be generated
         const scroll = assertExists(scrollData[(addr >>> 3) & 0xFF]);
-        if (scroll.flags & UVScrollFlags.Palette) {
+        if (scroll.flags & MaterialFlags.Palette) {
             state.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, scroll.paletteAddresses[0]);
-            if (scroll.flags & (UVScrollFlags.Tex1 | UVScrollFlags.Tex2)) {
+            if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Tex2)) {
                 state.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_4b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
                 state.gDPLoadTLUT(5, scroll.textures[0].siz === ImageSize.G_IM_SIZ_8b ? 256 : 16);
             }
         }
         // skip lights, env, blend for now
-        if (scroll.flags & (UVScrollFlags.Prim | UVScrollFlags.Special | UVScrollFlags.PrimLOD))
+        if (scroll.flags & (MaterialFlags.Prim | MaterialFlags.Special | MaterialFlags.PrimLOD))
             state.gSPSetPrimColor(scroll.primLOD, scroll.primColor[0] * 0xFF, scroll.primColor[1] * 0xFF, scroll.primColor[2] * 0xFF, scroll.primColor[3] * 0xFF);
-        if (scroll.flags & (UVScrollFlags.Tex2 | UVScrollFlags.Special)) {
+        if (scroll.flags & (MaterialFlags.Tex2 | MaterialFlags.Special)) {
             const siz2 = scroll.textures[1].siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
-            state.gDPSetTextureImage(scroll.textures[1].fmt, siz2, 0, scroll.textureAddresses[0]);
-            if (scroll.flags & (UVScrollFlags.Tex1 | UVScrollFlags.Special)) {
+
+            // guess at texture index, we'll load the right one later
+
+            const hasTwoTImg = scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special);
+            const texIndex = hasTwoTImg && scroll.textureAddresses.length > 1 ? 1 : 0;
+
+            state.gDPSetTextureImage(scroll.textures[1].fmt, siz2, 0, scroll.textureAddresses[texIndex]);
+            if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special)) {
                 let texels = scroll.textures[1].width * scroll.textures[1].height;
                 switch (scroll.textures[1].siz) {
                     case ImageSize.G_IM_SIZ_4b:
@@ -656,21 +756,21 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
             }
         }
 
-        if (scroll.flags & (UVScrollFlags.Tex1 | UVScrollFlags.Special))
+        if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special))
             state.gDPSetTextureImage(scroll.textures[0].fmt, scroll.textures[0].siz, 0, scroll.textureAddresses[0]);
 
         const adjXScale = scroll.halve === 0 ? scroll.xScale : scroll.xScale / 2;
-        if (scroll.flags & UVScrollFlags.Scroll0) {
+        if (scroll.flags & MaterialFlags.Tile0) {
             const uls = (scroll.tiles[0].width * scroll.tiles[0].xShift + scroll.shift) / adjXScale;
             const ult = (scroll.tiles[0].height * (1 - scroll.tiles[0].yShift) + scroll.shift) / scroll.yScale - scroll.tiles[0].height;
             state.gDPSetTileSize(0, uls << 2, ult << 2, (scroll.tiles[0].width + uls - 1) << 2, (scroll.tiles[0].height + ult - 1) << 2);
         }
-        if (scroll.flags & UVScrollFlags.Scroll1) {
+        if (scroll.flags & MaterialFlags.Tile1) {
             const uls = (scroll.tiles[1].width * scroll.tiles[1].xShift + scroll.shift) / adjXScale;
             const ult = (scroll.tiles[1].height * (1 - scroll.tiles[1].yShift) + scroll.shift) / scroll.yScale - scroll.tiles[1].height;
             state.gDPSetTileSize(1, uls << 2, ult << 2, (scroll.tiles[1].width + uls - 1) << 2, (scroll.tiles[1].height + ult - 1) << 2);
         }
-        if (scroll.flags & UVScrollFlags.Scale)
+        if (scroll.flags & MaterialFlags.Scale)
             state.gSPTexture(true, 0, 0, (1 << 21) / scroll.scale / adjXScale, (1 << 21) / scroll.scale / scroll.yScale);
     };
 }
@@ -750,11 +850,21 @@ function parsePath(dataMap: DataMap, addr: number): Path {
     const timeData = dataMap.getRange(timeList);
     const times = timeData.data.createTypedArray(Float32Array, timeList - timeData.start, length, Endianness.BIG_ENDIAN);
 
-    const pointData = dataMap.getRange(pointList);
-    const points = pointData.data.createTypedArray(Float32Array, pointList - pointData.start, length * 3 * (kind === PathKind.Bezier ? 3 : 1), Endianness.BIG_ENDIAN);
+    let pointCount = length * 3;
+    if (kind === PathKind.Bezier)
+        pointCount = length * 9;
+    if (kind === PathKind.Hermite)
+        pointCount = (length + 2) * 3;
 
-    const quarticData = dataMap.getRange(quarticList);
-    const quartics = quarticData.data.createTypedArray(Float32Array, quarticList - quarticData.start, (length - 1) * 5, Endianness.BIG_ENDIAN);
+    const pointData = dataMap.getRange(pointList);
+    const points = pointData.data.createTypedArray(Float32Array, pointList - pointData.start, pointCount, Endianness.BIG_ENDIAN);
+
+    let quartics: Float32Array;
+    if (quarticList !== 0) {
+         const quarticData = dataMap.getRange(quarticList);
+        quartics = quarticData.data.createTypedArray(Float32Array, quarticList - quarticData.start, (length - 1) * 5, Endianness.BIG_ENDIAN);
+    } else
+        quartics = new Float32Array(0);
 
     return { kind, length, segmentRate, speed, times, points, quartics };
 }
