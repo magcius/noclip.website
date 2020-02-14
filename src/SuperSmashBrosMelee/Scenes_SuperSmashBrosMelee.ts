@@ -110,7 +110,6 @@ class MeleeTitleDesc implements SceneDesc {
             HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
             null);
         scene.jobjRoots.push(bg);
-        // debugger;
 
         const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
         moji.addAnimAll(
