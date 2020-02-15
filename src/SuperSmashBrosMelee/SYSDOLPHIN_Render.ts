@@ -178,11 +178,13 @@ export class HSD_JObjRoot_Data {
     }
 }
 
-class HSD_AObj_Instance {
+export class HSD_AObj_Instance {
     public framerate: number = 1.0;
     public currFrame: number = 0;
+    public flags: HSD_AObjFlags;
 
     constructor(public aobj: HSD_AObj) {
+        this.flags = this.aobj.flags;
     }
 
     private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
@@ -212,7 +214,7 @@ class HSD_AObj_Instance {
     public calcAnim<T>(deltaTimeInFrames: number, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
         this.currFrame += this.framerate * deltaTimeInFrames;
 
-        if (!!(this.aobj.flags & HSD_AObjFlags.ANIM_LOOP)) {
+        if (!!(this.flags & HSD_AObjFlags.ANIM_LOOP)) {
             while (this.currFrame >= this.aobj.endFrame) {
                 // TODO(jstpierre): Rewind Frame
                 this.currFrame -= this.aobj.endFrame;
@@ -906,7 +908,8 @@ class HSD_MObj_Instance {
                 HSD_TEInput.TE_0, null);
             params.c = exp;
 
-            if (!!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
+            // TODO(jstpierre): This breaks the menu background
+            if (true || !!(alphaMode & HSD_RenderModeFlags.ALPHA_MODE_VTX)) {
                 HSD_TExpAlphaOp(exp, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true);
                 HSD_TExpAlphaIn(exp,
                     HSD_TEInput.TE_0, null,
@@ -1183,7 +1186,7 @@ class HSD_DObj_Instance {
 
 class HSD_JObj_Instance {
     private dobj: HSD_DObj_Instance[] = [];
-    private aobj: HSD_AObj_Instance | null = null;
+    public aobj: HSD_AObj_Instance | null = null;
     public children: HSD_JObj_Instance[] = [];
     public jointMtx = mat4.create();
 
@@ -1319,6 +1322,9 @@ class HSD_JObj_Instance {
 }
 
 export class HSD_JObjRoot_Instance {
+    public allJObjs: HSD_JObj_Instance[] = [];
+    public modelMatrix = mat4.create();
+
     private rootInst: HSD_JObj_Instance;
     private allJObjsByID = new Map<number, HSD_JObj_Instance>();
 
@@ -1327,6 +1333,7 @@ export class HSD_JObjRoot_Instance {
 
         // Traverse and register the JObjs.
         const registerJObj = (inst: HSD_JObj_Instance): void => {
+            this.allJObjs.push(inst);
             this.allJObjsByID.set(inst.data.jobj.jointReferenceID, inst);
 
             for (let i = 0; i < inst.children.length; i++)
@@ -1353,7 +1360,7 @@ export class HSD_JObjRoot_Instance {
     }
 
     public calcMtx(viewerInput: ViewerRenderInput): void {
-        this.rootInst.calcMtx(null);
+        this.rootInst.calcMtx(this.modelMatrix);
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

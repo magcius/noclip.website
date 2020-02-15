@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 
-export function assert(b: boolean, message: string = ""): void {
+export function assert(b: boolean, message: string = ""): asserts b {
     if (!b) {
         console.error(new Error().stack);
         throw new Error(`Assert fail: ${message}`);

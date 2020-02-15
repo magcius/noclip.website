@@ -4,13 +4,12 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexdump, hexzero } from "../util";
+import { readString, assert } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
 import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { calcTextureSize } from "../gx/gx_texture";
-import { Endianness } from "../endian";
 
 export interface HSD_ArchiveSymbol {
     name: string;
@@ -135,6 +134,11 @@ export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: 
 
 export function HSD_LoadContext__ResolvePtr(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice {
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
+}
+
+export function HSD_LoadContext__ResolvePtrString(ctx: HSD_LoadContext, offs: number): string {
+    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+    return readString(buffer, 0x00);
 }
 
 function HSD_LoadContext__CacheImageDesc(ctx: HSD_LoadContext, offs: number): HSD_ImageDesc {
@@ -1036,17 +1040,8 @@ export const enum HSD_TObjAnmType {
     TS_BLEND,
 }
 
-function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
+export function HSD_FObjLoadKeyframes(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, fracValue: number, fracSlope: number): HSD_FObj__Keyframe[] {
     const view = buffer.createDataView();
-    const nextSiblingOffs = view.getUint32(0x00);
-    const length = view.getUint32(0x04);
-    const startFrame = view.getFloat32(0x08);
-    const type = view.getUint8(0x0C);
-    const fracValue = view.getUint8(0x0D);
-    const fracSlope = view.getUint8(0x0E);
-    const dataOffs = view.getUint32(0x10);
-    const dataBuf = HSD_LoadContext__ResolvePtr(ctx, dataOffs);
-    const dataView = dataBuf.createDataView();
 
     let dataIdx = 0;
     function parseValue(frac: number): number {
@@ -1056,19 +1051,19 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayB
         let res: number;
         if (fmt === FObjFmt.FLOAT) {
             assert(shift === 0);
-            res = dataView.getFloat32(dataIdx + 0x00, true);
+            res = view.getFloat32(dataIdx + 0x00, true);
             dataIdx += 0x04;
         } else if (fmt === FObjFmt.S16) {
-            res = dataView.getInt16(dataIdx + 0x00, true);
+            res = view.getInt16(dataIdx + 0x00, true);
             dataIdx += 0x02;
         } else if (fmt === FObjFmt.U16) {
-            res = dataView.getUint16(dataIdx + 0x00, true);
+            res = view.getUint16(dataIdx + 0x00, true);
             dataIdx += 0x02;
         } else if (fmt === FObjFmt.S8) {
-            res = dataView.getInt8(dataIdx + 0x00);
+            res = view.getInt8(dataIdx + 0x00);
             dataIdx += 0x01;
         } else if (fmt === FObjFmt.U8) {
-            res = dataView.getUint8(dataIdx + 0x00);
+            res = view.getUint8(dataIdx + 0x00);
             dataIdx += 0x01;
         } else {
             throw "whoops";
@@ -1081,7 +1076,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayB
         let byte = 0x80;
         let res = 0;
         for (let i = 0; !!(byte & 0x80); i++) {
-            byte = dataView.getUint8(dataIdx++);
+            byte = view.getUint8(dataIdx++);
             res |= (byte & 0x7F) << (i * 7);
         }
         return res;
@@ -1094,7 +1089,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayB
 
     const keyframes: HSD_FObj__Keyframe[] = [];
     let op_intrp = FObjOpcode.NONE, duration = 0;
-    while (dataIdx < length) {
+    while (dataIdx < buffer.byteLength) {
         const headerByte = parseVLQ();
         const op: FObjOpcode = headerByte & 0x0F;
         let nbPack = (headerByte >>> 4) + 1;
@@ -1159,6 +1154,22 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayB
             op_intrp = op;
         }
     }
+
+    return keyframes;
+}
+
+function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+    const nextSiblingOffs = view.getUint32(0x00);
+    const length = view.getUint32(0x04);
+    const startFrame = view.getFloat32(0x08);
+    const type = view.getUint8(0x0C);
+    const fracValue = view.getUint8(0x0D);
+    const fracSlope = view.getUint8(0x0E);
+    const dataOffs = view.getUint32(0x10);
+
+    const dataBuf = HSD_LoadContext__ResolvePtr(ctx, dataOffs, length);
+    const keyframes = HSD_FObjLoadKeyframes(ctx, dataBuf, fracValue, fracSlope);
 
     fobj.push({ type, keyframes });
 
