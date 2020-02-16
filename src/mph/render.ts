@@ -375,7 +375,8 @@ export class MPHRenderer {
             const matIndex = mphModel.meshs[i].matID;
             const shapeIndex = mphModel.meshs[i].shapeID;
             const shape = model.shapes[shapeIndex];
-            const nodeIndex = getNodeIndex(shape);
+            //const nodeIndex = getNodeIndex(shape);
+            const nodeIndex = 0;
 
             this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }

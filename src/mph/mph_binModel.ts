@@ -65,39 +65,28 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const matrix_id = view.getInt32(0x64, true);
     const scaleS = fx32(view.getInt32(0x68, true));
     const scaleT = fx32(view.getInt32(0x6C, true));
-    const rot_Z = view.getUint16(0x70, true);
+    const rot_Z = fx16(view.getUint16(0x70, true));
     const field_0x72 = view.getInt16(0x72, true);
-    const scaleWidth = view.getInt32(0x74, true);
-    const scaleHeight = view.getInt32(0x78, true);
+    const scaleWidth = fx32(view.getInt32(0x74, true));
+    const scaleHeight = fx32(view.getInt32(0x78, true));
     const material_animation_id = 0;
     const field_0x7E = view.getInt16(0x7E, true);
     const packed_repeat_mode = view.getInt8(0x80);
     const field_0x81 = view.getInt8(0x81);
     const field_0x82 = view.getInt16(0x82, true);
 
-
     let textureName; 
     let paletteName;
 
     const texMatrix = mat2d.create();
-
-
-
-    function fx32_const(x: number): number {
-        return x > 0 ? x * fx32(1) + 0.5: x * fx32(1) - 0.5;
-    }
-
-    function fx32_mul(v1: number, v2: number): number {
-        return fx32(v1 * v2 + 0x800);
-    }
 
     let width;
     let height;
     if (palletIndex == 0xFFFF || textureIndex == 0xFFFF) {
         paletteName = null;
         textureName = null;
-        width = 1;
-        height = 1;
+        width = 1.0;
+        height = 1.0;
     } else {
         //texs[textureIndex].color0 = true;
         paletteName = `pallet_${palletIndex}`;
@@ -109,7 +98,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     let sinR = 0.0;
 
     if (Math.abs(rot_Z) > 0) {
-        const theta = 2 * Math.PI / 65536.0 * rot_Z;
+        const theta = rot_Z;
         sinR = Math.sin(theta);
         cosR = Math.cos(theta);
     }
@@ -117,7 +106,10 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const texScaleS = 1 / width;
     const texScaleT = 1 / height;
 
-    calcTexMtx(texMatrix, 0, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, 0, 0);
+    const translationS = scaleWidth * width;
+    const translationT = scaleHeight * height;
+
+    calcTexMtx(texMatrix, TexMtxMode.MAYA, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -376,10 +368,14 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     let tex0: TEX0 | null = null;
 
     // Model
-    const texMtxMode = TexMtxMode.MAYA; // Where?
-    const sbcBuffer = buffer.slice(0, 0x10); // bummy sbc for reuse MDL0 codes
+    const texMtxMode = TexMtxMode.MAYA;
+    const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
     const models: MDL0Model[] = [];
     const name = `model_0`;
+
+    const jointMatrix = mat4.create();
+    nodes.push({ name, jointMatrix });
+
     models.push({ name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
 
     return { models, tex0, mphTex, meshs, mtx_shmat };

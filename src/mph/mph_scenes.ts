@@ -175,8 +175,6 @@ class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
 const id = 'mph';
 const name = 'Metroid Prime: Hunters';
 const sceneDescs = [
-    //new MetroidPrimeHuntersSceneDesc("models/pick_wpn_snipergun_Model", "Imperialist", null, null), 
-    //new MetroidPrimeHuntersSceneDesc("models/MoverTest_Model", "Mover Test", null, null), 
     "Multiplayer",
     new MetroidPrimeHuntersSceneDesc("mp3_Model", "Combat Hall", "mp3", "mp3_Tex"),
     new MetroidPrimeHuntersSceneDesc("mp1_Model", "Data Shrine", "mp1", "mp1_tex"),
@@ -270,14 +268,6 @@ const sceneDescs = [
     new MetroidPrimeHuntersSceneDesc("unit3_b2_model", "biodefense chamber 08", "unit3_b2", null),
     new MetroidPrimeHuntersSceneDesc("unit4_b1_model", "biodefense chamber 04", "unit4_b1", null),
     new MetroidPrimeHuntersSceneDesc("unit4_b2_model", "biodefense chamber 07", "unit4_b2", null),
-    //"Boss",
-    //new MetroidPrimeHuntersSceneDesc("models/DripStank_lod0_Model", "Quadtroid", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/Temroid_lod0_Model", "Temroid", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/CylinderBoss_Model", "Cretaphid", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/BigEyeBall_Model", "Slench", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/Gorea1A_lod0_Model", "Gorea", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/Gorea1B_lod0_Model", "Gorea Reverse", null, null),
-    //new MetroidPrimeHuntersSceneDesc("models/Gorea2_lod0_Model", "Gorea Soul", null, null),
     "FirstHunt",
     new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/blueRoom_Model", "Regulator Stage", null, null), 
     new MetroidPrimeHuntersSceneDesc("mp_fh_data/levels/models/e3Level_Model", "Morphball Stage", null, null),
