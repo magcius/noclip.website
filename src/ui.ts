@@ -2150,6 +2150,7 @@ class BottomBar {
 
     constructor() {
         this.elem = document.createElement('div');
+        this.elem.id = 'BottomBar';
         this.elem.style.position = 'absolute';
         this.elem.style.bottom = '32px';
         this.elem.style.left = '32px';
@@ -2520,6 +2521,7 @@ export class UI {
         this.toplevel.appendChild(this.sceneUIContainer);
 
         this.panelToplevel = document.createElement('div');
+        this.panelToplevel.id = 'Panel';
         this.panelToplevel.style.position = 'absolute';
         this.panelToplevel.style.left = '0';
         this.panelToplevel.style.top = '0';
