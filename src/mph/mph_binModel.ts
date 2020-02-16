@@ -1,8 +1,10 @@
 ﻿import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D";
-import { mat4, mat2d, mat2 } from "gl-matrix";
+import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model, calcTexMtx, fx16 } from "../nns_g3d/NNS_G3D";
+import { mat4, mat2d, mat2, mat3, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
+import { colorNew } from "../Color";
+import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 
 export interface MPHbin {
     models: MDL0Model[];
@@ -17,6 +19,15 @@ interface MPHMesh {
     shapeID: number;
 }
 
+interface MPHNode {
+    name: string;
+    parent: number;
+    child: number;
+    next: number;
+    meshID: number;
+    node_transform: mat4;
+}
+
 interface MPHPal {
     pal: ArrayBufferSlice;
 }
@@ -25,6 +36,7 @@ interface MPHTex {
     tex: ArrayBufferSlice;
     width: number;
     height: number;
+    color0: boolean;
 }
 
 export interface MPHTexture {
@@ -36,62 +48,68 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const view = buffer.createDataView();
 
     const name = readString(buffer, 0x00, 0x40, true);
-
     const cullMode = view.getUint8(0x41);
     const alpha = view.getInt8(0x42);
-
-    const palID = view.getUint16(0x44, true);
-    let palletIndex;
-    if (palID == 0xFFFF) {
-        palletIndex = 0;
-    } else {
-        palletIndex = palID;
-    }
-    const texID = view.getUint16(0x46, true);
-    let textureIndex;
-    if (texID == 0xFFFF) {
-        textureIndex = 0;
-    } else {
-        textureIndex = texID;
-    }    
-
+    const wireFrame = view.getInt8(0x43);
+    const palletIndex = view.getUint16(0x44, true);
+    const textureIndex = view.getUint16(0x46, true);
     const texParams = view.getUint16(0x48, true);
-    const polyAttribs = view.getUint32(0x58, true);
+    const diffuse = colorNew(view.getInt8(0x4A), view.getInt8(0x4B), view.getInt8(0x4C));
+    const ambient = colorNew(view.getInt8(0x4D), view.getInt8(0x4E), view.getInt8(0x4F));
+    const specular = colorNew(view.getInt8(0x50), view.getInt8(0x51), view.getInt8(0x52));
+    const field_0x53 = view.getInt8(0x53);
+    const polyAttribs = view.getInt32(0x54, true);
 
-    const texScaleS = view.getInt16(0x64, true);
-    const texScaleT = view.getInt16(0x68, true);
+    const texcoord_transform_mode = view.getInt32(0x5C, true);
+    const texcoord_animation_id = view.getInt32(0x60, true);
+    const matrix_id = view.getInt32(0x64, true);
+    const scaleS = fx32(view.getInt32(0x68, true));
+    const scaleT = fx32(view.getInt32(0x6C, true));
+    const rot_Z = fx16(view.getUint16(0x70, true));
+    const field_0x72 = view.getInt16(0x72, true);
+    const scaleWidth = fx32(view.getInt32(0x74, true));
+    const scaleHeight = fx32(view.getInt32(0x78, true));
+    const material_animation_id = 0;
+    const field_0x7E = view.getInt16(0x7E, true);
+    const packed_repeat_mode = view.getInt8(0x80);
+    const field_0x81 = view.getInt8(0x81);
+    const field_0x82 = view.getInt16(0x82, true);
 
-    const scaleWidth = view.getInt16(0x74, true);
-    const scaleHeight = view.getInt16(0x78, true);
-    const rot_Z = view.getInt16(0x7C, true);
+    let textureName; 
+    let paletteName;
 
-    //const mat44 = mat4.create();
-
-
-
-    //function setup_texcoord_matrix(dst: mat4, scale_s:number, scale_t:number, rot_z:number, scale_width:number, scale_height:number, width:number, height:number) {
-    //    const scaled_width = width * scaleWidth;
-    //    const scaled_height = height * scaleHeight;
-
-    //    if (rot_z) {
-
-    //    } else {
-
-    //    }
-    //}
-
-
-    const m00 = 1 / texs[textureIndex].width;
-    const m01 = 0;
-    const m10 = 0;
-    const m11 = 1 / texs[textureIndex].height;
-    const tx = 0;
-    const ty = 0;
     const texMatrix = mat2d.create();
-    mat2d.set(texMatrix, m00, m01, m10, m11, tx, ty);
 
-    const textureName = `texture_${textureIndex}`; 
-    const paletteName = `pallet_${palletIndex}`;
+    let width;
+    let height;
+    if (palletIndex == 0xFFFF || textureIndex == 0xFFFF) {
+        paletteName = null;
+        textureName = null;
+        width = 1.0;
+        height = 1.0;
+    } else {
+        //texs[textureIndex].color0 = true;
+        paletteName = `pallet_${palletIndex}`;
+        textureName = `texture_${textureIndex}`;
+        width = texs[textureIndex].width;
+        height = texs[textureIndex].height;
+    }
+    let cosR = 1.0;
+    let sinR = 0.0;
+
+    if (Math.abs(rot_Z) > 0) {
+        const theta = rot_Z;
+        sinR = Math.sin(theta);
+        cosR = Math.cos(theta);
+    }
+
+    const texScaleS = 1 / width;
+    const texScaleT = 1 / height;
+
+    const translationS = scaleWidth * width;
+    const translationT = scaleHeight * height;
+
+    calcTexMtx(texMatrix, TexMtxMode.MAYA, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -114,13 +132,71 @@ function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index
     return({ name, dlBuffer });
 }
 
-function parseNode(buffer: ArrayBufferSlice): MDL0Node {
+function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const view = buffer.createDataView();
 
+    let vec1 = vec3.create();
+    let vec2 = vec3.create();
+    const node_transform = mat4.create();
     const name = readString(buffer, 0x00, 0x40, true);
-    const jointMatrix = mat4.create();
+    const parent = view.getInt16(0x40, true);
+    const child = view.getInt16(0x42, true);
+    const next = view.getInt16(0x44, true);
+    const field_0x46 = view.getInt16(0x46, true);
+    const enabled = view.getInt32(0x48, true);
+    const mesh_count = view.getInt16(0x4C, true);
+    const meshID = view.getInt16(0x4E, true);
+    const field_0x50 = view.getInt32(0x50, true);
+    const field_0x54 = view.getInt32(0x54, true);
+    const field_0x58 = view.getInt32(0x58, true);
+    const field_0x5C = view.getInt16(0x54, true);
+    const field_0x5E = view.getInt16(0x5E, true);
+    const field_0x60 = view.getInt16(0x60, true);
+    const field_0x62 = view.getInt16(0x62, true);
+    const field_0x64 = view.getInt32(0x64, true);
+    const field_0x68 = view.getInt32(0x68, true);
+    const field_0x6C = view.getInt32(0x6C, true);
+    const field_0x70 = view.getInt32(0x70, true);
 
-    return { name, jointMatrix, };
+    vec3.set(vec1, fx32(view.getInt32(0x74, true)), fx32(view.getInt32(0x78, true)), fx32(view.getInt32(0x7C, true)));
+    vec3.set(vec2, fx32(view.getInt32(0x80, true)), fx32(view.getInt32(0x84, true)), fx32(view.getInt32(0x88, true)));
+
+    const type = view.getUint8(0x8C);
+    const field_8D = view.getInt8(0x8D);
+    const field_8E = view.getInt16(0x8E, true);
+
+    node_transform[15] = 1;
+
+    node_transform[0] = fx32(view.getInt32(0x90, true));
+    node_transform[4] = fx32(view.getInt32(0x94, true));
+    node_transform[8] = fx32(view.getInt32(0x98, true));
+
+    node_transform[1] = fx32(view.getInt32(0x9C, true));
+    node_transform[5] = fx32(view.getInt32(0xA0, true));
+    node_transform[9] = fx32(view.getInt32(0xA4, true));
+
+    node_transform[2] = fx32(view.getInt32(0xA8, true));
+    node_transform[6] = fx32(view.getInt32(0xAC, true));
+    node_transform[10] = fx32(view.getInt32(0xB0, true));
+
+    node_transform[3] = fx32(view.getInt32(0xB4, true));
+    node_transform[7] = fx32(view.getInt32(0xB8, true));
+    node_transform[11] = fx32(view.getInt32(0xBC, true));
+
+    const field_0xC0 = view.getInt32(0xC0, true);
+    const field_0xC4 = view.getInt32(0xC4, true);
+    const field_0xC8 = view.getInt32(0xC8, true);
+    const field_0xCC = view.getInt32(0xCC, true);
+    const field_0xD0 = view.getInt32(0xD0, true);
+    const field_0xD4 = view.getInt32(0xD4, true);
+    const field_0xD8 = view.getInt32(0xD8, true);
+    const field_0xDC = view.getInt32(0xDC, true);
+    const field_0xE0 = view.getInt32(0xE0, true);
+    const field_0xE4 = view.getInt32(0xE4, true);
+    const field_0xE8 = view.getInt32(0xE8, true);
+    const field_0xEC = view.getInt32(0xEC, true);
+
+    return { name, parent, child, next, meshID, node_transform };
 }
 
 function parseMesh(buffer: ArrayBufferSlice): MPHMesh {
@@ -150,20 +226,23 @@ function parseTexture(buffer: ArrayBufferSlice, TexBuffer: ArrayBufferSlice, ind
     const view = buffer.createDataView();
 
     const name = `texture_${index}`;
-    const mph_format = view.getUint16(0x00, true);
-    const format = convertMPHTexToNitroTex(mph_format);
+    const mph_format = view.getInt8(0x00);
+    const field_0x01 = view.getInt8(0x01);
     const width = view.getUint16(0x02, true);
     const height = view.getUint16(0x04, true);
-    const unk_0x06 = view.getUint16(0x06, true);
+    const field_0x06 = view.getUint16(0x06, true);
     const textureDataOffs = view.getUint32(0x08, true);
     const textureDataSize = view.getInt32(0x0C, true);
-    const unk_0x10 = view.getUint32(0x10, true);
-    const unk_0x14 = view.getUint32(0x14, true);
-    const unk_0x18 = view.getUint32(0x18, true);
-    const unk_0x1C = view.getUint32(0x1C, true);
-    const unk_0x20 = view.getUint32(0x20, true);
-    const unk_0x24 = view.getUint32(0x24, true);
+    const field_0x10 = view.getUint32(0x10, true);
+    const field_0x14 = view.getUint32(0x14, true);
+    const vram_offset = view.getInt32(0x18, true);
+    const opaque = view.getInt32(0x1C, true);
+    const some_value = view.getInt32(0x20, true);
+    const packed_size = view.getUint8(0x24);
+    const native_texture_format = view.getUint8(0x25);
+    const texture_obj_ref = view.getInt16(0x26, true);
 
+    const format = convertMPHTexToNitroTex(mph_format);
     const color0 = false;
 
     const textureDataStart = textureDataOffs;
@@ -248,7 +327,8 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         const tex = buffer.slice(texDataStart, texDataEnd);
         const width = view.getInt16(texDataStart+0x2, true);
         const height = view.getInt16(texDataStart + 0x4, true);
-        texs.push({ tex, width, height });
+        const color0 = false;
+        texs.push({ tex, width, height, color0 });
     }
 
     // MPH_Pallet
@@ -276,20 +356,26 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     }
 
     // Node
-    const nodes: MDL0Node[] = [];
+    const MPHNode: MPHNode[] = [];
     for (let i = 0; i < nodeCount; i++) {
         const nodeOffs = i * 0xF0 + nodeOffset;
-        nodes.push( parseNode(buffer.slice(nodeOffs)) );
+        MPHNode.push( parseNode(buffer.slice(nodeOffs)) );
     }
+    const nodes: MDL0Node[] = [];
+
     const mphTex = { pals, texs };
 
     let tex0: TEX0 | null = null;
 
     // Model
-    const texMtxMode = TexMtxMode.MAYA; // Where?
-    const sbcBuffer = buffer.slice(0, 0x10); // bummy sbc for reuse MDL0 codes
+    const texMtxMode = TexMtxMode.MAYA;
+    const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
     const models: MDL0Model[] = [];
     const name = `model_0`;
+
+    const jointMatrix = mat4.create();
+    nodes.push({ name, jointMatrix });
+
     models.push({ name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });
 
     return { models, tex0, mphTex, meshs, mtx_shmat };
@@ -306,6 +392,7 @@ export function parseTEX0Texture(buffer: ArrayBufferSlice, tex: MPHTexture): TEX
     const textures: TEX0Texture[] = [];
     for (let i = 0; i < tex.texs.length; i++) {
         textures.push(parseTexture(tex.texs[i].tex, buffer, i));
+        textures[i].color0 = !!tex.texs[i].color0;
     }
 
     return { textures, palettes };

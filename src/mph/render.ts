@@ -14,6 +14,7 @@ import { nArray, assertExists } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MPHbin } from "./mph_binModel";
+import { MDL0_ShapeEntry } from "../rres/brres";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -33,7 +34,7 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
 
 const scratchTexMatrix = mat2d.create();
 class MaterialInstance {
-    private texture: TEX0Texture;
+    private texture: TEX0Texture | null;
     private gfxTextures: GfxTexture[] = [];
     private textureNames: string[] = [];
     private gfxSampler: GfxSampler | null = null;
@@ -50,9 +51,8 @@ class MaterialInstance {
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
-
-
-        this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
+        const texData = tex0.textures.find((t) => t.name === this.material.textureName);
+        this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: expand5to8(this.material.alpha) };
 
@@ -102,14 +102,14 @@ class MaterialInstance {
         }
 
         function parseMPHTexImageParamWrapModeS(w0: number): GfxWrapMode {
-            const repeatS = (((w0 >> 8) & 0x01) == 0x1);
-            const flipS = (((w0 >> 9) & 0x01) == 0x1);
+            const repeatS = (((w0 >> 0) & 0x01) == 0x1);
+            const flipS = (((w0 >> 1) & 0x01) == 0x1);
             return translateWrapMode(repeatS, flipS);
         }
 
         function parseMPHTexImageParamWrapModeT(w0: number): GfxWrapMode {
-            const repeatT = (((w0 >> 0) & 0x01) == 0x1);
-            const flipT = (((w0 >> 1) & 0x01) == 0x1);
+            const repeatT = (((w0 >> 8) & 0x01) == 0x1);
+            const flipT = (((w0 >> 9) & 0x01) == 0x1);
             return translateWrapMode(repeatT, flipT);
         }
     }
@@ -277,12 +277,8 @@ class ShapeInstance {
         this.vertexData = new VertexData(device, nitroVertexData);
     }
 
-    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
-        if (isSkybox) {
-            computeViewMatrixSkybox(dst, viewerInput.camera);
-        } else {
-            computeViewMatrix(dst, viewerInput.camera);
-        }
+    private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        computeViewMatrix(dst, viewerInput.camera);
 
         mat4.mul(dst, dst, this.node.modelMatrix);
 
@@ -292,14 +288,14 @@ class ShapeInstance {
             calcYBBoardMtx(dst, dst);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
         const packetParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
 
-        this.computeModelView(scratchMat4, viewerInput, isSkybox);
+        this.computeModelView(scratchMat4, viewerInput);
         offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
 
         this.materialInstance.setOnRenderInst(template, viewerInput);
@@ -348,9 +344,9 @@ export class MPHRenderer {
         this.gfxProgram = device.createProgram(program);
         let posScale;
         if (mphModel.mtx_shmat <= 0) {
-            posScale = 16;
+            posScale = 4;
         } else {
-            posScale = mphModel.mtx_shmat * 16;
+            posScale = mphModel.mtx_shmat * 4;
         }
         
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
@@ -368,12 +364,21 @@ export class MPHRenderer {
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
 
+        function getNodeIndex(shape: MDL0Shape): number{
+            const view = shape.dlBuffer.createDataView();
+            const nodeIndex = view.getInt8(0x04);
+            return nodeIndex;
+        }
+
         for (let i = 0; i < mphModel.meshs.length; i++) {
 
             const matIndex = mphModel.meshs[i].matID;
             const shapeIndex = mphModel.meshs[i].shapeID;
+            const shape = model.shapes[shapeIndex];
+            //const nodeIndex = getNodeIndex(shape);
+            const nodeIndex = 0;
 
-            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[0], model.shapes[shapeIndex], posScale));
+            this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
 
     }
@@ -386,7 +391,7 @@ export class MPHRenderer {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.filterKey = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
+        template.filterKey = G3DPass.MAIN;
         template.setGfxProgram(this.gfxProgram);
 
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
@@ -394,7 +399,7 @@ export class MPHRenderer {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput, this.isSkybox);
+            this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
     }
