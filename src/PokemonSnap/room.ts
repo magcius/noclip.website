@@ -7,7 +7,7 @@ import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
-
+import { findNewTextures } from "./animation";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -151,26 +151,33 @@ export function parseLevel(archives: LevelArchive[]): Level {
         const animData = skyboxView.getUint32(0x0C);
         const materials = skyboxMats !== 0 ? parseMaterialData(dataMap, dataMap.deref(skyboxMats)) : [];
         const skyboxState = new F3DEX2.RSPState(new RSPSharedOutput(), dataMap);
-        const skyboxModel = runRoomDL(dataMap, skyboxDL, skyboxState, materials);
+        initDL(skyboxState, true);
+        const skyboxModel = runRoomDL(dataMap, skyboxDL, [skyboxState], materials);
+
+        const node: GFXNode = {
+            billboard: 0,
+            model: skyboxModel,
+            translation: vec3.create(),
+            euler: vec3.create(),
+            scale: vec3.fromValues(1, 1, 1),
+            parent: -1,
+            materials,
+        };
 
         let animation: AnimationData | null = null;
         if (animData !== 0) {
             const animStart = dataMap.deref(animData);
             const mats: AnimationTrack[] = [];
-            for (let i = 0; i < materials.length; i++)
-                mats.push(parseAnimationTrack(dataMap, dataMap.deref(animStart + 4*i))!);
+            for (let i = 0; i < materials.length; i++) {
+                const track = parseAnimationTrack(dataMap, dataMap.deref(animStart + 4*i))!;
+                findNewTextures(dataMap, track, node, i);
+                mats.push(track);
+            }
             animation = {fps: 30, frames: 0, tracks: [null], materialTracks: [mats]};
         }
 
         skybox = {
-            node: {
-                model: skyboxModel,
-                translation: vec3.create(),
-                euler: vec3.create(),
-                scale: vec3.fromValues(1, 1, 1),
-                parent: -1,
-                materials,
-            },
+            node,
             objects: [],
             animation,
         };
@@ -229,13 +236,12 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const extraTransforms = objectView.getUint32(0x2E) >>> 8;
 
             const sharedOutput = new RSPSharedOutput();
-            const objectState = new F3DEX2.RSPState(sharedOutput, dataMap);
             try {
-                const nodes = parseGraph(dataMap, graphStart, materials, renderer, objectState);
+                const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
                 const animations = parseAnimations(dataMap, animationData, nodes);
                 objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(initData.spawnFunc), animations });
             } catch (e) {
-                console.warn("failed parse", e);
+                console.warn("failed parse", hexzero(id, 3), e);
             }
 
         }
@@ -246,8 +252,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
         const graphStart = 0x803AAA30;
         const materials = 0x8039D938;
         const sharedOutput = new RSPSharedOutput();
-        const objectState = new F3DEX2.RSPState(sharedOutput, dataMap);
-        const nodes = parseGraph(dataMap, graphStart, materials, 0x800A16B0, objectState);
+        const nodes = parseGraph(dataMap, graphStart, materials, 0x800A16B0, sharedOutput);
         const animAddrs = getCartAnimationAddresses(level.Name);
         const tracks: (AnimationTrack | null)[] = [];
         for (let i = 0; i < nodes.length; i++) {
@@ -255,25 +260,13 @@ export function parseLevel(archives: LevelArchive[]): Level {
             tracks.push(parseAnimationTrack(dataMap, trackStart));
         }
 
-        const materialTracks: (AnimationTrack | null)[][] = [];
-        for (let i = 0; i < nodes.length; i++) {
-            const matListStart = dataMap.deref(animAddrs[1] + 4 * i);
-            const nodeMats: (AnimationTrack | null)[] = [];
-            if (matListStart !== 0) {
-                for (let j = 0; j < nodes[i].materials.length; j++) {
-                    const trackStart = dataMap.deref(matListStart + 4 * j);
-                    const newTrack = parseAnimationTrack(dataMap, trackStart);
-                    nodeMats.push(newTrack);
-                }
-            }
-            materialTracks.push(nodeMats);
-        }
         const animations: AnimationData[] = [{
             fps: 15,
             frames: 0,
             tracks,
-            materialTracks,
+            materialTracks: parseMaterialAnimation(dataMap, animAddrs[1], nodes),
         }];
+
         objectInfo.push({
             id: 0,
             flags: 0,
@@ -353,11 +346,12 @@ function findObjectData(dataMap: DataMap, addr: number): InitParams {
 
 export interface GFXNode {
     model?: Model;
+    billboard: number;
     parent: number;
     translation: vec3;
     euler: vec3;
     scale: vec3;
-    materials: Material[];
+    materials: MaterialData[];
 }
 
 interface TileParams {
@@ -374,10 +368,16 @@ interface TextureParams {
     height: number,
 }
 
-interface Material {
+export interface MaterialTextureEntry {
+    tex: number,
+    pal: number,
+    index: number,
+}
+
+export interface MaterialData {
     flags: number;
-    textureAddresses: number[];
-    paletteAddresses: number[];
+    textureStart: number;
+    paletteStart: number;
 
     scale: number;
     shift: number;
@@ -394,6 +394,9 @@ interface Material {
     blendColor: vec4;
     diffuse: vec4;
     ambient: vec4;
+
+    usedTextures: MaterialTextureEntry[];
+    optional: boolean;
 }
 
 export const ColorFlagStart = 9;
@@ -403,9 +406,9 @@ export const enum MaterialFlags {
     Tex2    = 0x0002,
     Palette = 0x0004,
     PrimLOD = 0x0008,
-    Special = 0x0010, // behaves like 0x203, with extra logic
+    Special = 0x0010, // smoothly moves through a list of textures
     Tile0   = 0x0020, // set tile0 position
-    Tile1   = 0x0040, // set tile1 position, variable dimensions
+    Tile1   = 0x0040, // set tile1 position
     Scale   = 0x0080, // emit texture command, enabling tile0 and scaling
 
     Prim    = 0x0200, // set prim color
@@ -432,11 +435,11 @@ function getColor(view: DataView, offs: number): vec4 {
     );
 }
 
-function parseMaterialData(dataMap: DataMap, listStart: number): Material[] {
+function parseMaterialData(dataMap: DataMap, listStart: number): MaterialData[] {
     if (listStart === 0)
         return [];
 
-    const materialList: Material[] = [];
+    const materialList: MaterialData[] = [];
     const range = dataMap.getRange(listStart);
     const listView = range.data.createDataView();
     let offs = listStart - range.start;
@@ -451,32 +454,7 @@ function parseMaterialData(dataMap: DataMap, listStart: number): Material[] {
 
         const textureStart = scrollView.getUint32(0x04);
         const paletteStart = scrollView.getUint32(0x2C);
-        const textureAddresses: number[] = [];
-        const paletteAddresses: number[] = [];
 
-        if (textureStart > 0) { // only missing in rainbow cloud skybox?
-            const textureView = dataMap.getView(textureStart);
-            let textureOffs = 0;
-            while (true) {
-                const addr = textureView.getUint32(textureOffs);
-                if (addr === 0)
-                    break;
-                textureAddresses.push(addr);
-                textureOffs += 4;
-            }
-        }
-
-        if (paletteStart > 0) {
-            const paletteView = dataMap.getView(paletteStart);
-            let paletteOffs = 0;
-            while (true) {
-                const addr = paletteView.getUint32(paletteOffs);
-                if (addr === 0)
-                    break;
-                paletteAddresses.push(addr);
-                paletteOffs += 4;
-            }
-        }
         const scale = scrollView.getUint16(0x08);
         const shift = scrollView.getUint16(0x0A);
         const halve = scrollView.getUint32(0x10);
@@ -520,50 +498,59 @@ function parseMaterialData(dataMap: DataMap, listStart: number): Material[] {
         });
 
         materialList.push({
-            flags, textureAddresses, paletteAddresses, tiles, textures, primLOD, halve,
-            shift, scale, xScale, yScale, primColor, envColor, blendColor, diffuse, ambient,
+            flags: flags === 0 ? 0xA1 : flags, // empty flag means default, set up just a basic scrolling texture
+            textureStart, paletteStart, tiles, textures, primLOD, halve, usedTextures: [],
+            shift, scale, xScale, yScale, primColor, envColor, blendColor, diffuse, ambient, optional: false,
         });
-        // empty flag means default, set up just a basic scrolling texture
-        if (materialList[materialList.length - 1].flags === 0)
-            materialList[materialList.length - 1].flags = 0xa1;
     }
     return materialList;
 }
 
-type graphRenderer = (dataMap: DataMap, displayList: number, state: F3DEX2.RSPState, materials?: Material[]) => Model;
+type graphRenderer = (dataMap: DataMap, displayList: number, states: F3DEX2.RSPState[], materials?: MaterialData[]) => Model;
 
-function selectRenderer(addr: number): graphRenderer | null {
+function selectRenderer(addr: number): graphRenderer {
     switch (addr) {
+        case 0x80014F98:
         case 0x800a15D8:
         case 0x803594DC: // object
             return runRoomDL;
         case 0x8035942C: // object, fog
         case 0x8035958C: // object
-        case 0X802DE26C: // moltres: set 2 cycle and no Z update
             return runSplitDL;
+        case 0X802DE26C: // moltres: set 2 cycle and no Z update
+            return moltresDL;
         case 0x80359534: // object
-        case 0x800A1608: // maybe XLU?
+        case 0x800A1608:
         case 0x802DFAE4: // volcano smoke: disable TLUT, set xlu
             return runMultiDL;
         case 0x80359484: // object
-        case 0x800A16B0: // just the zero one?
+        case 0x800A16B0: // just the zero-one?
             return runMultiSplitDL;
 
-        default: console.warn('unknown renderfunc', hexzero(addr, 8));
+        default: throw `unknown renderfunc ${hexzero(addr, 8)}`;
     }
-    return null;
 }
 
-function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, state: F3DEX2.RSPState): GFXNode[] {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, output: RSPSharedOutput): GFXNode[] {
     const view = dataMap.getView(graphStart);
     const nodes: GFXNode[] = [];
 
     const parentIndices: number[] = [];
 
+    const states = nArray(2, () => new F3DEX2.RSPState(output, dataMap));
+
+    const renderer = selectRenderer(renderFunc);
+    if (renderer === moltresDL)
+        initDL(states[0], false);
+    else
+        initDL(states[0], true);
+    initDL(states[1], false);
+
     let currIndex = 0;
     let offs = 0;
     while (true) {
-        const depth = view.getUint32(offs + 0x00) & 0xFFF;
+        const billboard = view.getUint8(offs + 0x02) >>> 4;
+        const depth = view.getUint16(offs + 0x02) & 0xFFF;
         if (depth === 0x12)
             break;
         let dl = view.getUint32(offs + 0x04);
@@ -574,14 +561,12 @@ function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, 
         const parent = depth === 0 ? -1 : assertExists(parentIndices[depth - 1]);
         parentIndices[depth] = currIndex;
 
-        const node: GFXNode = { translation, euler, scale, parent, materials: [] };
+        const node: GFXNode = { billboard, translation, euler, scale, parent, materials: [] };
         if (dl > 0) {
             node.materials = materialList === 0 ? [] : parseMaterialData(dataMap, dataMap.deref(materialList + currIndex * 4));
-            const renderer = selectRenderer(renderFunc);
-            if (renderer !== null) {
-                node.model = renderer(dataMap, dl, state, node.materials);
-                state.clear();
-            }
+            node.model = renderer(dataMap, dl, states, node.materials);
+            states[0].clear();
+            states[1].clear();
         }
         nodes.push(node);
         offs += 0x2c;
@@ -612,12 +597,13 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     const sharedOutput = new RSPSharedOutput();
     sharedOutput.textureCache = sharedCache;
     const rspState = new F3DEX2.RSPState(sharedOutput, dataMap);
+    initDL(rspState, true);
 
-    const materials: Material[] = materialData !== 0 ? parseMaterialData(dataMap, dataMap.deref(materialData)) : [];
-    // for now, materials are just handled statically, using their initial state
-    const model = runRoomDL(dataMap, dlStart, rspState, materials);
+    const materials: MaterialData[] = materialData !== 0 ? parseMaterialData(dataMap, dataMap.deref(materialData)) : [];
+    const model = runRoomDL(dataMap, dlStart, [rspState], materials);
     const node: GFXNode = {
         model,
+        billboard: 0,
         parent: -1,
         translation: pos,
         euler: vec3.create(),
@@ -627,11 +613,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
 
     let animation: AnimationData | null = null;
     if (animData !== 0) {
-        const animStart = dataMap.deref(animData);
-        const mats: AnimationTrack[] = [];
-        for (let i = 0; i < materials.length; i++)
-            mats.push(parseAnimationTrack(dataMap, dataMap.deref(animStart + 4*i))!);
-        animation = {fps: 30, frames: 0, tracks: [null], materialTracks: [mats]};
+        animation = {fps: 30, frames: 0, tracks: [null], materialTracks: parseMaterialAnimation(dataMap, animData, [node])};
     }
 
     const objects: ObjectSpawn[] = [];
@@ -655,76 +637,99 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     return { node, objects, animation};
 }
 
-function runOpaqueDL(dataMap: DataMap, dlStart: number, rspState: F3DEX2.RSPState, materials: Material[] = []): F3DEX2.RSPState {
-    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE | F3DEX2.RSP_Geometry.G_LIGHTING);
-    rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
+function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
+    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE);
+    if (opaque) {
+        rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
+        rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_LIGHTING);
+    } else
+        rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
     // initially 2-cycle, though this can change
     rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // some objects seem to assume this gets set, might rely on stage rendering first
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
-    F3DEX2.runDL_F3DEX2(rspState, dlStart, materialDLHandler(materials));
-    return rspState;
 }
 
-function runRoomDL(dataMap: DataMap, displayList: number, state: F3DEX2.RSPState, materials: Material[] = []): Model {
-    const rspState = runOpaqueDL(dataMap, displayList, state, materials);
+function runRoomDL(dataMap: DataMap, displayList: number, states: F3DEX2.RSPState[], materials: MaterialData[] = []): Model {
+    const rspState = states[0];
+    F3DEX2.runDL_F3DEX2(rspState, displayList, materialDLHandler(materials));
     const rspOutput = rspState.finish();
     return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
 }
 
 // run two display lists, before and after pushing a matrix
-function runSplitDL(dataMap: DataMap, dlPair: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+function runSplitDL(dataMap: DataMap, dlPair: number, states: F3DEX2.RSPState[], materials: MaterialData[] = []): Model {
     const view = dataMap.getView(dlPair);
     const firstDL = view.getUint32(0x00);
     const secondDL = view.getUint32(0x04);
+    const rspState = states[0];
     rspState.SP_MatrixIndex = 1;
     if (firstDL !== 0)
-        runOpaqueDL(dataMap, firstDL, rspState, materials);
+        F3DEX2.runDL_F3DEX2(rspState, firstDL, materialDLHandler(materials));
     rspState.SP_MatrixIndex = 0;
     if (secondDL !== 0)
-        if (firstDL === 0)
-            rspState = runOpaqueDL(dataMap, secondDL, rspState, materials);
-        else
-            F3DEX2.runDL_F3DEX2(rspState, secondDL, materialDLHandler(materials));
+        F3DEX2.runDL_F3DEX2(rspState, secondDL, materialDLHandler(materials));
     const rspOutput = rspState.finish();
     return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
 }
 
-function runMultiDL(dataMap: DataMap, dlList: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+function moltresDL(dataMap: DataMap, dlPair: number, states: F3DEX2.RSPState[], materials: MaterialData[] = []): Model {
+    return runSplitDL(dataMap, dlPair, states, materials);
+}
+
+
+function runMultiDL(dataMap: DataMap, dlList: number, states: F3DEX2.RSPState[], materials: MaterialData[] = []): Model {
     const view = dataMap.getView(dlList);
+    const handler = materialDLHandler(materials);
+
     let offs = 0;
-    let model: Model;
     while (true) {
         const index = view.getUint32(offs + 0x00);
         const dlStart = view.getUint32(offs + 0x04);
-        // TODO: figure out what the display lists referenced by the indices mean. transparency?
-        if (index !== 4) {
-            return runRoomDL(dataMap, dlStart, rspState, materials);
-        }
+        if (index === 4)
+            break;
+        F3DEX2.runDL_F3DEX2(states[index], dlStart, handler);
         offs += 8;
     }
+    let rspOutput = states[0].finish();
+    let xluOutput = states[1].finish();
+    if (rspOutput === null)
+        rspOutput = xluOutput;
+    else if (xluOutput !== null)
+        rspOutput.drawCalls.push(...xluOutput.drawCalls);
+
+    return {sharedOutput: states[0].sharedOutput, rspState: states[0], rspOutput };
 }
 
-function runMultiSplitDL(dataMap: DataMap, dlList: number, rspState: F3DEX2.RSPState, materials: Material[] = []): Model {
+function runMultiSplitDL(dataMap: DataMap, dlList: number, states: F3DEX2.RSPState[], materials: MaterialData[] = []): Model {
     const view = dataMap.getView(dlList);
     let offs = 0;
     while (true) {
         const index = view.getUint32(offs);
-        if (index !== 4) {
-            return runSplitDL(dataMap, dlList + offs + 4, rspState, materials);
-        }
+        if (index === 4)
+            break;
+        runSplitDL(dataMap, dlList + offs + 4, [states[index]], materials);
         offs += 0xC;
     }
+    let rspOutput = states[0].finish();
+    let xluOutput = states[1].finish();
+    if (rspOutput === null)
+        rspOutput = xluOutput;
+    else if (xluOutput !== null)
+        rspOutput.drawCalls.push(...xluOutput.drawCalls);
+
+    return {sharedOutput: states[0].sharedOutput, rspState: states[0], rspOutput };
 }
 
-function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
+function materialDLHandler(scrollData: MaterialData[]): F3DEX2.dlRunner {
     return function (state: F3DEX2.RSPState, addr: number): void {
         assert((addr >>> 24) === 0x0E, `bad dl jump address ${hexzero(addr, 8)}`);
+        state.materialIndex = (addr >>> 3) & 0xFF;
         // insert the display list that would be generated
         const scroll = assertExists(scrollData[(addr >>> 3) & 0xFF]);
         if (scroll.flags & MaterialFlags.Palette) {
-            state.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, scroll.paletteAddresses[0]);
+            state.gDPSetTextureImage(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, state.dataMap.deref(scroll.paletteStart));
             if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Tex2)) {
                 state.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_4b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
                 state.gDPLoadTLUT(5, scroll.textures[0].siz === ImageSize.G_IM_SIZ_8b ? 256 : 16);
@@ -737,11 +742,9 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
             const siz2 = scroll.textures[1].siz === ImageSize.G_IM_SIZ_32b ? ImageSize.G_IM_SIZ_32b : ImageSize.G_IM_SIZ_16b;
 
             // guess at texture index, we'll load the right one later
+            const texOffset = (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special)) === 0 ? 0 : 4;
 
-            const hasTwoTImg = scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special);
-            const texIndex = hasTwoTImg && scroll.textureAddresses.length > 1 ? 1 : 0;
-
-            state.gDPSetTextureImage(scroll.textures[1].fmt, siz2, 0, scroll.textureAddresses[texIndex]);
+            state.gDPSetTextureImage(scroll.textures[1].fmt, siz2, 0, state.dataMap.deref(scroll.textureStart + texOffset));
             if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special)) {
                 let texels = scroll.textures[1].width * scroll.textures[1].height;
                 switch (scroll.textures[1].siz) {
@@ -757,7 +760,7 @@ function materialDLHandler(scrollData: Material[]): F3DEX2.dlRunner {
         }
 
         if (scroll.flags & (MaterialFlags.Tex1 | MaterialFlags.Special))
-            state.gDPSetTextureImage(scroll.textures[0].fmt, scroll.textures[0].siz, 0, scroll.textureAddresses[0]);
+            state.gDPSetTextureImage(scroll.textures[0].fmt, scroll.textures[0].siz, 0, state.dataMap.deref(scroll.textureStart));
 
         const adjXScale = scroll.halve === 0 ? scroll.xScale : scroll.xScale / 2;
         if (scroll.flags & MaterialFlags.Tile0) {
@@ -988,8 +991,11 @@ function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): Anim
     const animationStart = dataMap.deref(addr);
     const initFunc = dataMap.deref(addr + 0x04); // used to set initial state
 
-    if (animationStart === 0)
+    if (animationStart === 0) {
+        // make sure materials load default textures
+        parseMaterialAnimation(dataMap, 0, nodes);
         return [];
+    }
 
     const view = dataMap.getView(animationStart);
     const anims: AnimationData[] = [];
@@ -1018,24 +1024,34 @@ function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): Anim
             tracks.push(parseAnimationTrack(dataMap, trackStart));
         }
 
-        const materialTracks: (AnimationTrack | null)[][] = [];
-        if (materialData !== 0) {
-            const materialView = dataMap.getView(materialData);
-            for (let i = 0; i < nodes.length; i++) {
-                const matListStart = materialView.getUint32(4 * i);
-                const nodeMats: (AnimationTrack | null)[] = [];
-                if (matListStart !== 0) {
-                    for (let j = 0; j < nodes[i].materials.length; j++) {
-                        const trackStart = dataMap.deref(matListStart + 4 * j);
-                        nodeMats.push(parseAnimationTrack(dataMap, trackStart));
-                    }
-                }
-                materialTracks.push(nodeMats);
-            }
-        }
-        anims.push({ fps, frames, tracks, materialTracks });
+        anims.push({ fps, frames, tracks, materialTracks: parseMaterialAnimation(dataMap, materialData, nodes) });
     }
     return anims;
+}
+
+function parseMaterialAnimation(dataMap: DataMap, addr: number, nodes: GFXNode[]): (AnimationTrack | null)[][] {
+    const materialTracks: (AnimationTrack | null)[][] = [];
+    if (addr !== 0) {
+        const materialView = dataMap.getView(addr);
+        for (let i = 0; i < nodes.length; i++) {
+            const matListStart = materialView.getUint32(4 * i);
+            const nodeMats: (AnimationTrack | null)[] = [];
+            for (let j = 0; j < nodes[i].materials.length; j++) {
+                const newTrack = matListStart === 0 ? null : parseAnimationTrack(dataMap, dataMap.deref(matListStart + 4 * j));
+                findNewTextures(dataMap, newTrack, nodes[i], j);
+                nodeMats.push(newTrack);
+            }
+            materialTracks.push(nodeMats);
+        }
+    } else {
+        // any materials with textures must be able to use the default
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = 0; j < nodes[i].materials.length; j++) {
+                findNewTextures(dataMap, null, nodes[i], j);
+            }
+        }
+    }
+    return materialTracks;
 }
 
 interface GroundPlane {

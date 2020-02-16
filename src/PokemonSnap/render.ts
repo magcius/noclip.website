@@ -4,28 +4,36 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { GFXNode, AnimationData, ObjectDef } from './room';
-import { Animator, AObjOP, AObjTarget, getPathPoint } from './animation';
+import { GFXNode, AnimationData, ObjectDef, MaterialFlags } from './room';
+import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation';
 import { vec4, mat4, vec3 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
 import { GfxMegaStateDescriptor, GfxProgram, GfxCullMode, GfxDevice, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { nArray, assertExists } from '../util';
 import { TextureMapping } from '../TextureHolder';
 import { translateCullMode } from '../gx/gx_material';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT } from '../MathHelpers';
+import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 
 export const enum SnapPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
 }
 
+class SnapProgram extends F3DEX_Program {
+    protected blendAlpha = 8 / 255;
+}
+
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
+const colorScratch = vec4.create();
 class DrawCallInstance {
+    public visible = true;
+
     private textureEntry: RDP.Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
@@ -35,9 +43,9 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
-    public visible = true;
+    private material: Material | null = null;
 
-    constructor(geometryData: RenderData, private drawCall: F3DEX2.DrawCall, private drawMatrices: mat4[]) {
+    constructor(geometryData: RenderData, private drawCall: F3DEX2.DrawCall, private drawMatrices: mat4[], private billboard: number, materials: Material[] = []) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -46,6 +54,9 @@ class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
             }
         }
+
+        if (drawCall.materialIndex >= 0)
+            this.material = assertExists(materials[drawCall.materialIndex]);
 
         this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.createProgram();
@@ -57,7 +68,7 @@ class DrawCallInstance {
         const tiles: RDP.TileState[] = [];
         for (let i = 0; i < this.textureEntry.length; i++)
             tiles.push(this.textureEntry[i].tile);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, tiles);
+        const program = new SnapProgram(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -81,6 +92,8 @@ class DrawCallInstance {
 
         if (this.alphaVisualizerEnabled)
             program.defines.set('USE_ALPHA_VISUALIZER', '1');
+
+        program.defines.set('EXTRA_COMBINE', '1');
 
         this.program = program;
         this.gfxProgram = null;
@@ -120,6 +133,12 @@ class DrawCallInstance {
             // shift by 10.2 UL coords, rescaled by texture size
             m[12] = -entry.tile.uls / 4 / entry.width;
             m[13] = -entry.tile.ult / 4 / entry.height;
+
+            const tileFlag = textureEntryIndex === 0 ? MaterialFlags.Tile0 : MaterialFlags.Tile1;
+            if (this.material && this.material.data.flags & tileFlag) {
+                m[12] = -this.material.getXShift(textureEntryIndex) / entry.width;
+                m[13] = -this.material.getYShift(textureEntryIndex) / entry.height;
+            }
         } else {
             mat4.identity(m);
         }
@@ -134,6 +153,12 @@ class DrawCallInstance {
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
+
+        // TODO: figure out layers
+        if (!(this.drawCall.DP_OtherModeL & (1 << F3DEX.OtherModeL_Layout.Z_UPD)))
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+
+        this.material?.fillTextureMappings(this.textureMappings);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
@@ -148,6 +173,10 @@ class DrawCallInstance {
 
         for (let i = 0; i < this.drawMatrices.length; i++) {
             mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrices[i]);
+            if (this.billboard & 8)
+                J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+            else if (this.billboard & 2)
+                J3DCalcYBBoardMtx(modelViewScratch, modelViewScratch);
             offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
         }
 
@@ -157,20 +186,30 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
-        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 3 * 4);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        // TODO: set these properly, this mostly just reproduces vertex*texture
-        offs += fillVec4v(comb, offs, this.drawCall.DP_PrimColor);   // primitive color
-        offs += fillVec4v(comb, offs, this.drawCall.DP_EnvColor);   // environment color
+
+        vec4.copy(colorScratch, this.drawCall.DP_PrimColor);
+        this.material?.getColor(colorScratch, ColorField.Prim);
+        offs += fillVec4v(comb, offs, colorScratch);
+
+        vec4.copy(colorScratch, this.drawCall.DP_EnvColor);
+        this.material?.getColor(colorScratch, ColorField.Env);
+        offs += fillVec4v(comb, offs, colorScratch);
+
+        let primLOD = this.drawCall.DP_PrimLOD;
+        if (this.material && this.material.data.flags & (MaterialFlags.PrimLOD | MaterialFlags.Special))
+            primLOD = this.material.getPrimLOD();
+        offs += fillVec4(comb, offs, primLOD);
     }
 }
 
 export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): void {
-    mat4.fromTranslation(dst, pos);
-    mat4.rotateZ(dst, dst, euler[2]);
-    mat4.rotateY(dst, dst, euler[1]);
-    mat4.rotateX(dst, dst, euler[0]);
-    mat4.scale(dst, dst, scale);
+    computeModelMatrixSRT(dst,
+        scale[0], scale[1], scale[2],
+        euler[0], euler[1], euler[2],
+        pos[0], pos[1], pos[2]
+    );
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -193,17 +232,21 @@ export class NodeRenderer {
     public scale = vec3.fromValues(1, 1, 1);
 
     public animator = new Animator();
+    public materials: Material[] = [];
 
-    constructor(private renderData: RenderData, private graph: GFXNode, public parent: mat4, public isSkybox = false) {
+    constructor(renderData: RenderData, private node: GFXNode, public parent: mat4, public isSkybox = false) {
         const drawMatrices = [this.modelMatrix, parent];
 
-        if (graph.model !== undefined && graph.model.rspOutput !== null)
-            for (let i = 0; i < graph.model.rspOutput.drawCalls.length; i++)
-                this.drawCalls.push(new DrawCallInstance(renderData, graph.model.rspOutput.drawCalls[i], drawMatrices));
+        for (let i = 0; i < node.materials.length; i++)
+            this.materials.push(new Material(node.materials[i], renderData.textures));
 
-        vec3.copy(this.translation, graph.translation);
-        vec3.copy(this.euler, graph.euler);
-        vec3.copy(this.scale, graph.scale);
+        if (node.model !== undefined && node.model.rspOutput !== null)
+            for (let i = 0; i < node.model.rspOutput.drawCalls.length; i++)
+                this.drawCalls.push(new DrawCallInstance(renderData, node.model.rspOutput.drawCalls[i], drawMatrices, this.node.billboard, this.materials));
+
+        vec3.copy(this.translation, node.translation);
+        vec3.copy(this.euler, node.euler);
+        vec3.copy(this.scale, node.scale);
     }
 
     public animate(time: number): void {
@@ -216,18 +259,21 @@ export class NodeRenderer {
                 continue;
             const value = interps[i].compute(time);
             switch (i) {
-                case AObjTarget.Pitch: this.euler[0] = value; break;
-                case AObjTarget.Yaw: this.euler[1] = value; break;
-                case AObjTarget.Roll: this.euler[2] = value; break;
-                case AObjTarget.Path: getPathPoint(this.translation, assertExists(interps[i].path), clamp(value, 0, 1)); break;
-                case AObjTarget.X: this.translation[0] = value; break;
-                case AObjTarget.Y: this.translation[1] = value; break;
-                case AObjTarget.Z: this.translation[2] = value; break;
-                case AObjTarget.ScaleX: this.scale[0] = value; break;
-                case AObjTarget.ScaleY: this.scale[1] = value; break;
-                case AObjTarget.ScaleZ: this.scale[2] = value; break;
+                case ModelField.Pitch: this.euler[0] = value; break;
+                case ModelField.Yaw: this.euler[1] = value; break;
+                case ModelField.Roll: this.euler[2] = value; break;
+                case ModelField.Path: getPathPoint(this.translation, assertExists(interps[i].path), clamp(value, 0, 1)); break;
+                case ModelField.X: this.translation[0] = value; break;
+                case ModelField.Y: this.translation[1] = value; break;
+                case ModelField.Z: this.translation[2] = value; break;
+                case ModelField.ScaleX: this.scale[0] = value; break;
+                case ModelField.ScaleY: this.scale[1] = value; break;
+                case ModelField.ScaleZ: this.scale[2] = value; break;
             }
         }
+
+        for (let i = 0; i < this.materials.length; i++)
+            this.materials[i].update(time);
 
         buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
@@ -315,6 +361,12 @@ export class ModelRenderer {
         const newAnim = this.animations[index];
         for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animator.setTrack(newAnim.tracks[i]);
+            if (newAnim.materialTracks.length == 0 || newAnim.materialTracks[i].length === 0)
+                for (let j = 0; j < this.renderers[i].materials.length; j++)
+                    this.renderers[i].materials[j].setTrack(null);
+            else
+                for (let j = 0; j < this.renderers[i].materials.length; j++)
+                    this.renderers[i].materials[j].setTrack(newAnim.materialTracks[i][j]);
         }
     }
 

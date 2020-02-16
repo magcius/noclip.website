@@ -28,6 +28,8 @@ export class F3DEX_Program extends DeviceProgram {
     public static ub_DrawParams = 1;
     public static ub_CombineParams = 2;
 
+    protected blendAlpha = 0.5;
+
     public both = `
 precision mediump float;
 
@@ -48,6 +50,9 @@ layout(row_major, std140) uniform ub_DrawParams {
 uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
+#ifdef EXTRA_COMBINE
+    vec4 u_MiscComb;
+#endif
 };
 
 uniform sampler2D u_Texture[2];
@@ -145,7 +150,7 @@ void main() {
         const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
-            alphaThreshold = 0.5; // actually blend color, seems to always be 0.5
+            alphaThreshold = this.blendAlpha;
         } else if (alphaCompare != 0x00) {
             alphaThreshold = .0125; // should be dither
         } else if (cvgXAlpha != 0x00) {
@@ -189,12 +194,17 @@ void main() {
             't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
             'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
             't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
-            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
+            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 'u_MiscComb.rrr' /* prim LOD */, 't_Zero.rgb'
         ];
 
         const alphaInputs: string[] = [
             'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
+        ];
+
+        const alphaMultInputs: string[] = [
+            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
         ];
 
         function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
@@ -240,7 +250,7 @@ vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
+    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaMultInputs[py.z]} + ${alphaInputs[py.w]};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
@@ -248,7 +258,7 @@ vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaMultInputs[pw.z]} + ${alphaInputs[pw.w]};
 }
 
 void main() {

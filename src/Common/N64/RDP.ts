@@ -239,7 +239,7 @@ export class TextureCache {
     public textures: Texture[] = [];
 
     public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
-        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && t.dramPalAddr === dramPalAddr && textureMatch(t.tile, tile));
+        const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (tile.fmt !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
