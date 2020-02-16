@@ -3,7 +3,7 @@ import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Sha
 import { mat4, mat2d, mat2, mat3, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
-import { colorNew } from "../Color";
+import { colorNewFromRGBA } from "../Color";
 import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 
 export interface MPHbin {
@@ -54,9 +54,9 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const palletIndex = view.getUint16(0x44, true);
     const textureIndex = view.getUint16(0x46, true);
     const texParams = view.getUint16(0x48, true);
-    const diffuse = colorNew(view.getInt8(0x4A), view.getInt8(0x4B), view.getInt8(0x4C));
-    const ambient = colorNew(view.getInt8(0x4D), view.getInt8(0x4E), view.getInt8(0x4F));
-    const specular = colorNew(view.getInt8(0x50), view.getInt8(0x51), view.getInt8(0x52));
+    const diffuse = colorNewFromRGBA(view.getInt8(0x4A), view.getInt8(0x4B), view.getInt8(0x4C));
+    const ambient = colorNewFromRGBA(view.getInt8(0x4D), view.getInt8(0x4E), view.getInt8(0x4F));
+    const specular = colorNewFromRGBA(view.getInt8(0x50), view.getInt8(0x51), view.getInt8(0x52));
     const field_0x53 = view.getInt8(0x53);
     const polyAttribs = view.getInt32(0x54, true);
 
