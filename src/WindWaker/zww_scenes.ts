@@ -1125,6 +1125,7 @@ const sceneDescs = [
     new SceneDesc("K_Test5", "K_Test5"),
     new SceneDesc("K_Test6", "K_Test6"),
     new SceneDesc("K_Test8", "K_Test8"),
+    new SceneDesc("K_Test9", "K_Test9"),
     new SceneDesc("K_Testa", "K_Testa"),
     new SceneDesc("K_Testb", "K_Testb"),
     new SceneDesc("K_Testc", "K_Testc"),
