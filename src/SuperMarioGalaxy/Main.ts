@@ -254,8 +254,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
 
         // Prepare all of our NameObjs.
-        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
         executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture!);
+        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
         // Push to the renderinst.
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport);

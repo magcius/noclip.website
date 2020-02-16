@@ -330,15 +330,15 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // IndTex.
         this.setIndirectTextureOverride();
 
-        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, sunshineClearDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.SKYBOX);
