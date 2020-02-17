@@ -328,6 +328,20 @@ export class Material {
         return lodVal % 1;
     }
 
+    public xScale(): number {
+        const newScale = this.animator.compute(MaterialField.XScale, this.lastTime);
+        if (newScale === 0)
+            return 1;
+        return this.data.xScale / newScale;
+    }
+
+    public yScale(): number {
+        const newScale = this.animator.compute(MaterialField.YScale, this.lastTime);
+        if (newScale === 0)
+            return 1;
+        return this.data.yScale / newScale;
+    }
+
     public getXShift(index: number): number {
         const shifter = this.animator.interpolators[MaterialField.T0_XShift + index * tileFieldOffset];
         const scaler = this.animator.interpolators[MaterialField.XScale];

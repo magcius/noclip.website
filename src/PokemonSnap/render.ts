@@ -127,8 +127,14 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            m[0] = 1 / entry.width;
-            m[5] = 1 / entry.height;
+            const sShift = entry.tile.shifts <= 10 ? 1 / (1 << entry.tile.shifts) : (1 << (16 - entry.tile.shifts));
+            const tShift = entry.tile.shiftt <= 10 ? 1 / (1 << entry.tile.shiftt) : (1 << (16 - entry.tile.shiftt));
+            m[0] = sShift / entry.width;
+            m[5] = tShift / entry.height;
+            if (this.material && this.material.data.flags & MaterialFlags.Scale) {
+                m[0] *= this.material.xScale();
+                m[5] *= this.material.yScale();
+            }
 
             // shift by 10.2 UL coords, rescaled by texture size
             m[12] = -entry.tile.uls / 4 / entry.width;

@@ -467,7 +467,7 @@ function parseMaterialData(dataMap: DataMap, listStart: number): MaterialData[] 
         const diffuse = getColor(scrollView, 0x60);
         const ambient = getColor(scrollView, 0x64);
 
-        const primLOD = scrollView.getUint8(0x54);
+        const primLOD = scrollView.getUint8(0x54) / 255;
 
         const tiles: TileParams[] = [];
         tiles.push({
