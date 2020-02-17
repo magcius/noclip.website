@@ -28,8 +28,6 @@ export class F3DEX_Program extends DeviceProgram {
     public static ub_DrawParams = 1;
     public static ub_CombineParams = 2;
 
-    protected blendAlpha = 0.5;
-
     public both = `
 precision mediump float;
 
@@ -118,7 +116,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");

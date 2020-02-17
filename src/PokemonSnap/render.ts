@@ -23,10 +23,6 @@ export const enum SnapPass {
     SKYBOX = 0x02,
 }
 
-class SnapProgram extends F3DEX_Program {
-    protected blendAlpha = 8 / 255;
-}
-
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -68,7 +64,7 @@ class DrawCallInstance {
         const tiles: RDP.TileState[] = [];
         for (let i = 0; i < this.textureEntry.length; i++)
             tiles.push(this.textureEntry[i].tile);
-        const program = new SnapProgram(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, tiles);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, 8/255, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
