@@ -201,7 +201,7 @@ export class Animator {
                             this.interpolators[i].v1 = 0;
                             if (entry.increment !== 0)
                                 this.interpolators[i].v0 = (this.interpolators[i].p1 - this.interpolators[i].p0) / entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
@@ -216,7 +216,7 @@ export class Animator {
                             this.interpolators[i].v1 = entry.data[offs++];
                             if (entry.increment !== 0)
                                 this.interpolators[i].len = 1 / entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
@@ -237,7 +237,7 @@ export class Animator {
                             this.interpolators[i].v1 = 0;
                             if (entry.increment !== 0)
                                 this.interpolators[i].len = 1 / entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
@@ -250,7 +250,7 @@ export class Animator {
                             this.interpolators[i].p1 = entry.data[offs++];
                             this.interpolators[i].v1 = 0;
                             this.interpolators[i].len = entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
@@ -274,7 +274,7 @@ export class Animator {
                             vec4.copy(this.colors[i].c0, this.colors[i].c1);
                             vec4.copy(this.colors[i].c1, assertExists(entry.colors[offs++]));
                             this.interpolators[i].len = entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
@@ -287,7 +287,7 @@ export class Animator {
                             vec4.copy(this.colors[i].c1, assertExists(entry.colors[offs++]));
                             if (entry.increment !== 0)
                                 this.interpolators[i].len = 1 / entry.increment;
-                            this.interpolators[i].start = time;
+                            this.interpolators[i].start = this.nextUpdate;
                         }
                     }
                 } break;
