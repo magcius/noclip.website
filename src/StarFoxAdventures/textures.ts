@@ -2,10 +2,11 @@ import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
-import { loadRes } from './resource';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
-import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
+import { loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
+import { GfxDevice, GfxMipFilterMode, GfxTexture, GfxSampler, GfxFormat, makeTextureDescriptor2D, GfxWrapMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import { decodeTex_IA16, decodeTex_RGBA16, decodeTex_I4, decodeTex_RGBA32, decodeTex_I8 } from '../Common/N64/Image';
+
+import { loadRes } from './resource';
 
 interface LoadedTexture {
     offset: number;

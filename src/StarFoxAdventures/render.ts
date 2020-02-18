@@ -1,16 +1,15 @@
 import * as Viewer from '../viewer';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, loadTextureFromMipChain, translateWrapModeGfx, translateTexFilterGfx } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, getAttributeByteSize } from '../gx/gx_displaylist';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array } from '../gx/gx_displaylist';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import * as GX from '../gx/gx_enum';
-import * as GX_Texture from '../gx/gx_texture';
 import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
+
 import { DecodedTexture } from './textures';
 
 export class ModelInstance {
