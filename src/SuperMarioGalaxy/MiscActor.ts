@@ -4,8 +4,8 @@
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
-import { mat4, vec3, vec2 } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
+import { mat4, vec3, vec2, quat } from 'gl-matrix';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, getMatrixAxisX } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -208,45 +208,6 @@ function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4 = scra
     const theta = degrees * MathConstants.DEG_TO_RAD;
     mat4.fromRotation(m, theta, upVec);
     vec3.transformMat4(dst, dst, m);
-}
-
-function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
-    dst[0] = x[0];
-    dst[1] = x[1];
-    dst[2] = x[2];
-    dst[3] = 0.0;
-    dst[4] = y[0];
-    dst[5] = y[1];
-    dst[6] = y[2];
-    dst[7] = 0.0;
-    dst[8] = z[0];
-    dst[9] = z[1];
-    dst[10] = z[2];
-    dst[11] = 0.0;
-}
-
-function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
-    const frontNorm = scratchVec3a;
-    const upNorm = scratchVec3b;
-    const right = scratchVec3c;
-    vec3.normalize(frontNorm, front);
-    vec3.cross(right, up, frontNorm);
-    vec3.normalize(right, right);
-    vec3.cross(upNorm, frontNorm, right);
-    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
-}
-
-function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
-    const upNorm = scratchVec3b;
-    const frontNorm = scratchVec3a;
-    const right = scratchVec3c;
-    vec3.normalize(upNorm, up);
-    vec3.cross(right, up, front);
-    vec3.normalize(right, right);
-    vec3.cross(frontNorm, right, upNorm);
-    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
 }
 
 // ClippingJudge has these distances.
@@ -691,33 +652,6 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
     }
 }
 
-class NPCActorItem {
-    public goods0: string = "";
-    public goods1: string = "";
-    public goodsJoint0: string = "";
-    public goodsJoint1: string = "";
-}
-
-export class NPCDirector {
-    private scratchNPCActorItem = new NPCActorItem();
-
-    constructor(private npcDataArc: RARC.JKRArchive) {
-    }
-
-    public getNPCItemData(npcName: string, index: number, npcActorItem = this.scratchNPCActorItem): NPCActorItem | null {
-        if (index === -1)
-            return null;
-
-        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`)!);
-        infoIter.setRecord(index);
-        npcActorItem.goods0 = assertExists(infoIter.getValueString('mGoods0'));
-        npcActorItem.goods1 = assertExists(infoIter.getValueString('mGoods1'));
-        npcActorItem.goodsJoint0 = assertExists(infoIter.getValueString('mGoodsJoint0'));
-        npcActorItem.goodsJoint1 = assertExists(infoIter.getValueString('mGoodsJoint1'));
-        return npcActorItem;
-    }
-}
-
 export class PlanetMap extends LiveActor {
     private bloomModel: ModelObj | null = null;
     private waterModel: PartsModel | null = null;
@@ -770,9 +704,59 @@ export class RailPlanetMap extends PlanetMap {
     }
 }
 
+class NPCActorItem {
+    public goods0: string = "";
+    public goods1: string = "";
+    public goodsJoint0: string = "";
+    public goodsJoint1: string = "";
+}
+
+export class NPCDirector {
+    private scratchNPCActorItem = new NPCActorItem();
+
+    constructor(private npcDataArc: RARC.JKRArchive) {
+    }
+
+    public getNPCItemData(npcName: string, index: number, npcActorItem = this.scratchNPCActorItem): NPCActorItem | null {
+        if (index === -1)
+            return null;
+
+        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`)!);
+        infoIter.setRecord(index);
+        npcActorItem.goods0 = assertExists(infoIter.getValueString('mGoods0'));
+        npcActorItem.goods1 = assertExists(infoIter.getValueString('mGoods1'));
+        npcActorItem.goodsJoint0 = assertExists(infoIter.getValueString('mGoodsJoint0'));
+        npcActorItem.goodsJoint1 = assertExists(infoIter.getValueString('mGoodsJoint1'));
+        return npcActorItem;
+    }
+}
+
 class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public goods0: PartsModel | null = null;
     public goods1: PartsModel | null = null;
+
+    public lastRotation = vec3.create();
+    public poseQuat = quat.create();
+
+    public waitAction: string | null = null;
+    public walkAction: string | null = null;
+    public desiredRailSpeed: number = 2.0;
+    public maxChangeRailSpeed: number = 0.1;
+    public poseBlendSpeed: number = 0.08;
+    public turnBckRate = 1.0;
+    public railGrounded: boolean = false;
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        if (!vec3.equals(this.rotation, this.lastRotation)) {
+            quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
+            vec3.copy(this.lastRotation, this.rotation);
+        }
+
+        makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
+
+        // TODO(jstpierre): Figure out why this breaks things.
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
 
     protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem | null, isIndirect: boolean = false): void {
         if (itemGoods !== null) {
@@ -1226,6 +1210,94 @@ export class Peach extends NPCActor {
     }
 }
 
+function makeQuatUpFront(q: quat, up: vec3, front: vec3): void {
+    makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
+    mat4.getRotation(q, scratchMatrix);
+    quat.normalize(q, q);
+}
+
+function blendQuatUpFront(q: quat, up: vec3, front: vec3, speed0: number, speed1: number): void {
+    // TODO(jstpierre): Figure this out
+    makeQuatUpFront(q, up, front);
+}
+
+function decidePose(actor: NPCActor, up: vec3, front: vec3, pos: vec3, unk: number, rotationSpeed: number, translationSpeed: number): void {
+    vec3.lerp(actor.translation, actor.translation, pos, translationSpeed);
+    if (vec3.equals(up, Vec3Zero))
+        debugger;
+    if (Number.isNaN(actor.poseQuat[0]))
+        debugger;
+    if (unk === 1.0 && rotationSpeed === 1.0) {
+        makeQuatUpFront(actor.poseQuat, up, front);
+    } else {
+        blendQuatUpFront(actor.poseQuat, up, front, unk, rotationSpeed);
+    }
+    if (Number.isNaN(actor.poseQuat[0]))
+        debugger;
+}
+
+function followRailPose(actor: NPCActor, rotationSpeed: number, translationSpeed: number): void {
+    getRailPos(scratchVec3a, actor);
+    getRailDirection(scratchVec3b, actor);
+    vec3.negate(scratchVec3c, actor.gravityVector);
+    decidePose(actor, scratchVec3c, scratchVec3b, scratchVec3a, 1.0, rotationSpeed, translationSpeed);
+}
+
+function followRailPoseOnGround(actor: NPCActor, railActor: LiveActor, speed: number): void {
+    // TODO(jstpierre): Figure this out.
+    followRailPose(actor, speed, speed);
+}
+
+function startMoveAction(actor: NPCActor): void {
+    if (!isExistRail(actor))
+        return;
+
+    adjustmentRailCoordSpeed(actor, actor.desiredRailSpeed, actor.maxChangeRailSpeed);
+    moveRailRider(actor);
+
+    if (actor.railGrounded) {
+        followRailPoseOnGround(actor, actor, actor.poseBlendSpeed);
+    } else {
+        followRailPose(actor, actor.poseBlendSpeed, actor.poseBlendSpeed);
+    }
+
+    if (isRailReachedGoal(actor))
+        reverseRailDirection(actor);
+}
+
+function tryStartTurnAction(actor: NPCActor): void {
+    if (actor.waitAction !== null)
+        tryStartAction(actor, actor.waitAction);
+}
+
+function tryStartTalkAction(actor: NPCActor): void {
+    tryStartTurnAction(actor);
+}
+
+function tryStartMoveTalkAction(actor: NPCActor): void {
+    if (!isExistRail(actor)) {
+        tryStartTalkAction(actor);
+        return;
+    }
+
+    if (isNearZero(actor.desiredRailSpeed, 0.001) && isNearZero(getRailCoordSpeed(actor), 0.001)) {
+        tryStartTalkAction(actor);
+        return;
+    }
+
+    // Some stuff related to talking...
+    startMoveAction(actor);
+    let action = actor.walkAction;
+
+    if (action !== null)
+        tryStartAction(actor, action);
+}
+
+function tryTalkNearPlayerAndStartMoveTalkAction(actor: NPCActor): void {
+    tryStartMoveTalkAction(actor);
+    // tryTalkNearPlayer(actor);
+}
+
 const enum PenguinNrv { Wait, Dive }
 
 export class Penguin extends NPCActor<PenguinNrv> {
@@ -1241,7 +1313,6 @@ export class Penguin extends NPCActor<PenguinNrv> {
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
-        this.initNerve
 
         this.boundingSphereRadius = 100;
 
@@ -1252,19 +1323,33 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
         this.arg0 = fallback(getJMapInfoArg0(infoIter), -1);
         if (this.arg0 === 0) {
-            startAction(this, `SitDown`);
+            this.waitAction = `SitDown`;
         } else if (this.arg0 === 1) {
-            startAction(this, `SwimWait`);
+            this.waitAction = `SwimWait`;
+            this.walkAction = `Swim`;
+            this.desiredRailSpeed = 5.0;
         } else if (this.arg0 === 2) {
-            startAction(this, `SwimWaitSurface`);
+            this.waitAction = `SwimWaitSurface`;
+            this.walkAction = `SwimSurface`;
+            this.desiredRailSpeed = 5.0;
         } else if (this.arg0 === 3) {
-            startAction(this, `SwimWaitSurface`);
+            this.waitAction = `SwimWaitSurface`;
         } else if (this.arg0 === 4) {
-            startAction(this, `SwimTurtleTalk`);
+            this.waitAction = `SwimTurtleTalk`;
+            this.walkAction = `SwimTurtle`;
+            this.desiredRailSpeed = 10.0;
         } else if (this.arg0 === 6) {
-            startAction(this, `Wait`);
+            this.waitAction = `Wait`;
+            this.walkAction = `DashA`;
+            this.desiredRailSpeed = 6.0;
+            this.poseBlendSpeed = 0.8;
+            this.railGrounded = true;
         } else {
-            startAction(this, `Wait`);
+            this.waitAction = `Wait`;
+            this.walkAction = `Walk`;
+            this.desiredRailSpeed = 1.5;
+            this.turnBckRate = 2.0;
+            this.railGrounded = true;
         }
 
         setBckFrameAtRandom(this);
@@ -1283,6 +1368,8 @@ export class Penguin extends NPCActor<PenguinNrv> {
         if (currentNerve === PenguinNrv.Wait) {
             if (isFirstStep(this))
                 this.diveCounter = getRandomInt(120, 300);
+
+            tryTalkNearPlayerAndStartMoveTalkAction(this);
 
             if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
                 this.setNerve(PenguinNrv.Dive);

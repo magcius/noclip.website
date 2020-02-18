@@ -613,7 +613,7 @@ export class EffectKeeper {
         let jointName = autoEffectInfo.getValueString('JointName');
         if (jointName === '')
             jointName = null;
-    
+
         // registerEmitter
         if (jointName !== null) {
             const jointMtx = assertExists(this.actor.getJointMtx(jointName));

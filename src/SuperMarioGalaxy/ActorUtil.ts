@@ -10,7 +10,7 @@ import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
-import { vec3, vec2, mat4 } from "gl-matrix";
+import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
 import { isNearZero, isNearZeroVec3 } from "../MathHelpers";
@@ -19,6 +19,9 @@ import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 
 const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
@@ -357,6 +360,21 @@ export function isBvaPlaying(actor: LiveActor, name: string): boolean {
     return actor.modelManager!.isBvaPlaying(name);
 }
 
+export function isActionStart(actor: LiveActor, action: string): boolean {
+    if (actor.actorAnimKeeper !== null)
+        return actor.actorAnimKeeper.isPlaying(actor, action);
+    else
+        return isBckPlaying(actor, action);
+}
+
+export function tryStartAction(actor: LiveActor, action: string): boolean {
+    if (isActionStart(actor, action))
+        return false;
+
+    startAction(actor, action);
+    return true;
+}
+
 export function startAction(actor: LiveActor, animationName: string): void {
     if (actor.actorAnimKeeper === null || !actor.actorAnimKeeper.start(actor, animationName))
         tryStartAllAnim(actor, animationName);
@@ -413,6 +431,10 @@ export function isRailGoingToEnd(actor: LiveActor): boolean {
     return actor.railRider!.direction === RailDirection.TOWARDS_END;
 }
 
+export function isRailReachedGoal(actor: LiveActor): boolean {
+    return actor.railRider!.isReachedGoal();
+}
+
 export function reverseRailDirection(actor: LiveActor): void {
     actor.railRider!.reverse();
 }
@@ -427,6 +449,21 @@ export function moveCoordToStartPos(actor: LiveActor): void {
 
 export function setRailCoordSpeed(actor: LiveActor, v: number): void {
     actor.railRider!.setSpeed(Math.abs(v));
+}
+
+export function adjustmentRailCoordSpeed(actor: LiveActor, target: number, maxSpeed: number): void {
+    const curSpeed = actor.railRider!.speed;
+
+    if (Math.abs(curSpeed - target) >= maxSpeed) {
+        if (target > curSpeed)
+            target = curSpeed + maxSpeed;
+        else if (target === curSpeed)
+            target = curSpeed;
+        else
+            target = curSpeed - maxSpeed;
+    }
+
+    actor.railRider!.setSpeed(target);
 }
 
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
@@ -588,4 +625,50 @@ export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): v
     calcGravityVector(sceneObjHolder, actor, actor.translation, scratchVec3);
     if (!isNearZeroVec3(scratchVec3, 0.001))
         vec3.copy(actor.gravityVector, scratchVec3);
+}
+
+export function makeMtxTRFromQuatVec(dst: mat4, q: quat, translation: vec3): void {
+    mat4.fromQuat(dst, q);
+    dst[12] = translation[0];
+    dst[13] = translation[1];
+    dst[14] = translation[2];
+}
+
+export function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
+    dst[0] = x[0];
+    dst[1] = x[1];
+    dst[2] = x[2];
+    dst[3] = 0.0;
+    dst[4] = y[0];
+    dst[5] = y[1];
+    dst[6] = y[2];
+    dst[7] = 0.0;
+    dst[8] = z[0];
+    dst[9] = z[1];
+    dst[10] = z[2];
+    dst[11] = 0.0;
+}
+
+export function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
+    const frontNorm = scratchVec3a;
+    const upNorm = scratchVec3b;
+    const right = scratchVec3c;
+    vec3.normalize(frontNorm, front);
+    vec3.cross(right, up, frontNorm);
+    vec3.normalize(right, right);
+    vec3.cross(upNorm, frontNorm, right);
+    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+    setTrans(dst, pos);
+}
+
+export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
+    const upNorm = scratchVec3b;
+    const frontNorm = scratchVec3a;
+    const right = scratchVec3c;
+    vec3.normalize(upNorm, up);
+    vec3.cross(right, up, front);
+    vec3.normalize(right, right);
+    vec3.cross(frontNorm, right, upNorm);
+    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+    setTrans(dst, pos);
 }
