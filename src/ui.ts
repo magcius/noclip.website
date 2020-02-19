@@ -1545,7 +1545,7 @@ class ViewerSettings extends Panel {
         this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
         sliderContainer.appendChild(this.camSpeedSlider.elem);
 
-        this.viewer.addKeyMoveSpeedListener(this.onCameraController.bind(this));
+        this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
@@ -1579,7 +1579,7 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
-    private onCameraController(): void {
+    private onKeyMoveSpeedChanged(): void {
         const keyMoveSpeed = this.viewer.cameraController!.getKeyMoveSpeed();
         if (keyMoveSpeed !== null) {
             setElementVisible(this.camSpeedSlider.elem, true);
@@ -1588,6 +1588,10 @@ class ViewerSettings extends Panel {
         } else {
             setElementVisible(this.camSpeedSlider.elem, false);
         }
+    }
+
+    public setInitialKeyMoveSpeed(v: number): void {
+        this.camSpeedSlider.setValue(v);
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
@@ -2619,6 +2623,9 @@ export class UI {
     public sceneChanged() {
         const cameraControllerClass = this.viewer.cameraController!.constructor as CameraControllerClass;
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
+        const keyMoveSpeed = this.viewer.cameraController!.getKeyMoveSpeed();
+        if (keyMoveSpeed !== null)
+            this.viewerSettings.setInitialKeyMoveSpeed(keyMoveSpeed);
 
         // Textures
         if (this.viewer.scene !== null) {
