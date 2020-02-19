@@ -1,5 +1,5 @@
 
-import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo } from "./gx_material";
+import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, SwapTable } from "./gx_material";
 import * as GX from "./gx_enum";
 import { autoOptimizeMaterial } from "./gx_render";
 
@@ -186,10 +186,10 @@ export class GXMaterialBuilder {
 
             this.setTevColorOp(idx, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
             this.setTevAlphaOp(idx, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-            this.setTevColorIn(idx, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
-            this.setTevAlphaIn(idx, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+            this.setTevColorIn(idx, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC),
+            this.setTevAlphaIn(idx, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA),
 
-            this.setTevKColorSel(idx, GX.KonstColorSel.KCSEL_1_4);
+            this.setTevKColorSel(idx, GX.KonstColorSel.KCSEL_2_8);
             this.setTevKAlphaSel(idx, GX.KonstAlphaSel.KASEL_1);
 
             this.setTevDirect(idx);
@@ -223,7 +223,7 @@ export class GXMaterialBuilder {
         tevStage.alphaRegId = alphaRegId;
     }
 
-    public setTevColorIn(idx: number, colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput): void {
+    public setTevColorIn(idx: number, colorInA: GX.CC, colorInB: GX.CC, colorInC: GX.CC, colorInD: GX.CC): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.colorInA = colorInA;
         tevStage.colorInB = colorInB;
@@ -231,7 +231,7 @@ export class GXMaterialBuilder {
         tevStage.colorInD = colorInD;
     }
 
-    public setTevAlphaIn(idx: number, alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput): void {
+    public setTevAlphaIn(idx: number, alphaInA: GX.CA, alphaInB: GX.CA, alphaInC: GX.CA, alphaInD: GX.CA): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.alphaInA = alphaInA;
         tevStage.alphaInB = alphaInB;
@@ -247,6 +247,12 @@ export class GXMaterialBuilder {
     public setTevKAlphaSel(idx: number, sel: GX.KonstAlphaSel): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.konstAlphaSel = sel;
+    }
+
+    public setTevSwapMode(idx: number, rasSwapTable: SwapTable | undefined, texSwapTable: SwapTable | undefined): void {
+        const tevStage = this.ensureTevStage(idx);
+        tevStage.rasSwapTable = rasSwapTable;
+        tevStage.texSwapTable = texSwapTable;
     }
 
     public setTevIndirect(tevStageIdx: number, indTexStage: GX.IndTexStageID, format: GX.IndTexFormat, biasSel: GX.IndTexBiasSel, matrixSel: GX.IndTexMtxID, wrapS: GX.IndTexWrap, wrapT: GX.IndTexWrap, addPrev: boolean, utcLod: boolean, alphaSel: GX.IndTexAlphaSel): void {

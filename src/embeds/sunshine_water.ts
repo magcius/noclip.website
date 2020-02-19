@@ -161,8 +161,8 @@ class SeaPlaneScene {
 
         if (configName.includes('noblend')) {
             // Disable blending.
-            gxMaterial.tevStages[0].alphaInD = GX.CombineAlphaInput.KONST;
-            gxMaterial.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
+            gxMaterial.tevStages[0].alphaInD = GX.CA.KONST;
+            gxMaterial.tevStages[1].alphaInD = GX.CA.KONST;
             gxMaterial.ropInfo.blendSrcFactor = GX.BlendFactor.ONE;
             gxMaterial.ropInfo.blendDstFactor = GX.BlendFactor.ZERO;
             material.translucent = false;
@@ -170,13 +170,13 @@ class SeaPlaneScene {
 
         if (configName.includes('opaque')) {
             // Make it always opaque.
-            gxMaterial.tevStages[0].colorInB = GX.CombineColorInput.TEXA;
-            gxMaterial.tevStages[0].colorInC = GX.CombineColorInput.RASA;
-            gxMaterial.tevStages[0].colorInD = GX.CombineColorInput.CPREV;
+            gxMaterial.tevStages[0].colorInB = GX.CC.TEXA;
+            gxMaterial.tevStages[0].colorInC = GX.CC.RASA;
+            gxMaterial.tevStages[0].colorInD = GX.CC.CPREV;
             gxMaterial.tevStages[0].colorScale = GX.TevScale.SCALE_1;
-            gxMaterial.tevStages[1].colorInB = GX.CombineColorInput.TEXA;
-            gxMaterial.tevStages[1].colorInC = GX.CombineColorInput.RASA;
-            gxMaterial.tevStages[1].colorInD = GX.CombineColorInput.CPREV;
+            gxMaterial.tevStages[1].colorInB = GX.CC.TEXA;
+            gxMaterial.tevStages[1].colorInC = GX.CC.RASA;
+            gxMaterial.tevStages[1].colorInD = GX.CC.CPREV;
             gxMaterial.tevStages[1].colorScale = GX.TevScale.SCALE_1;
             gxMaterial.tevStages[1].colorClamp = true;
 

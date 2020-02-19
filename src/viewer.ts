@@ -12,6 +12,7 @@ import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
+import { MathConstants } from './MathHelpers';
 
 export interface Texture {
     name: string;
@@ -83,7 +84,7 @@ export class Viewer {
     public cameraController: CameraController | null = null;
 
     public camera = new Camera();
-    public fovY: number = Math.PI / 4;
+    public fovY: number = MathConstants.TAU / 8;
     // Scene time. Can be paused / scaled / rewound / whatever.
     public sceneTime: number = 0;
     // requestAnimationFrame time. Used to calculate dt from the new time.

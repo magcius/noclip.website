@@ -16,9 +16,6 @@ export const enum MathConstants {
  * 
  * This is roughly equivalent to {@link mat4.fromTranslationRotationScale}, but the
  * math is done by hand to be a bit faster, and more trustworthy.
- *
- * Note that this does *not* compute a Maya model matrix, as sometimes used by Nintendo
- * middleware.
  */
 export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
     const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
@@ -37,6 +34,37 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
 
     dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
     dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = scaleZ * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
+}
+
+/**
+ * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed
+ * to be in radians. This is similar to {@link computeModelMatrixSRT}, except it also
+ * has support for Maya's Segment Scale Compensation (SSC).
+ */
+export function computeModelMatrixSRT_MayaSSC(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
+    const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
+    const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
+    const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
+
+    dst[0] =  scaleX * (cosY * cosZ);
+    dst[1] =  scaleX * (sinZ * cosY)                      * (parentScaleX / parentScaleY);
+    dst[2] =  scaleX * (-sinY)                            * (parentScaleX / parentScaleZ);
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ) * (parentScaleY / parentScaleX);
+    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  scaleY * (sinX * cosY)                      * (parentScaleY / parentScaleZ);
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ) * (parentScaleZ / parentScaleX);
+    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ) * (parentScaleZ / parentScaleY);
     dst[10] = scaleZ * (cosY * cosX);
     dst[11] = 0.0;
 
@@ -440,5 +468,6 @@ export function getMatrixTranslation(dst: vec3, m: mat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }
 
-export const Vec3Zero = vec3.fromValues(0, 0, 0);
+export const Vec3Zero  = vec3.fromValues(0, 0, 0);
+export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);

@@ -138,7 +138,7 @@ class Command_Bin {
     private translateModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, bin: BIN): void {
         for (let i = 0; i < bin.samplers.length; i++) {
             const sampler = bin.samplers[i];
-            const texture: GX_Texture.Texture = { ...sampler.texture, name: `unknown ${i}`, mipCount: 1 };
+            const texture: GX_Texture.TextureInputGX = { ...sampler.texture, name: `unknown ${i}`, mipCount: 1 };
             const mipChain = GX_Texture.calcMipChain(texture, 1);
             const { gfxTexture, viewerTexture } = loadTextureFromMipChain(device, mipChain);
 

@@ -14,9 +14,9 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
             dstBuffer[dst++] = indexBuffer[i + 0];
             dstBuffer[dst++] = indexBuffer[i + 1];
             dstBuffer[dst++] = indexBuffer[i + 2];
+            dstBuffer[dst++] = indexBuffer[i + 0];
             dstBuffer[dst++] = indexBuffer[i + 2];
             dstBuffer[dst++] = indexBuffer[i + 3];
-            dstBuffer[dst++] = indexBuffer[i + 0];
         }
     } else if (topology === GfxTopology.TRISTRIP) {
         for (let i = 0; i < indexBuffer.length - 2; i++) {

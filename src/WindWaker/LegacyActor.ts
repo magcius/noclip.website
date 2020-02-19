@@ -1484,7 +1484,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Cafelmp') fetchArchive(`Cafelmp`).then((rarc) => buildModel(rarc, `bdl/ylamp.bdl`));
     else if (actorName === 'Pbka') fetchArchive(`Pbka`).then((rarc) => buildModel(rarc, `bdl/pbka.bdl`));
     else if (actorName === 'Plant') fetchArchive(`Plant`).then((rarc) => buildModel(rarc, `bdl/yrmwd.bdl`));
-    else if (actorName === 'Table') fetchArchive(`Table`).then((rarc) => buildModel(rarc, `bdl/ytble.bdl`));
+    else if (actorName === 'Table') fetchArchive(`Table`).then((rarc) => {
+        if ((actor.parameters & 0xFF) === 0)
+            buildModel(rarc, `bdl/ytble.bdl`);
+        else
+            buildModel(rarc, `bdl/qcfis.bdl`);
+    });
     else if (actorName === 'Ppos') fetchArchive(`Ppos`).then((rarc) => buildModel(rarc, `bdl/ppos.bdl`));
     else if (actorName === 'Rflw') fetchArchive(`Rflw`).then((rarc) => buildModel(rarc, `bdl/phana.bdl`));
     else if (actorName === 'Skanran') fetchArchive(`Skanran`).then((rarc) => buildModel(rarc, `bdl/skanran.bdl`));

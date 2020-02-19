@@ -98,10 +98,18 @@ class ActorAnimKeeper {
         return new ActorAnimKeeper(infoIter);
     }
 
-    public start(actor: LiveActor, animationName: string): boolean {
+    private findAnimInfo(animationName: string): ActorAnimKeeperInfo | null {
         animationName = animationName.toLowerCase();
         const animInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
         if (animInfo === undefined)
+            return null;
+
+        return animInfo;
+    }
+
+    public start(actor: LiveActor, animationName: string): boolean {
+        const animInfo = this.findAnimInfo(animationName);
+        if (animInfo === null)
             return false;
 
         const bckAnimName = getAnimName(animInfo, animInfo.Bck);
@@ -129,6 +137,16 @@ class ActorAnimKeeper {
             startBva(actor, bvaAnimName);
 
         return true;
+    }
+
+    public isPlaying(actor: LiveActor, animationName: string): boolean {
+        const animInfo = this.findAnimInfo(animationName);
+        if (animInfo !== null) {
+            const animName = getAnimName(animInfo, animInfo.Bck);
+            return isBckPlaying(actor, animName);
+        } else {
+            return isBckPlaying(actor, animationName);
+        }
     }
 }
 

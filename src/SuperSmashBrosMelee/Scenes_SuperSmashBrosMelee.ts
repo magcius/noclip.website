@@ -1,12 +1,17 @@
 
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
-import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data } from "./SYSDOLPHIN_Render";
+import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./SYSDOLPHIN_Render";
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint } from "./SYSDOLPHIN";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive } from "./SYSDOLPHIN";
 import { IS_DEVELOPMENT } from "../BuildVersion";
+import { colorFromRGBA8 } from "../Color";
+import { assertExists, assert } from "../util";
+import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { DataFetcher } from "../DataFetcher";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -67,18 +72,170 @@ export class MeleeRenderer extends BasicGXRendererHelper {
 const pathBase = `SuperSmashBrosMelee`;
 
 class HSDDesc implements SceneDesc {
-    constructor(public dataPath: string, public rootIdx: number = 0, public id: string = dataPath, public name: string = dataPath) {}
+    constructor(public dataPath: string, public rootName: string | null = null, public id: string = dataPath, public name: string = dataPath) {}
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.dataPath}`));
-        // const arc2 = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/PlFxAJ.dat`));
-        // console.log(arc2.publics[0]);
-        // hexdump(arc2.dataBuffer);
+        console.log(arc);
         const scene = new MeleeRenderer(device);
-        const rootData = scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, arc.publics[this.rootIdx]));
-        const rootInst = new HSD_JObjRoot_Instance(rootData);
+        if (this.rootName === null) {
+            // Look for the first thing with _joint suffix.
+            const joint = arc.publics.find((sym) => sym.name.endsWith('_joint'));
+            if (joint === undefined) {
+                throw "whoops";
+            }
+            this.rootName = joint.name.slice(0, -6);
+        }
+        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))));
+        rootInst.addAnimAll(
+            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_animjoint`)),
+            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_matanim_joint`)),
+            HSD_AObjLoadShapeAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_shapeanim_joint`)));
         scene.jobjRoots.push(rootInst);
+        return scene;
+    }
+}
+
+function BindFigATree(root: HSD_JObjRoot_Instance, figatree: figatree): void {
+    assert(figatree.kind === 'Anim');
+    assert(figatree.aobj.length === root.allJObjs.length);
+
+    for (let i = 0; i < figatree.aobj.length; i++) {
+        const jobj = root.allJObjs[i];
+        const aobj = figatree.aobj[i];
+        jobj.aobj = new HSD_AObj_Instance(aobj);
+    }
+}
+
+// Fighter Data.
+class MeleeFtVariant {
+    constructor(public arcName: string, public jointName: string, public mdArc: HSD_Archive) {
+    }
+}
+
+class MeleeFtData {
+    public playerData: ftData;
+    public figatrees: (figatree | null)[];
+
+    constructor(public plName: string, public plArc: HSD_Archive, public plAJData: ArrayBufferSlice, public variants: MeleeFtVariant[], public shareName: string) {
+        // There should only be one piece of data in the player data archive.
+        assert(plArc.publics.length === 1);
+        this.playerData = Melee_ftData_Load(plArc, plArc.publics[0]);
+
+        // Now split the AJ data.
+        this.figatrees = Melee_SplitDataAJ(plAJData, this.playerData.subActionTable).map((arc) => {
+            return arc !== null ? Melee_figatree_Load(arc) : null;
+        });
+    }
+}
+
+class MeleeFtInstance {
+    public rootInst: HSD_JObjRoot_Instance;
+
+    constructor(modelCache: ModelCache, public data: MeleeFtData, public variantIndex: number) {
+        const variant = this.data.variants[this.variantIndex];
+        const rootJointName = `${this.data.shareName}${variant.jointName}_Share_joint`;
+        const mdArc = variant.mdArc;
+        const rootJointSymbol = assertExists(HSD_Archive_FindPublic(mdArc, rootJointName));
+        const jobjData = modelCache.loadJObjRoot(HSD_JObjLoadJoint(mdArc, rootJointSymbol));
+        this.rootInst = new HSD_JObjRoot_Instance(jobjData);
+    }
+
+    public setSubActionName(actionName: string): boolean {
+        const figatreeName = `${this.data.shareName}_Share_ACTION_${actionName}_figatree`;
+        const figatree = this.data.figatrees.find((figatree) => figatree !== null && figatree.name === figatreeName)!;
+        if (figatree === undefined)
+            return false;
+        assert(figatree.kind === 'Anim');
+        BindFigATree(this.rootInst, figatree);
+        return true;
+    }
+}
+
+function BuildMeleeInstance(modelCache: ModelCache, data: MeleeFtData, variantIndex: number): MeleeFtInstance | null {
+    const variant = data.variants[variantIndex];
+    const rootJointName = `${data.shareName}${variant.jointName}_Share_joint`;
+    const mdArc = variant.mdArc;
+    const rootJointSymbol = HSD_Archive_FindPublic(mdArc, rootJointName);
+    if (rootJointSymbol === null)
+        return null;
+
+    return new MeleeFtInstance(modelCache, data, variantIndex);
+}
+
+async function fetchPlData(dataFetcher: DataFetcher, shortName: string, playerName: string, variantNames: string[]): Promise<MeleeFtData> {
+    const plArcName = `Pl${shortName}`;
+    const shareName = `Ply${playerName}5K`;
+    const plArc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${plArcName}.dat`));
+    const plAJData = await dataFetcher.fetchData(`${pathBase}/${plArcName}AJ.dat`);
+
+    const variants = await Promise.all(variantNames.map(async (variantArcName) => {
+        if (!variantArcName.endsWith('.usd'))
+            variantArcName = `${variantArcName}.dat`;
+
+        const mdArc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${plArcName}${variantArcName}`));
+        const variantName = variantArcName.slice(0, 2);
+        const jointName = variantName === 'Nr' ? '' : variantName;
+        return new MeleeFtVariant(variantName, jointName, mdArc);
+    }));
+    return new MeleeFtData(plArcName, plArc, plAJData, variants, shareName);
+}
+
+function fetchAllPlData(dataFetcher: DataFetcher): Promise<MeleeFtData[]> {
+    const data: Promise<MeleeFtData>[] = [];
+
+    data.push(fetchPlData(dataFetcher, "Ca", "Captain", ["Nr", "Bu", "Gr", "Gy", "Re", "Re.usd"]));
+    data.push(fetchPlData(dataFetcher, "Cl", "Clink",   ["Nr", "Bk", "Bu", "Re", "Wh"]));
+    data.push(fetchPlData(dataFetcher, "Dk", "Donkey",  ["Nr", "Bk", "Gr", "Re"]));
+    data.push(fetchPlData(dataFetcher, "Dr", "Drmario", ["Nr", "Bk", "Bu", "Gr", "Re"]));
+    data.push(fetchPlData(dataFetcher, "Fc", "Falco",   ["Nr", "Bu", "Gr", "Re"]));
+    data.push(fetchPlData(dataFetcher, "Fe", "Emblem",  ["Nr", "Bu", "Gr", "Re", "Ye"]));
+    data.push(fetchPlData(dataFetcher, "Fx", "Fox",     ["Nr", "Or", "La", "Gr"]));
+
+    return Promise.all(data);
+}
+
+function BindFigATreeNames(inst: MeleeFtInstance, names: string[]): void {
+    for (let i = 0; i < names.length; i++)
+        if (inst.setSubActionName(names[i]))
+            return;
+}
+
+class MeleeFtDesc implements SceneDesc {
+    constructor(public name: string = "Fighter Test Scene", public id = 'Fighters') {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+
+        const scene = new MeleeRenderer(device);
+
+        const fighterData = await fetchAllPlData(dataFetcher);
+
+        let z = -50;
+        for (let i = 0; i < fighterData.length; i++) {
+            let x = 0;
+
+            const ft = fighterData[i];
+            for (let j = 0; j < ft.variants.length; j++) {
+                const plInst = BuildMeleeInstance(scene.modelCache, ft, j);
+                if (plInst === null) {
+                    console.log('proper root', ft.variants[0].mdArc.publics[0].name);
+                    continue;
+                }
+
+                BindFigATreeNames(plInst, ['Wait', 'Wait1']);
+                plInst.rootInst.modelMatrix[12] = x;
+                plInst.rootInst.modelMatrix[14] = z;
+                scene.jobjRoots.push(plInst.rootInst);
+
+                x += 25;
+            }
+
+            z -= 25;
+        }
+
         return scene;
     }
 }
@@ -91,13 +248,20 @@ class MeleeTitleDesc implements SceneDesc {
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/GmTtAll.usd`));
 
         const scene = new MeleeRenderer(device);
+        colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
 
-        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`))));
-        bg.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)), null, null);
+        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))));
+        bg.addAnimAll(
+            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
+            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
+            null);
         scene.jobjRoots.push(bg);
 
-        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`))));
-        moji.addAnimAll(HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), null, null);
+        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
+        moji.addAnimAll(
+            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
+            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
+            null);
         scene.jobjRoots.push(moji);
 
         return scene;
@@ -106,9 +270,12 @@ class MeleeTitleDesc implements SceneDesc {
 
 const sceneDescs = [
     new MeleeTitleDesc(),
+    new MeleeFtDesc(),
     new HSDDesc(`PlFxNr.dat`),
     new HSDDesc(`PlKbNr.dat`),
-    new HSDDesc(`MnExtAll.usd`, 1),
+    new HSDDesc(`MnExtAll.usd`, "MenMainBack_Top"),
+    new HSDDesc(`GmRgEBG3.dat`),
+    new HSDDesc(`GmRst.usd`),
 
     new HSDDesc(`TyZkPair.dat`),
     new HSDDesc(`TyZkWmen.dat`),

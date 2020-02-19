@@ -623,6 +623,15 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
         ${compileWriteOneComponent(dstOffs + 3, `1.0`)};
 `;
                     break;
+                case GX.CompType.RGBA4:
+                    S += `
+        var ${temp} = ${viewName}.getUint16(${attrOffs});
+        ${compileWriteOneComponent(dstOffs + 0, `(((${temp} >>> 12) & 0xF) / 0xF)`)};
+        ${compileWriteOneComponent(dstOffs + 1, `(((${temp} >>>  8) & 0xF) / 0xF)`)};
+        ${compileWriteOneComponent(dstOffs + 2, `(((${temp} >>>  4) & 0xF) / 0xF)`)};
+        ${compileWriteOneComponent(dstOffs + 3, `(((${temp} >>>  0) & 0xF) / 0xF)`)};
+`;
+                    break;
                 case GX.CompType.RGBA6:
                     S += `
         var ${temp} = (${viewName}.getUint8(${attrOffs} + 0) << 16) | (${viewName}.getUint8(${attrOffs} + 1) << 8) | (${viewName}.getUint8(${attrOffs} + 2));

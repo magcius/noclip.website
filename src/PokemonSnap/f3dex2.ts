@@ -2,7 +2,6 @@
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as RDP from '../Common/N64/RDP';
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
 import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
@@ -27,6 +26,7 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
+    public materialIndex = -1;
 }
 
 // same logic, just with the new type
@@ -47,6 +47,7 @@ export class RSPState {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
+    private minorChange: boolean = false;
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
 
     private SP_GeometryMode: number = 0;
@@ -67,7 +68,9 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    constructor(public segments: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
+    public materialIndex = -1;
+
+    constructor(public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
     }
 
     public finish(): RSPOutput | null {
@@ -82,6 +85,8 @@ export class RSPState {
         // start a new collection of drawcalls
         this.output = new RSPOutput();
         this.stateChanged = true;
+
+        this.materialIndex = -1;
         // mark any existing vertices as belonging to the parent
         for (let i = 0; i < this.vertexCache.length; i++) {
             this.vertexCache[i].matrixIndex = 1;
@@ -92,8 +97,9 @@ export class RSPState {
     private _setGeometryMode(newGeometryMode: number) {
         if (this.SP_GeometryMode === newGeometryMode)
             return;
-
-        this.stateChanged = true;
+        // occasionally pokemon snap will just modify e.g. culling in between sets of triangles
+        // keep track of this to properly share material across draw calls
+        this.minorChange = true;
         this.SP_GeometryMode = newGeometryMode;
     }
 
@@ -179,8 +185,12 @@ export class RSPState {
     }
 
     private _flushDrawCall(): void {
-        if (this.stateChanged) {
+        if (this.stateChanged || this.minorChange) {
+            // if we've already used this material, and major changes have happened, clear it
+            if (this.materialIndex === this.output.currentDrawCall.materialIndex && this.stateChanged)
+                this.materialIndex = -1;
             this.stateChanged = false;
+            this.minorChange = false;
 
             const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
             dc.SP_GeometryMode = this.SP_GeometryMode;
@@ -191,6 +201,8 @@ export class RSPState {
             vec4.copy(dc.DP_PrimColor, this.DP_PrimColor);
             vec4.copy(dc.DP_EnvColor, this.DP_EnvColor);
             dc.DP_PrimLOD = this.DP_PrimLOD;
+            dc.materialIndex = this.materialIndex;
+
             this._flushTextures(dc);
         }
     }
@@ -515,6 +527,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             } break;
 
             case F3DEX2_GBI.G_MOVEWORD: {
+                // TODO: lights
+                assert(((w0 >>> 16) & 0xFF) === 0x0A)
             } break;
 
             case F3DEX2_GBI.G_CULLDL:

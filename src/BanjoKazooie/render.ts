@@ -48,6 +48,9 @@ layout(row_major, std140) uniform ub_DrawParams {
 uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
+#ifdef EXTRA_COMBINE
+    vec4 u_MiscComb;
+#endif
 };
 
 uniform sampler2D u_Texture[2];
@@ -113,7 +116,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
@@ -128,13 +131,13 @@ void main() {
                 const coordRatio = (((tile.lrs - tile.uls) >>> 2) + 1) / RDP.getTileWidth(tile);
                 const comp = i === 0 ? 'x' : 'z';
                 if (coordRatio > 1)
-                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio - .05).toFixed(1)});\n`
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
             }
             if (tile.cmt & 0x2) {
                 const coordRatio = (((tile.lrt - tile.ult) >>> 2) + 1) / RDP.getTileHeight(tile);
                 const comp = i === 0 ? 'y' : 'w';
                 if (coordRatio > 1)
-                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio-.05).toFixed(1)});\n`
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
             }
         }
         return out;
@@ -145,7 +148,7 @@ void main() {
         const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
-            alphaThreshold = 0.5; // actually blend color, seems to always be 0.5
+            alphaThreshold = this.blendAlpha;
         } else if (alphaCompare != 0x00) {
             alphaThreshold = .0125; // should be dither
         } else if (cvgXAlpha != 0x00) {
@@ -189,12 +192,17 @@ void main() {
             't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
             'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
             't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
-            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
+            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 'u_MiscComb.rrr' /* prim LOD */, 't_Zero.rgb'
         ];
 
         const alphaInputs: string[] = [
             'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
+        ];
+
+        const alphaMultInputs: string[] = [
+            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
         ];
 
         function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
@@ -240,7 +248,7 @@ vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
+    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaMultInputs[py.z]} + ${alphaInputs[py.w]};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
@@ -248,7 +256,7 @@ vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaMultInputs[pw.z]} + ${alphaInputs[pw.w]};
 }
 
 void main() {
@@ -850,7 +858,7 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
 
 // an animation controller that makes it easier to change fps
 // and preserve control over the new phase
-class AdjustableAnimationController {
+export class AdjustableAnimationController {
     private time = 0;
     private initialized = false;
     private phaseFrames = 0;

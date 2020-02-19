@@ -4,12 +4,12 @@
 // https://github.com/PsiLupan/FRAY/
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero, hexdump } from "../util";
+import { readString, assert } from "../util";
 import { vec3, mat4 } from "gl-matrix";
 import * as GX from "../gx/gx_enum";
 import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, GX_Array, LoadedVertexLayout } from "../gx/gx_displaylist";
-import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8 } from "../Color";
-import { calcTextureSize, calcPaletteSize } from "../gx/gx_texture";
+import { Color, colorNewCopy, TransparentBlack, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
+import { calcTextureSize } from "../gx/gx_texture";
 
 export interface HSD_ArchiveSymbol {
     name: string;
@@ -18,6 +18,7 @@ export interface HSD_ArchiveSymbol {
 
 export interface HSD_Archive {
     dataBuffer: ArrayBufferSlice;
+    validOffsets: number[];
     externs: HSD_ArchiveSymbol[];
     publics: HSD_ArchiveSymbol[];
 }
@@ -35,11 +36,25 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
 
     let baseIdx = 0x20;
 
-    const dataBuffer = buffer.subarray(baseIdx, dataSize);
+    const dataOffs = baseIdx;
+    const dataBuffer = buffer.subarray(dataOffs, dataSize);
     baseIdx += dataSize;
 
     // Relocation table.
-    baseIdx += nbReloc * 0x04;
+    const validOffsets: number[] = [];
+    for (let i = 0; i < nbReloc; i++) {
+        // This is an offset to a pointer to relocate.
+        const relocationTableEntryOffs = view.getUint32(baseIdx + 0x00);
+
+        // Retrieve the value where it would point. This is most likely the
+        // start of a structure. We will use this in HSD_LoadContext_GetStructSize.
+        const relocationTableValue = view.getUint32(dataOffs + relocationTableEntryOffs);
+
+        if (!validOffsets.includes(relocationTableValue))
+            validOffsets.push(relocationTableValue);
+
+        baseIdx += 0x04;
+    }
 
     const strOffs = baseIdx + (nbPublic * 0x08) + (nbExtern * 0x08);
 
@@ -48,6 +63,10 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
         const offset = view.getUint32(baseIdx + 0x00);
         const nameOffs = view.getUint32(baseIdx + 0x04);
         const name = readString(buffer, strOffs + nameOffs);
+
+        if (!validOffsets.includes(offset))
+            validOffsets.push(offset);
+
         publics.push({ name, offset });
         baseIdx += 0x08;
     }
@@ -61,88 +80,279 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
         baseIdx += 0x08;
     }
 
-    return { dataBuffer, publics, externs };
+    validOffsets.sort((a, b) => a - b);
+
+    return { dataBuffer, validOffsets, publics, externs };
 }
 
-export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol {
-    return arc.publics.find((sym) => sym.name === symbolName)!;
+export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol | null {
+    const obj = arc.publics.find((sym) => sym.name === symbolName);
+    if (obj !== undefined)
+        return obj;
+    else
+        return null;
+}
+
+// This is a kind of dumb hack to abuse the relocation table to get structure sizes.
+// Will not work in cases where the structures are non-contiguous (will receive a bit of extra padding),
+// or in cases where there are pointers ino 
+function HSD_Archive__GetStructSize(arc: HSD_Archive, offs: number): number {
+    const idx = arc.validOffsets.indexOf(offs);
+    assert(idx >= 0);
+
+    let nextIdx = idx + 1;
+
+    let nextOffs: number;
+    if (nextIdx >= arc.validOffsets.length) {
+        // No next structure, read until end of file.
+        nextOffs = arc.dataBuffer.byteLength;
+    } else {
+        nextOffs = arc.validOffsets[nextIdx];
+    }
+
+    return nextOffs - offs;
 }
 
 function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
+    // Ensure that this is somewhere within our relocation table.
+    assert(arc.validOffsets.indexOf(offs) >= 0);
     return arc.dataBuffer.subarray(offs, size);
 }
 
-class LoadContext {
-    public texImageDatas: HSD__TexImageData[] = [];
+export class HSD_LoadContext {
+    public imageDescs: HSD_ImageDesc[] = [];
+    public tlutDescs: HSD_TlutDesc[] = [];
 
     constructor(public archive: HSD_Archive) {
     }
 }
 
-function HSD_LoadContext__ResolvePtr(ctx: LoadContext, offs: number, size?: number): ArrayBufferSlice {
+export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice {
+    const size = HSD_Archive__GetStructSize(ctx.archive, offs);
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
 }
 
-//#region TObj
-export interface HSD__TexImageData {
-    // For GX Texture utility
-    name: string;
+export function HSD_LoadContext__ResolvePtr(ctx: HSD_LoadContext, offs: number, size?: number): ArrayBufferSlice {
+    return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
+}
 
-    // HSD_ImageDesc
-    imageDataOffs: number;
+export function HSD_LoadContext__ResolvePtrString(ctx: HSD_LoadContext, offs: number): string {
+    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+    return readString(buffer, 0x00);
+}
+
+function HSD_LoadContext__CacheImageDesc(ctx: HSD_LoadContext, offs: number): HSD_ImageDesc {
+    assert(offs !== 0);
+    let imageDesc = ctx.imageDescs.find((imageDesc) => imageDesc.offs === offs);
+    if (imageDesc === undefined) {
+        imageDesc = HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, offs));
+        ctx.imageDescs.push(imageDesc);
+    }
+    return imageDesc;
+}
+
+function HSD_LoadContext__CacheTlutDesc(ctx: HSD_LoadContext, offs: number): HSD_TlutDesc | null {
+    if (offs === 0)
+        return null;
+    let tlutDesc = ctx.tlutDescs.find((tlutDesc) => tlutDesc.offs === offs);
+    if (tlutDesc === undefined) {
+        tlutDesc = HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, offs));
+        ctx.tlutDescs.push(tlutDesc);
+    }
+    return tlutDesc;
+}
+
+//#region TObj
+export interface HSD_ImageDesc {
+    offs: number;
     format: GX.TexFormat;
     width: number;
     height: number;
-    data: ArrayBufferSlice;
     mipCount: number;
+    minLOD: number;
+    maxLOD: number;
+    data: ArrayBufferSlice;
+}
 
-    // HSD_TlutDesc
-    paletteData: ArrayBufferSlice | null;
-    paletteFormat: GX.TexPalette | null;
+export interface HSD_TlutDesc {
+    offs: number;
+    paletteData: ArrayBufferSlice;
+    paletteFormat: GX.TexPalette;
 }
 
 export const enum HSD_TObjFlags {
-    COORD_MASK       = 0x0F,
-    COORD_UV         = 0 << 0,
-    COORD_REFLECTION = 1 << 0,
-    COORD_HILIGHT    = 2 << 0,
-    COORD_SHADOW     = 3 << 0,
-    COORD_TOON       = 4 << 0,
-    COORD_GRADATION  = 5 << 0,
-    COORD_BACKLIGHT  = 6 << 0,
+    COORD_UV            = 0 << 0,
+    COORD_REFLECTION    = 1 << 0,
+    COORD_HILIGHT       = 2 << 0,
+    COORD_SHADOW        = 3 << 0,
+    COORD_TOON          = 4 << 0,
+    COORD_GRADATION     = 5 << 0,
+    COORD_BACKLIGHT     = 6 << 0,
+    COORD_MASK          = 0x0F << 0,
 
-    BUMP             = 1 << 24,
+    LIGHTMAP_DIFFUSE    = 1 << 4,
+    LIGHTMAP_SPECULAR   = 1 << 5,
+    LIGHTMAP_AMBIENT    = 1 << 6,
+    LIGHTMAP_EXT        = 1 << 7,
+    LIGHTMAP_SHADOW     = 1 << 8,
+    LIGHTMAP_MASK       = LIGHTMAP_DIFFUSE | LIGHTMAP_SPECULAR | LIGHTMAP_AMBIENT | LIGHTMAP_EXT | LIGHTMAP_SHADOW,
+
+    COLORMAP_NONE       = 0 << 16,
+    COLORMAP_ALPHA_MASK = 1 << 16,
+    COLORMAP_RGB_MASK   = 2 << 16,
+    COLORMAP_BLEND      = 3 << 16,
+    COLORMAP_MODULATE   = 4 << 16,
+    COLORMAP_REPLACE    = 5 << 16,
+    COLORMAP_PASS       = 6 << 16,
+    COLORMAP_ADD        = 7 << 16,
+    COLORMAP_SUB        = 8 << 16,
+    COLORMAP_MASK       = 0x0F << 16,
+
+    ALPHAMAP_NONE       = 0 << 20,
+    ALPHAMAP_ALPHA_MASK = 1 << 20,
+    ALPHAMAP_BLEND      = 2 << 20,
+    ALPHAMAP_MODULATE   = 3 << 20,
+    ALPHAMAP_REPLACE    = 4 << 20,
+    ALPHAMAP_PASS       = 5 << 20,
+    ALPHAMAP_ADD        = 6 << 20,
+    ALPHAMAP_SUB        = 7 << 20,
+    ALPHAMAP_MASK       = 0x0F << 20,
+
+    BUMP                = 1 << 24,
+}
+
+export const enum HSD_TObjTevColorIn {
+    // Some bits are from GX.CombineColorInput
+    ZERO      = GX.CC.ZERO,
+    ONE       = GX.CC.ONE,
+    HALF      = GX.CC.HALF,
+    TEXC      = GX.CC.TEXC,
+    TEXA      = GX.CC.TEXA,
+    KONST_RGB = 0x80,
+    KONST_RRR = 0x81,
+    KONST_GGG = 0x82,
+    KONST_BBB = 0x83,
+    KONST_AAA = 0x84,
+    TEX0_RGB  = 0x85,
+    TEX0_AAA  = 0x86,
+    TEX1_RGB  = 0x87,
+    TEX1_AAA  = 0x88,
+}
+
+export const enum HSD_TObjTevAlphaIn {
+    // Some bits are from GX.CombineColorInput
+    ZERO      = GX.CA.ZERO,
+    TEXA      = GX.CA.TEXA,
+    KONST_R   = 0x40,
+    KONST_G   = 0x41,
+    KONST_B   = 0x42,
+    KONST_A   = 0x43,
+    TEX0_A    = 0x44,
+    TEX1_A    = 0x45,
+}
+
+export const enum HSD_TObjTevActive {
+    KONST_R   = 1 << 0,
+    KONST_G   = 1 << 1,
+    KONST_B   = 1 << 2,
+    KONST_A   = 1 << 3,
+    KONST     = KONST_R | KONST_G | KONST_B | KONST_A,
+    TEV0_R    = 1 << 4,
+    TEV0_G    = 1 << 5,
+    TEV0_B    = 1 << 6,
+    TEV0_A    = 1 << 7,
+    TEV0      = TEV0_R  | TEV0_G  | TEV0_B  | TEV0_A,
+    TEV1_R    = 1 << 8,
+    TEV1_G    = 1 << 9,
+    TEV1_B    = 1 << 10,
+    TEV1_A    = 1 << 11,
+    TEV1      = TEV1_R  | TEV1_G  | TEV1_B  | TEV1_A,
+    COLOR_TEV = 1 << 30,
+    ALPHA_TEV = 1 << 31,
+}
+
+export interface HSD_TObjTev {
+    colorOp: GX.TevOp;
+    alphaOp: GX.TevOp;
+    colorBias: GX.TevBias;
+    alphaBias: GX.TevBias;
+    colorScale: GX.TevScale;
+    alphaScale: GX.TevScale;
+    colorClamp: boolean;
+    alphaClamp: boolean;
+    colorIn: readonly [HSD_TObjTevColorIn, HSD_TObjTevColorIn, HSD_TObjTevColorIn, HSD_TObjTevColorIn];
+    alphaIn: readonly [HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn, HSD_TObjTevAlphaIn];
+    constant: Color;
+    tev0: Color;
+    tev1: Color;
+    active: HSD_TObjTevActive;
 }
 
 export interface HSD_TObj {
     flags: HSD_TObjFlags;
-    id: GX.TexMapID;
+    animID: number;
     src: GX.TexGenSrc;
     rotation: vec3;
     scale: vec3;
     translation: vec3;
+    blending: number;
 
-    texImageIdx: number;
-
-    // HSD_TexLODDesc
-    minLOD: number;
-    maxLOD: number;
+    imageDesc: HSD_ImageDesc;
+    tlutDesc: HSD_TlutDesc | null;
 
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
+    repeatS: number;
+    repeatT: number;
     minFilt: GX.TexFilter;
     magFilt: GX.TexFilter;
 
+    // HSD_TexLODDesc
+
     // HSD_TObjTevDesc
+    tevDesc: HSD_TObjTev | null;
 }
 
-function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_LoadImageDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_ImageDesc {
+    const view = buffer.createDataView();
+
+    const imageDataOffs = view.getUint32(0x00);
+    const width = view.getUint16(0x04);
+    const height = view.getUint16(0x06);
+    const format: GX.TexFormat = view.getUint32(0x08);
+    // TODO(jstpierre): Figure out how to use the mipmaps flag
+    const mipmaps = view.getUint32(0x0C);
+
+    const minLOD = view.getFloat32(0x10);
+    const maxLOD = view.getFloat32(0x14);
+
+    const mipCount = 1;
+    const data = HSD_LoadContext__ResolvePtr(ctx, imageDataOffs, calcTextureSize(format, width, height));
+
+    const offs = buffer.byteOffset;
+    return { offs, format, width, height, mipCount, minLOD, maxLOD, data };
+}
+
+function HSD_LoadTlutDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_TlutDesc {
+    const view = buffer.createDataView();
+
+    const paletteDataOffs = view.getUint32(0x00);
+    const paletteFormat = view.getUint32(0x04);
+    const tlutName = view.getUint32(0x08);
+    const numEntries = view.getUint16(0x0C);
+    const paletteData = HSD_LoadContext__ResolvePtr(ctx, paletteDataOffs);
+
+    const offs = buffer.byteOffset;
+    return { offs, paletteFormat, paletteData };
+}
+
+function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
 
-    const id: GX.TexMapID = view.getUint32(0x08);
+    const animID: number = view.getUint32(0x08);
     const src: GX.TexGenSrc = view.getUint32(0x0C);
 
     const rotationX = view.getFloat32(0x10);
@@ -164,6 +374,7 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
     const wrapT: GX.WrapMode = view.getUint32(0x38);
     const repeatS = view.getUint8(0x3C);
     const repeatT = view.getUint8(0x3D);
+    assert(repeatS > 0 && repeatT > 0);
 
     const flags = view.getUint32(0x40);
     const blending = view.getFloat32(0x44);
@@ -171,56 +382,54 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
 
     const imageDescOffs = view.getUint32(0x4C);
     assert(imageDescOffs !== 0);
-    const imageBuffer = HSD_LoadContext__ResolvePtr(ctx, imageDescOffs);
-    const imageView = imageBuffer.createDataView();
+    const imageDesc = HSD_LoadContext__CacheImageDesc(ctx, imageDescOffs);
 
-    const imageDataOffs = imageView.getUint32(0x00);
-
-    let texImageIdx = ctx.texImageDatas.findIndex((data) => data.imageDataOffs === imageDataOffs);
-    if (texImageIdx < 0) {
-        const width = imageView.getUint16(0x04);
-        const height = imageView.getUint16(0x06);
-        const format: GX.TexFormat = imageView.getUint32(0x08);
-        // TODO(jstpierre): Figure out how to use the mipmaps flag
-        const mipmaps = imageView.getUint32(0x0C);
-        const mipCount = 1;
-        const data = HSD_LoadContext__ResolvePtr(ctx, imageDataOffs, calcTextureSize(format, width, height));
-
-        const tlutDescOffs = view.getUint32(0x50);
-        let paletteData: ArrayBufferSlice | null = null;
-        let paletteFormat: GX.TexPalette | null = null;
-        if (tlutDescOffs !== 0) {
-            const tlutBuffer = HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs);
-            const tlutView = tlutBuffer.createDataView();
-
-            const paletteDataOffs = tlutView.getUint32(0x00);
-            paletteFormat = tlutView.getUint32(0x04);
-            const tlutName = tlutView.getUint32(0x08);
-            const numEntries = tlutView.getUint16(0x0C);
-            paletteData = HSD_LoadContext__ResolvePtr(ctx, paletteDataOffs, calcPaletteSize(format, paletteFormat));
-        }
-
-        const name = `HSD Texture ${hexzero(buffer.byteOffset, 8)}`;
-        ctx.texImageDatas.push({
-            // Image
-            name, imageDataOffs, data, width, height, format, mipCount,
-            // TLUT
-            paletteData, paletteFormat,
-        });
-        texImageIdx = ctx.texImageDatas.length - 1;
-    }
-
-    const minLOD = imageView.getFloat32(0x10);
-    const maxLOD = imageView.getFloat32(0x14);
+    const tlutDescOffs = view.getUint32(0x50);
+    const tlutDesc = HSD_LoadContext__CacheTlutDesc(ctx, tlutDescOffs);
 
     const texLODDescOffs = view.getUint32(0x54);
+
     const tevDescOffs = view.getUint32(0x58);
+    let tevDesc: HSD_TObjTev | null = null;
+    if (tevDescOffs !== 0) {
+        const tevBuffer = HSD_LoadContext__ResolvePtr(ctx, tevDescOffs);
+        const tevView = tevBuffer.createDataView();
+
+        const colorOp: GX.TevOp = tevView.getUint8(0x00);
+        const alphaOp: GX.TevOp = tevView.getUint8(0x01);
+        const colorBias: GX.TevBias = tevView.getUint8(0x02);
+        const alphaBias: GX.TevBias = tevView.getUint8(0x03);
+        const colorScale: GX.TevScale = tevView.getUint8(0x04);
+        const alphaScale: GX.TevScale = tevView.getUint8(0x05);
+        const colorClamp: boolean = !!tevView.getUint8(0x06);
+        const alphaClamp: boolean = !!tevView.getUint8(0x07);
+        const colorA: HSD_TObjTevColorIn = tevView.getUint8(0x08);
+        const colorB: HSD_TObjTevColorIn = tevView.getUint8(0x09);
+        const colorC: HSD_TObjTevColorIn = tevView.getUint8(0x0A);
+        const colorD: HSD_TObjTevColorIn = tevView.getUint8(0x0B);
+        const alphaA: HSD_TObjTevAlphaIn = tevView.getUint8(0x0C);
+        const alphaB: HSD_TObjTevAlphaIn = tevView.getUint8(0x0D);
+        const alphaC: HSD_TObjTevAlphaIn = tevView.getUint8(0x0E);
+        const alphaD: HSD_TObjTevAlphaIn = tevView.getUint8(0x0F);
+        const constant: Color = colorNewFromRGBA8(tevView.getUint32(0x10));
+        const tev0: Color = colorNewFromRGBA8(tevView.getUint32(0x14));
+        const tev1: Color = colorNewFromRGBA8(tevView.getUint32(0x18));
+        const active: number = tevView.getUint32(0x1C);
+
+        const colorIn = [colorA, colorB, colorC, colorD] as const;
+        const alphaIn = [alphaA, alphaB, alphaC, alphaD] as const;
+
+        tevDesc = {
+            colorOp, alphaOp, colorBias, alphaBias, colorScale, alphaScale, colorClamp, alphaClamp,
+            colorIn, alphaIn, constant, tev0, tev1, active,
+        };
+    }
 
     const minFilt = GX.TexFilter.LIN_MIP_LIN;
 
     tobj.push({
-        flags, id, src, rotation, scale, translation, texImageIdx,
-        minLOD, maxLOD, wrapS, wrapT, minFilt, magFilt,
+        flags, animID, src, rotation, scale, translation, blending, wrapS, wrapT,
+        repeatS, repeatT, minFilt, magFilt, imageDesc, tlutDesc, tevDesc,
     });
 
     if (nextSiblingOffs !== 0)
@@ -229,7 +438,26 @@ function HSD_TObjLoadDesc(tobj: HSD_TObj[], ctx: LoadContext, buffer: ArrayBuffe
 //#endregion
 
 //#region MObj
-const enum RenderModeFlags {
+export const enum HSD_RenderModeFlags {
+    DIFFUSE_MODE_MAT0 = 0x00 << 0,
+    DIFFUSE_MODE_MAT  = 0x01 << 0,
+    DIFFUSE_MODE_VTX  = 0x02 << 0,
+    DIFFUSE_MODE_BOTH = 0x03 << 0,
+    DIFFUSE_MODE_MASK = 0x03 << 0,
+
+    DIFFUSE           = 0x01 << 2,
+    SPECULAR          = 0x01 << 3,
+
+    ALPHA_MODE_COMPAT = 0x00 << 13,
+    ALPHA_MODE_MAT    = 0x01 << 13,
+    ALPHA_MODE_VTX    = 0x02 << 13,
+    ALPHA_MODE_BOTH   = 0x03 << 13,
+    ALPHA_MODE_MASK   = 0x03 << 13,
+
+    SHADOW            = 0x01 << 26,
+    ZMODE_ALWAYS      = 0x01 << 27,
+    NO_ZUPDATE        = 0x01 << 29,
+    XLU               = 0x01 << 30,
 }
 
 export const enum HSD_PEFlags {
@@ -238,7 +466,9 @@ export const enum HSD_PEFlags {
 }
 
 export interface HSD_MObj {
-    renderMode: RenderModeFlags;
+    offs: number;
+
+    renderMode: HSD_RenderModeFlags;
 
     tobj: HSD_TObj[];
 
@@ -264,11 +494,11 @@ export interface HSD_MObj {
     alphaComp1: GX.CompareType;
 }
 
-function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj {
+function HSD_MObjLoadDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_MObj {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
-    const renderMode: RenderModeFlags = view.getUint32(0x04);
+    const renderMode: HSD_RenderModeFlags = view.getUint32(0x04);
 
     const texDescOffs = view.getUint32(0x08);
     const tobj: HSD_TObj[] = [];
@@ -299,7 +529,7 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
     const renderDescOffs = view.getUint32(0x10);
 
     // HSD_PEDesc
-    let peFlags: HSD_PEFlags = HSD_PEFlags.ENABLE_ZUPDATE | HSD_PEFlags.ENABLE_COMPARE;
+    let peFlags: HSD_PEFlags = 0;
     let alphaRef0: number = 0.0;
     let alphaRef1: number = 0.0;
     let dstAlpha: number = 1.0;
@@ -308,7 +538,7 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
     let dstFactor: GX.BlendFactor = GX.BlendFactor.ZERO;
     let logicOp: GX.LogicOp = GX.LogicOp.CLEAR;
     let zComp: GX.CompareType = GX.CompareType.LEQUAL;
-    let alphaComp0: GX.CompareType = GX.CompareType.GREATER;
+    let alphaComp0: GX.CompareType = GX.CompareType.ALWAYS;
     let alphaOp: GX.AlphaOp = GX.AlphaOp.AND;
     let alphaComp1: GX.CompareType = GX.CompareType.ALWAYS;
 
@@ -329,9 +559,27 @@ function HSD_MObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_MObj 
         alphaComp0 = peView.getUint8(0x09);
         alphaOp = peView.getUint8(0x0A);
         alphaComp1 = peView.getUint8(0x0B);
+    } else {
+        // Initialize from rendermode flags. See HSD_SetupPEMode.
+        type = !!(renderMode & HSD_RenderModeFlags.XLU) ? GX.BlendMode.BLEND : GX.BlendMode.NONE;
+        srcFactor = GX.BlendFactor.SRCALPHA;
+        dstFactor = GX.BlendFactor.INVSRCALPHA;
+
+        peFlags |= HSD_PEFlags.ENABLE_COMPARE;
+        zComp = !!(renderMode & HSD_RenderModeFlags.ZMODE_ALWAYS) ? GX.CompareType.ALWAYS : GX.CompareType.LEQUAL;
+        if (!(renderMode & HSD_RenderModeFlags.NO_ZUPDATE))
+            peFlags |= HSD_PEFlags.ENABLE_ZUPDATE;
+
+        if (!(renderMode & HSD_RenderModeFlags.NO_ZUPDATE) && !!(renderMode & HSD_RenderModeFlags.XLU)) {
+            alphaComp0 = GX.CompareType.GREATER;
+        } else {
+            alphaComp0 = GX.CompareType.ALWAYS;
+        }
     }
 
+    const offs = buffer.byteOffset;
     return {
+        offs,
         renderMode, tobj,
         // HSD_Material
         ambient, diffuse, specular, alpha, shininess,
@@ -369,16 +617,19 @@ interface HSD_PObjShapeAnim extends HSD_PObjBase {
     kind: 'ShapeAnim';
 }
 
-type HSD_PObj = HSD_PObjRigid | HSD_PObjEnvelope | HSD_PObjShapeAnim;
+export type HSD_PObj = HSD_PObjRigid | HSD_PObjEnvelope | HSD_PObjShapeAnim;
 
 export const enum HSD_PObjFlags {
     OBJTYPE_SKIN      = 0 << 12,
     OBJTYPE_SHAPEANIM = 1 << 12,
     OBJTYPE_ENVELOPE  = 2 << 12,
     OBJTYPE_MASK      = 0x3000,
+
+    CULLFRONT         = 1 << 14,
+    CULLBACK          = 1 << 15,
 }
 
-function runVertices(ctx: LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer: ArrayBufferSlice) {
+function runVertices(ctx: HSD_LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer: ArrayBufferSlice) {
     const view = vtxDescBuffer.createDataView();
 
     const vatFormat: GX_VtxAttrFmt[] = [];
@@ -411,7 +662,7 @@ function runVertices(ctx: LoadContext, vtxDescBuffer: ArrayBufferSlice, dlBuffer
     return { loadedVertexLayout, loadedVertexData };
 }
 
-function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     // const classNameOffs = view.getUint32(0x00);
@@ -478,7 +729,7 @@ export interface HSD_DObj {
     pobj: HSD_PObj[];
 }
 
-function HSD_DObjLoadDesc(dobjs: HSD_DObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+function HSD_DObjLoadDesc(dobjs: HSD_DObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     // const classNameOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
@@ -568,7 +819,7 @@ export const enum HSD_JObjFlags {
     ROOT_TEXEDGE        = 1 << 30,
 }
 
-function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: LoadContext, offs: number): void {
+function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, offs: number): void {
     assert(offs !== 0);
     const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
     const view = buffer.createDataView();
@@ -578,6 +829,9 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: LoadContext, offs: nu
     const nextSiblingOffs = view.getUint32(0x0C);
 
     const contentsOffs = view.getUint32(0x10);
+
+    if (!!(flags & HSD_JObjFlags.USE_QUATERNION))
+        debugger;
 
     const rotationX = view.getFloat32(0x14);
     const rotationY = view.getFloat32(0x18);
@@ -649,19 +903,21 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: LoadContext, offs: nu
 
 export interface HSD_JObjRoot {
     jobj: HSD_JObj;
-    texImageDatas: HSD__TexImageData[];
+    imageDescs: HSD_ImageDesc[];
+    tlutDescs: HSD_TlutDesc[];
 }
 
 export function HSD_JObjLoadJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_JObjRoot {
-    const ctx = new LoadContext(archive);
+    const ctx = new HSD_LoadContext(archive);
 
     const jobjs: HSD_JObj[] = [];
     HSD_JObjLoadJointInternal(jobjs, ctx, symbol.offset);
     assert(jobjs.length === 1);
     const jobj = jobjs[0];
 
-    const texImageDatas = ctx.texImageDatas;
-    return { jobj, texImageDatas };
+    const imageDescs = ctx.imageDescs;
+    const tlutDescs = ctx.tlutDescs;
+    return { jobj, imageDescs, tlutDescs };
 }
 //#endregion
 
@@ -709,73 +965,110 @@ export interface HSD_AObj {
 }
 
 const enum FObjFmt {
-    HSD_A_FRAC_FLOAT,
-    HSD_A_FRAC_S16,
-    HSD_A_FRAC_U16,
-    HSD_A_FRAC_S8,
-    HSD_A_FRAC_U8,
+    FLOAT,
+    S16,
+    U16,
+    S8,
+    U8,
 }
 
 const enum FObjOpcode {
-    HSD_A_OP_NONE,
-    HSD_A_OP_CON,
-    HSD_A_OP_LIN,
-    HSD_A_OP_SPL0,
-    HSD_A_OP_SPL,
-    HSD_A_OP_SLP,
-    HSD_A_OP_KEY,
+    NONE,
+    CON,
+    LIN,
+    SPL0,
+    SPL,
+    SLP,
+    KEY,
 }
 
-export const enum HSD_FObj__JointTrackType {
-    HSD_A_J_ROTX = 1,
-    HSD_A_J_ROTY,
-    HSD_A_J_ROTZ,
-    HSD_A_J_PATH,
-    HSD_A_J_TRAX,
-    HSD_A_J_TRAY,
-    HSD_A_J_TRAZ,
-    HSD_A_J_SCAX,
-    HSD_A_J_SCAY,
-    HSD_A_J_SCAZ,
-    HSD_A_J_NODE,
-    HSD_A_J_BRANCH,
+export const enum HSD_JObjAnmType {
+    ROTX = 1,
+    ROTY,
+    ROTZ,
+    PATH,
+    TRAX,
+    TRAY,
+    TRAZ,
+    SCAX,
+    SCAY,
+    SCAZ,
+    NODE,
+    BRANCH,
 }
 
-function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBufferSlice): void {
+export const enum HSD_MObjAnmType {
+    AMBIENT_R = 1,
+    AMBIENT_G,
+    AMBIENT_B,
+    DIFFUSE_R,
+    DIFFUSE_G,
+    DIFFUSE_B,
+    SPECULAR_R,
+    SPECULAR_G,
+    SPECULAR_B,
+    ALPHA,
+    PE_REF0,
+    PE_REF1,
+    PE_DSTALPHA,
+}
+
+export const enum HSD_TObjAnmType {
+    TIMG = 1,
+    TRAU,
+    TRAV,
+    SCAU,
+    SCAV,
+    ROTX,
+    ROTY,
+    ROTZ,
+    BLEND,
+    TCLT,
+    LOD_BIAS,
+    KONST_R,
+    KONST_G,
+    KONST_B,
+    KONST_A,
+    TEV0_R,
+    TEV0_G,
+    TEV0_B,
+    TEV0_A,
+    TEV1_R,
+    TEV1_G,
+    TEV1_B,
+    TEV1_A,
+    TS_BLEND,
+}
+
+export function HSD_FObjLoadKeyframes(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, fracValue: number, fracSlope: number): HSD_FObj__Keyframe[] {
     const view = buffer.createDataView();
-    const nextSiblingOffs = view.getUint32(0x00);
-    const length = view.getUint32(0x04);
-    const startFrame = view.getFloat32(0x08);
-    const type = view.getUint8(0x0C);
-    const fracValue = view.getUint8(0x0D);
-    const fracSlope = view.getUint8(0x0E);
-    const dataOffs = view.getUint32(0x10);
-    const dataView = HSD_LoadContext__ResolvePtr(ctx, dataOffs).createDataView();
 
     let dataIdx = 0;
     function parseValue(frac: number): number {
         const fmt: FObjFmt = frac >>> 5;
+        const shift = frac & 0x1F;
+
         let res: number;
-        if (fmt === FObjFmt.HSD_A_FRAC_FLOAT) {
-            res = dataView.getFloat32(dataIdx + 0x00);
+        if (fmt === FObjFmt.FLOAT) {
+            assert(shift === 0);
+            res = view.getFloat32(dataIdx + 0x00, true);
             dataIdx += 0x04;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_S16) {
-            res = dataView.getInt16(dataIdx + 0x00);
+        } else if (fmt === FObjFmt.S16) {
+            res = view.getInt16(dataIdx + 0x00, true);
             dataIdx += 0x02;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_U16) {
-            res = dataView.getUint16(dataIdx + 0x00);
+        } else if (fmt === FObjFmt.U16) {
+            res = view.getUint16(dataIdx + 0x00, true);
             dataIdx += 0x02;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_S8) {
-            res = dataView.getInt8(dataIdx + 0x00);
+        } else if (fmt === FObjFmt.S8) {
+            res = view.getInt8(dataIdx + 0x00);
             dataIdx += 0x01;
-        } else if (fmt === FObjFmt.HSD_A_FRAC_U8) {
-            res = dataView.getUint8(dataIdx + 0x00);
+        } else if (fmt === FObjFmt.U8) {
+            res = view.getUint8(dataIdx + 0x00);
             dataIdx += 0x01;
         } else {
             throw "whoops";
         }
 
-        const shift = frac & 0x1F;
         return res / (1 << shift);
     }
 
@@ -783,7 +1076,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
         let byte = 0x80;
         let res = 0;
         for (let i = 0; !!(byte & 0x80); i++) {
-            byte = dataView.getUint8(dataIdx++);
+            byte = view.getUint8(dataIdx++);
             res |= (byte & 0x7F) << (i * 7);
         }
         return res;
@@ -792,58 +1085,91 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
     let p0 = 0.0, p1 = 0.0, d0 = 0.0, d1 = 0.0;
     let time = 0;
 
+    let hasSLP = false;
+
     const keyframes: HSD_FObj__Keyframe[] = [];
-    while (dataIdx < length) {
+    let op_intrp = FObjOpcode.NONE, duration = 0;
+    while (dataIdx < buffer.byteLength) {
         const headerByte = parseVLQ();
-        const opcode: FObjOpcode = headerByte & 0x0F;
+        const op: FObjOpcode = headerByte & 0x0F;
         let nbPack = (headerByte >>> 4) + 1;
 
         for (let i = 0; i < nbPack; i++) {
-            // SLP is special, as it doesn't mark a keyframe by itself.
-            if (opcode === FObjOpcode.HSD_A_OP_SLP) {
+            // SLP is special, as it doesn't mark a keyframe by itself, but modifies the next one...
+            if (op === FObjOpcode.SLP) {
                 d0 = d1;
                 d1 = parseValue(fracSlope);
+                hasSLP = true;
                 continue;
             }
 
-            if (opcode === FObjOpcode.HSD_A_OP_CON) {
+            if (op === FObjOpcode.CON) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Constant', time, p0 });
-                time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_LIN) {
+                if (!hasSLP) {
+                    d0 = d1;
+                    d1 = 0.0;
+                }
+            } else if (op === FObjOpcode.LIN) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_SPL0) {
+                if (!hasSLP) {
+                    d0 = d1;
+                    d1 = 0.0;
+                }
+            } else if (op === FObjOpcode.SPL0) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
                 d1 = 0.0;
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_SPL) {
+            } else if (op === FObjOpcode.SPL) {
                 p0 = p1;
                 p1 = parseValue(fracValue);
                 d0 = d1;
                 d1 = parseValue(fracSlope);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
-                time += duration;
-            } else if (opcode === FObjOpcode.HSD_A_OP_KEY) {
+            } else if (op === FObjOpcode.KEY) {
                 p0 = p1 = parseValue(fracValue);
-                const duration = parseVLQ();
-                keyframes.push({ kind: 'Constant', time, p0 });
-                time += duration;
             } else {
                 debugger;
             }
+            hasSLP = false;
+
+            if (op_intrp === FObjOpcode.CON || op_intrp === FObjOpcode.KEY) {
+                keyframes.push({ kind: 'Constant', time, p0 });
+            } else if (op_intrp === FObjOpcode.LIN) {
+                keyframes.push({ kind: 'Linear', time, duration, p0, p1 });
+            } else if (op_intrp === FObjOpcode.SPL0 || op_intrp === FObjOpcode.SPL) {
+                keyframes.push({ kind: 'Hermite', time, duration, p0, p1, d0, d1 });
+            } else if (op_intrp === FObjOpcode.NONE) {
+                // Nothing.
+            } else {
+                debugger;
+            }
+
+            time += duration;
+
+            // Load wait.
+            duration = parseVLQ();
+
+            op_intrp = op;
         }
     }
+
+    return keyframes;
+}
+
+function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+    const nextSiblingOffs = view.getUint32(0x00);
+    const length = view.getUint32(0x04);
+    const startFrame = view.getFloat32(0x08);
+    const type = view.getUint8(0x0C);
+    const fracValue = view.getUint8(0x0D);
+    const fracSlope = view.getUint8(0x0E);
+    const dataOffs = view.getUint32(0x10);
+
+    const dataBuf = HSD_LoadContext__ResolvePtr(ctx, dataOffs, length);
+    const keyframes = HSD_FObjLoadKeyframes(ctx, dataBuf, fracValue, fracSlope);
 
     fobj.push({ type, keyframes });
 
@@ -851,7 +1177,7 @@ function HSD_FObjLoadDesc(fobj: HSD_FObj[], ctx: LoadContext, buffer: ArrayBuffe
         HSD_FObjLoadDesc(fobj, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-function HSD_AObjLoadDesc(ctx: LoadContext, buffer: ArrayBufferSlice): HSD_AObj {
+function HSD_AObjLoadDesc(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_AObj {
     const view = buffer.createDataView();
 
     const flags = view.getUint32(0x00);
@@ -875,7 +1201,7 @@ export interface HSD_AnimJointRoot {
     root: HSD_AnimJoint;
 }
 
-function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadContext, offs: number): void {
+function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_LoadContext, offs: number): void {
     assert(offs !== 0);
     const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
     const view = buffer.createDataView();
@@ -894,13 +1220,16 @@ function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: LoadCon
         aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
 
     animJoints.push({ children, aobj });
-    
+
     if (nextSiblingOffs !== 0)
         HSD_AObjLoadAnimJointInternal(animJoints, ctx, nextSiblingOffs);
 }
 
-export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_AnimJointRoot {
-    const ctx = new LoadContext(archive);
+export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_AnimJointRoot | null {
+    if (symbol === null)
+        return null;
+
+    const ctx = new HSD_LoadContext(archive);
 
     const animJoints: HSD_AnimJoint[] = [];
     HSD_AObjLoadAnimJointInternal(animJoints, ctx, symbol.offset);
@@ -910,19 +1239,147 @@ export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveS
     return { root };
 }
 
+export interface HSD_TexAnim {
+    aobj: HSD_AObj | null;
+    animID: number;
+    imageDescs: HSD_ImageDesc[];
+    tlutDescs: HSD_TlutDesc[];
+}
+
+export interface HSD_RenderAnim {
+}
+
+export interface HSD_MatAnim {
+    aobj: HSD_AObj | null;
+    texAnim: HSD_TexAnim[];
+    renderAnim: HSD_RenderAnim | null;
+}
+
 export interface HSD_MatAnimJoint {
     children: HSD_MatAnimJoint[];
+    matAnim: HSD_MatAnim[];
 }
 
 export interface HSD_MatAnimJointRoot {
     root: HSD_MatAnimJoint;
 }
 
+function HSD_AObjLoadTexAnim(texAnims: HSD_TexAnim[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    const nextSiblingOffs = view.getUint32(0x00);
+    const animID = view.getUint32(0x04);
+    const aobjDescOffs = view.getUint32(0x08);
+    const imageDescTblOffs = view.getUint32(0x0C);
+    const tlutDescTblOffs = view.getUint32(0x10);
+    const imageDescTblCount = view.getUint16(0x14);
+    const tlutDescTblCount = view.getUint16(0x16);
+
+    let aobj: HSD_AObj | null = null;
+    if (aobj !== 0)
+        aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
+
+    const imageDescs: HSD_ImageDesc[] = [];
+    const imageDescView = HSD_LoadContext__ResolvePtr(ctx, imageDescTblOffs).createDataView();
+    let imageDescTblIdx = 0x00;
+    for (let i = 0; i < imageDescTblCount; i++) {
+        const imageDescOffs = imageDescView.getUint32(imageDescTblIdx + 0x00);
+        imageDescs.push(HSD_LoadImageDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, imageDescOffs)));
+        imageDescTblIdx += 0x04;
+    }
+
+    const tlutDescs: HSD_TlutDesc[] = [];
+    const tlutDescView = HSD_LoadContext__ResolvePtr(ctx, tlutDescTblOffs).createDataView();
+    let tlutDescTblIdx = 0x00;
+    for (let i = 0; i < tlutDescTblCount; i++) {
+        const tlutDescOffs = tlutDescView.getUint32(tlutDescTblIdx + 0x00);
+        tlutDescs.push(HSD_LoadTlutDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, tlutDescOffs)));
+        tlutDescTblIdx += 0x04;
+    }
+
+    texAnims.push({ animID, aobj, imageDescs, tlutDescs });
+
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadTexAnim(texAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
+}
+
+function HSD_AObjLoadRenderAnim(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_RenderAnim {
+    // TODO(jstpierre): Is this even used?
+    return {};
+}
+
+function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    const nextSiblingOffs = view.getUint32(0x00);
+    const aobjDescOffs = view.getUint32(0x04);
+    const texAnimOffs = view.getUint32(0x08);
+    const renderAnimOffs = view.getUint32(0x0C);
+
+    let aobj: HSD_AObj | null = null;
+    if (aobjDescOffs !== 0)
+        aobj = HSD_AObjLoadDesc(ctx, HSD_LoadContext__ResolvePtr(ctx, aobjDescOffs));
+
+    let texAnim: HSD_TexAnim[] = [];
+    if (texAnimOffs !== 0)
+        HSD_AObjLoadTexAnim(texAnim, ctx, HSD_LoadContext__ResolvePtr(ctx, texAnimOffs));
+
+    let renderAnim: HSD_RenderAnim | null = null;
+    if (renderAnimOffs !== 0)
+        renderAnim = HSD_AObjLoadRenderAnim(ctx, HSD_LoadContext__ResolvePtr(ctx, texAnimOffs));
+
+    matAnims.push({ aobj, texAnim, renderAnim });
+
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadMatAnim(matAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
+}
+
+function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: HSD_LoadContext, offs: number): void {
+    assert(offs !== 0);
+    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+    const view = buffer.createDataView();
+    const firstChildOffs = view.getUint32(0x00);
+    const nextSiblingOffs = view.getUint32(0x04);
+    const matAnimOffs = view.getUint32(0x08);
+
+    const children: HSD_MatAnimJoint[] = [];
+    if (firstChildOffs !== 0)
+        HSD_AObjLoadMatAnimJointInternal(children, ctx, firstChildOffs);
+
+    let matAnim: HSD_MatAnim[] = [];
+    if (matAnimOffs !== 0)
+        HSD_AObjLoadMatAnim(matAnim, ctx, HSD_LoadContext__ResolvePtr(ctx, matAnimOffs));
+
+    matAnimJoints.push({ children, matAnim });
+    
+    if (nextSiblingOffs !== 0)
+        HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, nextSiblingOffs);
+}
+
+export function HSD_AObjLoadMatAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_MatAnimJointRoot | null {
+    if (symbol === null)
+        return null;
+
+    const ctx = new HSD_LoadContext(archive);
+
+    const matAnimJoints: HSD_MatAnimJoint[] = [];
+    HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, symbol.offset);
+    assert(matAnimJoints.length === 1);
+    const root = matAnimJoints[0];
+
+    return { root };
+}
+
 export interface HSD_ShapeAnimJoint {
     children: HSD_ShapeAnimJoint[];
+    aobj: HSD_AObj[];
 }
 
 export interface HSD_ShapeAnimJointRoot {
     root: HSD_ShapeAnimJoint;
+}
+
+export function HSD_AObjLoadShapeAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_ShapeAnimJointRoot | null {
+    return null;
 }
 //#endregion

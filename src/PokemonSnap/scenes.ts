@@ -7,11 +7,11 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { ModelRenderer, SnapPass, buildTransform } from './render';
-import { LevelArchive, parseLevel, Model } from './room';
+import { SnapPass, ModelRenderer, buildTransform } from './render';
+import { LevelArchive, parseLevel, findGroundHeight, SpawnType } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
-import { mat4, vec3 } from 'gl-matrix';
+import { vec3 } from 'gl-matrix';
 import { hexzero } from '../util';
 
 const pathBase = `PokemonSnap`;
@@ -105,7 +105,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
 }
 
-const transformScratch = mat4.create();
+const posScratch = vec3.create();
 const scaleScratch = vec3.create();
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) { }
@@ -123,7 +123,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=1`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=2`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
@@ -136,8 +136,12 @@ class SceneDesc implements Viewer.SceneDesc {
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
             if (level.skybox !== null) {
-                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.model!.sharedOutput);
-                const skyboxRenderer = new ModelRenderer(skyboxData, level.skybox, undefined, true);
+                const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
+                const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], true);
+                if (level.skybox.animation !== null) {
+                    skyboxRenderer.animations.push(level.skybox.animation!);
+                    skyboxRenderer.setAnimation(0);
+                }
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
             }
@@ -152,8 +156,12 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             for (let i = 0; i < level.rooms.length; i++) {
-                const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].graph.model!.sharedOutput);
-                const roomRenderer = new ModelRenderer(renderData, level.rooms[i].graph);
+                const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
+                const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node]);
+                if (level.rooms[i].animation !== null) {
+                    roomRenderer.animations.push(level.rooms[i].animation!);
+                    roomRenderer.setAnimation(0);
+                }
                 sceneRenderer.renderData.push(renderData);
                 sceneRenderer.modelRenderers.push(roomRenderer);
                 const objects = level.rooms[i].objects;
@@ -163,17 +171,15 @@ class SceneDesc implements Viewer.SceneDesc {
                         console.warn('missing object', hexzero(objects[j].id, 3));
                         continue;
                     }
-                    const objectRenderer = new ModelRenderer(objectDatas[objIndex], level.objectInfo[objIndex].graph);
+                    const def = level.objectInfo[objIndex];
+                    const objectRenderer = ModelRenderer.fromObject(objectDatas[objIndex], def);
                     // set transform components
-                    vec3.copy(objectRenderer.translation, objects[j].pos);
-                    if (level.objectInfo[objIndex].flying)
-                        vec3.sub(objectRenderer.translation, objectRenderer.translation, level.rooms[i].graph.translation);
+                    vec3.copy(posScratch, objects[j].pos);
+                    if (def.spawn === SpawnType.GROUND)
+                        posScratch[1] = findGroundHeight(level.collision!, objects[j].pos[0], objects[j].pos[2]);
 
-                    vec3.copy(objectRenderer.euler, objects[j].euler);
-
-                    vec3.mul(objectRenderer.scale, objectRenderer.scale, objects[j].scale);
-                    vec3.mul(objectRenderer.scale, objectRenderer.scale, level.objectInfo[objIndex].scale);
-
+                    vec3.mul(scaleScratch, def.scale, objects[j].scale);
+                    buildTransform(objectRenderer.modelMatrix, posScratch, objects[j].euler, scaleScratch);
                     sceneRenderer.modelRenderers.push(objectRenderer);
                 }
             }

@@ -185,6 +185,8 @@ export const enum TevOp {
     COMP_BGR24_EQ = 13,
     COMP_RGB8_GT = 14,
     COMP_RGB8_EQ = 15,
+    COMP_A8_GT = COMP_RGB8_GT,
+    COMP_A8_EQ = COMP_RGB8_EQ,
 }
 
 export const enum TevBias {
@@ -209,7 +211,7 @@ export const enum TevScale {
     $HWB_RGB8 = 3,
 }
 
-export const enum CombineColorInput {
+export const enum CC {
     CPREV = 0, /*!< Use the color value from previous TEV stage */
     APREV = 1, /*!< Use the alpha value from previous TEV stage */
     C0 = 2, /*!< Use the color value from the color/output register 0 */
@@ -228,7 +230,7 @@ export const enum CombineColorInput {
     ZERO = 15, /*!< Use to pass zero value */
 }
 
-export const enum CombineAlphaInput {
+export const enum CA {
     APREV = 0, /*!< Use the alpha value from previous TEV stage */
     A0 = 1, /*!< Use the alpha value from the color/output register 0 */
     A1 = 2, /*!< Use the alpha value from the color/output register 1 */
@@ -240,18 +242,18 @@ export const enum CombineAlphaInput {
 }
 
 export const enum KonstColorSel {
-    KCSEL_1 = 0x00, /*!< constant 1.0 */
+    KCSEL_1   = 0x00, /*!< constant 1.0 */
     KCSEL_7_8 = 0x01, /*!< constant 7/8 */
-    KCSEL_3_4 = 0x02, /*!< constant 3/4 */
+    KCSEL_6_8 = 0x02, /*!< constant 6/8 */
     KCSEL_5_8 = 0x03, /*!< constant 5/8 */
-    KCSEL_1_2 = 0x04, /*!< constant 1/2 */
+    KCSEL_4_8 = 0x04, /*!< constant 4/8 */
     KCSEL_3_8 = 0x05, /*!< constant 3/8 */
-    KCSEL_1_4 = 0x06, /*!< constant 1/4 */
+    KCSEL_2_8 = 0x06, /*!< constant 2/8 */
     KCSEL_1_8 = 0x07, /*!< constant 1/8 */
-    KCSEL_K0 = 0x0C, /*!< K0[RGB] register */
-    KCSEL_K1 = 0x0D, /*!< K1[RGB] register */
-    KCSEL_K2 = 0x0E, /*!< K2[RGB] register */
-    KCSEL_K3 = 0x0F, /*!< K3[RGB] register */
+    KCSEL_K0  = 0x0C, /*!< K0[RGB] register */
+    KCSEL_K1  = 0x0D, /*!< K1[RGB] register */
+    KCSEL_K2  = 0x0E, /*!< K2[RGB] register */
+    KCSEL_K3  = 0x0F, /*!< K3[RGB] register */
     KCSEL_K0_R = 0x10, /*!< K0[RRR] register */
     KCSEL_K1_R = 0x11, /*!< K1[RRR] register */
     KCSEL_K2_R = 0x12, /*!< K2[RRR] register */
@@ -271,14 +273,14 @@ export const enum KonstColorSel {
 }
 
 export const enum KonstAlphaSel {
-    KASEL_1 = 0x00, /*!< constant 1.0 */
-    KASEL_7_8 = 0x01, /*!< constant 7/8 */
-    KASEL_3_4 = 0x02, /*!< constant 3/4 */
-    KASEL_5_8 = 0x03, /*!< constant 5/8 */
-    KASEL_1_2 = 0x04, /*!< constant 1/2 */
-    KASEL_3_8 = 0x05, /*!< constant 3/8 */
-    KASEL_1_4 = 0x06, /*!< constant 1/4 */
-    KASEL_1_8 = 0x07, /*!< constant 1/8 */
+    KASEL_1    = 0x00, /*!< constant 1.0 */
+    KASEL_7_8  = 0x01, /*!< constant 7/8 */
+    KASEL_6_8  = 0x02, /*!< constant 6/8 */
+    KASEL_5_8  = 0x03, /*!< constant 5/8 */
+    KASEL_4_8  = 0x04, /*!< constant 4/8 */
+    KASEL_3_8  = 0x05, /*!< constant 3/8 */
+    KASEL_2_8  = 0x06, /*!< constant 2/8 */
+    KASEL_1_8  = 0x07, /*!< constant 1/8 */
     KASEL_K0_R = 0x10, /*!< K0[R] register */
     KASEL_K1_R = 0x11, /*!< K1[R] register */
     KASEL_K2_R = 0x12, /*!< K2[R] register */
