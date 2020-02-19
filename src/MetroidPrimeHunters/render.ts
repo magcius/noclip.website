@@ -1,20 +1,20 @@
 
 import { mat4, mat2d, vec3 } from "gl-matrix";
-import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
-import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
+import { readTexture, getFormatName, Texture, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
+import { computeViewMatrix } from "../Camera";
 import AnimationController from "../AnimationController";
 import { nArray, assertExists } from "../util";
-import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D";
+import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MPHbin } from "./mph_binModel";
-import { MDL0_ShapeEntry } from "../rres/brres";
+import { calcBBoardMtx, calcYBBoardMtx } from "../nns_g3d/render";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -32,6 +32,27 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
     return { name, surfaces, extraInfo };
 }
 
+function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
+    if (flip)
+        return GfxWrapMode.MIRROR;
+    else if (repeat)
+        return GfxWrapMode.REPEAT;
+    else
+        return GfxWrapMode.CLAMP;
+}
+
+function parseMPHTexImageParamWrapModeS(w0: number): GfxWrapMode {
+    const repeatS = (((w0 >> 0) & 0x01) == 0x1);
+    const flipS = (((w0 >> 1) & 0x01) == 0x1);
+    return translateWrapMode(repeatS, flipS);
+}
+
+function parseMPHTexImageParamWrapModeT(w0: number): GfxWrapMode {
+    const repeatT = (((w0 >> 8) & 0x01) == 0x1);
+    const flipT = (((w0 >> 9) & 0x01) == 0x1);
+    return translateWrapMode(repeatT, flipT);
+}
+
 const scratchTexMatrix = mat2d.create();
 class MaterialInstance {
     private texture: TEX0Texture | null;
@@ -47,10 +68,10 @@ class MaterialInstance {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
-
         function expand5to8(n: number): number {
             return (n << (8 - 5)) | (n >>> (10 - 8));
         }
+
         const texData = tex0.textures.find((t) => t.name === this.material.textureName);
         this.texture = texData !== undefined ? texData: null;
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
@@ -91,53 +112,7 @@ class MaterialInstance {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
         });
-
-        function translateWrapMode(repeat: boolean, flip: boolean): GfxWrapMode {
-            if (flip)
-                return GfxWrapMode.MIRROR;
-            else if (repeat)
-                return GfxWrapMode.REPEAT;
-            else
-                return GfxWrapMode.CLAMP;
-        }
-
-        function parseMPHTexImageParamWrapModeS(w0: number): GfxWrapMode {
-            const repeatS = (((w0 >> 0) & 0x01) == 0x1);
-            const flipS = (((w0 >> 1) & 0x01) == 0x1);
-            return translateWrapMode(repeatS, flipS);
-        }
-
-        function parseMPHTexImageParamWrapModeT(w0: number): GfxWrapMode {
-            const repeatT = (((w0 >> 8) & 0x01) == 0x1);
-            const flipT = (((w0 >> 9) & 0x01) == 0x1);
-            return translateWrapMode(repeatT, flipT);
-        }
     }
-
-    //public bindSRT0(animationController: AnimationController, srt0: SRT0): void {
-    //    this.srt0Animator = bindSRT0(animationController, srt0, this.material.name);
-    //}
-
-    //public bindPAT0(animationController: AnimationController, pat0: PAT0): boolean {
-    //    this.pat0Animator = bindPAT0(animationController, pat0, this.material.name);
-    //    return this.pat0Animator !== null;
-    //}
-
-    //public translatePAT0Textures(device: GfxDevice, hostAccessPass: GfxHostAccessPass, tex0: TEX0): void {
-    //    if (this.pat0Animator === null)
-    //        return;
-
-    //    while (this.gfxTextures.length > 1) {
-    //        device.destroyTexture(this.gfxTextures.pop()!);
-    //        this.textureNames.pop();
-    //        this.viewerTextures.pop();
-    //    }
-
-    //    for (let i = 0; i < this.pat0Animator.matData.animationTrack.length; i++) {
-    //        const { texName, plttName } = this.pat0Animator.matData.animationTrack[i];
-    //        this.translateTexture(device, tex0, texName, plttName);
-    //    }
-    //}
 
     private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null) {
         if (tex0 === null || textureName === null)
@@ -204,67 +179,6 @@ class Node {
     public calcMatrix(baseModelMatrix: mat4): void {
         mat4.mul(this.modelMatrix, baseModelMatrix, this.node.jointMatrix);
     }
-}
-
-function calcBBoardMtx(dst: mat4, m: mat4): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx;
-    dst[4] = 0;
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = my;
-    dst[9] = 0;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = 0;
-    dst[10] = mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-const scratchVec3 = vec3.create();
-function calcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    vec3.set(v, 0.0, -m[6], m[5]);
-    vec3.normalize(v, v);
-
-    dst[0] = mx;
-    dst[4] = m[4];
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = m[5];
-    dst[9] = v[1] * mz;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = m[6];
-    dst[10] = v[2] * mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    m[3] = 9999.0;
-    m[7] = 9999.0;
-    m[11] = 9999.0;
-    m[15] = 9999.0;
 }
 
 const scratchMat4 = mat4.create();
@@ -363,7 +277,6 @@ export class MPHRenderer {
             if (this.materialInstances[i].viewerTextures.length > 0)
                 this.viewerTextures.push(this.materialInstances[i].viewerTextures[0]);
 
-
         function getNodeIndex(shape: MDL0Shape): number{
             const view = shape.dlBuffer.createDataView();
             const nodeIndex = view.getInt8(0x04);
@@ -376,11 +289,11 @@ export class MPHRenderer {
             const shapeIndex = mphModel.meshs[i].shapeID;
             const shape = model.shapes[shapeIndex];
             //const nodeIndex = getNodeIndex(shape);
+            // TODO: Why isn't this working?
             const nodeIndex = 0;
 
             this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
-
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {

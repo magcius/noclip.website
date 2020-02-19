@@ -1,10 +1,10 @@
-﻿import ArrayBufferSlice from "../ArrayBufferSlice";
+﻿
+import ArrayBufferSlice from "../ArrayBufferSlice";
 import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model, calcTexMtx, fx16 } from "../nns_g3d/NNS_G3D";
-import { mat4, mat2d, mat2, mat3, vec3 } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
 import { colorNewFromRGBA } from "../Color";
-import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 
 export interface MPHbin {
     models: MDL0Model[];
@@ -311,7 +311,6 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const meshCount = view.getUint16(0x60, true);
     const matrixCount = view.getUint16(0x62, true);
 
-
     // Mesh
     const meshs: MPHMesh[] = [];
     for (let i = 0; i < meshCount; i++) {
@@ -361,7 +360,6 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         const nodeOffs = i * 0xF0 + nodeOffset;
         MPHNode.push( parseNode(buffer.slice(nodeOffs)) );
     }
-    const nodes: MDL0Node[] = [];
 
     const mphTex = { pals, texs };
 
@@ -371,9 +369,11 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const texMtxMode = TexMtxMode.MAYA;
     const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
     const models: MDL0Model[] = [];
-    const name = `model_0`;
 
+    // TODO
+    const name = `model_0`;
     const jointMatrix = mat4.create();
+    const nodes: MDL0Node[] = [];
     nodes.push({ name, jointMatrix });
 
     models.push({ name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode });

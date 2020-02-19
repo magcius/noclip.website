@@ -2,17 +2,17 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 
-export interface NitroFSEntry {
+export interface SNDFILEEntry {
     path: string | null;
     fileId: number;
     buffer: ArrayBufferSlice;
 }
 
-export interface NitroFS {
-    files: NitroFSEntry[];
+export interface SNDFILE {
+    files: SNDFILEEntry[];
 }
 
-function parseNitroFS(fileCount: number, fileSize: number, imgBuffer: ArrayBufferSlice): NitroFS {
+function parseSNDFILE(fileCount: number, imgBuffer: ArrayBufferSlice): SNDFILE {
     const imgView = imgBuffer.createDataView();
 
     const secSize = 0x40;
@@ -23,7 +23,7 @@ function parseNitroFS(fileCount: number, fileSize: number, imgBuffer: ArrayBuffe
         return imgBuffer.slice(fileStartOffs, fileStartOffs+fileEndOffs);
     }
 
-    const files: NitroFSEntry[] = [];
+    const files: SNDFILEEntry[] = [];
     let nameOffset = 0;
     for (let i = 0; i < fileCount; i++) {
         nameOffset = i * secSize + 0x20;
@@ -35,11 +35,9 @@ function parseNitroFS(fileCount: number, fileSize: number, imgBuffer: ArrayBuffe
     return { files };
 }
 
-export function parse(buffer: ArrayBufferSlice): NitroFS {
-const view = buffer.createDataView();
+export function parse(buffer: ArrayBufferSlice): SNDFILE {
+    const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x07) === 'SNDFILE');
     const fileCount = view.getUint32(0x08, false);
-    const fileSize = view.getUint32(0x0C, false);
-
-    return parseNitroFS(fileCount, fileSize, buffer);
+    return parseSNDFILE(fileCount, buffer);
 }

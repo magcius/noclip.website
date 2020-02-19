@@ -52,7 +52,7 @@ import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
-import * as Scenes_MetroidPrimeHunters from './mph/mph_scenes';
+import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 

@@ -10,19 +10,15 @@ import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MPHRenderer, G3DPass } from './render';
-import { assert, readString, assertExists } from '../util';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { assert, assertExists } from '../util';
+import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
-import { mat4 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
-import { fx32, SRT0, PAT0, parseNSBTX } from '../nns_g3d/NNS_G3D';
-import { FMDLRenderer } from '../fres_nx/render';
 
-const pathBase = `mph`;
+const pathBase = `MetroidPrimeHunters`;
+
 class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
@@ -35,15 +31,14 @@ class ModelCache {
         return Promise.all(p);
     }
 
-    private mountARC(arc: ARC.NitroFS): void {
+    private mountARC(arc: ARC.SNDFILE): void {
         for (let i = 0; i < arc.files.length; i++) {
             const file = arc.files[i];
             this.fileDataCache.set(assertExists(file.path), file.buffer);
         }
     }
 
-    //public async fetchFile(path: string): Promise<ArrayBufferSlice> {
-    fetchFile(path: string): Promise<ArrayBufferSlice> {
+    public fetchFile(path: string): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
         const p = this.dataFetcher.fetchData(`${pathBase}/${path}`);
         this.filePromiseCache.set(path, p);
@@ -139,10 +134,8 @@ interface OBJI {
     scaleZ: number;
 }
 
-//const scratchMatrix = mat4.create();
 class MetroidPrimeHuntersSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public arcName: string | null, public texName: string | null) {
-
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
