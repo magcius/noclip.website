@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, getMatrixAxisX } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, texEnvMtx, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -742,7 +742,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public walkAction: string | null = null;
     public desiredRailSpeed: number = 2.0;
     public maxChangeRailSpeed: number = 0.1;
-    public poseBlendSpeed: number = 0.08;
+    public railTurnSpeed: number = 0.08;
     public turnBckRate = 1.0;
     public railGrounded: boolean = false;
 
@@ -1210,27 +1210,16 @@ export class Peach extends NPCActor {
     }
 }
 
-function makeQuatUpFront(q: quat, up: vec3, front: vec3): void {
-    makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
-    mat4.getRotation(q, scratchMatrix);
-    quat.normalize(q, q);
-}
-
-function blendQuatUpFront(q: quat, up: vec3, front: vec3, speed0: number, speed1: number): void {
-    // TODO(jstpierre): Figure this out
-    makeQuatUpFront(q, up, front);
-}
-
-function decidePose(actor: NPCActor, up: vec3, front: vec3, pos: vec3, unk: number, rotationSpeed: number, translationSpeed: number): void {
+function decidePose(actor: NPCActor, up: vec3, front: vec3, pos: vec3, rotationSpeedUp: number, rotationSpeedFront: number, translationSpeed: number): void {
     vec3.lerp(actor.translation, actor.translation, pos, translationSpeed);
     if (vec3.equals(up, Vec3Zero))
         debugger;
     if (Number.isNaN(actor.poseQuat[0]))
         debugger;
-    if (unk === 1.0 && rotationSpeed === 1.0) {
+    if (rotationSpeedUp === 1.0 && rotationSpeedFront === 1.0) {
         makeQuatUpFront(actor.poseQuat, up, front);
     } else {
-        blendQuatUpFront(actor.poseQuat, up, front, unk, rotationSpeed);
+        blendQuatUpFront(actor.poseQuat, actor.poseQuat, up, front, rotationSpeedUp, rotationSpeedFront);
     }
     if (Number.isNaN(actor.poseQuat[0]))
         debugger;
@@ -1248,17 +1237,17 @@ function followRailPoseOnGround(actor: NPCActor, railActor: LiveActor, speed: nu
     followRailPose(actor, speed, speed);
 }
 
-function startMoveAction(actor: NPCActor): void {
+function startMoveAction(actor: NPCActor, deltaTimeFrames: number): void {
     if (!isExistRail(actor))
         return;
 
-    adjustmentRailCoordSpeed(actor, actor.desiredRailSpeed, actor.maxChangeRailSpeed);
+    adjustmentRailCoordSpeed(actor, actor.desiredRailSpeed, actor.maxChangeRailSpeed * deltaTimeFrames);
     moveRailRider(actor);
 
     if (actor.railGrounded) {
-        followRailPoseOnGround(actor, actor, actor.poseBlendSpeed);
+        followRailPoseOnGround(actor, actor, actor.railTurnSpeed * deltaTimeFrames);
     } else {
-        followRailPose(actor, actor.poseBlendSpeed, actor.poseBlendSpeed);
+        followRailPose(actor, actor.railTurnSpeed * deltaTimeFrames, actor.railTurnSpeed * deltaTimeFrames);
     }
 
     if (isRailReachedGoal(actor))
@@ -1274,7 +1263,7 @@ function tryStartTalkAction(actor: NPCActor): void {
     tryStartTurnAction(actor);
 }
 
-function tryStartMoveTalkAction(actor: NPCActor): void {
+function tryStartMoveTalkAction(actor: NPCActor, deltaTimeFrames: number): void {
     if (!isExistRail(actor)) {
         tryStartTalkAction(actor);
         return;
@@ -1286,15 +1275,15 @@ function tryStartMoveTalkAction(actor: NPCActor): void {
     }
 
     // Some stuff related to talking...
-    startMoveAction(actor);
+    startMoveAction(actor, deltaTimeFrames);
     let action = actor.walkAction;
 
     if (action !== null)
         tryStartAction(actor, action);
 }
 
-function tryTalkNearPlayerAndStartMoveTalkAction(actor: NPCActor): void {
-    tryStartMoveTalkAction(actor);
+function tryTalkNearPlayerAndStartMoveTalkAction(actor: NPCActor, deltaTimeFrames: number): void {
+    tryStartMoveTalkAction(actor, deltaTimeFrames);
     // tryTalkNearPlayer(actor);
 }
 
@@ -1342,7 +1331,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
             this.waitAction = `Wait`;
             this.walkAction = `DashA`;
             this.desiredRailSpeed = 6.0;
-            this.poseBlendSpeed = 0.8;
+            this.railTurnSpeed = 0.8;
             this.railGrounded = true;
         } else {
             this.waitAction = `Wait`;
@@ -1369,7 +1358,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
             if (isFirstStep(this))
                 this.diveCounter = getRandomInt(120, 300);
 
-            tryTalkNearPlayerAndStartMoveTalkAction(this);
+            tryTalkNearPlayerAndStartMoveTalkAction(this, getDeltaTimeFrames(viewerInput));
 
             if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
                 this.setNerve(PenguinNrv.Dive);

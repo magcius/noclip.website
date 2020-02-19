@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3 } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -22,6 +22,8 @@ const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchMatrix = mat4.create();
+const scratchQuat = quat.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
@@ -671,4 +673,95 @@ export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): 
     vec3.cross(frontNorm, right, upNorm);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
     setTrans(dst, pos);
+}
+
+export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
+    makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
+    mat4.getRotation(dst, scratchMatrix);
+    quat.normalize(dst, dst);
+}
+
+export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number, scratch = scratchVec3): void {
+    // v0 and v1 are normalized.
+
+    // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
+    vec3.cross(scratchVec3, v0, v1);
+    const sin = vec3.length(scratchVec3);
+    if (sin > MathConstants.EPSILON) {
+        const cos = vec3.dot(v0, v1);
+        const theta = Math.atan2(sin, cos);
+        quat.setAxisAngle(q, scratchVec3, theta * t);
+    } else {
+        quat.identity(q);
+    }
+}
+
+export function quatGetAxisX(dst: vec3, q: quat): void {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    dst[0] = (1.0 - 2.0 * y * y) - 2.0 * z * z;
+    dst[1] = 2.0 * x * y + 2.0 * w * z;
+    dst[2] = 2.0 * x * z - 2.0 * w * y;
+}
+
+export function quatGetAxisY(dst: vec3, q: quat): void {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    dst[0] = 2.0 * x * y - 2.0 * w * z;
+    dst[1] = (1.0 - 2.0 * x * x) - 2.0 * z * z;
+    dst[2] = 2.0 * y * z + 2.0 * w * x;
+}
+
+export function quatGetAxisZ(dst: vec3, q: quat): void {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    dst[0] = 2.0 * x * z + 2.0 * w * y;
+    dst[1] = 2.0 * y * z - 2.0 * x * w;
+    dst[2] = (1.0 - 2.0 * x * x) - 2.0 * y * y;
+}
+
+export function isSameDirection(v0: vec3, v1: vec3, ep: number): boolean {
+    if (Math.abs(v0[1] * v1[2] - v0[2] * v1[1]) > ep)
+        return false;
+    if (Math.abs(v0[2] * v1[0] - v0[0] * v1[2]) > ep)
+        return false;
+    if (Math.abs(v0[0] * v1[1] - v0[1] * v1[0]) > ep)
+        return false;
+    return true;
+}
+
+export function addRandomVector(dst: vec3, src: vec3, mag: number): void {
+    dst[0] = src[0] + getRandomFloat(-mag, mag);
+    dst[1] = src[1] + getRandomFloat(-mag, mag);
+    dst[2] = src[2] + getRandomFloat(-mag, mag);
+}
+
+export function turnRandomVector(dst: vec3, src: vec3, mag: number): void {
+    if (isNearZero(vec3.length(src), 0.001)) {
+        vec3.copy(dst, src);
+    } else {
+        addRandomVector(dst, src, mag);
+        normToLength(dst, mag);
+    }
+}
+
+export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, speedUp: number, speedFront: number): void {
+    const axisY = scratchVec3a;
+    const axisZ = scratchVec3b;
+    const scratch = scratchVec3;
+
+    quatGetAxisY(axisY, q);
+    if (vec3.dot(axisY, up) < 0.0 && isSameDirection(axisY, up, 0.01))
+        turnRandomVector(axisY, axisY, 0.001);
+    quatSetRotate(scratchQuat, axisY, up, speedUp, scratch);
+    quat.mul(dst, scratchQuat, q);
+
+    quatGetAxisY(axisY, dst);
+    vec3.scaleAndAdd(axisY, front, axisY, -vec3.dot(axisY, front));
+    vec3.normalize(axisY, axisY);
+
+    quatGetAxisZ(axisZ, dst);
+    if (vec3.dot(axisZ, axisY) < 0.0 && isSameDirection(axisZ, axisY, 0.01))
+        turnRandomVector(axisZ, axisZ, 0.001);
+
+    quatSetRotate(scratchQuat, axisZ, axisY, speedFront, scratch);
+    quat.mul(dst, scratchQuat, dst);
+    quat.normalize(dst, dst);
 }
