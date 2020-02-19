@@ -15,6 +15,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA } from './NNS_G3D';
+import { CameraController } from '../Camera';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -32,6 +33,11 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
                 viewerTextures.push(element.viewerTextures[j]);
         }
         this.textureHolder = new FakeTextureHolder(viewerTextures);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
+        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

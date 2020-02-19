@@ -1,5 +1,5 @@
 
-import { mat4, mat2d, vec3 } from "gl-matrix";
+import { mat4, mat2d } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';

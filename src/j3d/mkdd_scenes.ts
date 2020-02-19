@@ -13,6 +13,7 @@ import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DG
 import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
+import { CameraController } from '../Camera';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
@@ -35,6 +36,11 @@ class MKDDRenderer implements Viewer.SceneGfx {
             for (let j = 0; j < this.modelInstances[i].materialInstances.length; j++)
                 this.modelInstances[i].materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
         }
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(200/60);
+        return c;
     }
 
     public createPanels(): UI.Panel[] {

@@ -9,7 +9,7 @@ import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { Camera } from '../Camera';
+import { Camera, CameraController } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
@@ -135,6 +135,11 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
+        return c;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {

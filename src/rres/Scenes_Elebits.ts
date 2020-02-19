@@ -14,6 +14,7 @@ import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { SceneContext } from '../SceneBase';
 import { range } from '../MathHelpers';
+import { CameraController } from '../Camera';
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);
@@ -48,6 +49,11 @@ class ElebitsRenderer extends BasicGXRendererHelper {
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(24/60);
+        return c;
     }
 
     public createPanels(): UI.Panel[] {

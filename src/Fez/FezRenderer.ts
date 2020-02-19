@@ -5,8 +5,8 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec2, vec4, quat } from "gl-matrix";
-import { computeViewMatrix } from "../Camera";
+import { mat4, vec3, vec2, vec4 } from "gl-matrix";
+import { computeViewMatrix, CameraController } from "../Camera";
 import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
@@ -182,7 +182,12 @@ export class FezRenderer implements Viewer.SceneGfx {
         this.levelRenderData.baseDiffuse = level.baseDiffuse;
         this.levelRenderData.baseAmbient = level.baseAmbient;
     }
-    
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(16/60);
+        return c;
+    }
+
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -280,15 +285,6 @@ export class FezObjectRenderer {
 
         renderInst.drawIndexes(this.geometryData.indexCount);
     }
-}
-
-function parseBoolean(str: string): boolean {
-    if (str === 'True')
-        return true;
-    else if (str === 'False')
-        return false;
-    else
-        throw "whoops";
 }
 
 const scratchVec3 = vec3.create();

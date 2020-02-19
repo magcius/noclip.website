@@ -20,6 +20,7 @@ import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
+import { CameraController } from '../Camera';
 
 const pathBase = `BanjoKazooie`;
 
@@ -36,6 +37,11 @@ class BKRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
         this.renderHelper = new GfxRenderHelper(device);
         this.sceneEmitters = new SceneEmitterHolder(device, objectData);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(30/60);
+        return c;
     }
 
     public createPanels(): UI.Panel[] {

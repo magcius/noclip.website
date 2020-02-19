@@ -555,8 +555,6 @@ class Main {
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
 
-        if (scene.createCameraController !== undefined)
-            this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
@@ -609,8 +607,6 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
-        // TODO(jstpierre): Bring back the leak checker, eventually?
-        // gfxDeviceGetImpl_GL(this.viewer.gfxDevice).checkForLeaks();
 
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)

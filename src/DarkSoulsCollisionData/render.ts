@@ -12,6 +12,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { CameraController } from '../Camera';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -202,6 +203,11 @@ export class Scene implements Viewer.SceneGfx {
         });
 
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(16/60);
+        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

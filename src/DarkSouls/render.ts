@@ -11,7 +11,7 @@ import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { mat4, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
@@ -805,6 +805,11 @@ export class MSBRenderer {
                 this.flverInstances.push(instance);
             }
         }
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(20/60);
+        return c;
     }
 
     private lodModels: string[] = [];

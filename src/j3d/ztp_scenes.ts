@@ -19,6 +19,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { mat4 } from 'gl-matrix';
+import { CameraController } from '../Camera';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -96,6 +97,11 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public extraTextures: ZTPExtraTextures, public stageRarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(36/60);
+        return c;
     }
 
     private setMirrored(mirror: boolean): void {

@@ -23,6 +23,7 @@ import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { MathConstants } from "../MathHelpers";
+import { CameraController } from '../Camera';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
@@ -34,6 +35,11 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(12/60);
+        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

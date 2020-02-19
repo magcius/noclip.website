@@ -7,8 +7,16 @@ import * as World from './world';
 import { SceneContext } from '../SceneBase';
 import { DataFetcherFlags } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { CameraController } from '../Camera';
 
 const pathBase = `PaperMarioTTYD`;
+
+class TTYDRenderer extends WorldRenderer {
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(58/60);
+        return c;
+    }
+}
 
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {

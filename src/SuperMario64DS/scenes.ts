@@ -495,9 +495,9 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.bmdRenderers.length; i++)
-        this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-        this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
 
         this.renderInstManager.popTemplateRenderInst();
 

@@ -9,6 +9,14 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BasicRRESRenderer } from './scenes';
 import { SceneContext } from '../SceneBase';
+import { CameraController } from '../Camera';
+
+class RTDLRenderer extends BasicRRESRenderer {
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1/60);
+        return c;
+    }
+}
 
 class RTDLSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
@@ -20,7 +28,7 @@ class RTDLSceneDesc implements Viewer.SceneDesc {
             return CX.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
             const courseRRES = BRRES.parse(buffer);
-            return new BasicRRESRenderer(device, [courseRRES]);
+            return new RTDLRenderer(device, [courseRRES]);
         });
     }
 }

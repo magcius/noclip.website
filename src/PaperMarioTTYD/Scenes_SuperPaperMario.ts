@@ -11,6 +11,14 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { assertExists } from '../util';
+import { CameraController } from '../Camera';
+
+class SuperPaperMarioRenderer extends WorldRenderer {
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(24/60);
+        return c;
+    }
+}
 
 class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -39,7 +47,7 @@ class SPMSceneDesc implements Viewer.SceneDesc {
                 textureHolder.addTPLTextures(device, bgTpl);
             }
 
-            return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
+            return new SuperPaperMarioRenderer(device, d, textureHolder, backgroundTextureName);
         });
     }
 }

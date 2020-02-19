@@ -17,7 +17,7 @@ import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } fro
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { computeViewMatrix } from "../Camera";
+import { computeViewMatrix, CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { TextureState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
@@ -2682,6 +2682,11 @@ class Pilotwings64Renderer implements SceneGfx {
 
     constructor(device: GfxDevice, private dataHolder: DataHolder, private modelBuilder: ModelBuilder) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(128/60);
+        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {

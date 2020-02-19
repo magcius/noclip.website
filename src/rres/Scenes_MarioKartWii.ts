@@ -18,6 +18,7 @@ import { computeModelMatrixSRT, computeModelMatrixS, MathConstants } from '../Ma
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { CameraController } from '../Camera';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -77,6 +78,11 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
             for (let j = 0; j < getModelInstance(this.baseObjects[i]).materialInstances.length; j++)
                 getModelInstance(this.baseObjects[i]).materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
         }
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(24/60);
+        return c;
     }
 
     public createPanels(): UI.Panel[] {

@@ -16,7 +16,7 @@ import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { FPSCameraController, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { FPSCameraController, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Camera';
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -1011,10 +1011,9 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController() {
-        const controller = new FPSCameraController();
-        controller.sceneKeySpeedMult = 0.025;
-        return controller;
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.025);
+        return c;
     }
 
     public update(renderState: RenderState) {

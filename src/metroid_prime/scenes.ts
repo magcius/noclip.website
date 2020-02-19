@@ -13,7 +13,7 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
-import { FPSCameraController } from '../Camera';
+import { FPSCameraController, CameraController } from '../Camera';
 import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
@@ -44,10 +44,9 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public createCameraController() {
-        const controller = new FPSCameraController();
-        controller.sceneKeySpeedMult = 0.1;
-        return controller;
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.1);
+        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

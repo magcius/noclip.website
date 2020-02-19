@@ -8,6 +8,7 @@ import { SceneContext } from '../SceneBase';
 import { readZELVIEW0, Headers } from './zelview0';
 import { RootMeshRenderer, MeshData, Mesh } from './render';
 import { RSPState, RSPOutput } from './f3dzex';
+import { CameraController } from '../Camera';
 
 const pathBase = `zelview`;
 
@@ -23,6 +24,11 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(16/60);
+        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

@@ -264,6 +264,7 @@ export interface CameraController {
     forceUpdate: boolean;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
+    setSceneMoveSpeedMult(v: number): void;
     getKeyMoveSpeed(): number | null;
     setKeyMoveSpeed(speed: number): void;
 }
@@ -300,6 +301,10 @@ export class FPSCameraController implements CameraController {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
 
+    public setSceneMoveSpeedMult(v: number): void {
+        this.sceneKeySpeedMult = v;
+    }
+
     public setKeyMoveSpeed(speed: number): void {
         this.keyMoveSpeed = speed;
     }
@@ -327,7 +332,7 @@ export class FPSCameraController implements CameraController {
 
         const keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
-    
+
         const keyMovement = this.keyMovement;
         const keyMoveLowSpeedCap = 0.01;
 
@@ -457,6 +462,9 @@ export class OrbitCameraController implements CameraController {
     }
 
     public deserialize(state: string): void {
+    }
+
+    public setSceneMoveSpeedMult(v: number): void {
     }
 
     public setKeyMoveSpeed(speed: number): void {
@@ -592,6 +600,9 @@ export class OrthoCameraController implements CameraController {
     private nearPlane = 0;
 
     constructor() {
+    }
+
+    public setSceneMoveSpeedMult(v: number): void {
     }
 
     public cameraUpdateForced(): void {

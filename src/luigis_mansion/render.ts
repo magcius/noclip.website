@@ -10,7 +10,7 @@ import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
-import { Camera, computeViewMatrix } from "../Camera";
+import { Camera, computeViewMatrix, CameraController } from "../Camera";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 
@@ -174,6 +174,11 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
         super(device);
         for (let i = 0; i < bins.length; i++)
             this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(16/60);
+        return c;
     }
 
     public createPanels(): UI.Panel[] {

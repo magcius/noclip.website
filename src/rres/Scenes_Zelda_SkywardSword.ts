@@ -15,7 +15,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ColorKind } from '../gx/gx_render';

@@ -147,8 +147,6 @@ class Main {
         const scene = await createScene(context, state);
         this.viewer.setScene(scene);
 
-        if (scene.createCameraController !== undefined)
-            this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new OrbitCameraController());
     }

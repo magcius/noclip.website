@@ -13,7 +13,7 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_rende
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
-import { computeModelMatrixYBillboard } from "../Camera";
+import { computeModelMatrixYBillboard, CameraController } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { SceneContext } from "../SceneBase";
 
@@ -264,6 +264,11 @@ export class OkamiRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
+    }
+    
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
+        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

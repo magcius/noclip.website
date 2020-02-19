@@ -13,6 +13,7 @@ import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { vec3 } from 'gl-matrix';
 import { hexzero } from '../util';
+import { CameraController } from '../Camera';
 
 const pathBase = `PokemonSnap`;
 
@@ -27,6 +28,10 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(32/60);
+        return c;
+    }
 
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
