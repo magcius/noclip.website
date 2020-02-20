@@ -1,3 +1,4 @@
+
 import * as Viewer from '../viewer';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
@@ -13,12 +14,11 @@ import { GXMaterial } from '../gx/gx_material';
 import { DecodedTexture } from './textures';
 
 export class ModelInstance {
-    loadedVertexLayout: LoadedVertexLayout;
-    loadedVertexData: LoadedVertexData;
-    shapeHelper: GXShapeHelperGfx | null = null;
-    materialHelper: GXMaterialHelperGfx;
-    textures: (DecodedTexture | null)[] = [];
-    // modelMatrix: mat4 = mat4.create();
+    public loadedVertexLayout: LoadedVertexLayout;
+    public loadedVertexData: LoadedVertexData;
+    public shapeHelper: GXShapeHelperGfx | null = null;
+    public materialHelper: GXMaterialHelperGfx;
+    public textures: (DecodedTexture | null)[] = [];
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, enableCull: boolean) {
         const mb = new GXMaterialBuilder('Basic');
@@ -36,6 +36,10 @@ export class ModelInstance {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+
+        if (window.debug)
+            console.log(JSON.stringify({ vat, vcd }), vtxLoader);
+
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
@@ -83,8 +87,8 @@ export class ModelInstance {
                 materialParams.m_TextureMapping[i].reset();
             }
         }
-        mat4.identity(materialParams.u_TexMtx[0])
-        // this.materialCommand.fillMaterialParams(materialParams);
+
+        mat4.identity(materialParams.u_TexMtx[0]);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, materialParams);
@@ -92,13 +96,12 @@ export class ModelInstance {
         this.shapeHelper.fillPacketParams(packetParams, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
-        // renderInstManager.popTemplateRenderInst();
     }
 }
 
 export class SFARenderer extends BasicGXRendererHelper {
-    models: ModelInstance[] = [];
-    modelMatrices: mat4[] = [];
+    public models: ModelInstance[] = [];
+    public modelMatrices: mat4[] = [];
 
     public clearModels() {
         this.models = [];

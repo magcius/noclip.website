@@ -245,7 +245,7 @@ class MapScene {
 export class SFAMapDesc implements Viewer.SceneDesc {
     constructor(public locationNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isEarly: boolean = false, private isAncient: boolean = false) {
     }
-    
+
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;

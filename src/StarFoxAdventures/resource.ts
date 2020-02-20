@@ -1,3 +1,4 @@
+
 import * as pako from 'pako';
 import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -5,12 +6,12 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GameInfo } from './scenes';
 
 class ZLBHeader {
-    static readonly SIZE = 16;
+    public static readonly SIZE = 16;
 
-    magic: number;
-    unk4: number;
-    unk8: number;
-    size: number;
+    public magic: number;
+    public unk4: number;
+    public unk8: number;
+    public size: number;
 
     constructor(dv: DataView) {
         this.magic = dv.getUint32(0x0);
@@ -25,10 +26,8 @@ function stringToFourCC(s: string): number {
 }
 
 function loadZLB(compData: ArrayBufferSlice): ArrayBuffer {
-    let offs = 0;
     const dv = compData.createDataView();
     const header = new ZLBHeader(dv);
-    offs += ZLBHeader.SIZE;
 
     if (header.magic != stringToFourCC('ZLB\0')) {
         throw Error(`Invalid magic identifier 0x${hexzero(header.magic, 8)}`);

@@ -3,7 +3,7 @@ import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
-import { nArray } from '../util';
+import { nArray, hexdump } from '../util';
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
@@ -65,6 +65,7 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
+                window.debug = sub === 1;
                 this.blockRenderers[sub] = new BlockRenderer(device, uncomp, this.texColl);
             }
         }
@@ -91,31 +92,32 @@ class LowBitReader {
         this.buf = 0;
     }
 
-    peek(bits: number): number {
+    public peek(bits: number): number {
         while (this.num < bits) {
-            this.buf |= this.dv.getUint8(this.offs) << this.num
+            this.buf |= this.dv.getUint8(this.offs) << this.num;
             this.offs++;
             this.num += 8;
         }
-        return this.buf & ((1<<bits)-1);
+
+        return this.buf & ((1 << bits) - 1);
     }
 
-    drop(bits: number) {
+    public drop(bits: number) {
         this.peek(bits); // Ensure buffer has bits to drop
-        this.buf >>>= bits
-        this.num -= bits
+        this.buf >>>= bits;
+        this.num -= bits;
     }
 
-    get(bits: number): number {
-        const x = this.peek(bits)
-        this.drop(bits)
-        return x
+    public get(bits: number): number {
+        const x = this.peek(bits);
+        this.drop(bits);
+        return x;
     }
 }
 
 export class BlockRenderer implements BlockRendererBase {
-    models: ModelInstance[] = [];
-    yTranslate: number = 0;
+    public models: ModelInstance[] = [];
+    public yTranslate: number = 0;
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection) {
         let offs = 0;
@@ -236,7 +238,7 @@ export class BlockRenderer implements BlockRendererBase {
             Cull = 0x8,
         }
         for (let i = 0; i < shaderCount; i++) {
-            const shader = {
+            const shader: Shader = {
                 numLayers: 0,
                 hasTexCoord: nArray(8, () => false),
                 tex0Num: -1,
@@ -270,7 +272,7 @@ export class BlockRenderer implements BlockRendererBase {
             shaders.push(shader);
             offs += fields.shaderSize;
         }
-        
+
         const vcd: GX_VtxDesc[] = [];
         const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
         for (let i = 0; i <= GX.Attr.MAX; i++) {
@@ -289,11 +291,11 @@ export class BlockRenderer implements BlockRendererBase {
         vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
-        
+    
         vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
         vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-        
+    
         vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
@@ -306,7 +308,7 @@ export class BlockRenderer implements BlockRendererBase {
         vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        
+    
         vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
@@ -366,8 +368,11 @@ export class BlockRenderer implements BlockRendererBase {
                 offs = listOffset + listNum * fields.listSize;
                 const dlOffset = blockDv.getUint32(offs);
                 const dlSize = blockDv.getUint16(offs + 4);
-                // console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
                 const displayList = blockData.subarray(dlOffset, dlSize);
+                if (window.debug) {
+                    console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
+                    hexdump(displayList);
+                }
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -489,8 +494,8 @@ export class BlockRenderer implements BlockRendererBase {
 }
 
 export class AncientBlockRenderer implements BlockRendererBase {
-    models: ModelInstance[] = [];
-    yTranslate: number = 0;
+    public models: ModelInstance[] = [];
+    public yTranslate: number = 0;
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection) {
         let offs = 0;

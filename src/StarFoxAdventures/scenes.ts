@@ -1,3 +1,4 @@
+
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
@@ -5,7 +6,7 @@ import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 
-import { SFAMapDesc, SFASandboxDesc, AncientMapDesc } from './maps';
+import { SFAMapDesc, AncientMapDesc } from './maps';
 import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFARenderer } from './render';
@@ -18,10 +19,10 @@ export interface GameInfo {
 }
 
 class SFABlockFetcher implements BlockFetcher {
-    blocksTab: DataView;
-    blocksBin: ArrayBufferSlice;
-    trkblkTab: DataView;
-    locationNum: number;
+    public blocksTab: DataView;
+    public blocksBin: ArrayBufferSlice;
+    public trkblkTab: DataView;
+    public locationNum: number;
 
     constructor(private isDeletedMap: boolean) {
     }

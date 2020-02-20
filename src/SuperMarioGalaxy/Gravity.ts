@@ -113,11 +113,11 @@ abstract class PlanetGravity {
         return true;
     }
 
-    protected isInRangeDistance(dist: number): boolean {
+    protected isInRangeDistance(distance: number): boolean {
         if (this.range < 0.0)
             return true;
 
-        return dist < (this.range + this.distant);
+        return (distance - this.distant) < this.range;
     }
 
     protected abstract calcOwnGravityVector(dst: vec3, coord: vec3): number;
@@ -178,7 +178,7 @@ function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoI
 
 const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
 
-export class ParallelGravity extends PlanetGravity {
+class ParallelGravity extends PlanetGravity {
     private rangeType = ParallelGravityRangeType.Sphere;
     private baseDistance: number = 2000;
     private cylinderRangeScaleX: number;
@@ -310,7 +310,7 @@ export class ParallelGravity extends PlanetGravity {
     }
 }
 
-export class PointGravity extends PlanetGravity {
+class PointGravity extends PlanetGravity {
     public pos = vec3.create();
 
     protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
@@ -325,13 +325,13 @@ export class PointGravity extends PlanetGravity {
     }
 }
 
-export class SegmentGravity extends PlanetGravity {
+class SegmentGravity extends PlanetGravity {
     private gravityPoints = nArray(2, () => vec3.create());
     private sideVector = vec3.create();
     private sideDegreeVector = vec3.create();
     private edgeValid = nArray(2, () => true);
     private validSideDegree: number = 360.0;
-    private validSideCos: number = 0;
+    private validSideCos: number = -1.0;
     private segmentDirection = vec3.create();
     private segmentLength: number = 0;
 
