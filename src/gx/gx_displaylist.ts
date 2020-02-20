@@ -34,12 +34,12 @@
 // standard formats.
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { align, assert } from '../util';
+import { align, assert, hexzero } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat';
-import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
+import { HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -82,7 +82,7 @@ export interface LoadedVertexLayout {
     vertexAttributeLayouts: VertexAttributeLayout[];
 }
 
-interface VertexLayout extends LoadedVertexLayout {
+interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
     // Source layout.
     vatLayouts: (VatLayout | undefined)[];
 }
@@ -410,6 +410,10 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
 }
 
 export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
+    // Copy inputs since we use them as a cache.
+    vat = arrayCopy(vat, vatCopy);
+    vcd = arrayCopy(vcd, vcdCopy) as GX_VtxDesc[];
+
     // Create source VAT layouts.
     const vatLayouts = vat.map((vatFormat) => translateVatLayout(vatFormat, vcd));
 
@@ -455,7 +459,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
         const bufferOffset = fieldBase + fieldByteOffset;
 
-        const vtxAttribLayout = { vtxAttrib, bufferIndex, bufferOffset, format };
+        const vtxAttribLayout: VertexAttributeLayout = { vtxAttrib, bufferIndex, bufferOffset, format };
         vertexAttributeLayouts.push(vtxAttribLayout);
 
         if (isVtxAttribTexMtxIdx(vtxAttrib)) {
@@ -464,9 +468,9 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             if (texMtxIdxLayout[layoutIdx] === null) {
                 const baseVtxAttrib = (vtxAttrib < GX.Attr.TEX4MTXIDX) ? GX.Attr.TEX0MTXIDX : GX.Attr.TEX4MTXIDX;
                 if (vtxAttrib === baseVtxAttrib) {
-                    texMtxIdxLayout[layoutIdx] = vtxAttribLayout
+                    texMtxIdxLayout[layoutIdx] = vtxAttribLayout;
                 } else {
-                    const baseAttribLayout = { vtxAttrib: baseVtxAttrib, bufferIndex, bufferOffset: fieldBase, format };
+                    const baseAttribLayout: VertexAttributeLayout = { vtxAttrib: baseVtxAttrib, bufferIndex, bufferOffset: fieldBase, format };
                     vertexAttributeLayouts.push(baseAttribLayout);
                     texMtxIdxLayout[layoutIdx] = baseAttribLayout;
                 }
@@ -479,7 +483,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
     const vertexBufferStrides = [dstVertexSize];
 
     const indexFormat = GfxFormat.U16_R;
-    return { indexFormat, vertexBufferStrides, vertexAttributeLayouts, vatLayouts };
+    return { indexFormat, vertexBufferStrides, vertexAttributeLayouts, vatLayouts, vat, vcd };
 }
 //#endregion
 
@@ -877,7 +881,7 @@ class VtxLoaderImpl implements VtxLoader {
                 indexCount = ((vertexCount * 6) / 4) * 3;
                 break;
             default:
-                throw new Error("Invalid data at " + srcBuffer.byteOffset.toString(16) + "/" + drawCallIdx.toString(16) + " primType " + primType.toString(16));
+                throw new Error(`Invalid data at ${hexzero(srcBuffer.byteOffset, 0x08)} / ${hexzero(drawCallIdx - 0x03, 0x04)} cmd ${hexzero(cmd, 0x02)}`);
             }
 
             drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
@@ -974,6 +978,16 @@ interface VtxLoaderDesc {
     vcd: GX_VtxDesc[];
 }
 
+type EqualFunc<K> = (a: K, b: K) => boolean;
+type CopyFunc<T> = (a: T) => T;
+
+function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
+    const b = Array(a.length);
+    for (let i = 0; i < a.length; i++)
+        b[i] = copyFunc(a[i]);
+    return b;
+}
+
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++)
@@ -982,13 +996,31 @@ function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     return true;
 }
 
+function vtxAttrFmtCopy(a: GX_VtxAttrFmt | undefined): GX_VtxAttrFmt | undefined {
+    if (a === undefined)
+        return undefined;
+    else
+        return { compCnt: a.compCnt, compShift: a.compShift, compType: a.compType };
+}
+
 function vtxAttrFmtEqual(a: GX_VtxAttrFmt | undefined, b: GX_VtxAttrFmt | undefined): boolean {
     if (a === undefined || b === undefined) return a === b;
     return a.compCnt === b.compCnt && a.compShift === b.compShift && a.compType === b.compType;
 }
 
+function vatCopy(a: GX_VtxAttrFmt[]): GX_VtxAttrFmt[] {
+    return arrayCopy(a, vtxAttrFmtCopy) as GX_VtxAttrFmt[];
+}
+
 function vatEqual(a: GX_VtxAttrFmt[], b: GX_VtxAttrFmt[]): boolean {
     return arrayEqual(a, b, vtxAttrFmtEqual);
+}
+
+function vcdCopy(a: GX_VtxDesc | undefined): GX_VtxDesc | undefined {
+    if (a === undefined)
+        return undefined;
+    else
+        return { enableOutput: a.enableOutput, type: a.type };
 }
 
 function vcdEqual(a: GX_VtxDesc | undefined, b: GX_VtxDesc | undefined): boolean {
@@ -1010,7 +1042,7 @@ function compileVtxLoaderDesc(desc: VtxLoaderDesc): VtxLoader {
         const vcd = desc.vcd;
         const loadedVertexLayout: VertexLayout = compileLoadedVertexLayout(vat, vcd);
         loader = new VtxLoaderImpl(loadedVertexLayout);
-        cache.add(desc, loader);
+        cache.add(loadedVertexLayout, loader);
     }
     return loader;
 }
