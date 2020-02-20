@@ -245,7 +245,7 @@ export function fpcSCtRq_Request<G>(globals: fGlobals, ly: layer_class | null, p
 
 //#region fpcLy (framework process layer)
 
-// From what I can tell, theprocess  layer system is practically never used that much in the game.
+// From what I can tell, the process layer system is practically never used that much in the game.
 // root -> d_scn_play -> d_scn_room seem to be the active number of layers during gameplay...
 // We don't bother with the node tree, we just record the processes for each layer in a list.
 class layer_class {

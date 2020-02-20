@@ -68,171 +68,176 @@ interface MapSceneInfo {
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
 }
 
-class MapScene {
-    public async create(device: GfxDevice, info: MapSceneInfo): Promise<Viewer.SceneGfx> {
-        const sfaRenderer = new SFARenderer(device);
-        const blockCollections: IBlockCollection[] = [];
+class MapRenderer extends SFARenderer {
+    private numRows: number;
+    private numCols: number;
+    private blockTable: (BlockInfo | null)[][] = [];
+    private blockCollections: IBlockCollection[] = [];
 
-        const numRows = info.getNumRows();
-        const numCols = info.getNumCols();
-        const blockTable: (BlockInfo | null)[][] = [];
-        for (let y = 0; y < numRows; y++) {
+    constructor(device: GfxDevice, public info: MapSceneInfo) {
+        super(device);
+
+        this.numRows = info.getNumRows();
+        this.numCols = info.getNumCols();
+
+        for (let y = 0; y < this.numRows; y++) {
             const row: (BlockInfo | null)[] = [];
-            blockTable.push(row);
-            for (let x = 0; x < numCols; x++) {
+            this.blockTable.push(row);
+            for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = info.getBlockInfoAt(x, y);
                 row.push(blockInfo);
             }
         }
+    }
 
-        const self = this;
-        async function reloadBlocks() {
-            sfaRenderer.clearModels();
-            for (let y = 0; y < numRows; y++) {
-                for (let x = 0; x < numCols; x++) {
-                    const blockInfo = blockTable[y][x];
-                    if (blockInfo == null)
-                        continue;
+    public async reloadBlocks() {
+        this.clearModels();
+        for (let y = 0; y < this.numRows; y++) {
+            for (let x = 0; x < this.numCols; x++) {
+                const blockInfo = this.blockTable[y][x];
+                if (blockInfo == null)
+                    continue;
 
-                    try {
-                        if (blockCollections[blockInfo.mod] == undefined) {
-                            blockCollections[blockInfo.mod] = await info.getBlockCollection(blockInfo.mod);
-                        }
-                        const blockColl = blockCollections[blockInfo.mod];
-    
-                        const blockRenderer = blockColl.getBlock(blockInfo.mod, blockInfo.sub);
-                        if (blockRenderer) {
-                            const modelMatrix: mat4 = mat4.create();
-                            mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                            blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
-                        }
-                    } catch (e) {
-                        console.warn(`Skipping block at ${x},${y} due to exception:`);
-                        console.error(e);
+                try {
+                    if (this.blockCollections[blockInfo.mod] == undefined) {
+                        this.blockCollections[blockInfo.mod] = await this.info.getBlockCollection(blockInfo.mod);
                     }
+                    const blockColl = this.blockCollections[blockInfo.mod];
+
+                    const blockRenderer = blockColl.getBlock(blockInfo.mod, blockInfo.sub);
+                    if (blockRenderer) {
+                        const modelMatrix: mat4 = mat4.create();
+                        mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
+                        blockRenderer.addToRenderer(this, modelMatrix);
+                    }
+                } catch (e) {
+                    console.warn(`Skipping block at ${x},${y} due to exception:`);
+                    console.error(e);
                 }
             }
         }
+    }
 
-        await reloadBlocks();
-        
-        ////////////////////////// Set up editor //////
-        window.main.openEditor = function() {
-            const newWin = window.open('about:blank');
-            if (!newWin) {
-                console.warn(`Failed to open editor. Please allow pop-up windows and try again.`);
-                return;
+    public openEditor(): void {
+        const newWin = window.open('about:blank');
+        if (!newWin) {
+            console.warn(`Failed to open editor. Please allow pop-up windows and try again.`);
+            return;
+        }
+        newWin.onload = () => {
+            const inputs: HTMLInputElement[][] = [];
+            for (let y = 0; y < this.numRows; y++) {
+                const row: HTMLInputElement[] = [];
+                inputs.push(row);
+                for (let x = 0; x < this.numCols; x++) {
+                    const blockInfo = this.blockTable[y][x];
+                    const inputEl = newWin.document.createElement('input');
+                    inputEl.setAttribute('type', 'text');
+                    inputEl.setAttribute('value', `${blockInfo != null ? `${blockInfo.mod}.${blockInfo.sub}` : -1}`);
+                    row.push(inputEl);
+                }
             }
-            newWin.onload = function() {
-                const inputs: HTMLInputElement[][] = [];
-                for (let y = 0; y < numRows; y++) {
-                    const row: HTMLInputElement[] = [];
-                    inputs.push(row);
-                    for (let x = 0; x < numCols; x++) {
-                        const blockInfo = blockTable[y][x];
-                        const inputEl = newWin.document.createElement('input');
-                        inputEl.setAttribute('type', 'text');
-                        inputEl.setAttribute('value', `${blockInfo != null ? `${blockInfo.mod}.${blockInfo.sub}` : -1}`);
-                        row.push(inputEl);
-                    }
-                }
 
-                const tableEl = newWin.document.createElement('table');
-                newWin.document.body.appendChild(tableEl);
-                for (let y = 0; y < numRows; y++) {
-                    const trEl = newWin.document.createElement('tr');
-                    tableEl.appendChild(trEl);
-                    for (let x = 0 ; x < numCols; x++) {
-                        const tdEl = newWin.document.createElement('td');
-                        trEl.appendChild(tdEl);
-                        tdEl.appendChild(inputs[y][x]);
-                    }
+            const tableEl = newWin.document.createElement('table');
+            newWin.document.body.appendChild(tableEl);
+            for (let y = 0; y < this.numRows; y++) {
+                const trEl = newWin.document.createElement('tr');
+                tableEl.appendChild(trEl);
+                for (let x = 0 ; x < this.numCols; x++) {
+                    const tdEl = newWin.document.createElement('td');
+                    trEl.appendChild(tdEl);
+                    tdEl.appendChild(inputs[y][x]);
                 }
+            }
 
-                const jsonEl = newWin.document.createElement('textarea');
-                jsonEl.setAttribute('rows', '60');
-                jsonEl.setAttribute('cols', '100');
-                function updateJson() {
-                    let topRow = -1
-                    let leftCol = -1
-                    let rightCol = -1
-                    let bottomRow = -1
-                    for (let row = 0; row < numRows; row++) {
-                        for (let col = 0; col < numCols; col++) {
-                            const info = blockTable[row][col];
-                            if (info != null) {
-                                if (topRow == -1) {
-                                    topRow = row;
-                                }
-                                bottomRow = row;
-                                if (leftCol == -1) {
-                                    leftCol = col;
-                                } else if (col < leftCol) {
-                                    leftCol = col;
-                                }
-                                if (rightCol == -1) {
-                                    rightCol = col;
-                                } else if (col > rightCol) {
-                                    rightCol = col;
-                                }
+            const jsonEl = newWin.document.createElement('textarea');
+            jsonEl.setAttribute('rows', '60');
+            jsonEl.setAttribute('cols', '100');
+            const updateJson = () => {
+                let topRow = -1
+                let leftCol = -1
+                let rightCol = -1
+                let bottomRow = -1
+                for (let row = 0; row < this.numRows; row++) {
+                    for (let col = 0; col < this.numCols; col++) {
+                        const info = this.blockTable[row][col];
+                        if (info != null) {
+                            if (topRow == -1) {
+                                topRow = row;
+                            }
+                            bottomRow = row;
+                            if (leftCol == -1) {
+                                leftCol = col;
+                            } else if (col < leftCol) {
+                                leftCol = col;
+                            }
+                            if (rightCol == -1) {
+                                rightCol = col;
+                            } else if (col > rightCol) {
+                                rightCol = col;
                             }
                         }
                     }
-
-                    if (topRow == -1) {
-                        // No blocks found
-                        jsonEl.textContent = '[]';
-                        return;
-                    }
-
-                    let json = '[';
-                    for (let row = topRow; row <= bottomRow; row++) {
-                        json += row != topRow ? ',\n' : '\n';
-                        json += JSON.stringify(blockTable[row].slice(leftCol, rightCol + 1),
-                            (key, value) => {
-                                if (Array.isArray(value)) {
-                                    return value;
-                                } else if (value === null) {
-                                    return null;
-                                } else if (typeof value != 'object') {
-                                    return null;
-                                } else {
-                                    return `${value.mod}.${value.sub}`;
-                                }                
-                            });
-                    }
-                    json += '\n]';
-                    jsonEl.textContent = json;
                 }
 
-                const submitEl = newWin.document.createElement('input');
-                submitEl.setAttribute('type', 'submit');
-                newWin.document.body.appendChild(submitEl);
-                submitEl.onclick = async function() {
-                    console.log(`Reloading blocks...`);
-                    for (let y = 0; y < numRows; y++) {
-                        for (let x = 0; x < numCols; x++) {
-                            const newValue = inputs[y][x].value.split('.', 2);
-                            if (newValue.length == 2) {
-                                const newMod = Number.parseInt(newValue[0]);
-                                const newSub = Number.parseInt(newValue[1]);
-                                blockTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
+                if (topRow == -1) {
+                    // No blocks found
+                    jsonEl.textContent = '[]';
+                    return;
+                }
+
+                let json = '[';
+                for (let row = topRow; row <= bottomRow; row++) {
+                    json += row != topRow ? ',\n' : '\n';
+                    json += JSON.stringify(this.blockTable[row].slice(leftCol, rightCol + 1),
+                        (key, value) => {
+                            if (Array.isArray(value)) {
+                                return value;
+                            } else if (value === null) {
+                                return null;
+                            } else if (typeof value != 'object') {
+                                return null;
                             } else {
-                                blockTable[y][x] = null;
-                            }
+                                return `${value.mod}.${value.sub}`;
+                            }                
+                        });
+                }
+                json += '\n]';
+                jsonEl.textContent = json;
+            };
+
+            const submitEl = newWin.document.createElement('input');
+            submitEl.setAttribute('type', 'submit');
+            newWin.document.body.appendChild(submitEl);
+            submitEl.onclick = async() => {
+                console.log(`Reloading blocks...`);
+                for (let y = 0; y < this.numRows; y++) {
+                    for (let x = 0; x < this.numCols; x++) {
+                        const newValue = inputs[y][x].value.split('.', 2);
+                        if (newValue.length == 2) {
+                            const newMod = Number.parseInt(newValue[0]);
+                            const newSub = Number.parseInt(newValue[1]);
+                            this.blockTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
+                        } else {
+                            this.blockTable[y][x] = null;
                         }
                     }
-                    updateJson();
-                    await reloadBlocks();
                 }
+                updateJson();
+                await this.reloadBlocks();
+            };
 
-                const divEl = newWin.document.createElement('div');
-                newWin.document.body.appendChild(divEl);
-                divEl.appendChild(jsonEl);
-            }
+            const divEl = newWin.document.createElement('div');
+            newWin.document.body.appendChild(divEl);
+            divEl.appendChild(jsonEl);
         };
-        //////////////////////////////////////////////
+    }
+}
 
+class MapScene {
+    public async create(device: GfxDevice, info: MapSceneInfo): Promise<Viewer.SceneGfx> {
+        const sfaRenderer = new MapRenderer(device, info);
+        await sfaRenderer.reloadBlocks();
         return sfaRenderer;
     }
 }
@@ -348,7 +353,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
             }
         };
 
-        console.log(`Welcome to the sandbox. Type main.openEditor() to open the map editor.`);
+        console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
 
         const mapScene = new MapScene();
         return mapScene.create(device, mapSceneInfo);
