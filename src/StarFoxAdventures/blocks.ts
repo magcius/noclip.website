@@ -65,7 +65,6 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
-                window.debug = sub === 1;
                 this.blockRenderers[sub] = new BlockRenderer(device, uncomp, this.texColl);
             }
         }
@@ -369,10 +368,6 @@ export class BlockRenderer implements BlockRendererBase {
                 const dlOffset = blockDv.getUint32(offs);
                 const dlSize = blockDv.getUint16(offs + 4);
                 const displayList = blockData.subarray(dlOffset, dlSize);
-                if (window.debug) {
-                    console.log(`DL offset 0x${dlOffset.toString(16)} size 0x${dlSize.toString(16)}`);
-                    hexdump(displayList);
-                }
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
