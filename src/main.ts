@@ -43,7 +43,7 @@ import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
 import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
-import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
+import * as Scenes_InteractiveExamples from './InteractiveExamples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_StarFoxAdventures from './StarFoxAdventures/scenes';

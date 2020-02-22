@@ -186,11 +186,12 @@ export class Viewer {
 
     public setCameraController(cameraController: CameraController) {
         this.cameraController = cameraController;
-        this.cameraController.camera = this.camera;
-        this.cameraController.forceUpdate = true;
 
         if (this.scene !== null && this.scene.createCameraController !== undefined)
             this.cameraController = this.scene.createCameraController(cameraController);
+
+        this.cameraController.camera = this.camera;
+        this.cameraController.forceUpdate = true;
     }
 
     public setScene(scene: SceneGfx | null): void {
