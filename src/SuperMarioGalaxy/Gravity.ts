@@ -4,13 +4,14 @@ import { JMapInfoIter, getJMapInfoBool, getJMapInfoScale, getJMapInfoArg0, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants } from "../MathHelpers";
-import { setTrans, calcMtxAxis } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero } from "../MathHelpers";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 const scratchMatrix = mat4.create();
 
 export class GravityInfo {
@@ -111,6 +112,17 @@ abstract class PlanetGravity {
             vec3.negate(dst, dst);
 
         return true;
+    }
+
+    protected calcGravityFromMassPosition(dst: vec3, p0: vec3, p1: vec3): number {
+        vec3.subtract(dst, p1, p0);
+        const dist = vec3.length(dst);
+        if (this.isInRangeDistance(dist)) {
+            vec3.normalize(dst, dst);
+            return dist;
+        } else {
+            return -1;
+        }
     }
 
     protected isInRangeDistance(distance: number): boolean {
@@ -412,6 +424,114 @@ class SegmentGravity extends PlanetGravity {
     }
 }
 
+class ConeGravity extends PlanetGravity {
+    public enableBottom: boolean = false;
+    public topCutRate: number = 0.0;
+    private mtx = mat4.create();
+    private magX: number;
+
+    public setEnableBottom(v: boolean): void {
+        this.enableBottom = v;
+    }
+
+    public setTopCutRate(v: number): void {
+        this.topCutRate = v;
+    }
+
+    public setLocalMatrix(m: mat4): void {
+        mat4.copy(this.mtx, m);
+    }
+
+    protected updateMtx(): void {
+        getMatrixAxisX(scratchVec3a, this.mtx);
+        this.magX = vec3.length(scratchVec3a);
+    }
+
+    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+        getMatrixAxisY(scratchVec3a, this.mtx);
+        const height = vec3.length(scratchVec3a);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        getMatrixTranslation(scratchVec3b, this.mtx);
+        vec3.sub(scratchVec3b, coord, scratchVec3b);
+
+        // Project the position around the cone onto the cone's Y axis.
+        const dot = vec3.dot(scratchVec3a, scratchVec3b);
+        vec3.scaleAndAdd(scratchVec3d, scratchVec3b, scratchVec3a, -dot);
+
+        if (!isNearZeroVec3(scratchVec3d, 0.001)) {
+            const dist = vec3.length(scratchVec3d);
+
+            vec3.add(scratchVec3a, scratchVec3b, scratchVec3a);
+            vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3d, this.magX / dist);
+
+            if (dot >= 0.0) {
+                // Top of the cone.
+                if (this.topCutRate >= 0.01) {
+                    // TODO(jstpierre): Top cut...
+                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3c, scratchVec3a);
+                } else {
+                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3c, scratchVec3a);
+                }
+
+                vec3.sub(scratchVec3a, scratchVec3b, coord);
+                if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+                    if (!isNearZero(height, 0.001) && !isNearZero(this.magX, 0.001) && dist < (this.magX - (dot * (this.magX / height)))) {
+                        // On surface.
+                        vec3.sub(dst, coord, scratchVec3b);
+                        vec3.normalize(dst, dst);
+                        return 0.0;
+                    } else {
+                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3a);
+                    }
+                } else {
+                    vec3.sub(scratchVec3b, scratchVec3b, scratchVec3c);
+                    vec3.normalize(scratchVec3b, scratchVec3b);
+                    vec3.negate(scratchVec3d, scratchVec3d);
+                    const dot = vec3.dot(scratchVec3b, scratchVec3d);
+                    vec3.scaleAndAdd(scratchVec3b, scratchVec3d, scratchVec3b, -dot);
+                    if (!isNearZeroVec3(scratchVec3b, 0.001)) {
+                        vec3.normalize(dst, scratchVec3b);
+                    } else {
+                        vec3.negate(dst, scratchVec3a);
+                    }
+                    return 0.0;
+                }
+            } else {
+                // Bottom of the cone.
+
+                if (this.enableBottom) {
+                    getMatrixTranslation(scratchVec3b, this.mtx);
+                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3b, scratchVec3c);
+                    vec3.sub(scratchVec3c, scratchVec3b, coord);
+                    if (!isNearZeroVec3(scratchVec3c, 0.001)) {
+                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3a);
+                    } else {
+                        vec3.negate(dst, scratchVec3a);
+                        return 0.0;
+                    }
+                } else {
+                    return -1;
+                }
+            }
+        } else {
+            let dist = Math.abs(dot);
+
+            if (dot > 0.0) {
+                // Top of the cone.
+                dist = Math.max(0.0, dist - (height * (1.0 - this.topCutRate)));
+            }
+
+            if (this.isInRangeDistance(dist)) {
+                vec3.scale(dst, scratchVec3a, dot > 0.0 ? -1 : 1);
+                return dist;
+            } else {
+                return -1;
+            }
+        }
+    }
+}
+
 export class GlobalGravityObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -480,6 +600,7 @@ export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sce
     preScaleMtx(scratchMatrix, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
     gravity.setRangeBox(scratchMatrix);
 
+    // PlaneInBoxGravityCreator::settingFromJMapArgs
     const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
     if (arg0 >= 0)
         gravity.setBaseDistance(arg0);
@@ -513,7 +634,7 @@ export function createGlobalPointGravityObj(zoneAndLayer: ZoneAndLayer, sceneObj
 export function createGlobalSegmentGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
     const gravity = new SegmentGravity();
 
-    // PlaneGravityCreator::settingFromSRT
+    // SegmentGravityCreator::settingFromSRT
     getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
     getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
     getJMapInfoScale(scratchVec3c, infoIter);
@@ -525,6 +646,7 @@ export function createGlobalSegmentGravityObj(zoneAndLayer: ZoneAndLayer, sceneO
     gravity.setGravityPoint(1, scratchVec3a);
     gravity.setSideVector(scratchVec3b);
 
+    // SegmentGravityCreator::settingFromJMapArgs
     const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
     if (arg0 === 0) {
         gravity.setEdgeValid(0, false);
@@ -543,6 +665,31 @@ export function createGlobalSegmentGravityObj(zoneAndLayer: ZoneAndLayer, sceneO
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     if (arg1 >= 0)
         gravity.setValidSideDegree(arg1);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalConeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new ConeGravity();
+
+    // ConeGravityCreator::settingFromSRT
+    getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
+    getJMapInfoScale(scratchVec3c, infoIter);
+
+    makeMtxTRS(scratchMatrix, scratchVec3a, scratchVec3b, scratchVec3c);
+    gravity.setLocalMatrix(scratchMatrix);
+
+    // ConeGravityCreator::settingFromJMapArgs
+    const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+    gravity.setEnableBottom(arg0 !== 0);
+
+    const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
+    gravity.setTopCutRate(arg1 / 1000.0);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -764,4 +764,18 @@ export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, spee
     quatSetRotate(scratchQuat, axisZ, axisY, speedFront, scratch);
     quat.mul(dst, scratchQuat, dst);
     quat.normalize(dst, dst);
+}
+
+// Project pos onto the line created by p0...p1.
+export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): void {
+    vec3.sub(scratch, p1, p0);
+    const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
+    vec3.scaleAndAdd(dst, p0, scratch, proj / vec3.squaredLength(scratch));
+}
+
+// Project pos onto the line created by p0...p1, clamped to the inside of the line.
+export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): void {
+    vec3.sub(scratch, p1, p0);
+    const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
+    vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
 }
