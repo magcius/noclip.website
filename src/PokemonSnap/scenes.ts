@@ -8,12 +8,12 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SnapPass, ModelRenderer, buildTransform } from './render';
-import { LevelArchive, parseLevel, findGroundHeight, SpawnType } from './room';
+import { LevelArchive, parseLevel, findGroundHeight, SpawnType, CollisionTree, findGroundPlane } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
-import { vec3 } from 'gl-matrix';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
+import { Actor } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -110,8 +110,6 @@ class SnapRenderer implements Viewer.SceneGfx {
 
 }
 
-const posScratch = vec3.create();
-const scaleScratch = vec3.create();
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) { }
 
@@ -142,7 +140,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             if (level.skybox !== null) {
                 const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
-                const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], true);
+                const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], [], true);
                 if (level.skybox.animation !== null) {
                     skyboxRenderer.animations.push(level.skybox.animation!);
                     skyboxRenderer.setAnimation(0);
@@ -159,10 +157,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
             }
-
+            col = level.collision;
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
-                const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node]);
+                const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node], []);
                 if (level.rooms[i].animation !== null) {
                     roomRenderer.animations.push(level.rooms[i].animation!);
                     roomRenderer.setAnimation(0);
@@ -177,14 +175,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const def = level.objectInfo[objIndex];
-                    const objectRenderer = ModelRenderer.fromObject(objectDatas[objIndex], def);
-                    // set transform components
-                    vec3.copy(posScratch, objects[j].pos);
-                    if (def.spawn === SpawnType.GROUND)
-                        posScratch[1] = findGroundHeight(level.collision!, objects[j].pos[0], objects[j].pos[2]);
-
-                    vec3.mul(scaleScratch, def.scale, objects[j].scale);
-                    buildTransform(objectRenderer.modelMatrix, posScratch, objects[j].euler, scaleScratch);
+                    const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, level.collision!);
                     sceneRenderer.modelRenderers.push(objectRenderer);
                 }
             }
@@ -192,6 +183,8 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 }
+
+let col: CollisionTree | null = null;
 
 const id = `snap`;
 const name = "Pokemon Snap";

@@ -1,13 +1,15 @@
 import * as F3DEX2 from "./f3dex2";
 import * as RDP from "../Common/N64/RDP";
+import * as MIPS from "./mips";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
-import { assert, hexzero, assertExists, nArray } from "../util";
+import { assert, hexzero, assertExists, nArray, leftPad } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
-import { findNewTextures } from "./animation";
+import { findNewTextures, ModelField } from "./animation";
+import { SceneNameObjListExecutor } from "../SuperMarioGalaxy/NameObj";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -31,9 +33,11 @@ export interface Model {
 
 export interface ObjectSpawn {
     id: number;
+    behavior: number;
     pos: vec3;
     euler: vec3;
     scale: vec3;
+    path?: Path;
 }
 
 export interface ObjectDef {
@@ -201,12 +205,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
         rooms[0].objects.push(
             {
                 id: 0x97,
+                behavior: 0,
                 pos: vec3.fromValues(0, 100, 500),
                 euler: vec3.create(),
                 scale: vec3.fromValues(1, 1, 1)
             },
             {
                 id: 0x3e9,
+                behavior: 0,
                 pos: vec3.fromValues(0, 0, 10000),
                 euler: vec3.fromValues(0, Math.PI, 0),
                 scale: vec3.fromValues(1, 1, 1)
@@ -222,8 +228,9 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const initFunc = objFunctionView.getUint32(offs + 0x04);
             offs += 0x10;
 
-            const initData = findObjectData(dataMap, initFunc);
-            const objectView = dataMap.getView(initData.address);
+            const initView = dataMap.getView(initFunc);
+            assert(dataFinder.parseFromView(initView), `bad parse for init function ${hexzero(initFunc, 8)}`);
+            const objectView = dataMap.getView(dataFinder.dataAddress);
 
             const graphStart = objectView.getUint32(0x00);
             const materials = objectView.getUint32(0x04);
@@ -239,7 +246,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
                 const animations = parseAnimations(dataMap, animationData, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(initData.spawnFunc), animations });
+                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), animations });
             } catch (e) {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
@@ -278,7 +285,9 @@ export function parseLevel(archives: LevelArchive[]): Level {
         });
     }
     // zero-one spawn
-    rooms[0].objects.push({id: 0, pos: vec3.fromValues(0, 0, 0), euler: vec3.create(), scale: vec3.fromValues(1, 1, 1)});
+    rooms[0].objects.push({id: 0, behavior: 0, pos: vec3.fromValues(0, 0, 0), euler: vec3.create(), scale: vec3.fromValues(1, 1, 1)});
+
+    console.log("state counts", stateCount, goodCount, goodCount/stateCount)
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
@@ -287,62 +296,25 @@ export function parseLevel(archives: LevelArchive[]): Level {
     return { rooms, skybox, sharedCache, objectInfo, collision };
 }
 
-const enum MIPSOpcode {
-    JAL     = 0X03,
-    BEQ     = 0x04,
-    BNE     = 0x05,
-    ADDIU   = 0x09,
-    ANDI    = 0x0C,
-    LUI     = 0x0F,
-    LW      = 0x23,
-    SW      = 0x2B,
-}
+class ObjectDataFinder extends MIPS.NaiveInterpreter {
+    public spawnFunc = 0;
+    public dataAddress = 0;
 
-interface InitParams {
-    address: number;
-    spawnFunc: number;
-}
+    public reset(): void {
+        super.reset();
+        this.spawnFunc = 0;
+        this.dataAddress = 0;
+    }
 
-function findObjectData(dataMap: DataMap, addr: number): InitParams {
-    const view = dataMap.getView(addr);
-    // registers to keep track of
-    const regs = nArray(32, () => 0);
-    let LUIReg = -1;
-    let address = -1;
-    let spawnFunc = -1;
-    let offs = 0;
-    while (true) {
-        const instr = view.getUint32(offs + 0x00);
-        const rs = (instr >>> 21) & 0x1f;
-        const rt = (instr >>> 16) & 0x1f;
-        const imm = (instr >>> 0) & 0xffff;
-        switch (instr >>> 26) {
-            case MIPSOpcode.BEQ:
-            case MIPSOpcode.BNE:
-            case MIPSOpcode.ANDI:
-            case MIPSOpcode.SW:
-            case MIPSOpcode.LW:
-                break;
-            case MIPSOpcode.ADDIU:
-                regs[rt] = regs[rs] + view.getInt16(offs + 0x02);
-                if (rt === rs && rs === LUIReg)
-                    address = regs[rt];
-                break;
-            case MIPSOpcode.LUI:
-                regs[rt] = (imm << 16) >>> 0;
-                LUIReg = rt;
-                break;
-            case MIPSOpcode.JAL:
-                spawnFunc = 4 * ((instr >>> 0) & 0xFFFFFF);
-                break;
-            default:
-                throw `couldn't find data ${hexzero(instr, 8)} ${hexzero(addr, 8)}`;
-        }
-        if (spawnFunc >= 0 && address >= 0)
-            return { spawnFunc, address };
-        offs += 4;
+    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
+        this.spawnFunc = func;
+        this.dataAddress = assertExists(stackArgs[1]).value; // stack+0x14
+        this.done = true;
+        return 0;
     }
 }
+
+const dataFinder = new ObjectDataFinder();
 
 export interface GFXNode {
     model?: Model;
@@ -624,13 +596,17 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
             const id = objView.getInt32(offs + 0x00);
             if (id === -1)
                 break;
+            const behavior = objView.getInt32(offs + 0x04);
             const objPos = getVec3(objView, offs + 0x08);
             vec3.scale(objPos, objPos, 100);
             vec3.add(objPos, objPos, pos);
             const euler = getVec3(objView, offs + 0x14);
             const scale = getVec3(objView, offs + 0x20);
-            const path = objView.getUint32(offs + 0x2c);
-            objects.push({ id, pos: objPos, euler, scale });
+            const pathAddr = objView.getUint32(offs + 0x2c);
+            const newSpawn: ObjectSpawn = { id, behavior, pos: objPos, euler, scale };
+            if (pathAddr !== 0)
+                newSpawn.path = parsePath(dataMap, pathAddr);
+            objects.push(newSpawn);
             offs += 0x30;
         }
     }
@@ -991,31 +967,20 @@ function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): Anim
     const animationStart = dataMap.deref(addr);
     const initFunc = dataMap.deref(addr + 0x04); // used to set initial state
 
-    if (animationStart === 0) {
-        // make sure materials load default textures
-        parseMaterialAnimation(dataMap, 0, nodes);
-        return [];
-    }
+    const states = parseStateGraph(dataMap, initFunc, animationStart);
+    console.log(states)
 
-    const view = dataMap.getView(animationStart);
     const anims: AnimationData[] = [];
-
-    let offs = 0;
-    while (true) {
-        let fps = 30 * view.getFloat32(offs + 0x00);
+    for (let i = 0; i < states.animationAddresses.length; i++) {
+        const view = dataMap.getView(states.animationAddresses[i]);
+        let fps = 30 * view.getFloat32(0x00);
         if (fps === 0)
             fps = 30; // TODO: understand what's going on here
 
-        const frames = view.getFloat32(offs + 0x04);
-        const trackList = view.getUint32(offs + 0x08);
-        const materialData = view.getUint32(offs + 0x0C);
-        const someIDs = view.getUint32(offs + 0x10);
-        offs += 0x14;
-
-        // there's no clear indicator for the number of animations, and animations might not be contiguous
-        // so until we parse the state machine, guess based on reasonable values
-        if (fps > 100 || isNaN(fps) || fps < 0 || (fps > 0 && fps < .01) || (frames > 0 && frames < .01) || (trackList >>> 24) !== 0x80)
-            break;
+        const frames = view.getFloat32(0x04);
+        const trackList = view.getUint32(0x08);
+        const materialData = view.getUint32(0x0C);
+        const someIDs = view.getUint32(0x10);
 
         const tracks: (AnimationTrack | null)[] = [];
         const trackView = dataMap.getView(trackList);
@@ -1026,6 +991,9 @@ function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): Anim
 
         anims.push({ fps, frames, tracks, materialTracks: parseMaterialAnimation(dataMap, materialData, nodes) });
     }
+
+    if (anims.length === 0) // make sure materials load default textures
+        parseMaterialAnimation(dataMap, 0, nodes);
     return anims;
 }
 
@@ -1077,7 +1045,7 @@ export function findGroundHeight(tree: CollisionTree | null, x: number, z: numbe
     return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
-function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
     if (tree === null)
         return null;
     while (true) {
@@ -1142,4 +1110,435 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
     const negPlane = getPlane(negPlaneIdx);
 
     return { line, posSubtree, posPlane, negSubtree, negPlane };
+}
+
+const enum InteractionType {
+    PesterBall  = 0x09,
+    Hit         = 0x0D,
+    Apple       = 0x0F,
+    NearPlayer  = 0x10,
+
+    EndMarker   = 0x3A,
+    // not assigned by game
+    Basic,
+    Random,
+    Flag,
+    Behavior,
+    NoTarget,
+    HasTarget,
+    HasApple,
+    OverWater,
+    Unknown,
+}
+
+interface Motion {
+
+}
+
+interface StateEdge {
+    type: InteractionType;
+    index: number;
+    param: number;
+}
+
+interface State {
+    startAddress: number;
+    blocks: StateBlock[];
+    motion: Motion | null;
+    next: StateEdge[];
+}
+
+interface StateBlock {
+    animation: number;
+    force: boolean;
+    allowInteraction: boolean;
+    interactions: StateEdge[];
+    duration: number;
+    durationRange: number;
+    signal: number;
+    endCondition: number;
+}
+
+interface StateGraph {
+    states: State[];
+    entryPoints: number[];
+    animationAddresses: number[];
+}
+
+class StateInitParser extends MIPS.NaiveInterpreter {
+    public stateEntries: number[] = [];
+    public looksLikeState = false;
+
+    public reset(): void {
+        super.reset();
+        this.looksLikeState = false;
+        this.stateEntries = [];
+    }
+
+    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
+        switch (func) {
+            case StateFuncs.SetState: {
+                if (branch !== null) {
+                    if (branch.comparator.lastOp === MIPS.Opcode.ADDIU)
+                        this.stateEntries[branch.comparator.value] = a1.value;
+                    else if (branch.comparator.lastOp === MIPS.Opcode.LW && branch.comparator.value === ObjectField.Behavior && (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)) {
+                        // there are a couple instances of if (obj.behavior !== 0), just fill in the first few entries
+                        for (let i = 1; i < 4; i++)
+                            this.stateEntries[i] = a1.value;
+                    } else
+                        throw `:(:( ${branch.comparator.lastOp}`;
+                } else {
+                    if (a1.value !== 0)
+                        this.stateEntries[0] = a1.value;
+                    this.done = true;
+                }
+            } break;
+            case StateFuncs.ForceAnimation:
+            case StateFuncs.SetAnimation:
+            case StateFuncs.Random:
+            case StateFuncs.SetMotion:
+            case StateFuncs.Wait:
+            case StateFuncs.InteractWait:
+                this.done = true;
+                this.looksLikeState = true;
+        }
+        return 0;
+    }
+
+    protected handleUnknown(op: MIPS.Opcode): void {
+        this.valid = false;
+    }
+}
+
+const initParser = new StateInitParser();
+
+function parseStateGraph(dataMap: DataMap, initFunc: number, startAnimation: number): StateGraph {
+    ind = 0
+    const states: State[] = [];
+    const entryPoints: number[] = [];
+    const animationAddresses: number[] = [];
+
+    if (startAnimation !== 0)
+        animationAddresses.push(startAnimation);
+
+    if (initFunc === 0x802DBBA0) // poliwag's function has a switch which breaks parsing
+        initParser.looksLikeState = true;
+    else
+        initParser.parseFromView(dataMap.getView(initFunc));
+    if (initParser.looksLikeState) {
+        entryPoints.push(parseStateSubgraph(dataMap, initFunc, states, animationAddresses));
+    } else {
+        for (let i = 0; i < initParser.stateEntries.length; i++)
+            if (initParser.stateEntries[i])
+                entryPoints[i] = parseStateSubgraph(dataMap, initParser.stateEntries[i], states, animationAddresses);
+    }
+    if (initFunc === 0x802DBBA0)
+        console.log(states)
+    return {states, entryPoints, animationAddresses};
+}
+
+const enum GeneralFuncs {
+    SendSignal  = 0x0BA30,
+    RandomInt   = 0x19E14,
+}
+
+const enum StateFuncs {
+    SetAnimation    = 0x35F138,
+    ForceAnimation  = 0x35F15C,
+    SetMotion       = 0x35EDF8,
+    SetState        = 0x35EC58,
+    InteractWait    = 0x35FBF0,
+    Wait            = 0x35FC54,
+    Random          = 0x35ECAC,
+
+    Remove          = 0x35FD70,
+    ClaimApple      = 0x36010C,
+}
+
+const enum ObjectField {
+    SomeBool        = 0x10,
+    MiscFlags       = 0x50, // actually on the parent object
+
+    Apple           = 0x64,
+    Target          = 0x70,
+    Behavior        = 0x88,
+    StateFlags      = 0x8C,
+    Timer           = 0x90,
+    LoopTarget      = 0xA4,
+    FrameTarget     = 0xA8,
+    Transitions     = 0xAC,
+
+    Reference       = 0xB0,
+    Mystery         = 0xC0,
+    BadGround       = 0xCC,
+}
+
+class StateParser extends MIPS.NaiveInterpreter {
+    public state: State;
+    public currBlock: StateBlock;
+    public trivial = true;
+    public stateIndex = -1;
+    public recentRandom = 0;
+
+    constructor(public dataMap: DataMap, startAddress: number, public allStates: State[], public animationAddresses: number[]) {
+        super();
+        this.state = {
+            startAddress,
+            blocks: [],
+            motion: null,
+            next: [],
+        };
+        this.trivial = true;
+        this.stateIndex = -1;
+    }
+
+    public parse(): boolean {
+        return super.parseFromView(this.dataMap.getView(this.state.startAddress));
+    }
+
+    public reset(): void {
+        super.reset();
+        this.trivial = true;
+        this.currBlock = {
+            animation: -1,
+            force: false,
+            allowInteraction: true,
+            interactions: [],
+            duration: 0,
+            durationRange: 0,
+            signal: 0,
+            endCondition: 0,
+        };
+    }
+
+    private markNontrivial(): void {
+        if (this.trivial) {
+            assert(this.stateIndex === -1)
+            this.trivial = false;
+            this.stateIndex = this.allStates.length;
+            this.allStates.push(this.state);
+        }
+    }
+
+    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
+        if (func !== StateFuncs.SetState)
+            this.markNontrivial();
+        switch (func) {
+            case StateFuncs.SetState: {
+                const nextState = a1.value === 0 ? -1 : parseStateSubgraph(this.dataMap, a1.value, this.allStates, this.animationAddresses);
+                if (nextState === -1) {
+                    // no next state, we're done
+                    assert(!this.trivial && branch === null, `bad transition to null ${hexzero(this.state.startAddress, 8)} ${branch?.comparator}`);
+                } else if (this.trivial && branch === null) {
+                    // this state can be ignored, point to the real one
+                    this.stateIndex = nextState;
+                } else if (branch === null)
+                    this.state.next.push({ type: InteractionType.Basic, index: nextState, param: 0 });
+                else {
+                    if (branch.comparator.lastOp === MIPS.Opcode.ANDI || branch.comparator.lastOp === MIPS.Opcode.AND)
+                        this.state.next.push({ type: InteractionType.Flag, param: branch.comparator.value, index: nextState });
+                    else if (branch.comparator.lastOp === MIPS.Opcode.ADDIU)
+                        this.state.next.push({ type: InteractionType.Behavior, param: branch.comparator.value, index: nextState });
+                    else if (branch.comparator.lastOp === MIPS.Opcode.LW) {
+                        // see if we are testing an object member against 0
+                        switch (branch.comparator.value) {
+                            case ObjectField.Behavior: {
+                                this.state.next.push({ type: InteractionType.Behavior, param: 0, index: nextState });
+                            } break;
+                            case ObjectField.Target: {
+                                let type = InteractionType.NoTarget;
+                                if (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)
+                                    type = InteractionType.HasTarget;
+                                this.state.next.push({ type, param: 0, index: nextState });
+                            } break;
+                            case ObjectField.Apple: {
+                                this.state.next.push({ type: InteractionType.HasApple, param: 0, index: nextState });
+                            } break;
+                            default:
+                                console.warn("unknown object member condition", branch.comparator.value);
+                                this.valid = false;
+                                this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState });
+                        }
+                    } else if (branch.comparator.lastOp === MIPS.Opcode.ORI) {
+                        // this is admittedly a bit of a stretch, but it's a very rare condition
+                        this.state.next.push({ type: InteractionType.OverWater, param: 0, index: nextState });
+                    } else {
+                        console.warn("unknown edge condition", branch.comparator.lastOp, branch.comparator.value);
+                        this.valid = false;
+                        this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState})
+                    }
+                    this.markNontrivial();
+                }
+            } break;
+            case StateFuncs.Random: {
+                const randomView = this.dataMap.getView(a1.value);
+                let i = this.state.next.length;
+                let offs = 0;
+                let total = 0;
+                while (true) {
+                    const weight = randomView.getInt32(offs + 0x00);
+                    if (weight === 0)
+                        break;
+                    total += weight;
+                    offs += 8;
+                }
+                offs = 0;
+                while (true) {
+                    const weight = randomView.getInt32(offs + 0x00);
+                    if (weight === 0)
+                        break;
+                    const stateAddr = randomView.getUint32(offs + 0x04);
+                    const state = parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses);
+                    this.state.next.push({type: InteractionType.Random, index: state, param: weight/total});
+                    offs += 8;
+                }
+                this.done = true;
+            } break;
+            case StateFuncs.ForceAnimation:
+                this.currBlock.force = true;
+            case StateFuncs.SetAnimation: {
+                if (a1.lastOp !== MIPS.Opcode.ADDIU) {
+                    this.valid = false;
+                    break;
+                }
+                let index = this.animationAddresses.findIndex((a) => a == a1.value);
+                if (index === -1) {
+                    index = this.animationAddresses.length;
+                    this.animationAddresses.push(a1.value);
+                }
+                this.currBlock.animation = index;
+            } break;
+            case StateFuncs.SetMotion: {
+
+            } break;
+            case StateFuncs.Wait:
+                this.currBlock.allowInteraction = false;
+            case StateFuncs.InteractWait: {
+                this.currBlock.endCondition = a1.value;
+                this.state.blocks.push(this.currBlock);
+                this.currBlock = {
+                    animation: -1,
+                    force: false,
+                    allowInteraction: true,
+                    interactions: [],
+                    duration: 0,
+                    durationRange: 0,
+                    signal: 0,
+                    endCondition: 0,
+                };
+            } break;
+            case GeneralFuncs.SendSignal: {
+                assert(a0.value === 3, `signal to unknown link`)
+                this.currBlock.signal = a1.value;
+            } break;
+
+            case GeneralFuncs.RandomInt: {
+                this.recentRandom = a0.value;
+                return a0.value;
+            }
+
+
+            // don't handle these for now
+            case StateFuncs.Remove:
+            case StateFuncs.ClaimApple:
+                break;
+            default:
+                // console.log("unknown function", hexzero(func, 8))
+                this.valid = false;
+        }
+        return 0;
+    }
+
+    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number) {
+        this.markNontrivial();
+        if (op === MIPS.Opcode.SW && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP)) {
+            // this looks like setting a struct field - LW comes from loading the object struct from the parent,
+            // while NOP probably means using one of the function arguments
+            switch (offset) {
+                case ObjectField.Transitions: { // interactions
+                    if (value.value === 0)
+                        return;
+                    if (!((value.lastOp === MIPS.Opcode.ADDIU && value.value > 0x80000000))) {
+                        console.warn("checking stack for interactions", hexzero(value.value, 2), hexzero(this.stackArgs[(value.value >> 2) - 4].value, 8))
+                        assert(value.value > 0 && value.value < 0x20)
+                        value = this.stackArgs[(value.value >> 2) - 4]
+                    }
+                    if (value.lastOp === MIPS.Opcode.ADDIU && value.value > 0x80000000) {
+                        const tView = this.dataMap.getView(value.value);
+                        let offs = 0;
+                        while (true) {
+                            const type: InteractionType = tView.getInt32(offs + 0x00);
+                            if (type === InteractionType.EndMarker)
+                                break;
+                            const stateAddr = tView.getUint32(offs + 0x04);
+                            const radius = tView.getFloat32(offs + 0x08);
+                            const otherFunc = tView.getUint32(offs + 0x0C);
+                            offs += 0x10;
+
+                            // TODO: handle the other function
+                            if (stateAddr !== 0) {
+                                this.currBlock.interactions.push({
+                                    type,
+                                    param: radius,
+                                    index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
+                                });
+                            }
+                        }
+                    } else
+                        console.warn("nonstandard interaction address", hexzero(value.value, 8), hexzero(this.state.startAddress, 8));
+                } break;
+                case ObjectField.Timer: {
+                    assert(value.lastOp === MIPS.Opcode.ADDIU, `bad source for timer value ${value.lastOp} ${value.value}`)
+                    this.currBlock.duration = value.value/30;
+                    // hacky way to recover random ranges: when we see calls to randomInt, we set v0 to the maximum
+                    // then, if we used random recently, and duration is long enough to have been a sum with v0, assume it was random
+                    if (this.recentRandom > 30 && this.recentRandom <= value.value) {
+                        this.currBlock.duration -= this.recentRandom/30;
+                        this.currBlock.durationRange = this.recentRandom/30;
+                        this.recentRandom = 0;
+                    }
+                } break;
+                case ObjectField.SomeBool:
+                case ObjectField.MiscFlags:
+                case ObjectField.LoopTarget:
+                case ObjectField.FrameTarget:
+                case ObjectField.StateFlags:
+                case ObjectField.Apple:
+                case ObjectField.Reference:
+                case ObjectField.Mystery:
+                case ObjectField.BadGround:
+                    break;
+
+                default:
+                    this.valid = false;
+            }
+        } else {
+            this.valid = false;
+        }
+    }
+
+    protected handleUnknown(op: MIPS.Opcode) {
+        this.valid = false; // keep going for state discovery, we'll fix the details later
+    }
+}
+
+let ind = 0
+
+let stateCount = 0
+let goodCount = 0
+
+function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], animationAddresses: number[]): number {
+    const existingState = states.findIndex((s) => s.startAddress === addr);
+    if (existingState >= 0)
+        return existingState;
+
+    stateCount += 1
+    console.log(leftPad('', ind++, '  '), 'new state func', hexzero(addr, 8))
+    const parser = new StateParser(dataMap, addr, states, animationAddresses);
+    if (parser.parse())
+        goodCount += 1
+    console.log(leftPad('', --ind, '  '), 'end')
+
+        // console.warn('complicated state found', hexzero(addr, 8));
+    return parser.stateIndex;
 }

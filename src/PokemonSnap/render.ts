@@ -301,22 +301,8 @@ export class ModelRenderer {
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
     public animationController = new AdjustableAnimationController(30);
-    public animations: AnimationData[] = [];
 
-    public objectDef: ObjectDef | null = null;
-
-    public static fromObject(renderData: RenderData, def: ObjectDef): ModelRenderer {
-        const obj = new ModelRenderer(renderData, def.nodes);
-
-        obj.objectDef = def;
-        obj.animations = def.animations;
-        // for now, randomly choose an animation
-        if (def.animations.length > 0)
-            obj.setAnimation(Math.floor(Math.random() * def.animations.length));
-        return obj;
-    }
-
-    constructor(private renderData: RenderData, public nodes: GFXNode[], public isSkybox = false) {
+    constructor(private renderData: RenderData, public nodes: GFXNode[], public animations: AnimationData[], public isSkybox = false) {
         for (let i = 0; i < nodes.length; i++) {
             const p = nodes[i].parent;
             if (p === -1)
