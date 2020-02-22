@@ -175,7 +175,7 @@ function drawLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
     ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
 }
 
-export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera, v0: vec3, v1: vec3, color: Color = Magenta): void {
+export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera, v0: vec3, v1: vec3, color: Color = Magenta, thickness = 2): void {
     vec4.set(p[0], v0[0], v0[1], v0[2], 1.0);
     vec4.set(p[1], v1[0], v1[1], v1[2], 1.0);
     transformToClipSpace(ctx, camera, 2);
@@ -183,7 +183,20 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.beginPath();
     drawLine(ctx, p[0], p[1]);
     ctx.closePath();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = thickness;
+    ctx.strokeStyle = colorToCSS(color);
+    ctx.stroke();
+}
+
+export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, camera: Camera, pos: vec3, dir: vec3, mag: number, color: Color = Magenta, thickness = 2): void {
+    vec4.set(p[0], pos[0], pos[1], pos[2], 1.0);
+    vec4.set(p[1], pos[0] + dir[0] * mag, pos[1] + dir[1] * mag, pos[2] + dir[2] * mag, 1.0);
+    transformToClipSpace(ctx, camera, 2);
+
+    ctx.beginPath();
+    drawLine(ctx, p[0], p[1]);
+    ctx.closePath();
+    ctx.lineWidth = thickness;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
 }

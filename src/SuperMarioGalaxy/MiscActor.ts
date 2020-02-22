@@ -5764,6 +5764,7 @@ class GravityExplainerArrow {
     public time: number = 0.0;
     public lifetime = 360.0;
     public color = colorNewCopy(White);
+    public scale: number = 1.0;
 }
 
 export class GravityExplainer extends LiveActor {
@@ -5815,10 +5816,11 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            const count = 1500;
+            const count = 100;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
+                arrow.scale = 0.5;
 
                 grav.generateRandomPoint(arrow.coord);
                 vec3.copy(arrow.pos, arrow.coord);
@@ -5889,8 +5891,8 @@ export class GravityExplainer extends LiveActor {
         vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
         vec3.transformMat4(scratchVec3b, arrow.pos, viewMtx);
 
-        const scaleX = 1.0;
-        const scaleY = 1.0;
+        const scaleX = arrow.scale;
+        const scaleY = arrow.scale;
 
         mtx[0] = scratchVec3a[0] * scaleX;
         mtx[4] = -scratchVec3a[1] * scaleY;
