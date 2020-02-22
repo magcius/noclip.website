@@ -1,5 +1,5 @@
 
-import { lerp, saturate } from "./MathHelpers";
+import { lerp, saturate, MathConstants, invlerp } from "./MathHelpers";
 import { assert } from "./util";
 
 // Color utilities
@@ -113,6 +113,50 @@ export function colorToCSS(src: Color): string {
 
 export function colorEqual(c0: Color, c1: Color): boolean {
     return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+function mod(a: number, b: number): number {
+    return (a + b) % b;
+}
+
+function piecewiseHSL(m0: number, m1: number, t: number) {
+    t = mod(t, 6.0);
+
+    // Piecewise HSL curve
+    //  ____
+    // /    \____
+
+    if (t >= 0.0 && t < 1.0) {
+        // Rising action.
+        return lerp(m0, m1, t - 0.0);
+    } else if (t >= 1.0 && t < 3.0) {
+        // Level high.
+        return m1;
+    } else if (t >= 3.0 && t < 4.0) {
+        // Falling action.
+        return lerp(m1, m0, t - 3.0);
+    } else {
+        // Level low.
+        return m0;
+    }
+}
+
+export function colorFromHSL(dst: Color, hue: number, saturation: number, lightness: number, a: number = 1.0) {
+    if (saturation === 0.0) {
+        colorFromRGBA(dst, lightness, lightness, lightness);
+    } else {
+        const r = lightness * saturation;
+        const m1 = lightness < 0.5 ? (lightness + r) : (lightness + saturation - r);
+        const m0 = 2 * lightness - m1;
+
+        // Map to the three sextants according to the curve profile.
+        const h = hue * 6.0;
+
+        dst.r = piecewiseHSL(m0, m1, h + 2.0);
+        dst.g = piecewiseHSL(m0, m1, h);
+        dst.b = piecewiseHSL(m0, m1, h - 2.0);
+        dst.a = a;
+    }
 }
 
 export const TransparentBlack = colorNewFromRGBA(0, 0, 0, 0);

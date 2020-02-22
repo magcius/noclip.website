@@ -2721,7 +2721,7 @@ export class UI {
         let min: number = 0, max: number = 1, step: number = 0.01;
 
         let range = Reflect.getMetadata('df:range', obj, paramName);
-        if (range === undefined && parentMetadata !== undefined)
+        if (range === undefined && parentMetadata !== null)
             range = parentMetadata.range;
         if (range !== undefined) {
             min = range.min;

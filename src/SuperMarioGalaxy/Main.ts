@@ -30,9 +30,9 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, GravityExplainer } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder } from './MiscMap';
@@ -419,6 +419,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
 
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
+        this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.resetRenderInsts();
@@ -961,6 +962,9 @@ class SMGSpawner {
         this.placeZones(stageDataHolder);
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
+
+        // const grav = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
+        // console.log(grav);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects

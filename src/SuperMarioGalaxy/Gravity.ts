@@ -1,11 +1,11 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoBool, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoBool, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoTransLocal } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero } from "../MathHelpers";
-import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ } from "../MathHelpers";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, addRandomVector } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 
 const scratchVec3a = vec3.create();
@@ -23,7 +23,7 @@ export class GravityInfo {
 const scratchGravTotal = vec3.create();
 const scratchGravLocal = vec3.create();
 export class PlanetGravityManager extends NameObj {
-    private gravities: PlanetGravity[] = [];
+    public gravities: PlanetGravity[] = [];
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'PlanetGravityManager');
@@ -144,6 +144,18 @@ abstract class PlanetGravity {
         // mat4.identity(scratchMatrix);
         // this.updateMtx(scratchMatrix);
     }
+
+    // Generate a random point somewhere around or inside the gravity.
+    protected abstract generateOwnRandomPoint(dst: vec3): void;
+
+    public generateRandomPoint(dst: vec3): void {
+        while (true) {
+            this.generateOwnRandomPoint(dst);
+
+            if (this.calcOwnGravityVector(scratchVec3a, dst) >= 0)
+                break;
+        }
+    }
 }
 
 function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoIter): void {
@@ -185,7 +197,14 @@ function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoI
 
     const inverse = infoIter.getValueNumberNoInit('Inverse');
     if (inverse !== null)
-        gravity.inverse = getJMapInfoBool(inverse);
+        gravity.inverse = (inverse !== 0);
+}
+
+function generateRandomPointInMatrix(dst: vec3, m: mat4, mag: number = 1): void {
+    dst[0] = getRandomFloat(-mag, mag);
+    dst[1] = getRandomFloat(-mag, mag);
+    dst[2] = getRandomFloat(-mag, mag);
+    vec3.transformMat4(dst, dst, m);
 }
 
 const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
@@ -198,12 +217,12 @@ class ParallelGravity extends PlanetGravity {
     private boxMtx: mat4 | null = null;
     private boxExtentsSq: vec3 | null = null;
     private planeNormal = vec3.create();
-    private planeTranslation = vec3.create();
+    private pos = vec3.create();
     private distanceCalcType: number = -1;
 
     public setPlane(normal: vec3, translation: vec3): void {
         vec3.normalize(this.planeNormal, normal);
-        vec3.copy(this.planeTranslation, translation);
+        vec3.copy(this.pos, translation);
     }
 
     public setBaseDistance(v: number): void {
@@ -241,7 +260,7 @@ class ParallelGravity extends PlanetGravity {
 
     private isInSphereRange(coord: vec3): number {
         if (this.range >= 0) {
-            const distSq = vec3.squaredDistance(this.planeTranslation, coord);
+            const distSq = vec3.squaredDistance(this.pos, coord);
             if (distSq < this.range*this.range)
                 return this.baseDistance;
             else
@@ -259,17 +278,17 @@ class ParallelGravity extends PlanetGravity {
 
         const extentsSq = this.boxExtentsSq!;
 
-        calcMtxAxis(scratchVec3b, null, null, boxMtx);
+        getMatrixAxisX(scratchVec3b, boxMtx);
         const dotX = vec3.dot(scratchVec3a, scratchVec3b);
         if (dotX < -extentsSq[0] || dotX > extentsSq[0])
             return -1;
 
-        calcMtxAxis(null, scratchVec3b, null, boxMtx);
+        getMatrixAxisY(scratchVec3b, boxMtx);
         const dotY = vec3.dot(scratchVec3a, scratchVec3b);
         if (dotY < -extentsSq[1] || dotY > extentsSq[1])
             return -1;
 
-        calcMtxAxis(null, null, scratchVec3b, boxMtx);
+        getMatrixAxisZ(scratchVec3b, boxMtx);
         const dotZ = vec3.dot(scratchVec3a, scratchVec3b);
         if (dotZ < -extentsSq[2] || dotZ > extentsSq[2])
             return -1;
@@ -287,8 +306,8 @@ class ParallelGravity extends PlanetGravity {
     }
 
     private isInCylinderRange(coord: vec3): number {
-        vec3.subtract(scratchVec3a, coord, this.planeTranslation);
-        const dot = vec3.dot(this.planeNormal, this.planeTranslation);
+        vec3.subtract(scratchVec3a, coord, this.pos);
+        const dot = vec3.dot(this.planeNormal, scratchVec3a);
 
         if (dot < 0 || dot > this.cylinderRangeScaleY)
             return -1;
@@ -320,6 +339,18 @@ class ParallelGravity extends PlanetGravity {
         vec3.negate(dst, this.planeNormal);
         return distance;
     }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        if (this.rangeType === ParallelGravityRangeType.Box) {
+            const boxMtx = this.boxMtx!;
+            generateRandomPointInMatrix(dst, boxMtx);
+        } else {
+            const range = this.range >= 0.0 ? this.range : 50000.0;
+            dst[0] = this.pos[0] + getRandomFloat(-range, range);
+            dst[1] = this.pos[1] + getRandomFloat(-range, range);
+            dst[2] = this.pos[2] + getRandomFloat(-range, range);
+        }
+    }
 }
 
 class PointGravity extends PlanetGravity {
@@ -334,6 +365,12 @@ class PointGravity extends PlanetGravity {
             return -1;
 
         return mag;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        dst[0] = this.pos[0] + getRandomFloat(-this.range, this.range);
+        dst[1] = this.pos[1] + getRandomFloat(-this.range, this.range);
+        dst[2] = this.pos[2] + getRandomFloat(-this.range, this.range);
     }
 }
 
@@ -421,6 +458,14 @@ class SegmentGravity extends PlanetGravity {
 
         vec3.normalize(dst, scratchVec3a);
         return dist;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        vec3.lerp(dst, this.gravityPoints[0], this.gravityPoints[1], Math.random());
+
+        dst[0] += getRandomFloat(-this.range, this.range);
+        dst[1] += getRandomFloat(-this.range, this.range);
+        dst[2] += getRandomFloat(-this.range, this.range);
     }
 }
 
@@ -530,6 +575,10 @@ class ConeGravity extends PlanetGravity {
             }
         }
     }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        generateRandomPointInMatrix(dst, this.mtx);
+    }
 }
 
 export class GlobalGravityObj extends LiveActor {
@@ -608,6 +657,26 @@ export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sce
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     if (arg1 !== -1)
         gravity.setDistanceCalcType(arg1);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalPlaneInCylinderGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new ParallelGravity();
+    gravity.setRangeType(ParallelGravityRangeType.Cylinder);
+
+    // PlaneInCylinderGravityCreator::settingFromSRT
+    getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoTrans(scratchVec3b, sceneObjHolder, infoIter);
+    makeMtxTR(scratchMatrix, scratchVec3b, scratchVec3a);
+    getMatrixAxisY(scratchVec3a, scratchMatrix);
+    gravity.setPlane(scratchVec3a, scratchVec3b);
+    getJMapInfoScale(scratchVec3a, infoIter);
+    gravity.setRangeCylinder(500.0 * scratchVec3a[0], 500.0 * scratchVec3a[1]);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

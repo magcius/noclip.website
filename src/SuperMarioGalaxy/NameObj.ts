@@ -33,6 +33,8 @@ export const enum DrawType {
     EFFECT_DRAW_FOR_2D_MODEL       = 0x4B,
     EFFECT_DRAW_FOR_BLOOM_EFFECT   = 0x4C,
     EFFECT_DRAW_AFTER_IMAGE_EFFECT = 0x4D,
+
+    GRAVITY_EXPLAINER              = 0x200,
 };
 
 export const enum DrawBufferType {
