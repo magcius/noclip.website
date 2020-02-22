@@ -1,11 +1,11 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoBool, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoTransLocal } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ } from "../MathHelpers";
-import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, addRandomVector } from "./ActorUtil";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 
 const scratchVec3a = vec3.create();
@@ -344,6 +344,12 @@ class ParallelGravity extends PlanetGravity {
         if (this.rangeType === ParallelGravityRangeType.Box) {
             const boxMtx = this.boxMtx!;
             generateRandomPointInMatrix(dst, boxMtx);
+        } else if (this.rangeType === ParallelGravityRangeType.Cylinder) {
+            const rangeX = this.cylinderRangeScaleX;
+            const rangeY = this.cylinderRangeScaleY;
+            dst[0] = this.pos[0] + getRandomFloat(-rangeX, rangeX);
+            dst[1] = this.pos[1] + getRandomFloat(-rangeY, rangeY);
+            dst[2] = this.pos[2] + getRandomFloat(-rangeX, rangeX);
         } else {
             const range = this.range >= 0.0 ? this.range : 50000.0;
             dst[0] = this.pos[0] + getRandomFloat(-range, range);
@@ -410,7 +416,7 @@ class SegmentGravity extends PlanetGravity {
         // TODO(jstpierre): Quite sure this will be orthonormal, so not sure why it's doing all this work...
         // dot should always be 0, right?
         const dot = vec3.dot(scratchVec3a, this.sideVector);
-        vec3.scaleAndAdd(scratchVec3b, scratchVec3a, this.sideVector, -dot);
+        vec3.scaleAndAdd(scratchVec3b, this.sideVector, scratchVec3a, -dot);
 
         mat4.fromRotation(scratchMatrix, theta, scratchVec3a);
         vec3.transformMat4(this.sideDegreeVector, scratchVec3b, scratchMatrix);
@@ -431,7 +437,9 @@ class SegmentGravity extends PlanetGravity {
         if (this.validSideCos > -1 && vec3.squaredLength(this.sideDegreeVector) >= 0.0) {
             vec3.scale(scratchVec3b, this.segmentDirection, dot);
             vec3.sub(scratchVec3b, scratchVec3b, scratchVec3a);
-            if (vec3.dot(scratchVec3b, this.sideDegreeVector) < this.validSideCos)
+            vec3.normalize(scratchVec3b, scratchVec3b);
+            const dot2 = vec3.dot(scratchVec3b, this.sideDegreeVector);
+            if (dot2 < this.validSideCos)
                 return -1;
         }
 
@@ -507,11 +515,14 @@ class ConeGravity extends PlanetGravity {
         if (!isNearZeroVec3(scratchVec3d, 0.001)) {
             const dist = vec3.length(scratchVec3d);
 
-            vec3.add(scratchVec3a, scratchVec3b, scratchVec3a);
+            getMatrixTranslation(scratchVec3b, this.mtx);
             vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3d, this.magX / dist);
 
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3b, scratchVec3a, height);
+
             if (dot >= 0.0) {
-                // Top of the cone.
+                // "Top" of the cone -- the pointy tip.
+
                 if (this.topCutRate >= 0.01) {
                     // TODO(jstpierre): Top cut...
                     calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3c, scratchVec3a);
@@ -543,14 +554,13 @@ class ConeGravity extends PlanetGravity {
                     return 0.0;
                 }
             } else {
-                // Bottom of the cone.
+                // "Bottom" of the cone -- the flat surface.
 
                 if (this.enableBottom) {
-                    getMatrixTranslation(scratchVec3b, this.mtx);
                     calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3b, scratchVec3c);
                     vec3.sub(scratchVec3c, scratchVec3b, coord);
                     if (!isNearZeroVec3(scratchVec3c, 0.001)) {
-                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3a);
+                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3b);
                     } else {
                         vec3.negate(dst, scratchVec3a);
                         return 0.0;
@@ -750,6 +760,7 @@ export function createGlobalConeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
     getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
     getJMapInfoScale(scratchVec3c, infoIter);
 
+    vec3.scale(scratchVec3c, scratchVec3c, 500.0);
     makeMtxTRS(scratchMatrix, scratchVec3a, scratchVec3b, scratchVec3c);
     gravity.setLocalMatrix(scratchMatrix);
 
