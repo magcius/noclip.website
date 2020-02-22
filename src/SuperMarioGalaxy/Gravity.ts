@@ -1,10 +1,10 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ } from "../MathHelpers";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero } from "../MathHelpers";
 import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 
@@ -359,6 +359,383 @@ class ParallelGravity extends PlanetGravity {
     }
 }
 
+enum CubeGravityValidAreaFlags {
+    X_Right = 0x01,
+    X_Left  = 0x02,
+    Y_Right = 0x04,
+    Y_Left  = 0x08,
+    Z_Right = 0x10,
+    Z_Left  = 0x20,
+}
+
+enum CubeArea {
+    X_Left   = 0,
+    X_Inside = 1,
+    X_Right  = 2,
+    Y_Left   = 0,
+    Y_Inside = 3,
+    Y_Right  = 6,
+    Z_Left   = 0,
+    Z_Inside = 9,
+    Z_Right  = 18,
+}
+
+class CubeGravity extends PlanetGravity {
+    private mtx = mat4.create();
+    private extents = vec3.create();
+    public validAreaFlags: CubeGravityValidAreaFlags = 0x3F;
+
+    public setCube(mtx: mat4): void {
+        this.mtx = mat4.clone(mtx);
+    }
+
+    protected updateMtx(): void {
+        this.extents = vec3.create();
+
+        calcMtxAxis(scratchVec3a, scratchVec3b, scratchVec3c, this.mtx);
+        this.extents[0] = vec3.length(scratchVec3a);
+        this.extents[1] = vec3.length(scratchVec3b);
+        this.extents[2] = vec3.length(scratchVec3c);
+    }
+
+    private calcGravityArea(coord: vec3): CubeArea {
+        getMatrixTranslation(scratchVec3a, this.mtx);
+        vec3.sub(scratchVec3a, coord, scratchVec3a);
+
+        getMatrixAxisX(scratchVec3b, this.mtx);
+        const distX = vec3.dot(scratchVec3a, scratchVec3b) / this.extents[0];
+
+        // Each axis has three partitions: -extents <= V < extents
+        // We call the first area the LHS, the second area "inside", and the third RHS.
+        let areaFlags: CubeArea = 0;
+
+        if (distX > this.extents[0]) {
+            // RHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.X_Right))
+                return -1;
+
+            areaFlags += CubeArea.X_Right;
+        } else if (distX >= -this.extents[0]) {
+            // Inside
+            areaFlags += CubeArea.X_Inside;
+        } else {
+            // LHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.X_Left))
+                return -1;
+
+            areaFlags += CubeArea.X_Left;
+        }
+
+        getMatrixAxisY(scratchVec3b, this.mtx);
+        const distY = vec3.dot(scratchVec3a, scratchVec3b) / this.extents[1];
+
+        if (distY > this.extents[1]) {
+            // RHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.Y_Right))
+                return -1;
+
+            areaFlags += CubeArea.Y_Right;
+        } else if (distY >= -this.extents[1]) {
+            // Inside
+            areaFlags += CubeArea.Y_Inside;
+        } else {
+            // LHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.Y_Left))
+                return -1;
+
+            areaFlags += CubeArea.Y_Left;
+        }
+
+        getMatrixAxisZ(scratchVec3b, this.mtx);
+        const distZ = vec3.dot(scratchVec3a, scratchVec3b) / this.extents[2];
+
+        if (distZ > this.extents[2]) {
+            // RHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.Z_Right))
+                return -1;
+
+            areaFlags += CubeArea.Z_Right;
+        } else if (distZ >= -this.extents[2]) {
+            // Inside
+            areaFlags += CubeArea.Z_Inside;
+        } else {
+            // LHS
+            if (!(this.validAreaFlags & CubeGravityValidAreaFlags.Z_Left))
+                return -1;
+
+            areaFlags += CubeArea.Z_Left;
+        }
+
+        return areaFlags;
+    }
+
+    private calcFaceGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+        if (areaFlags === CubeArea.X_Left + CubeArea.Y_Inside + CubeArea.Z_Inside) {
+            getMatrixAxisX(dst, this.mtx);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Left + CubeArea.Z_Inside) {
+            getMatrixAxisY(dst, this.mtx);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Inside + CubeArea.Z_Left) {
+            getMatrixAxisZ(dst, this.mtx);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Inside + CubeArea.Z_Inside) {
+            getMatrixAxisX(dst, this.mtx);
+            vec3.negate(dst, dst);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Right + CubeArea.Z_Inside) {
+            getMatrixAxisY(dst, this.mtx);
+            vec3.negate(dst, dst);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Inside + CubeArea.Z_Right) {
+            getMatrixAxisZ(dst, this.mtx);
+            vec3.negate(dst, dst);
+        } else {
+            return -1;
+        }
+
+        const size = vec3.length(dst);
+        vec3.normalize(dst, dst);
+
+        getMatrixTranslation(scratchVec3a, this.mtx);
+        vec3.sub(scratchVec3a, scratchVec3a, coord);
+
+        // Project onto axis.
+        const dist = Math.max(size * vec3.dot(scratchVec3a, dst), 0.0);
+        return dist;
+    }
+
+    private calcEdgeGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+        vec3.copy(scratchVec3a, Vec3Zero);
+
+        // scratchVec3b = edge axis
+        // scratchVec3a = influence vector
+        if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Left + CubeArea.Z_Left) {
+            // axis = X, infl = -Y -Z
+            getMatrixAxisX(scratchVec3b, this.mtx);
+
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Inside + CubeArea.Z_Left) {
+            // axis = Y, infl = -X -Z
+            getMatrixAxisY(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Inside + CubeArea.Z_Left) {
+            // axis = Y, infl = +X -Z
+            getMatrixAxisY(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Right + CubeArea.Z_Left) {
+            // axis = X, infl = +Y -Z
+            getMatrixAxisX(scratchVec3b, this.mtx);
+
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Left + CubeArea.Z_Inside) {
+            // axis = Z, infl = -X -Y
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Left + CubeArea.Z_Inside) {
+            // axis = Z, infl = +X -Y
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Right + CubeArea.Z_Inside) {
+            // axis = Z, infl = -X +Y
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Right + CubeArea.Z_Inside) {
+            // axis = Z, infl = +X +Y
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Left + CubeArea.Z_Right) {
+            // axis = X, infl = -Y +Z
+            getMatrixAxisX(scratchVec3b, this.mtx);
+
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Inside + CubeArea.Z_Right) {
+            // axis = Y, infl = -X +Z
+            getMatrixAxisY(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Inside + CubeArea.Z_Right) {
+            // axis = Y, infl = +X +Z
+            getMatrixAxisY(scratchVec3b, this.mtx);
+
+            getMatrixAxisX(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Right + CubeArea.Z_Right) {
+            // axis = X, infl = +Y +Z
+            getMatrixAxisX(scratchVec3b, this.mtx);
+
+            getMatrixAxisY(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+            getMatrixAxisZ(scratchVec3c, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+        } else {
+            return -1;
+        }
+
+        getMatrixTranslation(scratchVec3c, this.mtx);
+        vec3.add(scratchVec3c, scratchVec3a, scratchVec3c);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        vec3.sub(scratchVec3d, scratchVec3c, coord);
+
+        // Orthagonalize to axis.
+        vec3.scaleAndAdd(dst, scratchVec3d, scratchVec3b, -vec3.dot(scratchVec3b, scratchVec3d));
+
+        vec3.sub(dst, dst, coord);
+        if (!vec3.equals(dst, Vec3Zero)) {
+            const dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
+            return dist;
+        } else {
+            vec3.normalize(dst, scratchVec3a);
+            return 0.0;
+        }
+    }
+
+    private calcCornerGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+        vec3.copy(scratchVec3a, Vec3Zero);
+
+        if (areaFlags === CubeArea.X_Left + CubeArea.Y_Left + CubeArea.Z_Left) {
+            // dst = -axisX -axisY -axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Left + CubeArea.Z_Left) {
+            // dst = +axisX -axisY -axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Right + CubeArea.Z_Left) {
+            // dst = -axisX +axisY -axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Right + CubeArea.Z_Left) {
+            // dst = +axisX +axisY -axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Left + CubeArea.Z_Right) {
+            // dst = -axisX -axisY +axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Left + CubeArea.Z_Right) {
+            // dst = +axisX -axisY +axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Left + CubeArea.Y_Right + CubeArea.Z_Right) {
+            // dst = -axisX +axisY +axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Right + CubeArea.Z_Right) {
+            // dst = +axisX +axisY +axisZ;
+            getMatrixAxisX(scratchVec3b, this.mtx);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisY(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            getMatrixAxisZ(scratchVec3b, this.mtx);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+        } else {
+            return -1;
+        }
+
+        getMatrixTranslation(scratchVec3b, this.mtx);
+        vec3.add(dst, scratchVec3a, scratchVec3b);
+
+        vec3.sub(dst, dst, coord);
+        if (!vec3.equals(dst, Vec3Zero)) {
+            const dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
+            return dist;
+        } else {
+            vec3.normalize(dst, scratchVec3a);
+            return 0.0;
+        }
+    }
+
+    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+        const areaFlags = this.calcGravityArea(coord);
+        if (areaFlags < 0)
+            return -1;
+
+        let dist: number = -1;
+
+        if (dist < 0)
+            dist = this.calcFaceGravity(dst, coord, areaFlags);
+        if (dist < 0)
+            dist = this.calcEdgeGravity(dst, coord, areaFlags);
+        if (dist < 0)
+            dist = this.calcCornerGravity(dst, coord, areaFlags);
+
+        if (dist >= 0 && this.isInRangeDistance(dist))
+            return dist;
+        else
+            return -1;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        const range = this.range >= 0.0 ? this.range : 6.0;
+        generateRandomPointInMatrix(dst, this.mtx, range);
+    }
+}
+
 class PointGravity extends PlanetGravity {
     public pos = vec3.create();
 
@@ -609,7 +986,8 @@ function makeMtxTRS(dst: mat4, translation: vec3, rotation: vec3, scale: vec3): 
         translation[0], translation[1], translation[2]);
 }
 
-function preScaleMtx(dst: mat4, x: number, y: number, z: number): void {
+function preScaleMtx(dst: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
     dst[0] *= x;
     dst[1] *= x;
     dst[2] *= x;
@@ -643,18 +1021,17 @@ export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sce
     gravity.setRangeType(ParallelGravityRangeType.Box);
 
     // PlaneInBoxGravityCreator::settingFromSRT
-    getJMapInfoScale(scratchVec3a, infoIter);
-    vec3.scale(scratchVec3a, scratchVec3a, 500);
-
     getJMapInfoTrans(scratchVec3b, sceneObjHolder, infoIter);
     getJMapInfoRotate(scratchVec3c, sceneObjHolder, infoIter);
-    makeMtxTR(scratchMatrix, scratchVec3b, scratchVec3c);
-    calcMtxAxis(null, scratchVec3c, null, scratchMatrix);
-    gravity.setPlane(scratchVec3c, scratchVec3b);
+    getJMapInfoScale(scratchVec3a, infoIter);
 
+    vec3.scale(scratchVec3a, scratchVec3a, 500);
+    makeMtxTR(scratchMatrix, scratchVec3b, scratchVec3c);
+    getMatrixAxisY(scratchVec3c, scratchMatrix);
+    gravity.setPlane(scratchVec3c, scratchVec3b);
     vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3c, scratchVec3a[1]);
     setTrans(scratchMatrix, scratchVec3c);
-    preScaleMtx(scratchMatrix, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+    preScaleMtx(scratchMatrix, scratchVec3a);
     gravity.setRangeBox(scratchMatrix);
 
     // PlaneInBoxGravityCreator::settingFromJMapArgs
@@ -700,6 +1077,53 @@ export function createGlobalPointGravityObj(zoneAndLayer: ZoneAndLayer, sceneObj
     getJMapInfoTrans(gravity.pos, sceneObjHolder, infoIter);
     getJMapInfoScale(scratchVec3a, infoIter);
     gravity.distant = 500.0 * scratchVec3a[0];
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalCubeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new CubeGravity();
+
+    // CubeGravityCreator::settingFromSRT
+    getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoTrans(scratchVec3b, sceneObjHolder, infoIter);
+    getJMapInfoScale(scratchVec3c, infoIter);
+
+    makeMtxTR(scratchMatrix, scratchVec3b, scratchVec3a);
+    getMatrixAxisY(scratchVec3a, scratchMatrix);
+
+    vec3.scale(scratchVec3c, scratchVec3c, 500.0);
+    vec3.scaleAndAdd(scratchVec3a, scratchVec3b, scratchVec3a, scratchVec3c[1]);
+    setTrans(scratchMatrix, scratchVec3a);
+    preScaleMtx(scratchMatrix, scratchVec3c);
+    gravity.setCube(scratchMatrix);
+
+    // CubeGravityCreator::settingFromJMapArgs
+    let areaFlags: CubeGravityValidAreaFlags = 0;
+
+    const arg0 = fallback(getJMapInfoArg0(infoIter), -1) >>> 0;
+    if (!!(arg0 & 0x01))
+        areaFlags |= CubeGravityValidAreaFlags.X_Left;
+    if (!!(arg0 & 0x02))
+        areaFlags |= CubeGravityValidAreaFlags.X_Right;
+
+    const arg1 = fallback(getJMapInfoArg1(infoIter), -1) >>> 0;
+    if (!!(arg1 & 0x01))
+        areaFlags |= CubeGravityValidAreaFlags.Y_Left;
+    if (!!(arg1 & 0x02))
+        areaFlags |= CubeGravityValidAreaFlags.Y_Right;
+
+    const arg2 = fallback(getJMapInfoArg2(infoIter), -1) >>> 0;
+    if (!!(arg2 & 0x01))
+        areaFlags |= CubeGravityValidAreaFlags.Z_Left;
+    if (!!(arg2 & 0x02))
+        areaFlags |= CubeGravityValidAreaFlags.Z_Right;
+
+    gravity.validAreaFlags = areaFlags;
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

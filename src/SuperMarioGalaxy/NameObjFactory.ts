@@ -8,7 +8,7 @@ import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, P
 import { OceanBowl } from "./OceanBowl";
 import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
-import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj } from './Gravity';
+import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj } from './Gravity';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -607,8 +607,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("PowerStarAppearPoint"),
 
     // Gravity
-    E("GlobalConeGravity",           createGlobalConeGravityObj),
-    N("GlobalCubeGravity"),
+    E("GlobalConeGravity",            createGlobalConeGravityObj),
+    E("GlobalCubeGravity",            createGlobalCubeGravityObj),
     N("GlobalDiskGravity"),
     N("GlobalDiskTorusGravity"),
     E("GlobalPointGravity",           createGlobalPointGravityObj),
