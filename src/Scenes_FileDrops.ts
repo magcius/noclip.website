@@ -15,7 +15,7 @@ import * as DC_PVRT from './Common/DC/PVRT';
 import * as JSR from './Common/DC/jsr';
 import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
-import * as JPAExplorer from './interactive_examples/JPAExplorer';
+import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
