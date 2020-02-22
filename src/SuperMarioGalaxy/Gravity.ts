@@ -383,8 +383,8 @@ class PointGravity extends PlanetGravity {
 class SegmentGravity extends PlanetGravity {
     private gravityPoints = nArray(2, () => vec3.create());
     private sideVector = vec3.create();
-    private sideDegreeVector = vec3.create();
     private edgeValid = nArray(2, () => true);
+    private validSideVector = vec3.create();
     private validSideDegree: number = 360.0;
     private validSideCos: number = -1.0;
     private segmentDirection = vec3.create();
@@ -413,13 +413,12 @@ class SegmentGravity extends PlanetGravity {
         vec3.sub(scratchVec3a, this.gravityPoints[1], this.gravityPoints[0]);
         vec3.normalize(scratchVec3a, scratchVec3a);
 
-        // TODO(jstpierre): Quite sure this will be orthonormal, so not sure why it's doing all this work...
-        // dot should always be 0, right?
+        // NOTE(jstpierre): I'm quite sure sideVector and segmentDirection will already be orthonormal...
         const dot = vec3.dot(scratchVec3a, this.sideVector);
         vec3.scaleAndAdd(scratchVec3b, this.sideVector, scratchVec3a, -dot);
 
         mat4.fromRotation(scratchMatrix, theta, scratchVec3a);
-        vec3.transformMat4(this.sideDegreeVector, scratchVec3b, scratchMatrix);
+        vec3.transformMat4(this.validSideVector, scratchVec3b, scratchMatrix);
     }
 
     protected updateMtx(): void {
@@ -434,12 +433,11 @@ class SegmentGravity extends PlanetGravity {
         vec3.subtract(scratchVec3a, coord, this.gravityPoints[0]);
         const dot = vec3.dot(scratchVec3a, this.segmentDirection);
 
-        if (this.validSideCos > -1 && vec3.squaredLength(this.sideDegreeVector) >= 0.0) {
+        if (this.validSideCos > -1 && vec3.squaredLength(this.validSideVector) >= 0.0) {
             vec3.scale(scratchVec3b, this.segmentDirection, dot);
-            vec3.sub(scratchVec3b, scratchVec3b, scratchVec3a);
+            vec3.sub(scratchVec3b, scratchVec3a, scratchVec3b);
             vec3.normalize(scratchVec3b, scratchVec3b);
-            const dot2 = vec3.dot(scratchVec3b, this.sideDegreeVector);
-            if (dot2 < this.validSideCos)
+            if (vec3.dot(scratchVec3b, this.validSideVector) < this.validSideCos)
                 return -1;
         }
 
