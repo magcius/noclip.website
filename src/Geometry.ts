@@ -134,18 +134,18 @@ export class AABB {
 
     public containsPoint(v: vec3): boolean {
         const pX = v[0], pY = v[1], pZ = v[2];
-        return (
-            pX >= this.minX && pX <= this.maxX &&
-            pY >= this.minY && pY <= this.maxY &&
-            pZ >= this.minZ && pZ <= this.maxZ);
+        return !(
+            pX < this.minX || pX > this.maxX ||
+            pY < this.minY || pY > this.maxY ||
+            pZ < this.minZ || pZ > this.maxZ);
     }
 
     public containsSphere(v: vec3, rad: number): boolean {
         const pX = v[0], pY = v[1], pZ = v[2];
-        return (
-            pX >= this.minX - rad && pX <= this.maxX + rad &&
-            pY >= this.minY - rad && pY <= this.maxY + rad &&
-            pZ >= this.minZ - rad && pZ <= this.maxZ + rad);
+        return !(
+            pX < this.minX - rad || pX > this.maxX + rad ||
+            pY < this.minY - rad || pY > this.maxY + rad ||
+            pZ < this.minZ - rad || pZ > this.maxZ + rad);
     }
 
     public centerPoint(v: vec3): void {
