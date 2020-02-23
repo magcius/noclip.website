@@ -30,7 +30,7 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, GravityExplainer } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -38,6 +38,7 @@ import { BckCtrl } from './Animation';
 import { WaterAreaHolder } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
+import { GravityExplainer } from './GravityExplainer';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
