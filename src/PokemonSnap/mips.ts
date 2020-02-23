@@ -61,12 +61,11 @@ export interface BranchInfo {
     end: number;
     comparator: Register;
     op: Opcode;
-    inverted: boolean;
 }
 
 // A simple MIPS interpreter that can only handle mostly-linear functions
 // A very small amount of information is kept about branches, and no attempt
-// is made to handle loops or nested conditionals
+// is made to handle loops, nested conditionals, or most register modification
 export class NaiveInterpreter {
     public regs: Register[] = nArray(32, () => ({ value: 0, lastOp: Opcode.NOP } as Register));
     public stackArgs: Register[] = nArray(10, () => ({ value: 0, lastOp: Opcode.NOP } as Register));
@@ -116,9 +115,9 @@ export class NaiveInterpreter {
                     break;
                 case Opcode.BEQ:
                     if (rs === 0 && rt === 0) {
-                        nextMeet = Math.max(nextMeet, offs + 4*(imm + 1));
+                        nextMeet = Math.max(nextMeet, offs + 4 * (imm + 1));
                         if (currBranch !== null) {
-                            assert(!this.valid || currBranch.end === -1 || currBranch.end === offs + 8, "unconditional branch in the middle of if block")
+                            assert(!this.valid || currBranch.end === -1 || currBranch.end === offs + 8, "unconditional branch in the middle of if block");
                             currBranch.end = offs + 8;
                         }
                         break; // unconditional branch
@@ -131,16 +130,15 @@ export class NaiveInterpreter {
                         this.handleUnknown(op);
                         break;
                     }
-                    assert(rs !== 0 || rt !== 0, `bad trivial branch`)
+                    assert(rs !== 0 || rt !== 0, `bad trivial branch`);
                     let compReg = this.regs[rt];
                     if (rt === 0 || (rs !== 0 && this.seemsLikeLiteral(rs)))
                         compReg = this.regs[rs];
-                    const comparator: Register = {lastOp: compReg.lastOp, value: compReg.value};
+                    const comparator: Register = { lastOp: compReg.lastOp, value: compReg.value };
                     // if the body starts right away, the condition is effectively inverted
                     // assume this is the case when comparing to zero
                     let start = offs + 8;
-                    let inverted = true;
-                    let end = offs + 4*(imm + 1);
+                    let end = offs + 4 * (imm + 1);
                     nextMeet = Math.max(nextMeet, end);
                     if (rs !== 0 && rt !== 0 && (op === Opcode.BEQ || op === Opcode.BEQL)) {
                         // if not comparing to zero, assume we are looking at
@@ -148,9 +146,8 @@ export class NaiveInterpreter {
                         // meaning "positive" branches jump to the start of the body
                         start = end;
                         end = -1;
-                        inverted = false;
                     }
-                    branches.push({ op, start, end, comparator, inverted });
+                    branches.push({ op, start, end, comparator });
                 } break;
 
                 case Opcode.SB:
@@ -182,8 +179,7 @@ export class NaiveInterpreter {
                 case Opcode.LB:
                 case Opcode.LBU:
                 case Opcode.LH:
-                case Opcode.LHU:
-                 {
+                case Opcode.LHU: {
                     if (imm === 0)
                         this.regs[rt].value = this.guessValue(rs);
                     else if ((this.regs[rs].value & 0xFFFF) === 0)
@@ -237,12 +233,10 @@ export class NaiveInterpreter {
                     if (rs === RegName.RA)
                         return this.valid;
                     // a switch statement, beyond the scope of this interpreter
-                    this.handleUnknown(op)
+                    this.handleUnknown(op);
                 default:
-                    // if (this.valid)
-                    //     console.warn("unhandled instruction", hexzero(instr, 8))
                     // unhandled instruction, return invalid
-                    this.handleUnknown(op)
+                    this.handleUnknown(op);
             }
             if (op === Opcode.BEQL || op === Opcode.BNEL)
                 offs += 4; // skip the delay slot entirely
@@ -276,6 +270,8 @@ export class NaiveInterpreter {
         return 0;
     }
 
+    // very hacky attempt to preserve information from register operations
+    // roughly, we want to keep the literal values involved
     private seemsLikeLiteral(r: RegName): boolean {
         switch (this.regs[r].lastOp) {
             case Opcode.JAL:
@@ -293,7 +289,7 @@ export class NaiveInterpreter {
 
     protected handleFunction(func: number, a0: Register, a1: Register, a2: Register, a3: Register, stackArgs: (Register | null)[], branch: BranchInfo | null): number {
         return 0;
-     }
+    }
 
     protected handleStore(op: Opcode, value: Register, target: Register, offset: number): void { }
 

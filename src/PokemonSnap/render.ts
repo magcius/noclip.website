@@ -4,7 +4,7 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { GFXNode, AnimationData, ObjectDef, MaterialFlags } from './room';
+import { GFXNode, AnimationData, ObjectDef, MaterialFlags, CollisionTree } from './room';
 import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation';
 import { vec4, mat4, vec3 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
@@ -206,6 +206,13 @@ class DrawCallInstance {
     }
 }
 
+export interface LevelGlobals {
+    collision: CollisionTree | null;
+    currentSong: number;
+    songStart: number;
+    lastPesterBall: number;
+}
+
 export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): void {
     computeModelMatrixSRT(dst,
         scale[0], scale[1], scale[2],
@@ -246,38 +253,42 @@ export class NodeRenderer {
             for (let i = 0; i < node.model.rspOutput.drawCalls.length; i++)
                 this.drawCalls.push(new DrawCallInstance(renderData, node.model.rspOutput.drawCalls[i], drawMatrices, this.node.billboard, this.materials));
 
-        vec3.copy(this.translation, node.translation);
-        vec3.copy(this.euler, node.euler);
-        vec3.copy(this.scale, node.scale);
+        this.setTransfromFromNode();
+    }
+
+    public setTransfromFromNode(): void {
+        vec3.copy(this.translation, this.node.translation);
+        vec3.copy(this.euler, this.node.euler);
+        vec3.copy(this.scale, this.node.scale);
+        buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
 
     public animate(time: number): void {
-        this.animator.update(time);
-
-        const interps = this.animator.interpolators;
-
-        for (let i = 0; i < interps.length; i++) {
-            if (interps[i].op === AObjOP.NOP)
-                continue;
-            const value = interps[i].compute(time);
-            switch (i) {
-                case ModelField.Pitch: this.euler[0] = value; break;
-                case ModelField.Yaw: this.euler[1] = value; break;
-                case ModelField.Roll: this.euler[2] = value; break;
-                case ModelField.Path: getPathPoint(this.translation, assertExists(interps[i].path), clamp(value, 0, 1)); break;
-                case ModelField.X: this.translation[0] = value; break;
-                case ModelField.Y: this.translation[1] = value; break;
-                case ModelField.Z: this.translation[2] = value; break;
-                case ModelField.ScaleX: this.scale[0] = value; break;
-                case ModelField.ScaleY: this.scale[1] = value; break;
-                case ModelField.ScaleZ: this.scale[2] = value; break;
+        if (this.animator.update(time)) {
+            for (let i = ModelField.Pitch; i <= ModelField.ScaleZ; i++) {
+                if (this.animator.interpolators[i].op === AObjOP.NOP)
+                    continue;
+                const value = this.animator.compute(i, time);
+                switch (i) {
+                    case ModelField.Pitch: this.euler[0] = value; break;
+                    case ModelField.Yaw: this.euler[1] = value; break;
+                    case ModelField.Roll: this.euler[2] = value; break;
+                    case ModelField.Path: {
+                        const path = assertExists(this.animator.interpolators[i].path);
+                        getPathPoint(this.translation, path, clamp(value, 0, 1));
+                    } break;
+                    case ModelField.X: this.translation[0] = value; break;
+                    case ModelField.Y: this.translation[1] = value; break;
+                    case ModelField.Z: this.translation[2] = value; break;
+                    case ModelField.ScaleX: this.scale[0] = value; break;
+                    case ModelField.ScaleY: this.scale[1] = value; break;
+                    case ModelField.ScaleZ: this.scale[2] = value; break;
+                }
             }
+            buildTransform(this.transform, this.translation, this.euler, this.scale);
         }
-
         for (let i = 0; i < this.materials.length; i++)
             this.materials[i].update(time);
-
-        buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -301,6 +312,8 @@ export class ModelRenderer {
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
     public animationController = new AdjustableAnimationController(30);
+    public currAnimation = -1;
+    public headAnimationIndex = -1;
 
     constructor(private renderData: RenderData, public nodes: GFXNode[], public animations: AnimationData[], public isSkybox = false) {
         for (let i = 0; i < nodes.length; i++) {
@@ -312,6 +325,8 @@ export class ModelRenderer {
                 this.renderers[p].children.push(this.renderers[i]);
             }
         }
+        if (this.animations.length > 0)
+            this.setAnimation(0);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -345,10 +360,15 @@ export class ModelRenderer {
     }
 
     public setAnimation(index: number): void {
+        this.currAnimation = index;
         this.animationController.adjust(this.animations[index].fps);
         const newAnim = this.animations[index];
+        this.headAnimationIndex = newAnim.tracks.findIndex((t) => t !== null);
         for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animator.setTrack(newAnim.tracks[i]);
+            if (newAnim.tracks[i] === null)
+                this.renderers[i].setTransfromFromNode();
+
             if (newAnim.materialTracks.length == 0 || newAnim.materialTracks[i].length === 0)
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
                     this.renderers[i].materials[j].setTrack(null);
@@ -358,17 +378,20 @@ export class ModelRenderer {
         }
     }
 
+    protected motion(viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void {}
+
     private animate(): void {
         const time = this.animationController.getTimeInFrames();
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].animate(time);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void {
         if (!this.visible)
             return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
+        this.motion(viewerInput, globals);
         this.animate();
 
         const template = renderInstManager.pushTemplateRenderInst();

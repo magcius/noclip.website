@@ -7,8 +7,8 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { SnapPass, ModelRenderer, buildTransform } from './render';
-import { LevelArchive, parseLevel, findGroundHeight, SpawnType, CollisionTree, findGroundPlane } from './room';
+import { SnapPass, ModelRenderer, LevelGlobals } from './render';
+import { LevelArchive, parseLevel, InteractionType } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
@@ -23,6 +23,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
+    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: 0, songStart: 0};
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -75,9 +76,18 @@ class SnapRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
-            this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
+        // update song - maybe put somewhere better
+        if (viewerInput.time > this.globals.songStart + 10000) {
+            const r = (Math.random()*5) >>> 0;
+            if (r > 2)
+                this.globals.currentSong = 0;
+            else
+                this.globals.currentSong = InteractionType.PokefluteA + r;
+            this.globals.songStart = viewerInput.time;
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -138,6 +148,8 @@ class SceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
+            sceneRenderer.globals.collision = level.collision;
+
             if (level.skybox !== null) {
                 const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
                 const skyboxRenderer = new ModelRenderer(skyboxData, [level.skybox.node], [], true);
@@ -149,6 +161,9 @@ class SceneDesc implements Viewer.SceneDesc {
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
             }
 
+            const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
+            sceneRenderer.modelRenderers.push(new ModelRenderer(zeroOneData,level.zeroOne.nodes,level.zeroOne.animations));
+
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
                 const data = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.objectInfo[i].sharedOutput);
@@ -157,7 +172,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
             }
-            col = level.collision;
+
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
                 const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node], []);
@@ -179,12 +194,11 @@ class SceneDesc implements Viewer.SceneDesc {
                     sceneRenderer.modelRenderers.push(objectRenderer);
                 }
             }
+
             return sceneRenderer;
         });
     }
 }
-
-let col: CollisionTree | null = null;
 
 const id = `snap`;
 const name = "Pokemon Snap";

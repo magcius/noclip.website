@@ -1,10 +1,10 @@
 import { vec3, vec4 } from "gl-matrix";
-import { TileState, getTileHeight, getTileWidth } from '../Common/N64/RDP';
+import { TileState } from '../Common/N64/RDP';
 import { GfxTexture } from '../gfx/platform/GfxPlatform';
 import { clamp, lerp } from '../MathHelpers';
 import { getPointBasis, getPointBezier, getPointHermite } from '../Spline';
 import { TextureMapping } from '../TextureHolder';
-import { assert, assertExists, nArray, hexzero } from '../util';
+import { assert, assertExists, nArray } from '../util';
 import { AnimationTrack, ColorFlagStart, DataMap, EntryKind, MaterialData, MaterialFlags, Path, PathKind, GFXNode } from './room';
 
 export const enum ModelField {
@@ -140,6 +140,7 @@ export class Animator {
     public interpolators = nArray(10, () => new AObj());
     public colors: ColorAObj[] = [];
     public stateFlags = 0;
+    public loopCount = 0;
 
     private trackIndex = 0;
     private nextUpdate = 0;
@@ -151,10 +152,11 @@ export class Animator {
 
     public setTrack(track: AnimationTrack | null): void {
         this.track = track;
-        this.reset(0);
+        this.loopCount = 0;
+        this.reset();
     }
 
-    public reset(time: number): void {
+    public reset(time = 0): void {
         this.trackIndex = 0;
         this.nextUpdate = time;
         for (let i = 0; i < this.interpolators.length; i++)
@@ -170,24 +172,27 @@ export class Animator {
         return this.trackIndex <= oldIndex || this.track === null;
     }
 
-    public compute(field: MaterialField, time: number): number {
+    public compute(field: MaterialField | ModelField, time: number): number {
         return this.interpolators[field].compute(time);
     }
 
-    public update(time: number): void {
+    public update(time: number): boolean {
         if (this.track === null)
-            return;
+            return false;
         const entries = this.track.entries;
         while (this.nextUpdate <= time) {
             if (this.trackIndex === entries.length) {
+                this.loopCount++;
                 if (this.track.loopStart >= 0)
                     this.trackIndex = this.track.loopStart;
                 else {
-                    // not actually a looping animation, force reset
-                    this.reset(time);
+                    // should end, but loop anyway
+                    // causes some glitches, but e.g. lava is clearly supposed to loop
+                    this.trackIndex = 0;
+                    // stay at last position for a frame, in case an actor is waiting on the animation
+                    return false;
                 }
             }
-
             const entry = entries[this.trackIndex++];
             let offs = 0;
             switch (entry.kind) {
@@ -295,7 +300,7 @@ export class Animator {
             if (entry.block)
                 this.nextUpdate += entry.increment;
         }
-        return;
+        return true;
     }
 }
 
@@ -308,8 +313,8 @@ export class Material {
     constructor(public data: MaterialData, private textures: GfxTexture[]) { }
 
     public update(time: number): void {
-        this.lastTime = time;
-        this.animator.update(time);
+        if (this.animator.update(time))
+            this.lastTime = time;
     }
 
     public setTrack(track: AnimationTrack | null): void {

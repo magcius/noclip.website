@@ -5,11 +5,10 @@ import * as MIPS from "./mips";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
-import { assert, hexzero, assertExists, nArray, leftPad } from "../util";
+import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
-import { findNewTextures, ModelField } from "./animation";
-import { SceneNameObjListExecutor } from "../SuperMarioGalaxy/NameObj";
+import { findNewTextures } from "./animation";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -17,6 +16,7 @@ export interface Level {
     rooms: Room[];
     objectInfo: ObjectDef[];
     collision: CollisionTree | null;
+    zeroOne: ZeroOne;
 }
 
 export interface Room {
@@ -43,27 +43,33 @@ export interface ObjectSpawn {
 export interface ObjectDef {
     id: number;
     nodes: GFXNode[];
-    animations: AnimationData[];
     sharedOutput: RSPSharedOutput;
     scale: vec3;
     flags: number;
     spawn: SpawnType;
+    stateGraph: StateGraph;
 }
 
 export interface LevelArchive {
-    Name: number,
-    Data: ArrayBufferSlice,
-    Code: ArrayBufferSlice,
-    StartAddress: number,
-    CodeStartAddress: number,
-    Rooms: number,
-    Objects: number,
-    Collision: number,
+    Name: number;
+    Data: ArrayBufferSlice;
+    Code: ArrayBufferSlice;
+    StartAddress: number;
+    CodeStartAddress: number;
+    Rooms: number;
+    Objects: number;
+    Collision: number;
 };
 
 export interface DataRange {
     data: ArrayBufferSlice;
     start: number;
+}
+
+interface ZeroOne {
+    animations: AnimationData[];
+    nodes: GFXNode[];
+    sharedOutput: RSPSharedOutput;
 }
 
 export class DataMap {
@@ -205,7 +211,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
         rooms[0].objects.push(
             {
                 id: 0x97,
-                behavior: 0,
+                behavior: 1,
                 pos: vec3.fromValues(0, 100, 500),
                 euler: vec3.create(),
                 scale: vec3.fromValues(1, 1, 1)
@@ -235,7 +241,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const graphStart = objectView.getUint32(0x00);
             const materials = objectView.getUint32(0x04);
             const renderer = objectView.getUint32(0x08);
-            const animationData = objectView.getUint32(0x0C);
+            const animationStart = objectView.getUint32(0x0C);
             const scale = getVec3(objectView, 0x10);
             vec3.scale(scale, scale, 0.1);
             // four floats
@@ -245,8 +251,8 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const sharedOutput = new RSPSharedOutput();
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
-                const animations = parseAnimations(dataMap, animationData, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), animations });
+                const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
+                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph });
             } catch (e) {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
@@ -254,46 +260,13 @@ export function parseLevel(archives: LevelArchive[]): Level {
         }
     }
 
-    // get ZERO-ONE
-    {
-        const graphStart = 0x803AAA30;
-        const materials = 0x8039D938;
-        const sharedOutput = new RSPSharedOutput();
-        const nodes = parseGraph(dataMap, graphStart, materials, 0x800A16B0, sharedOutput);
-        const animAddrs = getCartAnimationAddresses(level.Name);
-        const tracks: (AnimationTrack | null)[] = [];
-        for (let i = 0; i < nodes.length; i++) {
-            const trackStart = dataMap.deref(animAddrs[0] + 4 * i);
-            tracks.push(parseAnimationTrack(dataMap, trackStart));
-        }
-
-        const animations: AnimationData[] = [{
-            fps: 15,
-            frames: 0,
-            tracks,
-            materialTracks: parseMaterialAnimation(dataMap, animAddrs[1], nodes),
-        }];
-
-        objectInfo.push({
-            id: 0,
-            flags: 0,
-            nodes,
-            scale: vec3.fromValues(1, 1, 1),
-            sharedOutput,
-            spawn: SpawnType.FLYING,
-            animations,
-        });
-    }
-    // zero-one spawn
-    rooms[0].objects.push({id: 0, behavior: 0, pos: vec3.fromValues(0, 0, 0), euler: vec3.create(), scale: vec3.fromValues(1, 1, 1)});
-
-    console.log("state counts", stateCount, goodCount, goodCount/stateCount)
+    const zeroOne = buildZeroOne(dataMap, level.Name);
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision };
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne};
 }
 
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
@@ -963,16 +936,10 @@ function parseAnimationTrack(dataMap: DataMap, addr: number): AnimationTrack | n
     }
 }
 
-function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): AnimationData[] {
-    const animationStart = dataMap.deref(addr);
-    const initFunc = dataMap.deref(addr + 0x04); // used to set initial state
-
-    const states = parseStateGraph(dataMap, initFunc, animationStart);
-    console.log(states)
-
+function parseAnimations(dataMap: DataMap, addresses: number[], nodes: GFXNode[]): AnimationData[] {
     const anims: AnimationData[] = [];
-    for (let i = 0; i < states.animationAddresses.length; i++) {
-        const view = dataMap.getView(states.animationAddresses[i]);
+    for (let i = 0; i < addresses.length; i++) {
+        const view = dataMap.getView(addresses[i]);
         let fps = 30 * view.getFloat32(0x00);
         if (fps === 0)
             fps = 30; // TODO: understand what's going on here
@@ -988,7 +955,6 @@ function parseAnimations(dataMap: DataMap, addr: number, nodes: GFXNode[]): Anim
             const trackStart = trackView.getUint32(4 * i);
             tracks.push(parseAnimationTrack(dataMap, trackStart));
         }
-
         anims.push({ fps, frames, tracks, materialTracks: parseMaterialAnimation(dataMap, materialData, nodes) });
     }
 
@@ -1020,6 +986,28 @@ function parseMaterialAnimation(dataMap: DataMap, addr: number, nodes: GFXNode[]
         }
     }
     return materialTracks;
+}
+
+function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
+    const graphStart = 0x803AAA30;
+    const materials = 0x8039D938;
+    const sharedOutput = new RSPSharedOutput();
+    const nodes = parseGraph(dataMap, graphStart, materials, 0x800A16B0, sharedOutput);
+    const animAddrs = getCartAnimationAddresses(id);
+    const tracks: (AnimationTrack | null)[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+        const trackStart = dataMap.deref(animAddrs[0] + 4 * i);
+        tracks.push(parseAnimationTrack(dataMap, trackStart));
+    }
+
+    const animations: AnimationData[] = [{
+        fps: 15,
+        frames: 0,
+        tracks,
+        materialTracks: parseMaterialAnimation(dataMap, animAddrs[1], nodes),
+    }];
+
+    return {nodes, sharedOutput, animations}
 }
 
 interface GroundPlane {
@@ -1112,9 +1100,14 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
     return { line, posSubtree, posPlane, negSubtree, negPlane };
 }
 
-const enum InteractionType {
+export const enum InteractionType {
+    PokefluteA  = 0x05,
+    PokefluteB  = 0x06,
+    PokefluteC  = 0x07,
+    // might have these wrong, there are other "hit" ones, too
     PesterBall  = 0x09,
     Hit         = 0x0D,
+    // there seem to be a few apple interactions
     Apple       = 0x0F,
     NearPlayer  = 0x10,
 
@@ -1124,15 +1117,12 @@ const enum InteractionType {
     Random,
     Flag,
     Behavior,
+    NonzeroBehavior,
     NoTarget,
     HasTarget,
     HasApple,
     OverWater,
     Unknown,
-}
-
-interface Motion {
-
 }
 
 interface StateEdge {
@@ -1144,101 +1134,48 @@ interface StateEdge {
 interface State {
     startAddress: number;
     blocks: StateBlock[];
-    motion: Motion | null;
     next: StateEdge[];
 }
 
-interface StateBlock {
+export interface StateBlock {
     animation: number;
+    motionAddress: number;
     force: boolean;
+    // allows the standard set of interactions (proximity, pester ball, etc)
+    // but cannot prevent the object from responding to signals
     allowInteraction: boolean;
     interactions: StateEdge[];
     duration: number;
     durationRange: number;
     signal: number;
+    loopTarget: number;
     endCondition: number;
 }
 
 interface StateGraph {
     states: State[];
-    entryPoints: number[];
-    animationAddresses: number[];
+    animations: AnimationData[];
 }
 
-class StateInitParser extends MIPS.NaiveInterpreter {
-    public stateEntries: number[] = [];
-    public looksLikeState = false;
+function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): StateGraph {
+    const defaultAnimation = dataMap.deref(addr);
+    const initFunc = dataMap.deref(addr + 0x04); // used to set initial state
 
-    public reset(): void {
-        super.reset();
-        this.looksLikeState = false;
-        this.stateEntries = [];
-    }
-
-    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
-        switch (func) {
-            case StateFuncs.SetState: {
-                if (branch !== null) {
-                    if (branch.comparator.lastOp === MIPS.Opcode.ADDIU)
-                        this.stateEntries[branch.comparator.value] = a1.value;
-                    else if (branch.comparator.lastOp === MIPS.Opcode.LW && branch.comparator.value === ObjectField.Behavior && (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)) {
-                        // there are a couple instances of if (obj.behavior !== 0), just fill in the first few entries
-                        for (let i = 1; i < 4; i++)
-                            this.stateEntries[i] = a1.value;
-                    } else
-                        throw `:(:( ${branch.comparator.lastOp}`;
-                } else {
-                    if (a1.value !== 0)
-                        this.stateEntries[0] = a1.value;
-                    this.done = true;
-                }
-            } break;
-            case StateFuncs.ForceAnimation:
-            case StateFuncs.SetAnimation:
-            case StateFuncs.Random:
-            case StateFuncs.SetMotion:
-            case StateFuncs.Wait:
-            case StateFuncs.InteractWait:
-                this.done = true;
-                this.looksLikeState = true;
-        }
-        return 0;
-    }
-
-    protected handleUnknown(op: MIPS.Opcode): void {
-        this.valid = false;
-    }
-}
-
-const initParser = new StateInitParser();
-
-function parseStateGraph(dataMap: DataMap, initFunc: number, startAnimation: number): StateGraph {
-    ind = 0
     const states: State[] = [];
-    const entryPoints: number[] = [];
     const animationAddresses: number[] = [];
 
-    if (startAnimation !== 0)
-        animationAddresses.push(startAnimation);
+    if (defaultAnimation !== 0)
+        animationAddresses.push(defaultAnimation);
 
-    if (initFunc === 0x802DBBA0) // poliwag's function has a switch which breaks parsing
-        initParser.looksLikeState = true;
-    else
-        initParser.parseFromView(dataMap.getView(initFunc));
-    if (initParser.looksLikeState) {
-        entryPoints.push(parseStateSubgraph(dataMap, initFunc, states, animationAddresses));
-    } else {
-        for (let i = 0; i < initParser.stateEntries.length; i++)
-            if (initParser.stateEntries[i])
-                entryPoints[i] = parseStateSubgraph(dataMap, initParser.stateEntries[i], states, animationAddresses);
-    }
-    if (initFunc === 0x802DBBA0)
-        console.log(states)
-    return {states, entryPoints, animationAddresses};
+    parseStateSubgraph(dataMap, initFunc, states, animationAddresses);
+    const animations = parseAnimations(dataMap, animationAddresses, nodes);
+
+    return {states, animations};
 }
 
 const enum GeneralFuncs {
     SendSignal  = 0x0BA30,
+    Yield       = 0x0BCA8,
     RandomInt   = 0x19E14,
 }
 
@@ -1279,13 +1216,13 @@ class StateParser extends MIPS.NaiveInterpreter {
     public trivial = true;
     public stateIndex = -1;
     public recentRandom = 0;
+    public loadAddress = 0;
 
     constructor(public dataMap: DataMap, startAddress: number, public allStates: State[], public animationAddresses: number[]) {
         super();
         this.state = {
             startAddress,
             blocks: [],
-            motion: null,
             next: [],
         };
         this.trivial = true;
@@ -1299,21 +1236,26 @@ class StateParser extends MIPS.NaiveInterpreter {
     public reset(): void {
         super.reset();
         this.trivial = true;
+        this.recentRandom = 0;
+        this.loadAddress = 0;
+        this.stateIndex = -1;
         this.currBlock = {
             animation: -1,
             force: false,
+            motionAddress: 0,
             allowInteraction: true,
             interactions: [],
             duration: 0,
             durationRange: 0,
             signal: 0,
+            loopTarget: 0,
             endCondition: 0,
         };
     }
 
     private markNontrivial(): void {
         if (this.trivial) {
-            assert(this.stateIndex === -1)
+            assert(this.stateIndex === -1);
             this.trivial = false;
             this.stateIndex = this.allStates.length;
             this.allStates.push(this.state);
@@ -1321,14 +1263,14 @@ class StateParser extends MIPS.NaiveInterpreter {
     }
 
     protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[], branch: MIPS.BranchInfo | null): number {
-        if (func !== StateFuncs.SetState)
+        if (func !== StateFuncs.SetState || branch !== null)
             this.markNontrivial();
         switch (func) {
             case StateFuncs.SetState: {
                 const nextState = a1.value === 0 ? -1 : parseStateSubgraph(this.dataMap, a1.value, this.allStates, this.animationAddresses);
                 if (nextState === -1) {
                     // no next state, we're done
-                    assert(!this.trivial && branch === null, `bad transition to null ${hexzero(this.state.startAddress, 8)} ${branch?.comparator}`);
+                    assert(branch === null, `bad transition to null ${hexzero(this.state.startAddress, 8)} ${branch?.comparator}`);
                 } else if (this.trivial && branch === null) {
                     // this state can be ignored, point to the real one
                     this.stateIndex = nextState;
@@ -1343,7 +1285,10 @@ class StateParser extends MIPS.NaiveInterpreter {
                         // see if we are testing an object member against 0
                         switch (branch.comparator.value) {
                             case ObjectField.Behavior: {
-                                this.state.next.push({ type: InteractionType.Behavior, param: 0, index: nextState });
+                                let type = InteractionType.Behavior;
+                                if (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)
+                                    type = InteractionType.NonzeroBehavior;
+                                this.state.next.push({ type, param: 0, index: nextState });
                             } break;
                             case ObjectField.Target: {
                                 let type = InteractionType.NoTarget;
@@ -1355,7 +1300,6 @@ class StateParser extends MIPS.NaiveInterpreter {
                                 this.state.next.push({ type: InteractionType.HasApple, param: 0, index: nextState });
                             } break;
                             default:
-                                console.warn("unknown object member condition", branch.comparator.value);
                                 this.valid = false;
                                 this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState });
                         }
@@ -1363,15 +1307,17 @@ class StateParser extends MIPS.NaiveInterpreter {
                         // this is admittedly a bit of a stretch, but it's a very rare condition
                         this.state.next.push({ type: InteractionType.OverWater, param: 0, index: nextState });
                     } else {
-                        console.warn("unknown edge condition", branch.comparator.lastOp, branch.comparator.value);
                         this.valid = false;
-                        this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState})
+                        this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState });
                     }
                     this.markNontrivial();
                 }
             } break;
             case StateFuncs.Random: {
-                const randomView = this.dataMap.getView(a1.value);
+                let randomStart = a1.value;
+                if (a1.value < 0x80000000)
+                    randomStart = this.loadAddress; // only used by one starmie state
+                const randomView = this.dataMap.getView(randomStart);
                 let i = this.state.next.length;
                 let offs = 0;
                 let total = 0;
@@ -1382,6 +1328,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     total += weight;
                     offs += 8;
                 }
+                assert(total > 0, `empty random transition`);
                 offs = 0;
                 while (true) {
                     const weight = randomView.getInt32(offs + 0x00);
@@ -1389,7 +1336,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         break;
                     const stateAddr = randomView.getUint32(offs + 0x04);
                     const state = parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses);
-                    this.state.next.push({type: InteractionType.Random, index: state, param: weight/total});
+                    this.state.next.push({ type: InteractionType.Random, index: state, param: weight / total });
                     offs += 8;
                 }
                 this.done = true;
@@ -1397,7 +1344,7 @@ class StateParser extends MIPS.NaiveInterpreter {
             case StateFuncs.ForceAnimation:
                 this.currBlock.force = true;
             case StateFuncs.SetAnimation: {
-                if (a1.lastOp !== MIPS.Opcode.ADDIU) {
+                if (a1.lastOp !== MIPS.Opcode.ADDIU || a1.value < 0x80000000) {
                     this.valid = false;
                     break;
                 }
@@ -1409,7 +1356,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.animation = index;
             } break;
             case StateFuncs.SetMotion: {
-
+                this.currBlock.motionAddress = a1.value;
             } break;
             case StateFuncs.Wait:
                 this.currBlock.allowInteraction = false;
@@ -1419,16 +1366,18 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock = {
                     animation: -1,
                     force: false,
+                    motionAddress: 0,
                     allowInteraction: true,
                     interactions: [],
                     duration: 0,
                     durationRange: 0,
                     signal: 0,
+                    loopTarget: 0,
                     endCondition: 0,
                 };
             } break;
             case GeneralFuncs.SendSignal: {
-                assert(a0.value === 3, `signal to unknown link`)
+                assert(a0.value === 3, `signal to unknown link`);
                 this.currBlock.signal = a1.value;
             } break;
 
@@ -1437,13 +1386,11 @@ class StateParser extends MIPS.NaiveInterpreter {
                 return a0.value;
             }
 
-
             // don't handle these for now
             case StateFuncs.Remove:
             case StateFuncs.ClaimApple:
                 break;
             default:
-                // console.log("unknown function", hexzero(func, 8))
                 this.valid = false;
         }
         return 0;
@@ -1458,49 +1405,48 @@ class StateParser extends MIPS.NaiveInterpreter {
                 case ObjectField.Transitions: { // interactions
                     if (value.value === 0)
                         return;
-                    if (!((value.lastOp === MIPS.Opcode.ADDIU && value.value > 0x80000000))) {
-                        console.warn("checking stack for interactions", hexzero(value.value, 2), hexzero(this.stackArgs[(value.value >> 2) - 4].value, 8))
-                        assert(value.value > 0 && value.value < 0x20)
-                        value = this.stackArgs[(value.value >> 2) - 4]
-                    }
-                    if (value.lastOp === MIPS.Opcode.ADDIU && value.value > 0x80000000) {
-                        const tView = this.dataMap.getView(value.value);
-                        let offs = 0;
-                        while (true) {
-                            const type: InteractionType = tView.getInt32(offs + 0x00);
-                            if (type === InteractionType.EndMarker)
-                                break;
-                            const stateAddr = tView.getUint32(offs + 0x04);
-                            const radius = tView.getFloat32(offs + 0x08);
-                            const otherFunc = tView.getUint32(offs + 0x0C);
-                            offs += 0x10;
+                    let transitionStart = value.value;
+                    if (value.lastOp !== MIPS.Opcode.ADDIU || value.value < 0x80000000)
+                        transitionStart = this.loadAddress;
+                    const tView = this.dataMap.getView(transitionStart);
+                    let offs = 0;
+                    while (true) {
+                        const type: InteractionType = tView.getInt32(offs + 0x00);
+                        if (type === InteractionType.EndMarker)
+                            break;
+                        const stateAddr = tView.getUint32(offs + 0x04);
+                        const radius = tView.getFloat32(offs + 0x08);
+                        const otherFunc = tView.getUint32(offs + 0x0C);
+                        offs += 0x10;
 
-                            // TODO: handle the other function
-                            if (stateAddr !== 0) {
-                                this.currBlock.interactions.push({
-                                    type,
-                                    param: radius,
-                                    index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
-                                });
-                            }
+                        // TODO: handle the other function
+                        if (stateAddr !== 0) {
+                            this.currBlock.interactions.push({
+                                type,
+                                param: radius,
+                                index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
+                            });
                         }
-                    } else
-                        console.warn("nonstandard interaction address", hexzero(value.value, 8), hexzero(this.state.startAddress, 8));
+                    }
                 } break;
                 case ObjectField.Timer: {
-                    assert(value.lastOp === MIPS.Opcode.ADDIU, `bad source for timer value ${value.lastOp} ${value.value}`)
-                    this.currBlock.duration = value.value/30;
+                    if (value.lastOp !== MIPS.Opcode.ADDIU)
+                        this.valid = false; // starmie sets this using a separate variable
+                    this.currBlock.duration = value.value / 30;
                     // hacky way to recover random ranges: when we see calls to randomInt, we set v0 to the maximum
                     // then, if we used random recently, and duration is long enough to have been a sum with v0, assume it was random
                     if (this.recentRandom > 30 && this.recentRandom <= value.value) {
-                        this.currBlock.duration -= this.recentRandom/30;
-                        this.currBlock.durationRange = this.recentRandom/30;
+                        this.currBlock.duration -= this.recentRandom / 30;
+                        this.currBlock.durationRange = this.recentRandom / 30;
                         this.recentRandom = 0;
                     }
                 } break;
+                case ObjectField.LoopTarget: {
+                    this.currBlock.loopTarget = value.value;
+                } break;
+
                 case ObjectField.SomeBool:
                 case ObjectField.MiscFlags:
-                case ObjectField.LoopTarget:
                 case ObjectField.FrameTarget:
                 case ObjectField.StateFlags:
                 case ObjectField.Apple:
@@ -1513,6 +1459,8 @@ class StateParser extends MIPS.NaiveInterpreter {
                     this.valid = false;
             }
         } else {
+            if (op === MIPS.Opcode.SW && value.value > 0x80000000 && this.loadAddress === 0)
+                this.loadAddress = value.value;
             this.valid = false;
         }
     }
@@ -1522,23 +1470,38 @@ class StateParser extends MIPS.NaiveInterpreter {
     }
 }
 
-let ind = 0
-
-let stateCount = 0
-let goodCount = 0
-
 function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], animationAddresses: number[]): number {
     const existingState = states.findIndex((s) => s.startAddress === addr);
     if (existingState >= 0)
         return existingState;
 
-    stateCount += 1
-    console.log(leftPad('', ind++, '  '), 'new state func', hexzero(addr, 8))
     const parser = new StateParser(dataMap, addr, states, animationAddresses);
-    if (parser.parse())
-        goodCount += 1
-    console.log(leftPad('', --ind, '  '), 'end')
+    parser.parse();
 
-        // console.warn('complicated state found', hexzero(addr, 8));
+    if (!parser.trivial)
+        fixupState(states[parser.stateIndex]);
+
     return parser.stateIndex;
+}
+
+// make minor changes to specific states
+function fixupState(state: State): void {
+    switch (state.startAddress) {
+        // switch statements
+        case 0x802DBBA0: {
+            state.next[0].type = InteractionType.Behavior;
+            state.next[0].param = 1;
+            state.next[1].type = InteractionType.Behavior;
+            state.next[1].param = 2;
+            state.next[2].type = InteractionType.Behavior;
+            state.next[2].param = 3;
+            state.next[3].type = InteractionType.NonzeroBehavior;
+        } break;
+        case 0x802D8BB8: {
+            state.next[0].type = InteractionType.Behavior;
+            state.next[0].param = 3;
+            state.next[1].type = InteractionType.Behavior;
+            state.next[1].param = 4;
+        } break;
+    }
 }
