@@ -1,4 +1,3 @@
-
 import * as pako from 'pako';
 import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -43,6 +42,7 @@ function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
 }
 
 // Reference: <https://www.kernel.org/doc/Documentation/lzo.txt>
+// FIXME: Replace with existing LZO implementation that I didn't realize existed!
 function loadLZOn(data: ArrayBufferSlice, srcOffs: number): ArrayBuffer {
     const dv = data.createDataView();
     const uncompSize = dv.getUint32(srcOffs + 0x8)
@@ -197,9 +197,10 @@ export function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
     switch (magic) {
     case stringToFourCC('ZLB\0'):
         return new ArrayBufferSlice(loadZLB(data));
-    case stringToFourCC('DIRn'): // FIXME: actually just "DIR"
+    case stringToFourCC('DIRn'): // FIXME: actually just "DIR" is checked
         return new ArrayBufferSlice(loadDIRn(data));
     case stringToFourCC('LZOn'):
+        // LZO occurs in the demo only.
         return new ArrayBufferSlice(loadLZOn(data, 0));
     default:
         console.warn(`Invalid magic identifier 0x${hexzero(magic, 8)}`);
