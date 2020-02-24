@@ -1,16 +1,9 @@
 import { ModelRenderer, buildTransform, LevelGlobals } from "./render";
-import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, CollisionTree, InteractionType, StateBlock } from "./room";
+import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, CollisionTree, InteractionType, StateBlock, EndCondition } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
-import { assertExists } from "../util";
+import { assertExists, hexzero } from "../util";
 import { ViewerRenderInput } from "../viewer";
-
-const enum EndConditions {
-    Animation   = 0x01,
-    Path        = 0x02,
-    Timer       = 0x04,
-    Motion      = 0x20,
-}
 
 const posScratch = vec3.create();
 const scaleScratch = vec3.create();
@@ -41,9 +34,10 @@ export class Actor extends ModelRenderer {
             if (block.allowInteraction && this.basicInteractions(block, viewerInput, globals))
                 continue;
             if (
-                (block.endCondition & EndConditions.Timer && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
-                (block.endCondition & EndConditions.Animation && this.finishedAnimation()) ||
-                (block.endCondition & EndConditions.Path && this.animationController.getTimeInSeconds() >= this.blockEnd + 3)
+                (block.endCondition & EndCondition.Dance && globals.currentSong === 0) ||
+                (block.endCondition & EndCondition.Timer && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
+                (block.endCondition & EndCondition.Animation && this.finishedAnimation()) ||
+                (block.endCondition & EndCondition.Path && this.animationController.getTimeInSeconds() >= this.blockEnd + 3)
             )
                 this.nextBlock();
             else

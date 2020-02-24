@@ -1190,6 +1190,9 @@ const enum StateFuncs {
 
     Remove          = 0x35FD70,
     ClaimApple      = 0x36010C,
+
+    // only in cave
+    DanceInteract   = 0x2C1440,
 }
 
 const enum ObjectField {
@@ -1210,6 +1213,17 @@ const enum ObjectField {
     BadGround       = 0xCC,
 }
 
+export const enum EndCondition {
+    Animation   = 0x01,
+    Path        = 0x02,
+    Timer       = 0x04,
+    Motion      = 0x20,
+
+    // handling custom behavior in cave
+    Dance       = 0x100000,
+}
+
+const dummyReg: MIPS.Register = {value: 0, lastOp: MIPS.Opcode.NOP};
 class StateParser extends MIPS.NaiveInterpreter {
     public state: State;
     public currBlock: StateBlock;
@@ -1376,6 +1390,14 @@ class StateParser extends MIPS.NaiveInterpreter {
                     endCondition: 0,
                 };
             } break;
+            // this function calls interactWait in a loop until there's no song playing
+            case StateFuncs.DanceInteract: {
+                dummyReg.lastOp = MIPS.Opcode.LW;
+                this.handleStore(MIPS.Opcode.SW, a1, dummyReg, ObjectField.Transitions);
+                dummyReg.value = EndCondition.Dance;
+                this.handleFunction(StateFuncs.InteractWait, a0, dummyReg, a2, a3, stackArgs, branch);
+            } break;
+
             case GeneralFuncs.SendSignal: {
                 assert(a0.value === 3, `signal to unknown link`);
                 this.currBlock.signal = a1.value;
