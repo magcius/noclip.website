@@ -16,8 +16,12 @@ export abstract class BlockFetcher {
     public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
 }
 
+export abstract class ModelHolder {
+    public abstract addModel(model: ModelInstance, modelMatrix: mat4): void;
+}
+
 export abstract class BlockRenderer {
-    public abstract addToRenderer(renderer: SFARenderer, modelMatrix: mat4): void;
+    public abstract addToModelHolder(holder: ModelHolder, modelMatrix: mat4): void;
 }
 
 export interface IBlockCollection {
@@ -36,18 +40,15 @@ export class BlockCollection implements IBlockCollection {
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
         this.gfxDevice = device;
         const dataFetcher = context.dataFetcher;
-        const pathBase = gameInfo.pathBase;
         this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
         if (this.isAncient) {
             this.texColl = new FakeTextureCollection();
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             try {
-                const [tex1Tab, tex1Bin] = await Promise.all([
-                    dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`),
-                    dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`),
-                ]);
-                this.texColl = new SFATextureCollection(tex1Tab, tex1Bin);
+                const texColl = new SFATextureCollection(gameInfo);
+                await texColl.create(dataFetcher, subdir);
+                this.texColl = texColl;
             } catch (e) {
                 console.warn(`Failed to load textures for subdirectory ${subdir}. Using fake textures instead. Exception:`);
                 console.error(e);
@@ -118,25 +119,27 @@ export class SFABlockRenderer implements BlockRenderer {
     public models: ModelInstance[] = [];
     public yTranslate: number = 0;
 
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
-        // FIXME: This field is NOT a model type and doesn't reliably indicate
-        // the type of model.
-        const modelType = blockDv.getUint16(4);
         let fields;
-        switch (modelType) {
-        case 0:
+        if (earlyFields) {
             fields = {
                 texOffset: 0x54,
                 texCount: 0xa0,
                 posOffset: 0x58,
                 posCount: 0x90,
+                hasNormals: false,
+                nrmOffset: 0,
+                nrmCount: 0,
                 clrOffset: 0x5c,
                 clrCount: 0x94,
                 texcoordOffset: 0x60,
                 texcoordCount: 0x96,
+                hasJoints: false,
+                jointOffset: 0,
+                jointCount: 0,
                 shaderOffset: 0x64,
                 shaderCount: 0xa0, // Polygon attributes and material information
                 shaderSize: 0x40,
@@ -154,35 +157,79 @@ export class SFABlockRenderer implements BlockRenderer {
                 hasYTranslate: false,
                 oldShaders: true,
             };
-            break;
-        case 8:
-        case 264:
-            fields = {
-                texOffset: 0x54,
-                texCount: 0xa0,
-                posOffset: 0x58,
-                posCount: 0x90,
-                clrOffset: 0x5c,
-                clrCount: 0x94,
-                texcoordOffset: 0x60,
-                texcoordCount: 0x96,
-                shaderOffset: 0x64,
-                shaderCount: 0xa2,
-                shaderSize: 0x44,
-                listOffset: 0x68,
-                listCount: 0xa1, // TODO
-                listSize: 0x1c,
-                numListBits: 8,
-                numLayersOffset: 0x41,
-                bitstreamOffset: 0x78,
-                bitstreamByteCount: 0x84,
-                oldVat: false,
-                hasYTranslate: true,
-                oldShaders: false,
-            };
-            break;
-        default:
-            throw Error(`Model type ${modelType} not implemented`);
+        } else {
+            // FIXME: This field is NOT a model type and doesn't reliably indicate
+            // the type of model.
+            const modelType = blockDv.getUint16(4);
+            switch (modelType) {
+            case 0:
+                // Used in character and object models
+                fields = {
+                    texOffset: 32,
+                    texCount: 242,
+                    posOffset: 40,
+                    posCount: 228,
+                    hasNormals: true,
+                    nrmOffset: 44,
+                    nrmCount: 230,
+                    clrOffset: 48,
+                    clrCount: 232,
+                    texcoordOffset: 52,
+                    texcoordCount: 234,
+                    hasJoints: true,
+                    jointOffset: 60,
+                    jointCount: 243,
+                    shaderOffset: 56,
+                    shaderCount: 248,
+                    shaderSize: 0x44,
+                    listOffset: 208,
+                    listCount: 245,
+                    listSize: 0x1c,
+                    numListBits: 8,
+                    numLayersOffset: 0x41,
+                    bitstreamOffset: 212,
+                    bitstreamByteCount: 216,
+                    oldVat: false,
+                    hasYTranslate: false,
+                    oldShaders: false,
+                };
+                break;
+            case 8:
+            case 264:
+                // Used in map blocks
+                fields = {
+                    texOffset: 0x54,
+                    texCount: 0xa0,
+                    posOffset: 0x58,
+                    posCount: 0x90,
+                    hasNormals: false,
+                    nrmOffset: 0,
+                    nrmCount: 0,
+                    clrOffset: 0x5c,
+                    clrCount: 0x94,
+                    texcoordOffset: 0x60,
+                    texcoordCount: 0x96,
+                    hasJoints: false,
+                    jointOffset: 0,
+                    jointCount: 0,
+                    shaderOffset: 0x64,
+                    shaderCount: 0xa2,
+                    shaderSize: 0x44,
+                    listOffset: 0x68,
+                    listCount: 0xa1, // TODO
+                    listSize: 0x1c,
+                    numListBits: 8,
+                    numLayersOffset: 0x41,
+                    bitstreamOffset: 0x78,
+                    bitstreamByteCount: 0x84,
+                    oldVat: false,
+                    hasYTranslate: true,
+                    oldShaders: false,
+                };
+                break;
+            default:
+                throw Error(`Model type ${modelType} not implemented`);
+            }
         }
 
         // @0x8: data size
@@ -203,6 +250,14 @@ export class SFABlockRenderer implements BlockRenderer {
         // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = blockData.subarray(posOffset);
 
+        let nrmBuffer = blockData;
+        let nrmTypeFlags = 0;
+        if (fields.hasNormals) {
+            const nrmOffset = blockDv.getUint32(fields.nrmOffset);
+            nrmBuffer = blockData.subarray(nrmOffset);
+            nrmTypeFlags = blockDv.getUint8(0x24);
+        }
+
         const clrOffset = blockDv.getUint32(fields.clrOffset);
         // const clrCount = blockDv.getUint16(fields.clrCount);
         // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
@@ -213,17 +268,39 @@ export class SFABlockRenderer implements BlockRenderer {
         // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
+        let jointCount = 0;
+        let matrixIdxThing = 0;
+        if (fields.hasJoints) {
+            const jointOffset = blockDv.getUint32(fields.jointOffset);
+            jointCount = blockDv.getUint8(fields.jointCount);
+            matrixIdxThing = blockDv.getUint8(0xf3);
+        }
+
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
         // console.log(`Loading ${polyCount} polytypes from 0x${polyOffset.toString(16)}`);
 
+        interface ShaderLayer {
+            texNum: number;
+            tevMode: number;
+        }
+
+        function parseShaderLayer(data: DataView): ShaderLayer {
+            return {
+                texNum: data.getUint32(0),
+                tevMode: data.getUint8(4),
+            };
+        }
+
         interface Shader {
             numLayers: number;
-            tex0Num: number;
-            tex1Num: number;
+            layers: ShaderLayer[],
             hasTexCoord: boolean[];
             enableCull: boolean;
             flags: number;
+            hasTexmtx01: boolean;
+            hasTexmtx2: boolean;
+            attrFlags: number;
         }
 
         const shaders: Shader[] = [];
@@ -234,16 +311,25 @@ export class SFABlockRenderer implements BlockRenderer {
         for (let i = 0; i < shaderCount; i++) {
             const shader: Shader = {
                 numLayers: 0,
+                layers: [],
                 hasTexCoord: nArray(8, () => false),
-                tex0Num: -1,
-                tex1Num: -1,
                 enableCull: false,
                 flags: 0,
+                hasTexmtx01: false,
+                hasTexmtx2: false,
+                attrFlags: 0,
             };
 
-            shader.tex0Num = blockDv.getUint32(offs + 0x24);
-            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
             shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
+            if (shader.numLayers > 2) {
+                console.warn(`Number of shader layers greater than maximum (${shader.numLayers} / 2)`);
+                shader.numLayers = 2;
+            }
+            for (let i = 0; i < shader.numLayers; i++) {
+                const layer = parseShaderLayer(blockData.subarray(offs + 0x24 + i * 8).createDataView());
+                shader.layers.push(layer);
+            }
+
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
             }
@@ -256,6 +342,14 @@ export class SFABlockRenderer implements BlockRenderer {
             } else {
                 shader.enableCull = (shader.flags & ShaderFlags.Cull) != 0;
             }
+
+            // FIXME: the texmtx stuff below is broken or not present in SFA...
+            // shader.hasTexmtx01 = blockDv.getUint32(offs + 8) == 1 || blockDv.getUint32(offs + 20) == 1;
+            // shader.hasTexmtx2 = (blockDv.getUint32(offs + 64 + 2) & 0x80) != 0;
+            shader.hasTexmtx01 = blockDv.getUint32(offs + 0x34) != 0;
+            shader.hasTexmtx2 = false;
+
+            shader.attrFlags = blockDv.getUint8(offs + 0x40);
             
             shaders.push(shader);
             offs += fields.shaderSize;
@@ -269,10 +363,7 @@ export class SFABlockRenderer implements BlockRenderer {
                 vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
             }
         }
-
-        vcd[GX.Attr.POS].type = GX.AttrType.DIRECT;
-        vcd[GX.Attr.CLR0].type = GX.AttrType.DIRECT;
-        vcd[GX.Attr.TEX0].type = GX.AttrType.DIRECT;
+        vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
 
         vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
@@ -283,6 +374,7 @@ export class SFABlockRenderer implements BlockRenderer {
         vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
     
         vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[2][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
         vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
@@ -296,10 +388,12 @@ export class SFABlockRenderer implements BlockRenderer {
         vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
     
         vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
 
         vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: fields.oldVat ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
+        vat[5][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
         vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
@@ -307,6 +401,7 @@ export class SFABlockRenderer implements BlockRenderer {
         vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
 
         vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+        vat[6][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -314,6 +409,7 @@ export class SFABlockRenderer implements BlockRenderer {
         vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
         vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+        vat[7][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -328,6 +424,11 @@ export class SFABlockRenderer implements BlockRenderer {
         const bitstreamByteCount = blockDv.getUint16(fields.bitstreamByteCount);
         // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
+        let texMtxCount = 0;
+        if (fields.hasJoints) {
+            texMtxCount = blockDv.getUint8(0xfa);
+        }
+
         if (fields.hasYTranslate) {
             this.yTranslate = blockDv.getInt16(0x8e);
         } else {
@@ -336,13 +437,12 @@ export class SFABlockRenderer implements BlockRenderer {
 
         const bits = new LowBitReader(blockDv, bitstreamOffset);
         let done = false;
-        let curShader = 0;
+        let curShader = shaders[0];
         while (!done) {
             const opcode = bits.get(4);
             switch (opcode) {
             case 1: // Set polygon type
-                curShader = bits.get(6);
-                // console.log(`setting poly type ${curPolyType}`);
+                curShader = shaders[bits.get(6)];
                 break;
             case 2: // Geometry
                 const listNum = bits.get(fields.numListBits);
@@ -358,40 +458,48 @@ export class SFABlockRenderer implements BlockRenderer {
 
                 const vtxArrays: GX_Array[] = [];
                 vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+                if (fields.hasNormals) {
+                    vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+                }
                 vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
                 for (let t = 0; t < 8; t++) {
                     vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
                 }
 
                 try {
-                    const shader = shaders[curShader];
                     const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
 
                     const mb = new GXMaterialBuilder('Basic');
-                    if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
+                    if ((curShader.flags & 0x40000000) || (curShader.flags & 0x20000000)) {
                         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
                         mb.setZMode(true, GX.CompareType.LEQUAL, false);
                         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
                     } else {
                         mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
                         mb.setZMode(true, GX.CompareType.LEQUAL, true);
-                        if (((shader.flags & 0x400) == 0) || ((shader.flags & 0x80) != 0)) {
+                        if (((curShader.flags & 0x400) == 0) || ((curShader.flags & 0x80) != 0)) {
                             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
                         } else {
                             mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
                         }
                     }
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-                    mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
+                    mb.setCullMode(curShader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
+
                     let tevStage = 0;
                     let texcoordId = GX.TexCoordID.TEXCOORD0;
                     let texmapId = GX.TexMapID.TEXMAP0;
                     let texGenSrc = GX.TexGenSrc.TEX0;
-                    for (let i = 0; i < shader.numLayers; i++) {
+                    let cprevIsValid = false;
+                    let aprevIsValid = false;
+                    function addTevStagesForTextureWithSkyAmbient() {
+                        // TODO: set texture matrix
                         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
 
                         // mb.setTevKColor (does not exist)
+                        // TODO: The game multiplies by a sky-related ambient color
                         // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
+                        // Stage 1: Multiply vertex color by ambient sky color
                         mb.setTevDirect(tevStage);
                         mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
                         mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.ONE /*GX.CombineColorInput.KONST*/, GX.CC.RASC, GX.CC.ZERO);
@@ -399,6 +507,7 @@ export class SFABlockRenderer implements BlockRenderer {
                         mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
                         mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
+                        // Stage 2: Blend previous stage with vertex color by vertex alpha
                         mb.setTevDirect(tevStage + 1);
                         mb.setTevOrder(tevStage + 1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
                         mb.setTevColorIn(tevStage + 1, GX.CC.CPREV, GX.CC.RASC, GX.CC.RASA, GX.CC.ZERO);
@@ -406,6 +515,7 @@ export class SFABlockRenderer implements BlockRenderer {
                         mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
                         mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
+                        // Stage 3: Multiply by texture
                         mb.setTevDirect(tevStage + 2);
                         mb.setTevOrder(tevStage + 2, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
                         mb.setTevColorIn(tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
@@ -418,12 +528,117 @@ export class SFABlockRenderer implements BlockRenderer {
                         texmapId++;
                         texGenSrc++;
                     }
+
+                    function addTevStagesForTextureWithMode(mode: number) {
+                        // TODO: set texture matrix
+                        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
+
+                        mb.setTevDirect(tevStage);
+                        mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
+                        // Only modes 0 and 9 occur in map blocks. Other modes
+                        // occur in object and character models.
+                        switch (mode) {
+                        case 0:
+                            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+                            break;
+                        case 9:
+                            mb.setTevColorIn(tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+                            break;
+                        default:
+                            console.warn(`Unhandled tev color-in mode ${mode}`);
+                            break;
+                        }
+
+                        if (!aprevIsValid) {
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+                            aprevIsValid = true;
+                        } else {
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+                        }
+                        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        cprevIsValid = true;
+
+                        tevStage++;
+                        texcoordId++;
+                        texmapId++;
+                        texGenSrc++;
+                    }
+
+                    function addTevStageForTextureWithWhiteKonst(colorInMode: number) {
+                        // TODO: handle color. map block renderer always passes opaque white to this function.
+                        
+                        // TODO: set texture matrix
+                        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
+
+                        mb.setTevDirect(tevStage);
+                        mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
+                        switch (colorInMode) {
+                        case 0:
+                            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE /* GX.CC.KONST */, GX.CC.ZERO);
+                            break;
+                        default:
+                            console.warn(`Unhandled colorInMode ${colorInMode}`);
+                            break;
+                        }
+
+                        if (!aprevIsValid) {
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+                            aprevIsValid = true;
+                        } else {
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+                        }
+                        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        cprevIsValid = true;
+
+                        tevStage++;
+                        texcoordId++;
+                        texmapId++;
+                        texGenSrc++;
+                    }
+
+                    function addTevStageForMultVtxColor() {
+                        // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
+
+                        mb.setTevDirect(tevStage);
+                        mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+                        mb.setTevKAlphaSel(tevStage, GX.KonstAlphaSel.KASEL_1); // TODO: handle non-opaque alpha
+                        if (tevStage === 0 || !cprevIsValid) {
+                            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+                        } else {
+                            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO);
+                        }
+                        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                        cprevIsValid = true;
+                        tevStage++;
+                    }
+
+                    if (curShader.numLayers === 2 && (curShader.layers[1].tevMode & 0x7f) === 9) {
+                        addTevStageForTextureWithWhiteKonst(0);
+                        addTevStagesForTextureWithMode(9);
+                        addTevStageForMultVtxColor();
+                    } else {
+                        for (let i = 0; i < curShader.numLayers; i++) {
+                            const layer = curShader.layers[i];
+                            if (curShader.flags & 0x40000) {
+                                addTevStagesForTextureWithSkyAmbient();
+                            } else {
+                                addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                            }
+                        }
+                    }
+
                     newModel.setMaterial(mb.finish());
 
-                    newModel.setTextures([
-                        texColl.getTexture(device, texIds[shader.tex0Num]),
-                        texColl.getTexture(device, texIds[shader.tex1Num]),
-                    ]);
+                    const textures = [];
+                    for (let i = 0; i < curShader.numLayers; i++) {
+                        textures.push(texColl.getTexture(device, texIds[curShader.layers[i].texNum], true));
+                    }
+                    newModel.setTextures(textures);
 
                     this.models.push(newModel);
                 } catch (e) {
@@ -431,16 +646,57 @@ export class SFABlockRenderer implements BlockRenderer {
                 }
                 break;
             case 3: // Set vertex attributes
+                vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
+                for (let i = 0; i < 8; i++) {
+                    vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
+                }
+
+                if (fields.hasJoints && matrixIdxThing >= 2) {
+                    vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
+                    let texmtxNum = 0;
+                    // FIXME: what is this?
+                    // if (shaders[curShader].hasTexmtx01) {
+                    //     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT; 
+                    //     texmtxNum++;
+                    //     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                    //     texmtxNum++;
+                    // }
+                    vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                    texmtxNum++;
+                    for (let i = 0; i < texMtxCount; i++) {
+                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                        texmtxNum++;
+                    }
+                }
+
                 const posDesc = bits.get(1);
-                const colorDesc = bits.get(1);
-                const texCoordDesc = bits.get(1);
                 vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                vcd[GX.Attr.NRM].type = GX.AttrType.NONE; // Normal is not used in Star Fox Adventures (?)
-                vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                if (shaders[curShader].hasTexCoord[0]) {
+
+                if (fields.hasNormals && (curShader.attrFlags & 1) != 0) {
+                    const nrmDesc = bits.get(1);
+                    if ((nrmTypeFlags & 8) != 0) {
+                        vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                        vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    } else {
+                        vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
+                        vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    }
+                } else {
+                    vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                }
+
+                if ((curShader.attrFlags & 2) != 0) {
+                    const clr0Desc = bits.get(1);
+                    vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                } else {
+                    vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
+                }
+
+                const texCoordDesc = bits.get(1);
+                if (curShader.hasTexCoord[0]) {
                     // Note: texCoordDesc applies to all texture coordinates in the vertex
                     for (let t = 0; t < 8; t++) {
-                        if (shaders[curShader].hasTexCoord[t]) {
+                        if (curShader.hasTexCoord[t]) {
                             vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                         } else {
                             vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
@@ -464,13 +720,13 @@ export class SFABlockRenderer implements BlockRenderer {
         }
     }
 
-    public addToRenderer(renderer: SFARenderer, modelMatrix: mat4) {
+    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
         for (let i = 0; i < this.models.length; i++) {
             const trans = mat4.create();
             mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
             const matrix = mat4.create();
             mat4.mul(matrix, modelMatrix, trans);
-            renderer.addModel(this.models[i], matrix);
+            holder.addModel(this.models[i], matrix);
         }
     }
 }
@@ -733,8 +989,8 @@ export class AncientBlockRenderer implements BlockRenderer {
                     newModel.setMaterial(mb.finish());
 
                     newModel.setTextures([
-                        texColl.getTexture(device, texIds[shader.tex0Num]),
-                        // texColl.getTexture(device, texIds[shader.tex1Num]),
+                        texColl.getTexture(device, texIds[shader.tex0Num], true),
+                        // texColl.getTexture(device, texIds[shader.tex1Num], true),
                     ]);
 
                     this.models.push(newModel);
@@ -776,13 +1032,13 @@ export class AncientBlockRenderer implements BlockRenderer {
         }
     }
 
-    public addToRenderer(renderer: SFARenderer, modelMatrix: mat4) {
+    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
         for (let i = 0; i < this.models.length; i++) {
             const trans = mat4.create();
             mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
             const matrix = mat4.create();
             mat4.mul(matrix, modelMatrix, trans);
-            renderer.addModel(this.models[i], matrix);
+            holder.addModel(this.models[i], matrix);
         }
     }
 }

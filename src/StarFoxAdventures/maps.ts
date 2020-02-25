@@ -1,11 +1,14 @@
 import * as Viewer from '../viewer';
+import { DataFetcher } from '../DataFetcher';
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 
-import { SFARenderer } from './render';
-import { BlockCollection, IBlockCollection } from './blocks';
+import { SFARenderer, ModelInstance } from './render';
+import { BlockCollection, IBlockCollection, ModelHolder } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 
 export interface BlockInfo {
@@ -64,15 +67,16 @@ interface MapSceneInfo {
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
 }
 
-class MapRenderer extends SFARenderer {
+export class MapInstance implements ModelHolder {
+    private matrix: mat4 = mat4.create();
+    private models: ModelInstance[] = [];
+    private modelMatrices: mat4[] = [];
     private numRows: number;
     private numCols: number;
     private blockTable: (BlockInfo | null)[][] = [];
     private blockCollections: IBlockCollection[] = [];
 
-    constructor(device: GfxDevice, public info: MapSceneInfo) {
-        super(device);
-
+    constructor(private info: MapSceneInfo) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
@@ -84,6 +88,32 @@ class MapRenderer extends SFARenderer {
                 row.push(blockInfo);
             }
         }
+    }
+    
+    public clearModels() {
+        this.models = [];
+        this.modelMatrices = [];
+    }
+
+    public addModel(model: ModelInstance, modelMatrix: mat4) {
+        this.models.push(model);
+        this.modelMatrices.push(modelMatrix);
+    }
+
+    // Caution: Matrix will be referenced, not copied.
+    public setMatrix(matrix: mat4) {
+        this.matrix = matrix;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        const modelMtx = mat4.create();
+        for (let i = 0; i < this.models.length; i++) {
+            mat4.mul(modelMtx, this.matrix, this.modelMatrices[i]);
+            this.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx);
+        }
+        renderInstManager.popTemplateRenderInst();
     }
 
     public async reloadBlocks() {
@@ -104,7 +134,7 @@ class MapRenderer extends SFARenderer {
                     if (blockRenderer) {
                         const modelMatrix: mat4 = mat4.create();
                         mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                        blockRenderer.addToRenderer(this, modelMatrix);
+                        blockRenderer.addToModelHolder(this, modelMatrix);
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${y} due to exception:`);
@@ -230,49 +260,77 @@ class MapRenderer extends SFARenderer {
     }
 }
 
-class MapScene {
-    public async create(device: GfxDevice, info: MapSceneInfo): Promise<Viewer.SceneGfx> {
-        const sfaRenderer = new MapRenderer(device, info);
-        await sfaRenderer.reloadBlocks();
-        return sfaRenderer;
+export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
+    const pathBase = gameInfo.pathBase;
+    const dataFetcher = context.dataFetcher;
+    const [mapsTab, mapsBin] = await Promise.all([
+        dataFetcher.fetchData(`${pathBase}/MAPS.tab`),
+        dataFetcher.fetchData(`${pathBase}/MAPS.bin`),
+    ]);
+
+    const mapInfo = getMapInfo(mapsTab.createDataView(), mapsBin.createDataView(), mapNum);
+    const blockTable = getBlockTable(mapInfo);
+    return {
+        getNumCols() { return mapInfo.blockCols; },
+        getNumRows() { return mapInfo.blockRows; },
+        async getBlockCollection(mod: number): Promise<IBlockCollection> {
+            const blockColl = new BlockCollection(mod, isAncient);
+            await blockColl.create(device, context, gameInfo);
+            return blockColl;
+        },
+        getBlockInfoAt(col: number, row: number): BlockInfo | null {
+            return blockTable[row][col];
+        }
+    };
+}
+
+class MapSceneRenderer extends SFARenderer {
+    private map: MapInstance;
+
+    constructor(device: GfxDevice) {
+        super(device);
+    }
+
+    public async create(info: MapSceneInfo): Promise<Viewer.SceneGfx> {
+        this.map = new MapInstance(info);
+        await this.map.reloadBlocks();
+        return this;
+    }
+
+    // Caution: Matrix will be referenced, not copied.
+    public setMatrix(matrix: mat4) {
+        this.map.setMatrix(matrix);
+    }
+    
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        this.map.prepareToRender(device, renderInstManager, viewerInput);
     }
 }
 
-export class SFAMapDesc implements Viewer.SceneDesc {
-    constructor(public locationNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isEarly: boolean = false, private isAncient: boolean = false) {
+export class SFAMapSceneDesc implements Viewer.SceneDesc {
+    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isEarly: boolean = false, private isAncient: boolean = false) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const pathBase = this.gameInfo.pathBase;
-        const dataFetcher = context.dataFetcher;
-        const mapsTab = (await dataFetcher.fetchData(`${pathBase}/MAPS.tab`)).createDataView();
-        const mapsBin = (await dataFetcher.fetchData(`${pathBase}/MAPS.bin`)).createDataView();
+        console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
+        
+        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo, this.isAncient);
 
-        console.log(`Creating scene for ${this.name} (location ${this.locationNum}) ...`);
+        const mapRenderer = new MapSceneRenderer(device);
+        await mapRenderer.create(mapSceneInfo);
 
-        const mapInfo = getMapInfo(mapsTab, mapsBin, this.locationNum);
-        const blockTable = getBlockTable(mapInfo);
+        // Rotate camera 135 degrees to more reliably produce a good view of the map
+        // when it is loaded for the first time.
+        // FIXME: The best method is to create default save states for each map.
+        const matrix = mat4.create();
+        mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
+        mapRenderer.setMatrix(matrix);
 
-        const self = this;
-        const mapSceneInfo: MapSceneInfo = {
-            getNumCols() { return mapInfo.blockCols; },
-            getNumRows() { return mapInfo.blockRows; },
-            async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, self.isAncient);
-                await blockColl.create(device, context, self.gameInfo);
-                return blockColl;
-            },
-            getBlockInfoAt(col: number, row: number): BlockInfo | null {
-                return blockTable[row][col];
-            }
-        };
-
-        const mapScene = new MapScene();
-        return mapScene.create(device, mapSceneInfo);
+        return mapRenderer;
     }
 }
 
-export class AncientMapDesc implements Viewer.SceneDesc {
+export class AncientMapSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, private gameInfo: GameInfo, private mapKey: any) {
     }
     
@@ -319,8 +377,17 @@ export class AncientMapDesc implements Viewer.SceneDesc {
             }
         };
 
-        const mapScene = new MapScene();
-        return mapScene.create(device, mapSceneInfo);
+        const mapRenderer = new MapSceneRenderer(device);
+        await mapRenderer.create(mapSceneInfo);
+
+        // Rotate camera 135 degrees to more reliably produce a good view of the map
+        // when it is loaded for the first time.
+        // FIXME: The best method is to create default save states for each map.
+        const matrix = mat4.create();
+        mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
+        mapRenderer.setMatrix(matrix);
+
+        return mapRenderer;
     }
 }
 
@@ -351,7 +418,8 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
 
         console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
 
-        const mapScene = new MapScene();
-        return mapScene.create(device, mapSceneInfo);
+        const mapRenderer = new MapSceneRenderer(device);
+        await mapRenderer.create(mapSceneInfo);
+        return mapRenderer;
     }
 }
