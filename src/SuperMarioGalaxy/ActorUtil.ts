@@ -69,6 +69,10 @@ export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, nameObj: Na
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
 }
 
+export function connectToSceneMapObjDecoration(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x23, 0x0B, DrawBufferType.MAP_OBJ, -1);
+}
+
 export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
@@ -447,6 +451,10 @@ export function isLoopRail(actor: LiveActor): boolean {
 
 export function moveCoordToStartPos(actor: LiveActor): void {
     actor.railRider!.setCoord(0);
+}
+
+export function moveCoordToEndPos(actor: LiveActor): void {
+    actor.railRider!.setCoord(getRailTotalLength(actor));
 }
 
 export function setRailCoordSpeed(actor: LiveActor, v: number): void {

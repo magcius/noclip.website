@@ -30,7 +30,7 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -402,6 +402,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x22);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
+        this.execute(passRenderer, DrawType.ELECTRIC_RAIL_HOLDER);
         this.execute(passRenderer, DrawType.OCEAN_RING);
         this.execute(passRenderer, DrawType.OCEAN_BOWL);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
@@ -785,6 +786,7 @@ export const enum SceneObj {
     AirBubbleHolder      = 0x39,
     SwingRopeGroup       = 0x47,
     TrapezeRopeDrawInit  = 0x4A,
+    ElectricRailHolder   = 0x59,
     WaterAreaHolder      = 0x62,
     WaterPlantDrawInit   = 0x63,
 }
@@ -809,6 +811,7 @@ export class SceneObjHolder {
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
+    public electricRailHolder: ElectricRailHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
 
@@ -837,6 +840,8 @@ export class SceneObjHolder {
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
+        else if (sceneObj === SceneObj.ElectricRailHolder)
+            return this.electricRailHolder;
         return null;
     }
 
@@ -855,6 +860,8 @@ export class SceneObjHolder {
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
+        else if (sceneObj === SceneObj.ElectricRailHolder)
+            this.electricRailHolder = new ElectricRailHolder(this);
     }
 
     public destroy(device: GfxDevice): void {

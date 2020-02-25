@@ -234,7 +234,7 @@ export class BezierRail {
     public copyPointPos(dst: vec3, idx: number): void {
         assert(idx < this.pointRecordCount);
         if (!this.isClosed && idx === this.railParts.length)
-            vec3.copy(dst, this.railParts[idx - 1].p3);
+            vec3.add(dst, this.railParts[idx - 1].p0, this.railParts[idx - 1].p3);
         else
             vec3.copy(dst, this.railParts[idx].p0);
     }
@@ -516,14 +516,17 @@ export class RailRider {
         return isNearZero(dist, 0.001);
     }
 
-    public getCurrentPointArg(argName: string): number | null {
-        const pointIter = this.bezierRail.calcRailCtrlPointIter(this.currentPointId);
+    public getPointArg(idx: number, argName: string): number | null {
+        const pointIter = this.bezierRail.calcRailCtrlPointIter(idx);
         return pointIter.getValueNumberNoInit(argName);
     }
 
+    public getCurrentPointArg(argName: string): number | null {
+        return this.getPointArg(this.currentPointId, argName);
+    }
+
     public getNextPointArg(argName: string): number | null {
-        const pointIter = this.bezierRail.calcRailCtrlPointIter(this.getNextPointNo());
-        return pointIter.getValueNumberNoInit(argName);
+        return this.getPointArg(this.getNextPointNo(), argName);
     }
 
     public getPartLength(partIdx: number): number {

@@ -374,7 +374,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
     // calcGravity is off by default until we can feel comfortable turning it on...
-    public calcGravity: boolean = false;
+    public calcGravityFlag: boolean = false;
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
@@ -569,7 +569,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.visibleAlive) {
             const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
-            if (this.calcGravity)
+            if (this.calcGravityFlag)
                 calcGravity(sceneObjHolder, this);
 
             if (this.modelManager !== null)

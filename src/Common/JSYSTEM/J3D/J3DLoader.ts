@@ -5,7 +5,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
-import { assert, readString, assertExists } from '../../../util';
+import { assert, readString } from '../../../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
@@ -79,10 +79,14 @@ export class JSystemFileReaderHelper {
 //#endregion
 //#region J3DModel
 //#region INF1
-export const enum MatrixCalcType {
-    BASIC = 0x00,
-    XSI   = 0x01,
-    MAYA  = 0x02,
+export const enum J3DLoadFlags {
+    // Scaling rule
+    ScalingRule_Basic = 0x00000000,
+    ScalingRule_XSI   = 0x00000001,
+    ScalingRule_Maya  = 0x00000002,
+    ScalingRule_Mask  = 0x0000000F,
+
+    // TODO(jstpierre): Document the other bits.
 }
 
 export enum HierarchyNodeType {
@@ -98,17 +102,17 @@ export enum HierarchyNodeType {
 
 export interface INF1 {
     hierarchyData: ArrayBufferSlice;
-    matrixCalcType: MatrixCalcType;
+    loadFlags: J3DLoadFlags;
 }
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const matrixCalcType: MatrixCalcType = view.getUint16(0x08) & 0x0F;
+    const loadFlags = view.getUint32(0x08);
     const mtxGroupCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
     const hierarchyData = buffer.slice(hierarchyOffs);
-    return { hierarchyData, matrixCalcType };
+    return { hierarchyData, loadFlags };
 }
 //#endregion
 //#region VTX1

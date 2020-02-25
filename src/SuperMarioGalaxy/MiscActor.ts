@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -18,7 +18,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, calcGravity, isSameDirection, moveCoordToEndPos } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -2790,7 +2790,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private seaGullGroup: SeaGullGroup, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        this.calcGravity = true;
+        this.calcGravityFlag = true;
         initDefaultPos(sceneObjHolder, this, infoIter);
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
         vec3.copy(this.upVec, this.axisY);
@@ -5746,5 +5746,302 @@ export class Flag extends LiveActor {
         super.destroy(device);
         this.ddraw.destroy(device);
         this.texture.destroy(device);
+    }
+}
+
+const enum ElectricRailType {
+    Normal0,
+    Normal1,
+    Moving0,
+    Moving1,
+    Count,
+}
+
+interface ElectricRailBase extends LiveActor {
+    type: ElectricRailType;
+    drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
+}
+
+// This is originally a LiveActor, but I think it can just be a NameObj without loss of functionality...
+export class ElectricRailHolder extends NameObj {
+    private models: (ModelObj | null)[] = nArray(ElectricRailType.Count, () => null);
+    private rails: ElectricRailBase[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'ElectricRailHolder');
+        connectToScene(sceneObjHolder, this, 0x23, 5, -1, DrawType.ELECTRIC_RAIL_HOLDER);
+
+        // TODO(jstpierre): createAdaptorAndConnectToDrawBloomModel()
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAnim(sceneObjHolder, viewerInput);
+
+        for (let i = 0; i < this.models.length; i++) {
+            const modelObj = this.models[i];
+            if (modelObj === null)
+                continue;
+
+            modelObj.calcAnim(sceneObjHolder, viewerInput);
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        for (let i = 0; i < this.models.length; i++) {
+            const modelObj = this.models[i];
+            if (modelObj === null)
+                continue;
+
+            modelObj.movement(sceneObjHolder, viewerInput);
+        }
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        const device = sceneObjHolder.modelCache.device, cache = renderInstManager.gfxRenderCache;
+        for (let i = 0; i < ElectricRailType.Count; i++) {
+            const modelObj = this.models[i];
+            if (modelObj === null)
+                continue;
+
+            const template = renderInstManager.pushTemplateRenderInst();
+
+            mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            const modelInstance = modelObj.modelInstance!;
+            modelInstance.materialInstances[0].setOnRenderInst(device, cache, template);
+            modelInstance.materialInstances[0].fillMaterialParams(template, modelInstance.materialInstanceState, viewerInput.camera.viewMatrix, modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+            template.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+            modelInstance.shapeInstances[0].shapeData.shapeHelpers[0].fillPacketParams(packetParams, template);
+
+            for (let j = 0; j < this.rails.length; j++) {
+                const rail = this.rails[j]!;
+                if (rail.type !== i)
+                    continue;
+
+                // TODO(jstpierre): Do this in one TDDraw?
+                rail.drawRail(sceneObjHolder, renderInstManager, viewerInput);
+            }
+
+            renderInstManager.popTemplateRenderInst();
+        }
+    }
+
+    public registerRail(sceneObjHolder: SceneObjHolder, rail: ElectricRailBase): void {
+        this.createModel(sceneObjHolder, rail.type);
+        this.rails.push(rail);
+    }
+
+    private createModel(sceneObjHolder: SceneObjHolder, type: ElectricRailType): void {
+        if (this.models[type] !== null)
+            return;
+
+        if (type === ElectricRailType.Normal0) {
+            const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRail', null, -1, -1, -1);
+            startBtk(modelObj, 'ElectricRail');
+            startBrk(modelObj, 'ElectricRail');
+            setBrkFrameAndStop(modelObj, 0.0);
+            this.models[type] = modelObj;
+        } else if (type === ElectricRailType.Normal1) {
+            const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRail', null, -1, -1, -1);
+            startBtk(modelObj, 'ElectricRail');
+            startBrk(modelObj, 'ElectricRail');
+            setBrkFrameAndStop(modelObj, 1.0);
+            this.models[type] = modelObj;
+        } else if (type === ElectricRailType.Moving0) {
+            const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRailMoving', null, -1, -1, -1);
+            startBtk(modelObj, 'ElectricRailMoving');
+            startBrk(modelObj, 'ElectricRailMoving');
+            setBrkFrameAndStop(modelObj, 0.0);
+            this.models[type] = modelObj;
+        } else if (type === ElectricRailType.Moving1    ) {
+            const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRailMoving', null, -1, -1, -1);
+            startBtk(modelObj, 'ElectricRailMoving');
+            startBrk(modelObj, 'ElectricRailMoving');
+            setBrkFrameAndStop(modelObj, 1.0);
+            this.models[type] = modelObj;
+        }
+    }
+}
+
+class ElectricRailPoint extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'ElectricRailPoint');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
+        connectToSceneMapObjDecoration(sceneObjHolder, this);
+    }
+}
+
+function makeAxisFrontUp(axisRight: vec3, axisUp: vec3, front: vec3, up: vec3): void {
+    vec3.cross(axisRight, up, front);
+    vec3.normalize(axisRight, axisRight);
+    vec3.cross(axisUp, front, axisRight);
+}
+
+function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
+    vec3.scaleAndAdd(axisRight, Vec3UnitZ, front, -vec3.dot(front, Vec3UnitZ));
+    if (isNearZeroVec3(axisRight, 0.001))
+        vec3.scaleAndAdd(axisRight, Vec3UnitX, front, -vec3.dot(front, Vec3UnitX));
+    vec3.normalize(axisRight, axisRight);
+}
+
+function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: vec3): void {
+    makeAxisVerticalZX(axisRight, front);
+    vec3.cross(axisUp, front, axisRight);
+    vec3.normalize(axisUp, axisUp);
+}
+
+class ElectricRailSeparator {
+    public position = vec3.create();
+    public right = vec3.create();
+    public up = vec3.create();
+    public front = vec3.create();
+    public gravity = vec3.create();
+
+    public setup(): void {
+        vec3.negate(this.front, this.front);
+        vec3.negate(scratchVec3a, this.gravity);
+
+        if (!isSameDirection(scratchVec3a, this.front, 0.01)) {
+            makeAxisFrontUp(this.right, this.up, this.front, scratchVec3a);
+        } else {
+            makeAxisCrossPlane(this.right, this.up, this.front);
+        }
+    }
+}
+
+export class ElectricRail extends LiveActor implements ElectricRailBase {
+    public type: ElectricRailType;
+    private height: number;
+    private points: ElectricRailPoint[] = [];
+    private separators: ElectricRailSeparator[] = [];
+    private railGravity: boolean = false;
+    private size = 30.0;
+    private ddraw = new TDDraw();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'ElectricRail');
+
+        this.type = fallback(getJMapInfoArg3(infoIter), 0);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.height = fallback(getJMapInfoArg0(infoIter), 1);
+        this.initRailRider(sceneObjHolder, infoIter);
+
+        this.railGravity = getJMapInfoBool(fallback(getJMapInfoArg4(infoIter), -1));
+        if (this.railGravity)
+            calcGravityVector(sceneObjHolder, this, this.translation, this.gravityVector);
+
+        this.initPoints(sceneObjHolder);
+        this.initSeparators(sceneObjHolder);
+
+        sceneObjHolder.create(SceneObj.ElectricRailHolder);
+        sceneObjHolder.electricRailHolder!.registerRail(sceneObjHolder, this);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+    }
+
+    private initPoints(sceneObjHolder: SceneObjHolder): void {
+        const railPointCount = getRailPointNum(this);
+
+        for (let i = 0; i < railPointCount; i++) {
+            const hidePoint = fallback(this.railRider!.getPointArg(i, 'point_arg0'), -1) !== -1;
+            if (hidePoint)
+                continue;
+
+            for (let j = 0; j < this.height; j++) {
+                const point = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                calcRailPointPos(point.translation, this, i);
+
+                if (j >= 1) {
+                    this.calcGravity(sceneObjHolder, scratchVec3, point.translation);
+                    vec3.scaleAndAdd(point.translation, point.translation, scratchVec3, -100.0 * j);
+                }
+
+                this.points.push(point);
+            }
+        }
+    }
+
+    private initSeparators(sceneObjHolder: SceneObjHolder): void {
+        const separatorCount = ((getRailTotalLength(this) / 200.0) | 0) + 1;
+        for (let i = 0; i < separatorCount; i++) {
+            if (i === separatorCount - 1) {
+                if (isLoopRail(this))
+                    moveCoordToStartPos(this);
+                else
+                    moveCoordToEndPos(this);
+            } else {
+                setRailCoord(this, 200.0 * i);
+            }
+
+            const separator = new ElectricRailSeparator();
+            getRailPos(separator.position, this);
+            this.calcGravity(sceneObjHolder, separator.gravity, separator.position);
+            if (isNearZeroVec3(separator.gravity, 0.001))
+                vec3.set(separator.gravity, 0.0, -1.0, 0.0);
+            getRailDirection(separator.front, this);
+            separator.setup();
+            this.separators.push(separator);
+        }
+
+        moveCoordToStartPos(this);
+    }
+
+    private calcGravity(sceneObjHolder: SceneObjHolder, dst: vec3, coord: vec3): void {
+        if (this.railGravity) {
+            calcGravityVector(sceneObjHolder, this, coord, dst);
+        } else {
+            vec3.copy(dst, this.gravityVector);
+        }
+    }
+
+    private drawPlane(ddraw: TDDraw, x0: number, y0: number, x1: number, y1: number): void {
+        for (let i = 0; i < this.height; i++) {
+            const y = 100.0 * i;
+
+            ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+            for (let j = 0; j < this.separators.length; j++) {
+                const separator = this.separators[j];
+
+                vec3.scaleAndAdd(scratchVec3, separator.position, separator.up, y);
+                const tx = 0.5 * j;
+
+                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x0);
+                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y0);
+                ddraw.position3vec3(scratchVec3a);
+                ddraw.texCoord2f32(GX.Attr.TEX0, tx, 0.0);
+
+                vec3.scaleAndAdd(scratchVec3a, scratchVec3, separator.right, x1);
+                vec3.scaleAndAdd(scratchVec3a, scratchVec3a, separator.up, y1);
+                ddraw.position3vec3(scratchVec3a);
+                ddraw.texCoord2f32(GX.Attr.TEX0, tx, 1.0);
+            }
+
+            ddraw.end();
+        }
+    }
+
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.ddraw.beginDraw();
+
+        this.drawPlane(this.ddraw, this.size, this.size, -this.size, -this.size);
+        this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
+
+        const device = sceneObjHolder.modelCache.device;
+        this.ddraw.endDraw(device, renderInstManager);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+
+        sceneObjHolder.modelCache.requestObjectData('ElectricRailPoint');
     }
 }

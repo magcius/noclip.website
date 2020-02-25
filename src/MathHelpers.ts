@@ -470,4 +470,6 @@ export function getMatrixTranslation(dst: vec3, m: mat4): void {
 
 export const Vec3Zero  = vec3.fromValues(0, 0, 0);
 export const Vec3One   = vec3.fromValues(1, 1, 1);
+export const Vec3UnitX = vec3.fromValues(1, 0, 0);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);
+export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
