@@ -6043,7 +6043,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
         this.ddraw.beginDraw();
 
-        // this.drawPlane(this.ddraw, this.size, this.size, -this.size, -this.size);
+        this.drawPlane(this.ddraw, this.size, this.size, -this.size, -this.size);
         this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const device = sceneObjHolder.modelCache.device;
