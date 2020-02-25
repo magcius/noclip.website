@@ -7,10 +7,11 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 
 import { SFAMapDesc, AncientMapDesc } from './maps';
-import { BlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
+import { SFABlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection, FalseTextureCollection } from './textures';
+import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
+import { SFAWorldDesc } from './world';
 
 export interface GameInfo {
     pathBase: string;
@@ -36,11 +37,19 @@ class SFABlockFetcher implements BlockFetcher {
             console.log(`isDeletedMap; subdir ${subdir}`);
             // this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
             // this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
-            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`);
+            const [blocksTab, blocksBin] = await Promise.all([
+                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`),
+                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`),
+            ]);
+            this.blocksTab = blocksTab.createDataView();
+            this.blocksBin = blocksBin;
         } else {
-            this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-            this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`);
+            const [blocksTab, blocksBin] = await Promise.all([
+                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`),
+                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`),
+            ]);
+            this.blocksTab = blocksTab.createDataView();
+            this.blocksBin = blocksBin;
         }
     }
 
@@ -413,15 +422,13 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
         console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
 
         if (this.useAncientTextures) {
-            // TODO: get rid of this
-            // const texTab = await dataFetcher.fetchData(`${directory}/TEX.tab`);
-            // const texBin = await dataFetcher.fetchData(`${directory}/TEX.bin`);
-            // this.texColl = new SFATextureCollection(texTab, texBin, true);
-            this.texColl = new FalseTextureCollection(device);
+            this.texColl = new FakeTextureCollection();
         } else {
-            const tex1Tab = await dataFetcher.fetchData(`${directory}/TEX1.tab`);
-            const tex1Bin = await dataFetcher.fetchData(`${directory}/TEX1.bin`);
-            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, false);
+            const [tex1Tab, tex1Bin] = await Promise.all([
+                dataFetcher.fetchData(`${directory}/TEX1.tab`),
+                dataFetcher.fetchData(`${directory}/TEX1.bin`),
+            ]);
+            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin);
         }
         const blockFetcher = new BlockExhibitFetcher(this.useCompression);
         await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}${this.useCompression ? '.zlb' : ''}.bin`);
@@ -448,7 +455,7 @@ class SFABlockExhibitDesc implements Viewer.SceneDesc {
                     if (this.useAncientBlocks) {
                         blockRenderer = new AncientBlockRenderer(device, blockData, this.texColl);
                     } else {
-                        blockRenderer = new BlockRenderer(device, blockData, this.texColl);
+                        blockRenderer = new SFABlockRenderer(device, blockData, this.texColl);
                     }
                     if (!blockRenderer) {
                         console.warn(`Block ${blockNum} not found`);
@@ -593,6 +600,9 @@ const sceneDescs = [
     // new SFAMapDesc(115, 'loc115', 'Location'),
     // new SFAMapDesc(116, 'loc116', 'Location'), 
     // (end)
+
+    // 'Full Scenes',
+    // new SFAWorldDesc('hollow', 'ThornTail Hollow'),
 
     // 'Block Exhibits',
     // new SFABlockExhibitDesc('animtest', 'mod6', 'Animation Test Blocks'),

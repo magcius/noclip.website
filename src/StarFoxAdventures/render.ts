@@ -11,37 +11,22 @@ import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GXMaterial } from '../gx/gx_material';
 
-import { DecodedTexture } from './textures';
+import { SFATexture } from './textures';
 
 export class ModelInstance {
     public loadedVertexLayout: LoadedVertexLayout;
     public loadedVertexData: LoadedVertexData;
     public shapeHelper: GXShapeHelperGfx | null = null;
     public materialHelper: GXMaterialHelperGfx;
-    public textures: (DecodedTexture | null)[] = [];
+    public textures: (SFATexture | null)[] = [];
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, enableCull: boolean) {
-        const mb = new GXMaterialBuilder('Basic');
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
-        mb.setZMode(true, GX.CompareType.LESS, true);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
-        // mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-        // mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setCullMode(enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
-
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
-
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
 
         if (window.debug)
             console.log(JSON.stringify({ vat, vcd }), vtxLoader);
 
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
-
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
     }
 
@@ -49,7 +34,7 @@ export class ModelInstance {
         this.materialHelper = new GXMaterialHelperGfx(material);
     }
 
-    public setTextures(textures: (DecodedTexture | null)[]) {
+    public setTextures(textures: (SFATexture | null)[]) {
         this.textures = textures;
     }
 

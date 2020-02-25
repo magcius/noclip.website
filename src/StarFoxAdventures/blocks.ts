@@ -3,27 +3,30 @@ import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
-import { nArray, hexdump } from '../util';
+import { nArray } from '../util';
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
 import { ModelInstance, SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection, FalseTextureCollection } from './textures';
+import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { IBlockCollection } from './maps';
 
 export abstract class BlockFetcher {
     public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
 }
 
-export abstract class BlockRendererBase {
+export abstract class BlockRenderer {
     public abstract addToRenderer(renderer: SFARenderer, modelMatrix: mat4): void;
+}
+
+export interface IBlockCollection {
+    getBlock(mod: number, sub: number): BlockRenderer | null;
 }
 
 export class BlockCollection implements IBlockCollection {
     gfxDevice: GfxDevice;
-    blockRenderers: BlockRendererBase[] = []; // Address by blockRenderers[sub]
+    blockRenderers: BlockRenderer[] = []; // Address by blockRenderers[sub]
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
 
@@ -35,29 +38,25 @@ export class BlockCollection implements IBlockCollection {
         const dataFetcher = context.dataFetcher;
         const pathBase = gameInfo.pathBase;
         this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
-        // const tex0Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`);
-        // const tex0Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`);
         if (this.isAncient) {
-            // const texTab = await dataFetcher.fetchData(`${pathBase}/TEX.tab`);
-            // const texBin = await dataFetcher.fetchData(`${pathBase}/TEX.bin`);
-            // this.texColl = new SFATextureCollection(texTab, texBin, this.isAncient);
-            console.log(`creating ancient texture collection`);
-            this.texColl = new FalseTextureCollection(device);
+            this.texColl = new FakeTextureCollection();
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             try {
-                const tex1Tab = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`);
-                const tex1Bin = await dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`);
-                this.texColl = new SFATextureCollection(tex1Tab, tex1Bin, this.isAncient);
+                const [tex1Tab, tex1Bin] = await Promise.all([
+                    dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`),
+                    dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`),
+                ]);
+                this.texColl = new SFATextureCollection(tex1Tab, tex1Bin);
             } catch (e) {
                 console.warn(`Failed to load textures for subdirectory ${subdir}. Using fake textures instead. Exception:`);
                 console.error(e);
-                this.texColl = new FalseTextureCollection(device);
+                this.texColl = new FakeTextureCollection();
             }
         }
     }
 
-    public getBlockRenderer(device: GfxDevice, sub: number): BlockRendererBase | null {
+    public getBlockRenderer(device: GfxDevice, sub: number): BlockRenderer | null {
         if (this.blockRenderers[sub] === undefined) {
             const uncomp = this.blockFetcher.getBlock(this.mod, sub);
             if (uncomp === null)
@@ -65,19 +64,20 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
-                this.blockRenderers[sub] = new BlockRenderer(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new SFABlockRenderer(device, uncomp, this.texColl);
             }
         }
 
         return this.blockRenderers[sub];
     }
 
-    public getBlock(mod: number, sub: number): BlockRendererBase | null {
+    public getBlock(mod: number, sub: number): BlockRenderer | null {
         return this.getBlockRenderer(this.gfxDevice, sub);
     }
 }
 
-// Reads bitfields by pulling from the low bits of each byte in sequence
+// Reads bitfields. Bits are pulled from the least significant bits of each byte
+// in the the sequence.
 class LowBitReader {
     dv: DataView
     offs: number
@@ -114,7 +114,7 @@ class LowBitReader {
     }
 }
 
-export class BlockRenderer implements BlockRendererBase {
+export class SFABlockRenderer implements BlockRenderer {
     public models: ModelInstance[] = [];
     public yTranslate: number = 0;
 
@@ -189,8 +189,6 @@ export class BlockRenderer implements BlockRendererBase {
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
 
-        //////////// TEXTURE STUFF TODO: move somewhere else
-
         const texOffset = blockDv.getUint32(fields.texOffset);
         const texCount = blockDv.getUint8(fields.texCount);
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
@@ -199,9 +197,6 @@ export class BlockRenderer implements BlockRendererBase {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
             texIds.push(texIdFromFile);
         }
-        // console.log(`tex ids: ${JSON.stringify(texIds)}`);
-
-        //////////////////////////
 
         const posOffset = blockDv.getUint32(fields.posOffset);
         // const posCount = blockDv.getUint16(fields.posCount);
@@ -245,13 +240,9 @@ export class BlockRenderer implements BlockRendererBase {
                 enableCull: false,
                 flags: 0,
             };
-            // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
+
             shader.tex0Num = blockDv.getUint32(offs + 0x24);
-            //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
-            //XXX: for demo
             shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
-            // shader.tex1Num = blockDv.getUint32(offs + 0x2c); // ???
-            // shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
             shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
@@ -266,8 +257,6 @@ export class BlockRenderer implements BlockRendererBase {
                 shader.enableCull = (shader.flags & ShaderFlags.Cull) != 0;
             }
             
-            // console.log(`PolyType: ${JSON.stringify(polyType)}`);
-            // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
             shaders.push(shader);
             offs += fields.shaderSize;
         }
@@ -281,12 +270,10 @@ export class BlockRenderer implements BlockRendererBase {
             }
         }
 
-        // vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
         vcd[GX.Attr.POS].type = GX.AttrType.DIRECT;
         vcd[GX.Attr.CLR0].type = GX.AttrType.DIRECT;
         vcd[GX.Attr.TEX0].type = GX.AttrType.DIRECT;
 
-        // TODO: Implement normals and lighting
         vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
@@ -338,7 +325,7 @@ export class BlockRenderer implements BlockRendererBase {
         // console.log(`Loading ${chunkCount} display lists from 0x${chunkOffset.toString(16)}`);
 
         const bitstreamOffset = blockDv.getUint32(fields.bitstreamOffset);
-        const bitstreamCount = blockDv.getUint16(fields.bitstreamByteCount);
+        const bitstreamByteCount = blockDv.getUint16(fields.bitstreamByteCount);
         // console.log(`Loading ${bitsCount} bits from 0x${bitsOffset.toString(16)}`);
 
         if (fields.hasYTranslate) {
@@ -378,7 +365,7 @@ export class BlockRenderer implements BlockRendererBase {
 
                 try {
                     const shader = shaders[curShader];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, shader.enableCull);
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
 
                     const mb = new GXMaterialBuilder('Basic');
                     if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
@@ -488,7 +475,7 @@ export class BlockRenderer implements BlockRendererBase {
     }
 }
 
-export class AncientBlockRenderer implements BlockRendererBase {
+export class AncientBlockRenderer implements BlockRenderer {
     public models: ModelInstance[] = [];
     public yTranslate: number = 0;
 
@@ -496,7 +483,7 @@ export class AncientBlockRenderer implements BlockRendererBase {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
-        let fields = {
+        const fields = {
             texOffset: 0x58,
             posOffset: 0x5c,
             clrOffset: 0x60,
@@ -578,23 +565,16 @@ export class AncientBlockRenderer implements BlockRendererBase {
                 enableCull: false,
                 flags: 0,
             };
-            // console.log(`parsing polygon attributes ${i} from 0x${offs.toString(16)}`);
-            shader.tex0Num = blockDv.getUint32(offs + 0x24);
-            //polyType.tex1Num = blockDv.getUint32(offs + 0x2C);
-            //XXX: for demo
-            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
-            // shader.tex1Num = blockDv.getUint32(offs + 0x2c); // ???
-            // shader.tex1Num = blockDv.getUint32(offs + 0x34); // According to decompilation
-            // shader.numLayers = blockDv.getUint8(offs + fields.numLayersOffset);
+            
             shader.numLayers = 1;
             for (let j = 0; j < shader.numLayers; j++) {
                 shader.hasTexCoord[j] = true;
             }
+            shader.tex0Num = blockDv.getUint32(offs + 0x24); // ???
+            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
             shader.flags = blockDv.getUint32(offs + 0x3c);
             shader.enableCull = true; // FIXME
             
-            // console.log(`PolyType: ${JSON.stringify(polyType)}`);
-            // console.log(`PolyType tex0: ${decodedTextures[polyType.tex0Num]}, tex1: ${decodedTextures[polyType.tex1Num]}`);
             shaders.push(shader);
             offs += fields.shaderSize;
         }
@@ -708,7 +688,7 @@ export class AncientBlockRenderer implements BlockRendererBase {
 
                 try {
                     const shader = shaders[curShader];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, shader.enableCull);
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);

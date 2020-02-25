@@ -5,7 +5,7 @@ import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 
 import { SFARenderer } from './render';
-import { BlockCollection, BlockRendererBase } from './blocks';
+import { BlockCollection, IBlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 
 export interface BlockInfo {
@@ -55,10 +55,6 @@ function getBlockTable(mapInfo: MapInfo): (BlockInfo | null)[][] {
     }
 
     return blockTable;
-}
-
-export interface IBlockCollection {
-    getBlock(mod: number, sub: number): BlockRendererBase | null;
 }
 
 interface MapSceneInfo {
