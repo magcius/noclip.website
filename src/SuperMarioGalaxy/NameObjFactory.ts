@@ -422,7 +422,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("TrialBubbleRevolvingPartsA",     RotateMoveObj),
     _("CubeBubbleExRotateWallS",        RotateMoveObj),
     _("CubeBubbleExRotateWallL",        RotateMoveObj),
-    _("WaterRoadWaveRotateGround",      RotateMoveObj),
+    _("WaterRoadCaveRotateGround",      RotateMoveObj),
     _("OnimasuPlanetRotatePartsA",      RotateMoveObj),
     _("OnimasuPlanetRotatePartsB",      RotateMoveObj),
     _("KoopaVS2PartsStartMoveStepA",    RotateMoveObj),
