@@ -1193,6 +1193,7 @@ const enum StateFuncs {
 
     // only in cave
     DanceInteract   = 0x2C1440,
+    DanceInteract2  = 0x2C0140,
 }
 
 const enum ObjectField {
@@ -1223,7 +1224,7 @@ export const enum EndCondition {
     Dance       = 0x100000,
 }
 
-const dummyReg: MIPS.Register = {value: 0, lastOp: MIPS.Opcode.NOP};
+const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
     public state: State;
     public currBlock: StateBlock;
@@ -1390,12 +1391,24 @@ class StateParser extends MIPS.NaiveInterpreter {
                     endCondition: 0,
                 };
             } break;
-            // this function calls interactWait in a loop until there's no song playing
+            // first waits a second with hard-coded transitions, then the loop like DanceInteract
+            case StateFuncs.DanceInteract2:
+                dummyRegs[0].lastOp = MIPS.Opcode.ADDIU;
+                dummyRegs[0].value = 0x802C6D60;
+                dummyRegs[1].lastOp = MIPS.Opcode.LW;
+                this.handleStore(MIPS.Opcode.SW, dummyRegs[0], dummyRegs[1], ObjectField.Transitions);
+                dummyRegs[0].lastOp = MIPS.Opcode.ADDIU;
+                dummyRegs[0].value = 30;
+                dummyRegs[1].lastOp = MIPS.Opcode.LW;
+                this.handleStore(MIPS.Opcode.SW, dummyRegs[0], dummyRegs[1], ObjectField.Timer);
+                dummyRegs[0].value = EndCondition.Timer;
+                this.handleFunction(StateFuncs.InteractWait, a0, dummyRegs[0], a2, a3, stackArgs, branch);
+            // calls interactWait in a loop until there's no song playing
             case StateFuncs.DanceInteract: {
-                dummyReg.lastOp = MIPS.Opcode.LW;
-                this.handleStore(MIPS.Opcode.SW, a1, dummyReg, ObjectField.Transitions);
-                dummyReg.value = EndCondition.Dance;
-                this.handleFunction(StateFuncs.InteractWait, a0, dummyReg, a2, a3, stackArgs, branch);
+                dummyRegs[0].lastOp = MIPS.Opcode.LW;
+                this.handleStore(MIPS.Opcode.SW, a1, dummyRegs[0], ObjectField.Transitions);
+                dummyRegs[0].value = EndCondition.Dance;
+                this.handleFunction(StateFuncs.InteractWait, a0, dummyRegs[0], a2, a3, stackArgs, branch);
             } break;
 
             case GeneralFuncs.SendSignal: {

@@ -23,7 +23,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: 0, songStart: 0};
+    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0};
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
         this.renderHelper = new GfxRenderHelper(device);
