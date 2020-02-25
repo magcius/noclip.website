@@ -155,6 +155,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("StarPiece",                      StarPiece),
     _("StarPieceGroup",                 StarPieceGroup),
     _("SubmarineSteam",                 SubmarineSteam),
+    _("SubmarineVolcano",               SubmarineSteam),
     E("SuperSpinDriver",                createSuperSpinDriverYellow, requestArchivesSuperSpinDriver),
     E("SuperSpinDriverGreen",           createSuperSpinDriverGreen,  requestArchivesSuperSpinDriver),
     E("SuperSpinDriverPink",            createSuperSpinDriverPink,   requestArchivesSuperSpinDriver),
@@ -547,9 +548,11 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Steam",                          SimpleEffectObj),
     _("TwinFallLakeWaterFall",          EffectObjR1000F50),
     _("WaterDropBottom",                EffectObjR1000F50),
+    _("WaterDropMiddle",                EffectObjR1000F50),
     _("WaterDropTop",                   EffectObjR1000F50),
     _("WaterfallL",                     EffectObjR1000F50),
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
+    _("WaterLayerBreak",                EffectObjR500F50),
     _("UFOKinokoLandingBlackSmoke",     EffectObjR500F50),
 
     // Invisible / Collision only.
