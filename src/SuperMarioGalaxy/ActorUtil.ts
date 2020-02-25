@@ -433,6 +433,18 @@ export function calcRailPosAtCoord(dst: vec3, actor: LiveActor, coord: number): 
     actor.railRider!.calcPosAtCoord(dst, coord);
 }
 
+export function calcRailDirectionAtCoord(dst: vec3, actor: LiveActor, coord: number): void {
+    actor.railRider!.calcDirectionAtCoord(dst, coord);
+}
+
+export function calcRailStartPointPos(dst: vec3, actor: LiveActor): void {
+    actor.railRider!.copyPointPos(dst, 0);
+}
+
+export function calcRailEndPointPos(dst: vec3, actor: LiveActor): void {
+    actor.railRider!.copyPointPos(dst, actor.railRider!.getPointNum() - 1);
+}
+
 export function isRailGoingToEnd(actor: LiveActor): boolean {
     return actor.railRider!.direction === RailDirection.TOWARDS_END;
 }

@@ -31,7 +31,7 @@ export class PlanetGravityManager extends NameObj {
 
     public calcTotalGravityVector(dst: vec3 | null, gravityInfo: GravityInfo | null, coord: vec3, gravityTypeMask: GravityTypeMask, attachmentFilter: any): boolean {
         let bestPriority = -1;
-        let bestMag = 0;
+        let bestMag = -1.0;
         vec3.set(scratchGravTotal, 0, 0, 0);
 
         for (let i = 0; i < this.gravities.length; i++) {
@@ -50,16 +50,21 @@ export class PlanetGravityManager extends NameObj {
                 continue;
 
             const mag = vec3.length(scratchGravLocal);
+
+            let newBest = false;
             if (gravity.priority === bestPriority) {
                 // Combine the two.
                 vec3.add(scratchGravTotal, scratchGravTotal, scratchGravLocal);
+                if (mag > bestMag)
+                    newBest = true;
             } else {
                 // Overwrite with the new best gravity.
                 vec3.copy(scratchGravTotal, scratchGravLocal);
                 bestPriority = gravity.priority;
+                newBest = true;
             }
 
-            if (gravityInfo !== null && mag < bestMag) {
+            if (gravityInfo !== null && newBest) {
                 vec3.copy(gravityInfo.direction, scratchGravLocal);
                 gravityInfo.gravity = gravity;
                 gravityInfo.priority = gravity.priority;

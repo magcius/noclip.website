@@ -234,7 +234,7 @@ export class BezierRail {
     public copyPointPos(dst: vec3, idx: number): void {
         assert(idx < this.pointRecordCount);
         if (!this.isClosed && idx === this.railParts.length)
-            vec3.add(dst, this.railParts[idx - 1].p0, this.railParts[idx - 1].p3);
+            this.railParts[idx - 1].calcPos(dst, 1.0);
         else
             vec3.copy(dst, this.railParts[idx].p0);
     }
@@ -293,7 +293,7 @@ export class BezierRail {
     }
 
     public getIncludedSectionIdx(coord: number, n: number): number {
-        coord = this.normalizePos(coord, n);
+        // assume coord is normalized.
 
         if (n < 1) {
             // TODO
@@ -361,6 +361,7 @@ export class BezierRail {
     }
 
     public calcPosDir(dstPos: vec3, dstDir: vec3, coord: number): void {
+        coord = this.normalizePos(coord, 1);
         const partIdx = this.getIncludedSectionIdx(coord, 1);
         const part = this.railParts[partIdx];
         const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
@@ -369,6 +370,7 @@ export class BezierRail {
     }
 
     public calcPos(dst: vec3, coord: number): void {
+        coord = this.normalizePos(coord, 1);
         const partIdx = this.getIncludedSectionIdx(coord, 1);
         const part = this.railParts[partIdx];
         const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
@@ -376,6 +378,7 @@ export class BezierRail {
     }
 
     public calcDirection(dst: vec3, coord: number): void {
+        coord = this.normalizePos(coord, 1);
         const partIdx = this.getIncludedSectionIdx(coord, 1);
         const part = this.railParts[partIdx];
         const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
@@ -507,6 +510,10 @@ export class RailRider {
         this.bezierRail.calcPos(dst, coord);
     }
 
+    public calcDirectionAtCoord(dst: vec3, coord: number): void {
+        this.bezierRail.calcDirection(dst, coord);
+    }
+
     public isReachedGoal(): boolean {
         // Closed rails loop forever...
         if (this.bezierRail.isClosed)
@@ -554,7 +561,7 @@ export class RailRider {
         let lastPartIdx = -1;
 
         for (let i = 0; i < nPoints; i++) {
-            const coord = i * speed;
+            const coord = this.bezierRail.normalizePos(i * speed, 1);
 
             const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
             this.bezierRail.calcPos(scratchVec3c, coord);
