@@ -793,15 +793,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const itemId = (actor.variable & 0xFF);
             if (itemId === 0x00 || itemId === 0x01 || itemId === 0x02) { // Rupees
                 const b = buildModel(zar, `item00/model/drop_gi_rupy.cmb`, 0.015);
+                b.setVertexColorScale(characterLightScale);
                 b.modelMatrix[13] += 10;
                 for (let i = 0; i < b.shapeInstances.length; i++)
                     b.shapeInstances[i].visible = false;
                 const whichShape = itemId;
                 b.shapeInstances[whichShape].visible = true;
             } else if (itemId === 0x03) { // Recovery Heart
-                buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.02);
+                const b = buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.04);
+                b.setVertexColorScale(characterLightScale);
             } else if (itemId === 0x06) { // Heart Piece ( stuck in the ground a bit ? )
-                buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
+                const b = buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
+                b.setVertexColorScale(characterLightScale);
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         } else if (actor.actorId === ActorId.Bg_Haka_Trap) {
             const zar = await fetchArchive(`zelda_haka_objects.zar`);
@@ -1076,6 +1079,10 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "starschulz";
             }
+        } else if (actor.actorId === ActorId.Bg_Gate_Shutter) { // kakariko guard gate
+            const zar = await fetchArchive(`zelda_spot01_matoyab.zar`);
+            const b = buildModel(zar, 'model/c_s01tomegate_model.cmb', 1);  // kakariko guard gate
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.Obj_Mure2) {
             const zar = await fetchArchive(`zelda_field_keep.zar`); // grass and rock circles. only the middle one spawns?
             const whichModel = actor.variable & 0xF;
@@ -1371,9 +1378,14 @@ class SceneDesc implements Viewer.SceneDesc {
             const whichModel = actor.variable & 0x00FF;
             // TODO(jstpierre): Why don't these tree models display correctly?
             if (whichModel === 0x00) { // "Large Tree"
-                buildModel(zar, `model/tree01_model.cmb`, 1.5);
+                const b = buildModel(zar, `model/tree01_model.cmb`, 1.5);
+                b.setVertexColorScale(characterLightScale);
+            } else if (whichModel === 0x01) { // "Medium Tree"
+                const b = buildModel(zar, `model/tree01_model.cmb`, 1);
+                b.setVertexColorScale(characterLightScale);
             } else if (whichModel === 0x02) { // "Small Tree"
-                buildModel(zar, `model/tree03_model.cmb`, 0.5);
+                const b = buildModel(zar, `model/tree03_model.cmb`, 0.5);
+                b.setVertexColorScale(characterLightScale);
             } else {
                 console.warn(`Unknown En_Wood02 model ${whichModel}`);
             }
@@ -1421,6 +1433,14 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const b2 = buildModel(zar, `model/c_s03shibuki_modelT.cmb`, 0.1);
             b2.bindCMAB(parseCMAB(zar, `misc/c_s03shibuki_modelT.cmab`));
+        } else if (actor.actorId === ActorId.Obj_Lift) {
+                const zar = await fetchArchive(`zelda_d_lift.zar`);
+                const b = buildModel(zar, `model/lift_l_model.cmb`, 0.1);
+                b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.Bg_Spot07_Taki) {
+            const zar = await fetchArchive(`zelda_spot07_object.zar`);
+            const b = buildModel(zar, `model/obj_s07taki01_modelT.cmb`, 0.1);
+            b.bindCMAB(parseCMAB(zar, `misc/obj_s07taki01_modelT.cmab`));
         } else if (actor.actorId === ActorId.En_A_Obj) {
             const whichObject = actor.variable & 0xFF;
             if (whichObject === 0x0A) {
@@ -1726,7 +1746,7 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Owl) {
             const zar = await fetchArchive(`zelda_owl.zar`);
-            const b = buildModel(zar, `model/kaeporagaebora1.cmb`);
+            const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Okuta) {
@@ -2028,9 +2048,10 @@ class SceneDesc implements Viewer.SceneDesc {
         // Enemies
         } else if (actor.actorId === ActorId.En_Hintnuts) {
             const zar = await fetchArchive(`zelda_hintnuts.zar`);
-            const b = buildModel(zar, `model/dekunuts.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/dnh_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            const body = buildModel(zar, `model/dekunuts.cmb`);
+            body.bindCSAB(parseCSAB(zar, `anim/dnh_wait.csab`));
+            body.setVertexColorScale(characterLightScale);
+            body.modelMatrix[13] += 8;
         } else if (actor.actorId === ActorId.En_Shopnuts) {
             const zar = await fetchArchive(`zelda_shopnuts.zar`);
             const b = buildModel(zar, `model/akindonuts.cmb`);
@@ -2046,6 +2067,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/okorinuts.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dn_wait.csab`));
             b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 6;
         } else if (actor.actorId === ActorId.En_Am) {
             const zar = await fetchArchive('zelda_am.zar');
             const b = buildModel(zar, `model/amos.cmb`, 0.015);
@@ -2165,16 +2187,12 @@ class SceneDesc implements Viewer.SceneDesc {
             // Assembled Deku Baba
         } else if (actor.actorId === ActorId.En_Sw) {
             const zar = await fetchArchive('zelda_st.zar');
-            const whichSkulltula = (actor.variable >>> 12) & 0x07;
-            if (whichSkulltula === 0x00)  { // Skullwalltula
+            const whichSkulltula = actor.variable;
+            if (whichSkulltula === 0x0000)  { // Skullwalltula
                 const b = buildModel(zar, `model/staltula.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
                 b.setVertexColorScale(characterLightScale);
-            } else if (whichSkulltula === 0x04) { // Golden Skulltula
-                const b = buildModel(zar, `model/staltula_gold.cmb`, 0.02);
-                b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
-            } else if (whichSkulltula === 0x05) { // Golden Skulltula (only spawns at night)
+            } else { // Golden Skulltula
                 const b = buildModel(zar, `model/staltula_gold.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
                 b.setVertexColorScale(characterLightScale);
@@ -2184,18 +2202,21 @@ class SceneDesc implements Viewer.SceneDesc {
             const whichSkulltula = actor.variable & 0xFFFF;
             if (whichSkulltula === 0x00)  { // Flying Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
+                b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
                 b.setVertexColorScale(characterLightScale);
             } else if (whichSkulltula === 0x01) { // PeahatLarva
                 const b = buildModel(zar, `model/peehat_tail.cmb`, 0.05);
                 b.setVertexColorScale(characterLightScale);
             } else if (whichSkulltula === 0xFFFF) { // Burrowed Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
+                b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
                 b.setVertexColorScale(characterLightScale);
             }
         } else if (actor.actorId === ActorId.En_Dekubaba) {
             const zar = await fetchArchive(`zelda_dekubaba.zar`);
             // The Deku Baba lies in hiding...
-            buildModel(zar, `model/db_ha_model.cmb`);
+            const b = buildModel(zar, `model/db_ha_model.cmb`);
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Tite) {
             const zar = await fetchArchive(`zelda_tt.zar`);
             const b = buildModel(zar, `model/tectite.cmb`);
