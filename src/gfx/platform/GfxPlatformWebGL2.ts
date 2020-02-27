@@ -12,7 +12,7 @@ import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { WebXRContext } from '../../WebXR';
 import { NormalizedViewportCoords } from '../helpers/RenderTargetHelpers';
 
-const SHADER_DEBUG = IS_DEVELOPMENT;
+const SHADER_DEBUG = false // IS_DEVELOPMENT;
 
 const TRACK_RESOURCES = IS_DEVELOPMENT;
 
@@ -294,7 +294,7 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, end, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
@@ -308,7 +308,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public pf32(c: number) { this.f32.n(c); }
     public po(r: object | null) { this.o.push(r); }
 
-    public end() { this.pcmd(RenderPassCmd.invalid); }
+    public end() { this.pcmd(RenderPassCmd.end); }
     public setRenderPassParameters(ca: GfxAttachment | null, cr: GfxTexture | null, dsa: GfxAttachment | null, dsr: GfxTexture | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) { this.po(ca); this.po(cr); } this.po(dsa); this.po(dsr); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
     public setViewport(x: number, y: number, w: number, h: number) { this.pcmd(RenderPassCmd.setViewport); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setScissor(x: number, y: number, w: number, h: number)  { this.pcmd(RenderPassCmd.setScissor); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
@@ -319,7 +319,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
-    public endPass()                              { this.pcmd(RenderPassCmd.endPass); }
+    public endPass(): void                        { }
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
@@ -1470,7 +1470,7 @@ void main() {
                 this.drawIndexed(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexedInstanced) {
                 this.drawIndexedInstanced(u32[iu32++], u32[iu32++], u32[iu32++]);
-            } else if (cmd === RenderPassCmd.endPass) {
+            } else if (cmd === RenderPassCmd.end) {
                 this.endPass();
                 return;
             } else {
@@ -1777,7 +1777,8 @@ void main() {
             const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
             for (let i = 0; i < uniformBlocks.length; i++) {
                 const [m, blockName, contents] = uniformBlocks[i];
-                gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
+                const blockIdx = gl.getUniformBlockIndex(prog, blockName);
+                gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
             const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);

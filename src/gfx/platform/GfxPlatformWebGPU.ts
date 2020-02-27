@@ -340,6 +340,10 @@ class GfxHostAccessPassP_WebGPU implements GfxHostAccessPass {
             h = Math.max((h / 2) | 0, 1);
         }
     }
+
+    public finish(): GPUCommandBuffer {
+        return this.commandEncoder!.finish();
+    }
 }
 
 class GfxRenderPassP_WebGPU implements GfxRenderPass {
@@ -458,8 +462,12 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     }
 
     public endPass(): void {
+    }
+
+    public finish(): GPUCommandBuffer {
         this.renderPassEncoder!.endPass();
         this.renderPassEncoder = null;
+        return this.commandEncoder!.finish();
     }
 }
 
@@ -823,10 +831,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const queue = this.device.getQueue();
 
         const pass = o as (GfxRenderPassP_WebGPU | GfxHostAccessPassP_WebGPU);
-        if (pass.commandEncoder !== null) {
-            const b = pass.commandEncoder.finish();
-            queue.submit([b]);
-        }
+        const b = pass.finish()!;
+        queue.submit([b]);
         pass.commandEncoder = null;
 
         if (o instanceof GfxRenderPassP_WebGPU) {

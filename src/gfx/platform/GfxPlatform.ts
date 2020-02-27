@@ -301,7 +301,7 @@ export interface GfxRenderPass {
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 
-    // Pass resolution.
+    // TODO(jstpierre): Remove this. It does nothing.
     endPass(): void;
 };
 

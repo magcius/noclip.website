@@ -602,7 +602,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeList(device, renderInstManager, pass, listSet[1]);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass | null {
         const dlst = this.globals.dlst;
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
@@ -635,12 +635,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         dlst.peekZ.peekData(device);
 
         // Now indirect stuff.
-        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Indirect]);
+
+        indirectPassRenderer.endPass();
+        device.submitPass(indirectPassRenderer);
 
         dlst.reset();
         renderInstManager.resetRenderInsts();
-        return indirectPassRenderer;
+
+        return null;
     }
 
     public destroy(device: GfxDevice): void {
