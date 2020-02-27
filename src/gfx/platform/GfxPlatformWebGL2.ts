@@ -9,6 +9,8 @@ import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { colorEqual, colorCopy } from '../../Color';
 import { range } from '../../MathHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
+import { WebXRContext } from '../../WebXR';
+import { NormalizedViewportCoords } from '../helpers/RenderTargetHelpers';
 
 const SHADER_DEBUG = IS_DEVELOPMENT;
 
@@ -708,26 +710,26 @@ void main() {
         return this._scTexture!;
     }
 
-    public present(platformFramebuffer?: GfxPlatformFramebuffer): void {
+    public present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void {
         if (platformFramebuffer !== undefined) {
             const gl = this.gl;
             // TODO(jstpierre): Find a way to copy the depth buffer to WebXR.
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, platformFramebuffer);
-            this.blitFullscreenTexture(this._scTexture!);
+            this.blitFullscreenTexture(this._scTexture!, viewport);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
         } else {
             this.blitFullscreenTexture(this._scTexture!);
         }
     }
 
-    private blitFullscreenTexture(texture: GfxTexture): void {
+    private blitFullscreenTexture(texture: GfxTexture, viewport: NormalizedViewportCoords = {x: 0, y: 0, w: 1, h: 1}): void {
         const gl = this.gl;
         this._setMegaState(this._fullscreenCopyMegaState);
         this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
         gl.disable(gl.SCISSOR_TEST);
-        gl.viewport(0, 0, this._scWidth, this._scHeight);
+        gl.viewport(viewport.x * this._scWidth, viewport.y * this._scHeight, viewport.w * this._scWidth, viewport.h * this._scHeight);
         this._currentTextures[0] = null;
         this._currentSamplers[0] = null;
         this._useProgram(this._fullscreenCopyProgram);

@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, XRCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -15,6 +15,7 @@ import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { IsWebXRSupported, WebXRContext } from './WebXR';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1629,6 +1630,61 @@ class ViewerSettings extends Panel {
     }
 }
 
+class XRSettings extends Panel {
+    private EnableXRCheckBox: Checkbox;
+    private scaleSlider: Slider;
+
+    constructor(private ui: UI, private viewer: Viewer.Viewer, private webXRContext: WebXRContext) {
+        super();
+
+        this.setTitle(VR_ICON, 'VR Settings');
+
+        this.contents.style.lineHeight = '36px';
+
+        this.EnableXRCheckBox = new Checkbox('Enable VR');
+        this.contents.appendChild(this.EnableXRCheckBox.elem);
+        this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+
+        var displayScaleValue = (value: Number) => {
+            return value.toPrecision(5).toString();
+        };
+
+        var GetSliderLabel = () => {
+            return "VR World Scale: " + displayScaleValue(this.viewer.xrCameraController.worldScale);
+        };
+
+        this.scaleSlider = new Slider();
+        this.scaleSlider.setLabel(GetSliderLabel());
+        this.scaleSlider.setRange(10, 10000);
+        this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
+        this.scaleSlider.onvalue = () => {
+            this.viewer.xrCameraController.worldScale = this.scaleSlider.getValue();
+            this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
+            this.scaleSlider.setLabel(GetSliderLabel());
+        };
+        this.contents.appendChild(this.scaleSlider.elem);
+    }
+
+    private async enableXRChecked(saveManager: SaveManager, key: string) {
+        const enableXR = this.EnableXRCheckBox.checked;
+        this.EnableXRCheckBox.setChecked(enableXR);
+
+        if (this.EnableXRCheckBox.checked) {
+            try {
+                await this.webXRContext.start();
+                this.webXRContext.xrSession.addEventListener('end', () => {
+                    this.EnableXRCheckBox.setChecked(false);
+                });
+            } catch {
+                console.error("Failed to start XR");
+                this.EnableXRCheckBox.setChecked(false);
+            }
+        } else {
+            this.webXRContext.end();
+        }
+    }
+}
+
 class LineGraph {
     public canvas: HTMLCanvasElement;
     public ctx: CanvasRenderingContext2D;
@@ -2500,6 +2556,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
+    public xrSettings?: XRSettings;
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
@@ -2517,7 +2574,7 @@ export class UI {
 
     public isPlaying: boolean = true;
 
-    constructor(public viewer: Viewer.Viewer) {
+    constructor(public viewer: Viewer.Viewer, public webXRContext?: WebXRContext) {
         this.toplevel = document.createElement('div');
 
         this.sceneUIContainer = document.createElement('div');
@@ -2576,6 +2633,9 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
+        if (webXRContext) {
+            this.xrSettings = new XRSettings(this, viewer, webXRContext);
+        }
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
@@ -2653,10 +2713,16 @@ export class UI {
     }
 
     public setScenePanels(scenePanels: Panel[] | null): void {
-        if (scenePanels !== null)
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
-        else
+        if (scenePanels !== null) {
+            if (this.xrSettings) {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+            } else {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
+            }
+        }
+        else {
             this.setPanels([this.sceneSelect, this.about]);
+        }
     }
 
     public setPanelsAutoClosed(v: boolean): void {

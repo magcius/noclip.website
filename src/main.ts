@@ -1,7 +1,7 @@
 
 /* @preserve The source code to this website is under the MIT license and can be found at https://github.com/magcius/noclip.website */
 
-import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas } from './viewer';
+import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 
@@ -75,6 +75,7 @@ import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
+import { WebXRContext, IsWebXRSupported } from './WebXR';
 
 const sceneGroups = [
     "Wii",
@@ -183,6 +184,9 @@ class Main {
 
     public sceneTimeScale = 1.0;
 
+    public webXRContext: WebXRContext | null = null;
+    public renderingContext?: WebGLRenderingContext;
+
     private hashpotatoes: HTMLTextAreaElement;
 
     constructor() {
@@ -199,6 +203,12 @@ class Main {
         if (errorCode !== InitErrorCode.SUCCESS) {
             this.toplevel.appendChild(makeErrorUI(errorCode));
             return;
+        }
+
+        if (IsWebXRSupported() && this.renderingContext) {
+            this.webXRContext = new WebXRContext(this.renderingContext);
+            this.webXRContext.onSessionStarted = this._onWebXRStarted.bind(this);
+            this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
         }
 
         this.toplevel.ondragover = (e) => {
@@ -327,6 +337,21 @@ class Main {
             this.ui.togglePlayPause();
     }
 
+    private _onWebXRStarted() {
+        mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
+    }
+
+    private _onWebXRFrame(time: number) {
+        if (!this.paused) {
+            const updateInfo: ViewerUpdateInfo = {
+                time: time,
+                isWebXR: true,
+                webXRContext: this.webXRContext
+            }
+            this._runUpdate(updateInfo);
+        }
+    }
+
     public setPaused(v: boolean): void {
         if (this.paused === v)
             return;
@@ -336,10 +361,7 @@ class Main {
             window.requestAnimationFrame(this._updateLoop);
     }
 
-    private _updateLoop = (time: number) => {
-        if (this.paused)
-            return;
-
+    private _runUpdate(updateInfo: ViewerUpdateInfo) {
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
@@ -348,12 +370,24 @@ class Main {
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
-        this.viewer.update(time);
+
+        this.viewer.update(updateInfo);
 
         if (shouldTakeScreenshot)
             this._takeScreenshot();
 
         this.ui.update();
+    }
+
+    private _updateLoop = (time: number) => {
+        if (this.paused)
+            return;
+        
+        const updateInfo: ViewerUpdateInfo = {
+            time: time
+        }
+        this._runUpdate(updateInfo);
+        
         window.requestAnimationFrame(this._updateLoop);
     };
 
@@ -565,6 +599,8 @@ class Main {
 
             if (!didLoadCameraState)
                 mat4.identity(camera.worldMatrix);
+
+            mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
 
         this.ui.sceneChanged();
@@ -683,7 +719,7 @@ class Main {
     }
 
     private _makeUI() {
-        this.ui = new UI(this.viewer);
+        this.ui = new UI(this.viewer, this.webXRContext);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
     }
