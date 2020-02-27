@@ -15,7 +15,7 @@ import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
-import { IsWebXRSupported, WebXRContext } from './WebXR';
+import { WebXRContext } from './WebXR';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';

@@ -1165,6 +1165,10 @@ void main() {
         return readback;
     }
 
+    public createWebXRLayer(webXRSession: XrSession): XrWebGLLayer {
+        return new XRWebGLLayer(webXRSession, this.gl);
+    }
+
     public destroyBuffer(o: GfxBuffer): void {
         const { gl_buffer_pages } = o as GfxBufferP_GL;
         for (let i = 0; i < gl_buffer_pages.length; i++)

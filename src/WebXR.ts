@@ -1,3 +1,5 @@
+import { GfxDevice } from "./gfx/platform/GfxPlatform";
+
 export function IsWebXRSupported() {
     return !!window.navigator.xr && navigator.xr.isSessionSupported('immersive-vr');
 }
@@ -30,7 +32,7 @@ export class WebXRContext {
 
     public currentFrame: XrFrame;
 
-    constructor(private renderingContext: WebGLRenderingContext) {}
+    constructor(private gfxDevice: GfxDevice) {}
 
     public async start() {
         this.xrSession = await navigator.xr.requestSession('immersive-vr', {
@@ -41,7 +43,7 @@ export class WebXRContext {
         this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
         this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
 
-        let glLayer = new XRWebGLLayer(this.xrSession, this.renderingContext);
+        let glLayer = this.gfxDevice.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
         this.onSessionStarted();

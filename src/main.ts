@@ -184,8 +184,8 @@ class Main {
 
     public sceneTimeScale = 1.0;
 
-    public webXRContext: WebXRContext | null = null;
-    public renderingContext?: WebGLRenderingContext;
+    private updateInfo: ViewerUpdateInfo;
+    private webXRContext: WebXRContext | null = null;
 
     private hashpotatoes: HTMLTextAreaElement;
 
@@ -205,8 +205,8 @@ class Main {
             return;
         }
 
-        if (IsWebXRSupported() && this.renderingContext) {
-            this.webXRContext = new WebXRContext(this.renderingContext);
+        if (IsWebXRSupported()) {
+            this.webXRContext = new WebXRContext(this.viewer.gfxDevice);
             this.webXRContext.onSessionStarted = this._onWebXRStarted.bind(this);
             this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
         }
@@ -270,6 +270,10 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
+        this.updateInfo = {
+            time: 0,
+            isWebXR: false
+        };
         this._updateLoop(window.performance.now());
 
         if (!IS_DEVELOPMENT) {
@@ -343,12 +347,10 @@ class Main {
 
     private _onWebXRFrame(time: number) {
         if (!this.paused) {
-            const updateInfo: ViewerUpdateInfo = {
-                time: time,
-                isWebXR: true,
-                webXRContext: this.webXRContext
-            }
-            this._runUpdate(updateInfo);
+            this.updateInfo.time = time;
+            this.updateInfo.isWebXR = true;
+            this.updateInfo.webXRContext = this.webXRContext;
+            this._runUpdate(this.updateInfo);
         }
     }
 
@@ -383,10 +385,9 @@ class Main {
         if (this.paused)
             return;
         
-        const updateInfo: ViewerUpdateInfo = {
-            time: time
-        }
-        this._runUpdate(updateInfo);
+        this.updateInfo.time = time;
+        this.updateInfo.isWebXR = false;
+        this._runUpdate(this.updateInfo);
         
         window.requestAnimationFrame(this._updateLoop);
     };

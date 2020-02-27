@@ -18,7 +18,7 @@ import { MathConstants } from './MathHelpers';
 
 export interface ViewerUpdateInfo {
     time: number;
-    isWebXR?: boolean | null;
+    isWebXR: boolean;
     webXRContext?: WebXRContext | null;
 }
 
@@ -341,7 +341,6 @@ export { SceneDesc, SceneGroup };
 
 interface ViewerOut {
     viewer: Viewer;
-    renderingContext?: WebGLRenderingContext;
 }
 
 export const enum InitErrorCode {
@@ -377,7 +376,6 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
 
     const gfxSwapChain = createSwapChainForWebGL2(gl);
     out.viewer = new Viewer(gfxSwapChain, canvas);
-    out.renderingContext = gl;
 
     return InitErrorCode.SUCCESS;
 }
