@@ -1079,9 +1079,9 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "starschulz";
             }
-        } else if (actor.actorId === ActorId.Bg_Gate_Shutter) {
-            const zar = await fetchArchive(`zelda_spot01_matoyab.zar`); // grass and rock circles. only the middle one spawns?
-            const b = buildModel(zar, 'model/c_s01tomegate_model.cmb', 1);  // circle of rocks
+        } else if (actor.actorId === ActorId.Bg_Gate_Shutter) { // kakariko guard gate
+            const zar = await fetchArchive(`zelda_spot01_matoyab.zar`);
+            const b = buildModel(zar, 'model/c_s01tomegate_model.cmb', 1);  // kakariko guard gate
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.Obj_Mure2) {
             const zar = await fetchArchive(`zelda_field_keep.zar`); // grass and rock circles. only the middle one spawns?
