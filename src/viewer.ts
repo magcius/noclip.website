@@ -39,7 +39,7 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | null;
     destroy(device: GfxDevice): void;
 }
 
@@ -68,10 +68,14 @@ class ClearScene {
         device.setResourceLeakCheck(this.colorAttachment.gfxAttachment!, false);
     }
 
-    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass | null {
         this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        return device.createRenderPass(this.renderPassDescriptor);
+        this.renderPassDescriptor.colorResolveTo = viewerRenderInput.onscreenTexture;
+        const renderPass = device.createRenderPass(this.renderPassDescriptor);
+        renderPass.endPass();
+        device.submitPass(renderPass);
+        return null;
     }
 
     public destroy(device: GfxDevice): void {
@@ -153,27 +157,27 @@ export class Viewer {
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
         let renderPass: GfxRenderPass | null = null;
-        if (this.scene !== null)
+        if (this.scene !== null) {
             renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
-
-        if (renderPass === null) {
-            renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
-        } else {
             this.clearScene.minimize(this.gfxDevice);
+        } else {
+            this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
         }
 
-        // TODO(jstpierre): Rework the render API eventually.
-        const descriptor = this.gfxDevice.queryRenderPass(renderPass);
+        if (renderPass !== null) {
+            // Legacy API: needs resolve.
+            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
 
-        renderPass.endPass();
-        this.gfxDevice.submitPass(renderPass);
+            renderPass.endPass();
+            this.gfxDevice.submitPass(renderPass);
 
-        // Resolve.
-        this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-        this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-        const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-        resolvePass.endPass();
-        this.gfxDevice.submitPass(resolvePass);
+            // Resolve.
+            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
+            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
+            resolvePass.endPass();
+            this.gfxDevice.submitPass(resolvePass);
+        }
 
         this.gfxSwapChain.present();
 
