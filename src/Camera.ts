@@ -475,41 +475,39 @@ export class XRCameraController {
         }
                
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {            
-            var viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
+            const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
                     new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
-            var pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
+            const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
 
             if (pose) {
-                var movementTranslation = vec3.create();
-                movementTranslation[0] = pose.transform.position.x;
-                movementTranslation[1] = keyMovement[1];
-                movementTranslation[2] = pose.transform.position.z;
-                vec3.add(this.offset, this.offset, movementTranslation);
+                this.offset[0] += pose.transform.position.x;
+                this.offset[1] += keyMovement[1];
+                this.offset[2] += pose.transform.position.z;
             }
 
             updated = true;
         }
 
-        assert(this.cameras.length == webXRContext.views.length);
-        for (var i = 0; i < this.cameras.length; i++) {
-            const camera : Camera = this.cameras[i];
-            let xrView = webXRContext.views[i];
+        assert(this.cameras.length === webXRContext.views.length);
+        for (let i = 0; i < this.cameras.length; i++) {
+            const camera = this.cameras[i];
+            const xrView = webXRContext.views[i];
 
-            var cameraWorldMatrix = mat4.create();
+            const cameraWorldMatrix = mat4.create();
             cameraWorldMatrix.set(xrView.transform.matrix);
-            var cameraWorldMatrixTranslation = vec3.create();
+            const cameraWorldMatrixTranslation = vec3.create();
             mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
-            var originalViewTranslation = vec3.create();
+            const originalViewTranslation = vec3.create();
             mat4.getTranslation(originalViewTranslation, cameraWorldMatrix);
 
             // Scale up view position and add offset
-            var cameraScale = vec3.create();
-            var cameraOrientation = quat.create();
+            const cameraScale = vec3.create();
+            const cameraOrientation = quat.create();
             mat4.getScaling(cameraScale, cameraWorldMatrix);
             mat4.getRotation(cameraOrientation, cameraWorldMatrix);
 
-            var cameraAdditionalOffset = vec3.create();
+            const cameraAdditionalOffset = vec3.create();
             cameraAdditionalOffset.set(this.offset);
             vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
             vec3.scale(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, this.worldScale);
@@ -524,12 +522,12 @@ export class XRCameraController {
             camera.worldMatrixUpdated();
 
             // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
-            var cameraProjectionMatrix = xrView.projectionMatrix;
+            const cameraProjectionMatrix = xrView.projectionMatrix;
             camera.projectionMatrix.set(cameraProjectionMatrix);
-            var fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
-            var aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
-            var shearX = cameraProjectionMatrix[8];
-            var shearY = cameraProjectionMatrix[9];
+            const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
+            const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
+            const shearX = cameraProjectionMatrix[8];
+            const shearY = cameraProjectionMatrix[9];
 
             // Extract camera properties
             camera.fovY = fov;

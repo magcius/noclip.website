@@ -304,7 +304,7 @@ export class Viewer {
         if (updateInfo.isWebXR && updateInfo.webXRContext) {
             // Ensure the number of xr cameras matches the number of views
             if (updateInfo.webXRContext.views.length != this.xrCameraController.cameras.length) {
-                for (var i = this.xrCameraController.cameras.length; i < updateInfo.webXRContext.views.length; i++) {
+                for (let i = this.xrCameraController.cameras.length; i < updateInfo.webXRContext.views.length; i++) {
                     this.xrCameraController.cameras.push(new Camera());
                 }
                 this.xrCameraController.cameras.splice(updateInfo.webXRContext.views.length);

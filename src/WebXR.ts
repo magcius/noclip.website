@@ -68,5 +68,5 @@ export class WebXRContext {
         this.onFrame(time);
 
         session.requestAnimationFrame(this.onXRFrame.bind(this));
-      }
+    }
 }

@@ -1645,11 +1645,11 @@ class XRSettings extends Panel {
         this.contents.appendChild(this.EnableXRCheckBox.elem);
         this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
 
-        var displayScaleValue = (value: Number) => {
+        let displayScaleValue = (value: Number) => {
             return value.toPrecision(5).toString();
         };
 
-        var GetSliderLabel = () => {
+        let GetSliderLabel = () => {
             return "VR World Scale: " + displayScaleValue(this.viewer.xrCameraController.worldScale);
         };
 
