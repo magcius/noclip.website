@@ -441,6 +441,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
                     alphaBlendState,
                 },
             ],
+            blendConstant,
             depthCompare: reverseDepthForCompareMode(depthTestFunction),
             depthWrite: depthWriteEnabled,
             cullMode,
