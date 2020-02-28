@@ -1643,6 +1643,14 @@ class XRSettings extends Panel {
 
         this.contents.style.lineHeight = '36px';
 
+        this.contents.innerHTML += `
+        <div id="About">
+        <p>Click on the <strong>Enable VR</strong> checkbox to go in VR mode.</p>
+        <p>Press the <strong>Trigger</strong> to go up, and use the <strong>Grab Button</strong> to go down.
+        You can move horizontally by using the <strong>Joystick</strong>.
+        </div>
+        `;
+
         this.EnableXRCheckBox = new Checkbox('Enable VR');
         this.contents.appendChild(this.EnableXRCheckBox.elem);
         this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
