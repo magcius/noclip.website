@@ -118,7 +118,7 @@ export class Viewer {
     private clearScene: ClearScene = new ClearScene();
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
-    constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
+    constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
         this.rafTime = window.performance.now();
 
@@ -229,8 +229,8 @@ export class Viewer {
 
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
-            let xrView: XRView = webXRContext.views[i];
-            let xrViewPort: XRViewport = baseLayer.getViewport(xrView);
+            const xrView: XRView = webXRContext.views[i];
+            const xrViewPort: XRViewport = baseLayer.getViewport(xrView);
 
             if (!xrViewPort) {
                 continue;
@@ -240,7 +240,7 @@ export class Viewer {
             const heightRatio: number = xrViewPort.height / fbh;
 
             this.renderViewport();
-            
+
             const viewportForBlitting = {
                 x: xrViewPort.x / xrViewPort.width * widthRatio,
                 y: xrViewPort.y / xrViewPort.height * heightRatio,
@@ -358,7 +358,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true });
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {

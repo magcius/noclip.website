@@ -1,7 +1,8 @@
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
+import { GfxDevice, GfxSwapChain } from "./gfx/platform/GfxPlatform";
 
 export function IsWebXRSupported() {
-    return !!window.navigator.xr && navigator.xr.isSessionSupported('immersive-vr');
+    const navigator = window.navigator as any;
+    return !!navigator.xr && navigator.xr.isSessionSupported('immersive-vr');
 }
 
 // TODO WebXR: Known issues
@@ -28,13 +29,14 @@ export class WebXRContext {
 
     public views: XRView[];
 
-    public onFrame: (time: number)=>void = ()=>{};
+    public onFrame: (time: number)=>void = () => {};
 
     public currentFrame: XRFrame;
 
-    constructor(private gfxDevice: GfxDevice) {}
+    constructor(private swapChain: GfxSwapChain) {}
 
     public async start() {
+        const navigator = window.navigator as any;
         this.xrSession = await navigator.xr.requestSession('immersive-vr', {
             requiredFeatures: [],
             optionalFeatures: ['viewer', 'local']
@@ -47,7 +49,7 @@ export class WebXRContext {
         this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
         this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
 
-        let glLayer = this.gfxDevice.createWebXRLayer(this.xrSession);
+        let glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
         this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));

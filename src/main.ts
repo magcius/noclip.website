@@ -206,7 +206,7 @@ class Main {
         }
 
         if (IsWebXRSupported()) {
-            this.webXRContext = new WebXRContext(this.viewer.gfxDevice);
+            this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
             this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
         }
 
