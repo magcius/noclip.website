@@ -1,4 +1,4 @@
-import { nArray, hexzero, assert } from '../util'
+import { nArray, assert } from '../util'
 
 export const enum Opcode {
     NOP     = 0x00,
@@ -230,8 +230,10 @@ export class NaiveInterpreter {
                     func = (instr & 0xFFFFFF) << 2;
                     break;
                 case Opcode.JR:
-                    if (rs === RegName.RA)
+                    if (rs === RegName.RA) {
+                        this.finish();
                         return this.valid;
+                    }
                     // a switch statement, beyond the scope of this interpreter
                     this.handleUnknown(op);
                 default:
@@ -259,6 +261,7 @@ export class NaiveInterpreter {
                 }
             }
         }
+        this.finish();
         return this.valid;
     }
 
@@ -299,4 +302,5 @@ export class NaiveInterpreter {
         this.valid = false;
     }
 
+    protected finish(): void {}
 }

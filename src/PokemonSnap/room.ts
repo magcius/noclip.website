@@ -1116,6 +1116,7 @@ export const enum InteractionType {
     Basic,
     Random,
     Flag,
+    NotFlag,
     Behavior,
     NonzeroBehavior,
     NoTarget,
@@ -1125,31 +1126,36 @@ export const enum InteractionType {
     Unknown,
 }
 
-interface StateEdge {
+export interface StateEdge {
     type: InteractionType;
     index: number;
     param: number;
-}
-
-interface State {
-    startAddress: number;
-    blocks: StateBlock[];
-    next: StateEdge[];
 }
 
 export interface StateBlock {
     animation: number;
     motionAddress: number;
     force: boolean;
+    signal: number;
+    wait: WaitParams | null;
+    edges: StateEdge[];
+}
+
+export interface WaitParams {
     // allows the standard set of interactions (proximity, pester ball, etc)
     // but cannot prevent the object from responding to signals
     allowInteraction: boolean;
     interactions: StateEdge[];
     duration: number;
     durationRange: number;
-    signal: number;
     loopTarget: number;
     endCondition: number;
+}
+
+interface State {
+    startAddress: number;
+    blocks: StateBlock[];
+    justRemove: boolean;
 }
 
 interface StateGraph {
@@ -1174,7 +1180,7 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
 }
 
 const enum GeneralFuncs {
-    SendSignal  = 0x0BA30,
+    SendSignal  = 0x0B830,
     Yield       = 0x0BCA8,
     RandomInt   = 0x19E14,
 }
@@ -1224,9 +1230,14 @@ export const enum EndCondition {
     Dance       = 0x100000,
 }
 
+function emptyStateBlock(block: StateBlock): boolean {
+    return block.animation === -1 && block.motionAddress === 0 && block.signal === 0;
+}
+
 const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
     public state: State;
+    public currWait: WaitParams;
     public currBlock: StateBlock;
     public trivial = true;
     public stateIndex = -1;
@@ -1238,7 +1249,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         this.state = {
             startAddress,
             blocks: [],
-            next: [],
+            justRemove: false,
         };
         this.trivial = true;
         this.stateIndex = -1;
@@ -1254,17 +1265,21 @@ class StateParser extends MIPS.NaiveInterpreter {
         this.recentRandom = 0;
         this.loadAddress = 0;
         this.stateIndex = -1;
-        this.currBlock = {
-            animation: -1,
-            force: false,
-            motionAddress: 0,
+        this.currWait = {
             allowInteraction: true,
             interactions: [],
             duration: 0,
             durationRange: 0,
-            signal: 0,
             loopTarget: 0,
             endCondition: 0,
+        };
+        this.currBlock = {
+            edges: [],
+            animation: -1,
+            force: false,
+            motionAddress: 0,
+            signal: 0,
+            wait: null,
         };
     }
 
@@ -1282,58 +1297,63 @@ class StateParser extends MIPS.NaiveInterpreter {
             this.markNontrivial();
         switch (func) {
             case StateFuncs.SetState: {
-                const nextState = a1.value === 0 ? -1 : parseStateSubgraph(this.dataMap, a1.value, this.allStates, this.animationAddresses);
-                if (nextState === -1) {
+                const index = a1.value === 0 ? -1 : parseStateSubgraph(this.dataMap, a1.value, this.allStates, this.animationAddresses);
+                if (index === -1) {
                     // no next state, we're done
                     assert(branch === null, `bad transition to null ${hexzero(this.state.startAddress, 8)} ${branch?.comparator}`);
-                } else if (this.trivial && branch === null) {
+                    return 0;
+                }
+                if (this.trivial && branch === null) {
                     // this state can be ignored, point to the real one
-                    this.stateIndex = nextState;
-                } else if (branch === null)
-                    this.state.next.push({ type: InteractionType.Basic, index: nextState, param: 0 });
-                else {
-                    if (branch.comparator.lastOp === MIPS.Opcode.ANDI || branch.comparator.lastOp === MIPS.Opcode.AND)
-                        this.state.next.push({ type: InteractionType.Flag, param: branch.comparator.value, index: nextState });
-                    else if (branch.comparator.lastOp === MIPS.Opcode.ADDIU)
-                        this.state.next.push({ type: InteractionType.Behavior, param: branch.comparator.value, index: nextState });
-                    else if (branch.comparator.lastOp === MIPS.Opcode.LW) {
+                    this.stateIndex = index;
+                    return 0;
+                }
+                let type = InteractionType.Basic;
+                let param = 0;
+                if (branch !== null) {
+                    param = branch.comparator.value;
+                    if (branch.comparator.lastOp === MIPS.Opcode.ANDI || branch.comparator.lastOp === MIPS.Opcode.AND) {
+                        type = InteractionType.Flag;
+                        if (branch.op === MIPS.Opcode.BNE || branch.op === MIPS.Opcode.BNEL)
+                            type = InteractionType.NotFlag;
+                        param = branch.comparator.value;
+                    } else if (branch.comparator.lastOp === MIPS.Opcode.ADDIU) {
+                        type = InteractionType.Behavior;
+                    } else if (branch.comparator.lastOp === MIPS.Opcode.LW) {
                         // see if we are testing an object member against 0
                         switch (branch.comparator.value) {
                             case ObjectField.Behavior: {
-                                let type = InteractionType.Behavior;
+                                type = InteractionType.Behavior;
                                 if (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)
                                     type = InteractionType.NonzeroBehavior;
-                                this.state.next.push({ type, param: 0, index: nextState });
                             } break;
                             case ObjectField.Target: {
-                                let type = InteractionType.NoTarget;
+                                type = InteractionType.NoTarget;
                                 if (branch.op === MIPS.Opcode.BEQ || branch.op === MIPS.Opcode.BEQL)
                                     type = InteractionType.HasTarget;
-                                this.state.next.push({ type, param: 0, index: nextState });
                             } break;
                             case ObjectField.Apple: {
-                                this.state.next.push({ type: InteractionType.HasApple, param: 0, index: nextState });
+                                type = InteractionType.HasApple;
                             } break;
                             default:
                                 this.valid = false;
-                                this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState });
+                                type = InteractionType.Unknown;
                         }
                     } else if (branch.comparator.lastOp === MIPS.Opcode.ORI) {
                         // this is admittedly a bit of a stretch, but it's a very rare condition
-                        this.state.next.push({ type: InteractionType.OverWater, param: 0, index: nextState });
+                        type = InteractionType.OverWater;
                     } else {
                         this.valid = false;
-                        this.state.next.push({ type: InteractionType.Unknown, param: 0, index: nextState });
+                        type = InteractionType.Unknown;
                     }
-                    this.markNontrivial();
                 }
+                this.addEdge({type, param, index});
             } break;
             case StateFuncs.Random: {
                 let randomStart = a1.value;
                 if (a1.value < 0x80000000)
                     randomStart = this.loadAddress; // only used by one starmie state
                 const randomView = this.dataMap.getView(randomStart);
-                let i = this.state.next.length;
                 let offs = 0;
                 let total = 0;
                 while (true) {
@@ -1351,7 +1371,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         break;
                     const stateAddr = randomView.getUint32(offs + 0x04);
                     const state = parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses);
-                    this.state.next.push({ type: InteractionType.Random, index: state, param: weight / total });
+                    this.addEdge({ type: InteractionType.Random, index: state, param: weight / total });
                     offs += 8;
                 }
                 this.done = true;
@@ -1374,21 +1394,27 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.motionAddress = a1.value;
             } break;
             case StateFuncs.Wait:
-                this.currBlock.allowInteraction = false;
+                this.currWait.allowInteraction = false;
             case StateFuncs.InteractWait: {
-                this.currBlock.endCondition = a1.value;
+                this.currWait.endCondition = a1.value;
+                this.currBlock.wait = this.currWait;
                 this.state.blocks.push(this.currBlock);
-                this.currBlock = {
-                    animation: -1,
-                    force: false,
-                    motionAddress: 0,
+
+                this.currWait = {
                     allowInteraction: true,
                     interactions: [],
                     duration: 0,
                     durationRange: 0,
-                    signal: 0,
                     loopTarget: 0,
                     endCondition: 0,
+                };
+                this.currBlock = {
+                    edges: [],
+                    animation: -1,
+                    force: false,
+                    motionAddress: 0,
+                    signal: 0,
+                    wait: null,
                 };
             } break;
             // first waits a second with hard-coded transitions, then the loop like DanceInteract
@@ -1412,7 +1438,8 @@ class StateParser extends MIPS.NaiveInterpreter {
             } break;
 
             case GeneralFuncs.SendSignal: {
-                assert(a0.value === 3, `signal to unknown link`);
+                // only fails because we aren't actually handling conditionals
+                // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
                 this.currBlock.signal = a1.value;
             } break;
 
@@ -1420,9 +1447,11 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.recentRandom = a0.value;
                 return a0.value;
             }
-
-            // don't handle these for now
-            case StateFuncs.Remove:
+            case StateFuncs.Remove: {
+                if (this.state.blocks.length === 0)
+                    this.state.justRemove = true;
+            } break;
+            // TODO: figure out apples
             case StateFuncs.ClaimApple:
                 break;
             default:
@@ -1456,7 +1485,7 @@ class StateParser extends MIPS.NaiveInterpreter {
 
                         // TODO: handle the other function
                         if (stateAddr !== 0) {
-                            this.currBlock.interactions.push({
+                            this.currWait.interactions.push({
                                 type,
                                 param: radius,
                                 index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
@@ -1467,17 +1496,17 @@ class StateParser extends MIPS.NaiveInterpreter {
                 case ObjectField.Timer: {
                     if (value.lastOp !== MIPS.Opcode.ADDIU)
                         this.valid = false; // starmie sets this using a separate variable
-                    this.currBlock.duration = value.value / 30;
+                    this.currWait.duration = value.value / 30;
                     // hacky way to recover random ranges: when we see calls to randomInt, we set v0 to the maximum
                     // then, if we used random recently, and duration is long enough to have been a sum with v0, assume it was random
                     if (this.recentRandom > 30 && this.recentRandom <= value.value) {
-                        this.currBlock.duration -= this.recentRandom / 30;
-                        this.currBlock.durationRange = this.recentRandom / 30;
+                        this.currWait.duration -= this.recentRandom / 30;
+                        this.currWait.durationRange = this.recentRandom / 30;
                         this.recentRandom = 0;
                     }
                 } break;
                 case ObjectField.LoopTarget: {
-                    this.currBlock.loopTarget = value.value;
+                    this.currWait.loopTarget = value.value;
                 } break;
 
                 case ObjectField.SomeBool:
@@ -1500,8 +1529,33 @@ class StateParser extends MIPS.NaiveInterpreter {
         }
     }
 
+    protected finish(): void {
+        if (!emptyStateBlock(this.currBlock))
+            this.state.blocks.push(this.currBlock);
+    }
+
     protected handleUnknown(op: MIPS.Opcode) {
         this.valid = false; // keep going for state discovery, we'll fix the details later
+    }
+
+    private addEdge(edge: StateEdge): void {
+        if (emptyStateBlock(this.currBlock) && this.state.blocks.length > 0) {
+            // we haven't done anything since the last block, so append it there
+            this.state.blocks[this.state.blocks.length - 1].edges.push(edge);
+        } else {
+            this.currBlock.edges.push(edge);
+            this.state.blocks.push(this.currBlock);
+            // don't worry about any wait data: it will be overwritten by the state change
+            // or used later in this state
+            this.currBlock = {
+                edges: [],
+                animation: -1,
+                force: false,
+                motionAddress: 0,
+                signal: 0,
+                wait: null,
+            };
+        }
     }
 }
 
@@ -1524,19 +1578,19 @@ function fixupState(state: State): void {
     switch (state.startAddress) {
         // switch statements
         case 0x802DBBA0: {
-            state.next[0].type = InteractionType.Behavior;
-            state.next[0].param = 1;
-            state.next[1].type = InteractionType.Behavior;
-            state.next[1].param = 2;
-            state.next[2].type = InteractionType.Behavior;
-            state.next[2].param = 3;
-            state.next[3].type = InteractionType.NonzeroBehavior;
+            state.blocks[0].edges[0].type = InteractionType.Behavior;
+            state.blocks[0].edges[1].type = InteractionType.Behavior;
+            state.blocks[0].edges[0].param = 1;
+            state.blocks[0].edges[1].param = 2;
+            state.blocks[0].edges[2].type = InteractionType.Behavior;
+            state.blocks[0].edges[2].param = 3;
+            state.blocks[0].edges[3].type = InteractionType.NonzeroBehavior;
         } break;
         case 0x802D8BB8: {
-            state.next[0].type = InteractionType.Behavior;
-            state.next[0].param = 3;
-            state.next[1].type = InteractionType.Behavior;
-            state.next[1].param = 4;
+            state.blocks[0].edges[0].type = InteractionType.Behavior;
+            state.blocks[0].edges[0].param = 3;
+            state.blocks[0].edges[1].type = InteractionType.Behavior;
+            state.blocks[0].edges[1].param = 4;
         } break;
     }
 }
