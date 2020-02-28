@@ -1,5 +1,4 @@
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import "./vendor/webxr/WebXR";
 
 export function IsWebXRSupported() {
     return !!window.navigator.xr && navigator.xr.isSessionSupported('immersive-vr');

@@ -32,6 +32,10 @@ module.exports = {
         test: /\.glsl$/,
         loader: 'raw-loader',
       },
+      {
+        test: /\.d\.ts$/,
+        loader: 'declaration-loader'
+    },
     ],
   },
   plugins: [
