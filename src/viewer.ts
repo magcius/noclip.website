@@ -13,7 +13,6 @@ import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
-import { mat4 } from 'gl-matrix';
 import { MathConstants } from './MathHelpers';
 
 export interface ViewerUpdateInfo {
@@ -202,12 +201,15 @@ export class Viewer {
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
-        const canRenderWebXR: boolean = webXRContext.views && webXRContext.xrSession.renderState.baseLayer;
-        if (!canRenderWebXR) {
+        if (!webXRContext.views || !webXRContext.xrSession) {
             return;
         }
 
-        const baseLayer: XRWebGLLayer = webXRContext.xrSession.renderState.baseLayer;
+        const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession.renderState.baseLayer;
+        if (!baseLayer) {
+            return;
+        }
+
         const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
         const fbw: number = baseLayer.framebufferWidth;
         const fbh: number = baseLayer.framebufferHeight;
@@ -227,8 +229,8 @@ export class Viewer {
 
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
-            let xrView: XrView = webXRContext.views[i];
-            let xrViewPort: XrViewPort = baseLayer.getViewport(xrView);
+            let xrView: XRView = webXRContext.views[i];
+            let xrViewPort: XRViewport = baseLayer.getViewport(xrView);
 
             if (!xrViewPort) {
                 continue;

@@ -348,6 +348,9 @@ class Main {
         if (state) {
             try {
                 await this.webXRContext.start();
+                if (!this.webXRContext.xrSession) {
+                    return;
+                }
                 mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
                 this.webXRContext.xrSession.addEventListener('end', () => {
                     this.ui.toggleWebXRCheckbox(false);

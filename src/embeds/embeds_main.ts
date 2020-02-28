@@ -73,6 +73,8 @@ class Main {
     private fsButton: FsButton;
     private destroyablePool: Destroyable[] = [];
 
+    private updateInfo: Viewer.ViewerUpdateInfo;
+
     constructor() {
         this.init();
     }
@@ -106,11 +108,17 @@ class Main {
         this.onResize();
 
         this.loadFromHash();
+
+        this.updateInfo = {
+            time: 0,
+            isWebXR: false
+        };
         this._updateLoop(0);
     }
 
     private _updateLoop = (time: number) => {
-        this.viewer.update(time);
+        this.updateInfo.time = time;
+        this.viewer.update(this.updateInfo);
         window.requestAnimationFrame(this._updateLoop);
     };
 

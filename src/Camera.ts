@@ -465,6 +465,10 @@ export class XRCameraController {
     public update(webXRContext: WebXRContext): boolean {
         let updated = false;
         
+        if (!webXRContext.xrSession) {
+            return false;
+        }
+
         let inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
@@ -472,7 +476,7 @@ export class XRCameraController {
         if (inputSources.length > 0) {
             for (let i = 0; i < inputSources.length; i++) {
                 const gamepad = inputSources[i].gamepad;
-                if (gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                if (gamepad && gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
                     keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
                     keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
                     keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
