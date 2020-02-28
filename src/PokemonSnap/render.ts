@@ -4,7 +4,7 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { GFXNode, AnimationData, ObjectDef, MaterialFlags, CollisionTree } from './room';
+import { GFXNode, AnimationData, MaterialFlags, CollisionTree } from './room';
 import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation';
 import { vec4, mat4, vec3 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
@@ -17,6 +17,7 @@ import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { clamp, computeModelMatrixSRT } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { Actor } from './actor';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -211,6 +212,7 @@ export interface LevelGlobals {
     currentSong: number;
     songStart: number;
     lastPesterBall: number;
+    allObjects: Actor[];
 }
 
 export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): void {

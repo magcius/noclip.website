@@ -23,7 +23,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0};
+    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0, allObjects: []};
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -190,8 +190,9 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const def = level.objectInfo[objIndex];
-                    const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, level.collision!);
+                    const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
                     sceneRenderer.modelRenderers.push(objectRenderer);
+                    sceneRenderer.globals.allObjects.push(objectRenderer);
                 }
             }
 
