@@ -129,7 +129,10 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 const scratchVec4 = vec4.create();
+const scratchMat4 = mat4.create();
+const scratchQuat = quat.create();
 
 /**
  * Computes a view-space depth given @param camera and @param aabb in world-space.
@@ -494,20 +497,20 @@ export class XRCameraController {
             const camera = this.cameras[i];
             const xrView = webXRContext.views[i];
 
-            const cameraWorldMatrix = mat4.create();
+            const cameraWorldMatrix = scratchMat4;
             cameraWorldMatrix.set(xrView.transform.matrix);
-            const cameraWorldMatrixTranslation = vec3.create();
+            const cameraWorldMatrixTranslation = scratchVec3c;
             mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
-            const originalViewTranslation = vec3.create();
+            const originalViewTranslation = scratchVec3c;
             mat4.getTranslation(originalViewTranslation, cameraWorldMatrix);
 
             // Scale up view position and add offset
-            const cameraScale = vec3.create();
-            const cameraOrientation = quat.create();
+            const cameraScale = scratchVec3c;
+            const cameraOrientation = scratchQuat;
             mat4.getScaling(cameraScale, cameraWorldMatrix);
             mat4.getRotation(cameraOrientation, cameraWorldMatrix);
 
-            const cameraAdditionalOffset = vec3.create();
+            const cameraAdditionalOffset = scratchVec3c;
             cameraAdditionalOffset.set(this.offset);
             vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
             vec3.scale(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, this.worldScale);
