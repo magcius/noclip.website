@@ -207,7 +207,6 @@ class Main {
 
         if (IsWebXRSupported()) {
             this.webXRContext = new WebXRContext(this.viewer.gfxDevice);
-            this.webXRContext.onSessionStarted = this._onWebXRStarted.bind(this);
             this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
         }
 
@@ -341,8 +340,25 @@ class Main {
             this.ui.togglePlayPause();
     }
 
-    private _onWebXRStarted() {
-        mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
+    private async _onWebXRStateRequested(state: boolean) {
+        if (!this.webXRContext) {
+            return;
+        }
+        
+        if (state) {
+            try {
+                await this.webXRContext.start();
+                mat4.getTranslation(this.viewer.xrCameraController.offset, this.viewer.camera.worldMatrix);
+                this.webXRContext.xrSession.addEventListener('end', () => {
+                    this.ui.toggleWebXRCheckbox(false);
+                });
+            } catch {
+                console.error("Failed to start XR");
+                this.ui.toggleWebXRCheckbox(false);
+            }
+        } else {
+            this.webXRContext.end();
+        }
     }
 
     private _onWebXRFrame(time: number) {
@@ -720,9 +736,10 @@ class Main {
     }
 
     private _makeUI() {
-        this.ui = new UI(this.viewer, this.webXRContext);
+        this.ui = new UI(this.viewer);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
+        this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
     }
 
     private _toggleUI(visible?: boolean) {

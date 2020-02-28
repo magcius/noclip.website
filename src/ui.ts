@@ -11,11 +11,11 @@ import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
+import { IsWebXRSupported } from './WebXR';
 import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
-import { WebXRContext } from './WebXR';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1631,10 +1631,12 @@ class ViewerSettings extends Panel {
 }
 
 class XRSettings extends Panel {
-    private EnableXRCheckBox: Checkbox;
+    public onWebXRStateRequested: (state: boolean)=>void = (state: boolean) => {};
+
+    public EnableXRCheckBox: Checkbox;
     private scaleSlider: Slider;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer, private webXRContext: WebXRContext) {
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(VR_ICON, 'VR Settings');
@@ -1668,20 +1670,7 @@ class XRSettings extends Panel {
     private async enableXRChecked(saveManager: SaveManager, key: string) {
         const enableXR = this.EnableXRCheckBox.checked;
         this.EnableXRCheckBox.setChecked(enableXR);
-
-        if (this.EnableXRCheckBox.checked) {
-            try {
-                await this.webXRContext.start();
-                this.webXRContext.xrSession.addEventListener('end', () => {
-                    this.EnableXRCheckBox.setChecked(false);
-                });
-            } catch {
-                console.error("Failed to start XR");
-                this.EnableXRCheckBox.setChecked(false);
-            }
-        } else {
-            this.webXRContext.end();
-        }
+        this.onWebXRStateRequested(enableXR);
     }
 }
 
@@ -2556,7 +2545,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
-    public xrSettings?: XRSettings;
+    public xrSettings: XRSettings;
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
@@ -2574,7 +2563,7 @@ export class UI {
 
     public isPlaying: boolean = true;
 
-    constructor(public viewer: Viewer.Viewer, public webXRContext?: WebXRContext) {
+    constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
 
         this.sceneUIContainer = document.createElement('div');
@@ -2633,9 +2622,7 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
-        if (webXRContext) {
-            this.xrSettings = new XRSettings(this, viewer, webXRContext);
-        }
+        this.xrSettings = new XRSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
@@ -2665,6 +2652,10 @@ export class UI {
     public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
         this.isPlaying = shouldBePlaying;
         this.playPauseButton.setIsPlaying(this.isPlaying);
+    }
+
+    public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.EnableXRCheckBox.checked) {
+        this.xrSettings.EnableXRCheckBox.setChecked(shouldBeChecked);
     }
 
     public setMouseActive(): void {
@@ -2714,7 +2705,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null) {
-            if (this.xrSettings) {
+            if (IsWebXRSupported()) {
                 this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
             } else {
                 this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);

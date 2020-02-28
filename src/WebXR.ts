@@ -5,6 +5,7 @@ export function IsWebXRSupported() {
 }
 
 // TODO WebXR: Known issues
+    // Should have the option to not render to the main view if in WebXR. This can be a simple check box
     // Typescript complains about missing types on compile
     // Sprites and billboards assume axis aligned view, so will rotate with your head. (e.g trees in Mario 64 DS)
     // View based effects like lens flare should be based on view space, as one lens may be affected by lens flare and one might not be, based on positional differences (e.g. Wind Waker lens flare, wind waker stars)
@@ -27,7 +28,6 @@ export class WebXRContext {
 
     public views: XrView[];
 
-    public onSessionStarted: ()=>void = ()=>{};
     public onFrame: (time: number)=>void = ()=>{};
 
     public currentFrame: XrFrame;
@@ -46,7 +46,6 @@ export class WebXRContext {
         let glLayer = this.gfxDevice.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
-        this.onSessionStarted();
         this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
     }
 
