@@ -130,6 +130,9 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
+const scratchVec3f = vec3.create();
 const scratchVec4 = vec4.create();
 const scratchMat4 = mat4.create();
 const scratchQuat = quat.create();
@@ -501,20 +504,19 @@ export class XRCameraController {
             cameraWorldMatrix.set(xrView.transform.matrix);
             const cameraWorldMatrixTranslation = scratchVec3c;
             mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
-            const originalViewTranslation = scratchVec3c;
+            const originalViewTranslation = scratchVec3d;
             mat4.getTranslation(originalViewTranslation, cameraWorldMatrix);
 
             // Scale up view position and add offset
-            const cameraScale = scratchVec3c;
+            const cameraScale = scratchVec3e;
             const cameraOrientation = scratchQuat;
             mat4.getScaling(cameraScale, cameraWorldMatrix);
             mat4.getRotation(cameraOrientation, cameraWorldMatrix);
 
-            const cameraAdditionalOffset = scratchVec3c;
+            const cameraAdditionalOffset = scratchVec3f;
             cameraAdditionalOffset.set(this.offset);
             vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
-            vec3.scale(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, this.worldScale);
-            vec3.add(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, cameraAdditionalOffset);
+            vec3.scaleAndAdd(cameraWorldMatrixTranslation, cameraAdditionalOffset, cameraWorldMatrixTranslation, this.worldScale);
 
             mat4.fromRotationTranslationScale(cameraWorldMatrix, cameraOrientation, cameraWorldMatrixTranslation, cameraScale);
             
