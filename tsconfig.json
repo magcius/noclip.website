@@ -27,6 +27,7 @@
     },
     "include": [
         "./src/",
+        "./src/vendor/webxr/",
         "node_modules/@webgpu/types"
     ],
     "exclude": [

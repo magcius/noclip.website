@@ -9,7 +9,6 @@ import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { colorEqual, colorCopy } from '../../Color';
 import { range } from '../../MathHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
-import { WebXRContext } from '../../WebXR';
 import { NormalizedViewportCoords } from '../helpers/RenderTargetHelpers';
 
 const SHADER_DEBUG = false // IS_DEVELOPMENT;
@@ -1165,7 +1164,7 @@ void main() {
         return readback;
     }
 
-    public createWebXRLayer(webXRSession: XrSession): XrWebGLLayer {
+    public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
         return new XRWebGLLayer(webXRSession, this.gl);
     }
 

@@ -22,15 +22,15 @@ export function IsWebXRSupported() {
     // Scaling up and going close causes cross eye. Probably need to move the near plane out
 
 export class WebXRContext {
-    public xrSession: XrSession;
-    public xrViewSpace: XrReferenceSpace;
-    public xrLocalSpace: XrReferenceSpace;
+    public xrSession: XRSession | null;
+    public xrViewSpace: XRReferenceSpace;
+    public xrLocalSpace: XRReferenceSpace;
 
-    public views: XrView[];
+    public views: XRView[];
 
     public onFrame: (time: number)=>void = ()=>{};
 
-    public currentFrame: XrFrame;
+    public currentFrame: XRFrame;
 
     constructor(private gfxDevice: GfxDevice) {}
 
@@ -39,6 +39,10 @@ export class WebXRContext {
             requiredFeatures: [],
             optionalFeatures: ['viewer', 'local']
         });
+
+        if (!this.xrSession) {
+            return;
+        }
 
         this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
         this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
@@ -56,7 +60,7 @@ export class WebXRContext {
         this.xrSession = null;
     }
 
-    private onXRFrame(time: number, frame: XrFrame) {
+    private onXRFrame(time: number, frame: XRFrame) {
         let session = frame.session;
         let pose = frame.getViewerPose(this.xrLocalSpace);
 
