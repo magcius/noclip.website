@@ -1650,6 +1650,7 @@ class XRSettings extends Panel {
             <li> WebXR Device API - <font color="green"><strong>Enabled</strong></font></li>
             <li>OpenXR support - <font color="green"><strong>Enabled</strong></font></li>
             <li>OpenVR hardware support - <font color="green"><strong>Enabled</strong></font></li>
+            <li>Oculus hardware support - <font color="green"><strong>Enabled</strong></font></li>
             <li>XR device sandboxing - <font color="red"><strong>Disabled</strong></font></li>
         </ul>
         <p>Click on the <strong>Enable VR</strong> checkbox to go in VR mode.</p>
