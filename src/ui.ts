@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, XRCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -11,6 +11,7 @@ import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
+import { IsWebXRSupported } from './WebXR';
 import "reflect-metadata";
 
 // @ts-ignore
@@ -1629,6 +1630,50 @@ class ViewerSettings extends Panel {
     }
 }
 
+class XRSettings extends Panel {
+    public onWebXRStateRequested: (state: boolean)=>void = (state: boolean) => {};
+
+    public EnableXRCheckBox: Checkbox;
+    private scaleSlider: Slider;
+
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
+        super();
+
+        this.setTitle(VR_ICON, 'VR Settings');
+
+        this.contents.style.lineHeight = '36px';
+
+        this.EnableXRCheckBox = new Checkbox('Enable VR');
+        this.contents.appendChild(this.EnableXRCheckBox.elem);
+        this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+
+        let displayScaleValue = (value: Number) => {
+            return value.toPrecision(5).toString();
+        };
+
+        let GetSliderLabel = () => {
+            return "VR World Scale: " + displayScaleValue(this.viewer.xrCameraController.worldScale);
+        };
+
+        this.scaleSlider = new Slider();
+        this.scaleSlider.setLabel(GetSliderLabel());
+        this.scaleSlider.setRange(10, 10000);
+        this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
+        this.scaleSlider.onvalue = () => {
+            this.viewer.xrCameraController.worldScale = this.scaleSlider.getValue();
+            this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
+            this.scaleSlider.setLabel(GetSliderLabel());
+        };
+        this.contents.appendChild(this.scaleSlider.elem);
+    }
+
+    private async enableXRChecked(saveManager: SaveManager, key: string) {
+        const enableXR = this.EnableXRCheckBox.checked;
+        this.EnableXRCheckBox.setChecked(enableXR);
+        this.onWebXRStateRequested(enableXR);
+    }
+}
+
 class LineGraph {
     public canvas: HTMLCanvasElement;
     public ctx: CanvasRenderingContext2D;
@@ -2500,6 +2545,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
+    public xrSettings: XRSettings;
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
@@ -2576,6 +2622,7 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
+        this.xrSettings = new XRSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
@@ -2605,6 +2652,10 @@ export class UI {
     public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
         this.isPlaying = shouldBePlaying;
         this.playPauseButton.setIsPlaying(this.isPlaying);
+    }
+
+    public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.EnableXRCheckBox.checked) {
+        this.xrSettings.EnableXRCheckBox.setChecked(shouldBeChecked);
     }
 
     public setMouseActive(): void {
@@ -2653,10 +2704,16 @@ export class UI {
     }
 
     public setScenePanels(scenePanels: Panel[] | null): void {
-        if (scenePanels !== null)
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
-        else
+        if (scenePanels !== null) {
+            if (IsWebXRSupported()) {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+            } else {
+                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
+            }
+        }
+        else {
             this.setPanels([this.sceneSelect, this.about]);
+        }
     }
 
     public setPanelsAutoClosed(v: boolean): void {

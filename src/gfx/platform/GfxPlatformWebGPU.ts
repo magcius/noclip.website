@@ -768,6 +768,12 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const o: GfxReadbackP_WebGPU = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId() };
         return o;
     }
+    
+    public createWebXRLayer(webXRSession: XrSession): XrWebGLLayer {
+        // TODO WebXR: currently now way to use WebGPU with WebXR.
+        // This method should never be called.
+        throw "createWebXRLayer not implemented on WebGPU";
+    }
 
     public destroyBuffer(o: GfxBuffer): void {
         getPlatformBuffer(o).destroy();

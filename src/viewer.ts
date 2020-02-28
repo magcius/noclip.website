@@ -3,16 +3,24 @@ import * as UI from './ui';
 
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
-import { CameraController, Camera } from './Camera';
+import { CameraController, Camera, XRCameraController } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxLoadDisposition } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
+import { WebXRContext } from './WebXR';
+import { mat4 } from 'gl-matrix';
 import { MathConstants } from './MathHelpers';
+
+export interface ViewerUpdateInfo {
+    time: number;
+    isWebXR: boolean;
+    webXRContext?: WebXRContext | null;
+}
 
 export interface Texture {
     name: string;
@@ -86,6 +94,7 @@ class ClearScene {
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
+    public xrCameraController: XRCameraController = new XRCameraController();
 
     public camera = new Camera();
     public fovY: number = MathConstants.TAU / 8;
@@ -143,19 +152,7 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private render(): void {
-        this.viewerRenderInput.time = this.sceneTime;
-        this.viewerRenderInput.backbufferWidth = this.canvas.width;
-        this.viewerRenderInput.backbufferHeight = this.canvas.height;
-        this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
-
-        this.renderStatisticsTracker.beginFrame();
-
-        resetGfxDebugGroup(this.debugGroup);
-        this.gfxDevice.pushDebugGroup(this.debugGroup);
-
-        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-
+    private renderViewport() {
         let renderPass: GfxRenderPass | null = null;
         if (this.scene !== null) {
             renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
@@ -178,8 +175,78 @@ export class Viewer {
             resolvePass.endPass();
             this.gfxDevice.submitPass(resolvePass);
         }
+    }
+
+    private render(): void {
+        this.viewerRenderInput.camera = this.camera;
+        this.viewerRenderInput.time = this.sceneTime;
+        this.viewerRenderInput.backbufferWidth = this.canvas.width;
+        this.viewerRenderInput.backbufferHeight = this.canvas.height;
+        this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
+        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+
+        this.renderStatisticsTracker.beginFrame();
+
+        resetGfxDebugGroup(this.debugGroup);
+        this.gfxDevice.pushDebugGroup(this.debugGroup);
+
+        this.renderViewport();
 
         this.gfxSwapChain.present();
+
+        this.gfxDevice.popDebugGroup();
+        this.renderStatisticsTracker.endFrame();
+
+        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
+        this.onstatistics(this.renderStatisticsTracker);
+    }
+
+    private renderWebXR(webXRContext: WebXRContext) {
+        const canRenderWebXR: boolean = webXRContext.views && webXRContext.xrSession.renderState.baseLayer;
+        if (!canRenderWebXR) {
+            return;
+        }
+
+        const baseLayer: XRWebGLLayer = webXRContext.xrSession.renderState.baseLayer;
+        const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
+        const fbw: number = baseLayer.framebufferWidth;
+        const fbh: number = baseLayer.framebufferHeight;
+
+        this.viewerRenderInput.camera = this.camera;
+        this.viewerRenderInput.time = this.sceneTime;
+        this.viewerRenderInput.backbufferWidth = fbw;
+        this.viewerRenderInput.backbufferHeight = fbh;
+        this.gfxSwapChain.configureSwapChain(fbw, fbh);
+
+        this.renderStatisticsTracker.beginFrame();
+
+        resetGfxDebugGroup(this.debugGroup);
+        this.gfxDevice.pushDebugGroup(this.debugGroup);
+        
+        this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+
+        for (let i = 0; i < webXRContext.views.length; i++) {
+            this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
+            let xrView: XrView = webXRContext.views[i];
+            let xrViewPort: XrViewPort = baseLayer.getViewport(xrView);
+
+            if (!xrViewPort) {
+                continue;
+            }
+
+            const widthRatio: number = xrViewPort.width / fbw;
+            const heightRatio: number = xrViewPort.height / fbh;
+
+            this.renderViewport();
+            
+            const viewportForBlitting = {
+                x: xrViewPort.x / xrViewPort.width * widthRatio,
+                y: xrViewPort.y / xrViewPort.height * heightRatio,
+                w: widthRatio,
+                h: heightRatio
+            };
+            this.gfxSwapChain.present(framebuffer, viewportForBlitting);
+        }
 
         this.gfxDevice.popDebugGroup();
         this.renderStatisticsTracker.endFrame();
@@ -203,12 +270,12 @@ export class Viewer {
         this.cameraController = null;
     }
 
-    public update(nt: number): void {
-        const dt = nt - this.rafTime;
-        this.updateDT(dt);
+    public update(updateInfo: ViewerUpdateInfo): void {
+        const dt = updateInfo.time - this.rafTime;
+        this.updateDT(dt, updateInfo);
     }
 
-    public updateDT(dt: number): void {
+    public updateDT(dt: number, updateInfo: ViewerUpdateInfo): void {
         if (dt < 0)
             return;
         this.rafTime += dt;
@@ -236,6 +303,19 @@ export class Viewer {
         this.sceneTime += deltaTime;
 
         this.render();
+
+        if (updateInfo.isWebXR && updateInfo.webXRContext) {
+            // Ensure the number of xr cameras matches the number of views
+            if (updateInfo.webXRContext.views.length != this.xrCameraController.cameras.length) {
+                for (let i = this.xrCameraController.cameras.length; i < updateInfo.webXRContext.views.length; i++) {
+                    this.xrCameraController.cameras.push(new Camera());
+                }
+                this.xrCameraController.cameras.splice(updateInfo.webXRContext.views.length);
+            }
+
+            this.xrCameraController.update(updateInfo.webXRContext);
+            this.renderWebXR(updateInfo.webXRContext);
+        }
 
         // Reset the delta for next frame.
         this.viewerRenderInput.deltaTime = 0;
@@ -276,7 +356,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false });
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {

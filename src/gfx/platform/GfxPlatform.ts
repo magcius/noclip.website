@@ -5,6 +5,7 @@
 
 import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
+import { NormalizedViewportCoords } from "../helpers/RenderTargetHelpers";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -277,7 +278,7 @@ export interface GfxSwapChain {
     getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer): void;
+    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void;
 }
 
 export interface GfxHostAccessPass {
@@ -319,6 +320,7 @@ export interface GfxDevice {
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
     createReadback(elemCount: number): GfxReadback;
+    createWebXRLayer(webXRSession: XrSession): XrWebGLLayer;
 
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;

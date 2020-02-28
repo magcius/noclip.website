@@ -1,10 +1,12 @@
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
+import { WebXRContext } from './WebXR';
+import { assert } from './util';
 
 export class Camera {
     // Converts to view space from world space.
@@ -28,6 +30,13 @@ export class Camera {
     public orthoScaleY: number;
     public aspect: number;
     public isOrthographic: boolean = false;
+    public shearX: number = 0;
+    public shearY: number = 0;
+
+    private webXROverrideCameraProperties: boolean = false;
+    public setWebXROverrideEnabled(enabled: boolean): void {
+        this.webXROverrideCameraProperties = enabled;
+    }
 
     public identity(): void {
         mat4.identity(this.worldMatrix);
@@ -60,6 +69,9 @@ export class Camera {
     }
 
     public setClipPlanes(n: number, f: number = Infinity): void {
+        if (this.webXROverrideCameraProperties) {
+            return;
+        }
         if (this.isOrthographic) {
             // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
         } else {
@@ -117,7 +129,10 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 const scratchVec4 = vec4.create();
+const scratchMat4 = mat4.create();
+const scratchQuat = quat.create();
 
 /**
  * Computes a view-space depth given @param camera and @param aabb in world-space.
@@ -431,6 +446,109 @@ export class FPSCameraController implements CameraController {
             mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
+        }
+
+        return updated;
+    }
+}
+
+export class XRCameraController {
+    public cameras: Camera[] = [];
+
+    public offset = vec3.create();
+
+    public worldScale: number = 70; // Roughly the size of Banjo in Banjo Kazooie
+
+    public update(webXRContext: WebXRContext): boolean {
+        let updated = false;
+        
+        let inputSources = webXRContext.xrSession.inputSources;
+
+        const cameraMoveSpeed = this.worldScale;
+        const keyMovement = vec3.create();
+        if (inputSources.length > 0) {
+            for (let i = 0; i < inputSources.length; i++) {
+                const gamepad = inputSources[i].gamepad;
+                if (gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                    keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
+                    keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
+                    keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
+                }
+            }
+        }
+               
+        if (!vec3.exactEquals(keyMovement, vec3Zero)) {            
+            const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
+                new XRRigidTransform(
+                    new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
+            const pose = webXRContext.currentFrame.getPose(viewMovementSpace, webXRContext.xrLocalSpace);
+
+            if (pose) {
+                this.offset[0] += pose.transform.position.x;
+                this.offset[1] += keyMovement[1];
+                this.offset[2] += pose.transform.position.z;
+            }
+
+            updated = true;
+        }
+
+        assert(this.cameras.length === webXRContext.views.length);
+        for (let i = 0; i < this.cameras.length; i++) {
+            const camera = this.cameras[i];
+            const xrView = webXRContext.views[i];
+
+            const cameraWorldMatrix = scratchMat4;
+            cameraWorldMatrix.set(xrView.transform.matrix);
+            const cameraWorldMatrixTranslation = scratchVec3c;
+            mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
+            const originalViewTranslation = scratchVec3c;
+            mat4.getTranslation(originalViewTranslation, cameraWorldMatrix);
+
+            // Scale up view position and add offset
+            const cameraScale = scratchVec3c;
+            const cameraOrientation = scratchQuat;
+            mat4.getScaling(cameraScale, cameraWorldMatrix);
+            mat4.getRotation(cameraOrientation, cameraWorldMatrix);
+
+            const cameraAdditionalOffset = scratchVec3c;
+            cameraAdditionalOffset.set(this.offset);
+            vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
+            vec3.scale(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, this.worldScale);
+            vec3.add(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, cameraAdditionalOffset);
+
+            mat4.fromRotationTranslationScale(cameraWorldMatrix, cameraOrientation, cameraWorldMatrixTranslation, cameraScale);
+            
+            camera.isOrthographic = false;
+
+            camera.worldMatrix.set(cameraWorldMatrix);
+            mat4.invert(camera.viewMatrix, camera.worldMatrix);
+            camera.worldMatrixUpdated();
+
+            // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
+            const cameraProjectionMatrix = xrView.projectionMatrix;
+            camera.projectionMatrix.set(cameraProjectionMatrix);
+            const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
+            const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
+            const shearX = cameraProjectionMatrix[8];
+            const shearY = cameraProjectionMatrix[9];
+
+            // Extract camera properties
+            camera.fovY = fov;
+            camera.aspect = aspect;
+            camera.shearX = shearX;
+            camera.shearY = shearY;
+            camera.setWebXROverrideEnabled(false);
+            camera.setClipPlanes(5);
+            camera.setWebXROverrideEnabled(true);
+
+            // TODO WebXR: We do this to restore the components removed by setClipPlanes.
+            // The camera class ideally should generate the projection matrix taking these components into account
+            camera.projectionMatrix.set(cameraProjectionMatrix);
+            reverseDepthForPerspectiveProjectionMatrix(camera.projectionMatrix);
+
+            camera.worldMatrixUpdated();
+        
+            updated = true;
         }
 
         return updated;
@@ -816,4 +934,9 @@ export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Norma
     transT = transT * viewport.h + viewport.y;
 
     texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
+
+    // Add in the shear factor for WebXR.
+    // TODO WebXR: move this into texProjPerspMtx
+    dst[8] += camera.shearX * scaleS;
+    dst[9] += camera.shearY * Math.abs(scaleT);
 }
