@@ -1,9 +1,6 @@
-import { GfxDevice, GfxSwapChain } from "./gfx/platform/GfxPlatform";
 
-export function IsWebXRSupported() {
-    const navigator = window.navigator as any;
-    return !!navigator.xr && navigator.xr.isSessionSupported('immersive-vr');
-}
+import { GfxSwapChain } from "./gfx/platform/GfxPlatform";
+import { assertExists } from "./util";
 
 // TODO WebXR: Known issues
     // Should have the option to not render to the main view if in WebXR. This can be a simple check box
@@ -29,36 +26,54 @@ export class WebXRContext {
 
     public views: XRView[];
 
-    public onFrame: (time: number)=>void = () => {};
+    public onframe: ((time: number) => void) | null = null;
+    public onsupportedchanged: (() => void) | null = null;
 
     public currentFrame: XRFrame;
 
-    constructor(private swapChain: GfxSwapChain) {}
+    public isSupported = false;
+
+    constructor(private swapChain: GfxSwapChain) {
+        this.checkIsSupported();
+    }
+
+    private async checkIsSupported() {
+        const navigator = window.navigator as any;
+        if (navigator.xr === undefined)
+            return;
+        const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
+        if (this.isSupported !== isSupported) {
+            this.isSupported = isSupported;
+            if (this.onsupportedchanged !== null)
+                this.onsupportedchanged();
+        }
+    }
 
     public async start() {
         const navigator = window.navigator as any;
-        this.xrSession = await navigator.xr.requestSession('immersive-vr', {
+        const xr = assertExists(navigator.xr);
+
+        this.xrSession = await xr.requestSession('immersive-vr', {
             requiredFeatures: [],
             optionalFeatures: ['viewer', 'local']
         });
 
-        if (!this.xrSession) {
+        // TODO(jstpierre): I think we should just error here instead?
+        if (!this.xrSession)
             return;
-        }
 
         this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
         this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
 
-        let glLayer = this.swapChain.createWebXRLayer(this.xrSession);
+        const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
         this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
     }
 
     public end() {
-        if (this.xrSession) {
+        if (this.xrSession !== null)
             this.xrSession.end();
-        }
         this.xrSession = null;
     }
 
@@ -68,11 +83,11 @@ export class WebXRContext {
 
         this.currentFrame = frame;
 
-        if (pose) {
+        if (pose)
             this.views = pose.views;
-        }
 
-        this.onFrame(time);
+        if (this.onframe !== null)
+            this.onframe(time);
 
         session.requestAnimationFrame(this.onXRFrame.bind(this));
     }

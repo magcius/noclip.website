@@ -75,7 +75,7 @@ import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
-import { WebXRContext, IsWebXRSupported } from './WebXR';
+import { WebXRContext } from './WebXR';
 
 const sceneGroups = [
     "Wii",
@@ -185,9 +185,7 @@ class Main {
     public sceneTimeScale = 1.0;
 
     private updateInfo: ViewerUpdateInfo;
-    private webXRContext: WebXRContext | null = null;
-
-    private hashpotatoes: HTMLTextAreaElement;
+    private webXRContext: WebXRContext;
 
     constructor() {
         this.init();
@@ -205,10 +203,8 @@ class Main {
             return;
         }
 
-        if (IsWebXRSupported()) {
-            this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-            this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
-        }
+        this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
+        this.webXRContext.onframe = this._onWebXRFrame.bind(this);
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -355,7 +351,7 @@ class Main {
                 this.webXRContext.xrSession.addEventListener('end', () => {
                     this.ui.toggleWebXRCheckbox(false);
                 });
-            } catch {
+            } catch(e) {
                 console.error("Failed to start XR");
                 this.ui.toggleWebXRCheckbox(false);
             }
@@ -743,6 +739,15 @@ class Main {
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
+
+        this.webXRContext.onsupportedchanged = () => {
+            this._syncWebXRSettingsVisible();
+        };
+        this._syncWebXRSettingsVisible();
+    }
+
+    private _syncWebXRSettingsVisible(): void {
+        this.ui.xrSettings.setVisible(this.webXRContext.isSupported);
     }
 
     private _toggleUI(visible?: boolean) {
