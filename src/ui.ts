@@ -1662,7 +1662,7 @@ class XRSettings extends Panel {
         this.contents.appendChild(this.EnableXRCheckBox.elem);
         this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
 
-        let displayScaleValue = (value: Number) => {
+        const displayScaleValue = (value: Number) => {
             return value.toPrecision(5).toString();
         };
 
