@@ -157,12 +157,15 @@ class SceneDesc implements Viewer.SceneDesc {
                     skyboxRenderer.animations.push(level.skybox.animation!);
                     skyboxRenderer.setAnimation(0);
                 }
+                skyboxRenderer.forceLoop();
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
             }
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
-            sceneRenderer.modelRenderers.push(new ModelRenderer(zeroOneData,level.zeroOne.nodes,level.zeroOne.animations));
+            const zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
+            zeroOne.forceLoop();
+            sceneRenderer.modelRenderers.push(zeroOne);
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
@@ -180,6 +183,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     roomRenderer.animations.push(level.rooms[i].animation!);
                     roomRenderer.setAnimation(0);
                 }
+                roomRenderer.forceLoop();
                 sceneRenderer.renderData.push(renderData);
                 sceneRenderer.modelRenderers.push(roomRenderer);
                 const objects = level.rooms[i].objects;
@@ -191,6 +195,8 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                     const def = level.objectInfo[objIndex];
                     const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
+                    if (def.id === 133) // eevee actually uses chansey's path
+                        objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
                     sceneRenderer.modelRenderers.push(objectRenderer);
                     sceneRenderer.globals.allObjects.push(objectRenderer);
                 }

@@ -473,3 +473,11 @@ export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitX = vec3.fromValues(1, 0, 0);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);
 export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
+
+const baseBuffer = new ArrayBuffer(4);
+const asFloat32 = new Float32Array(baseBuffer);
+const asUint32 = new Uint32Array(baseBuffer);
+export function bitsAsFloat32(x: number): number {
+    asUint32[0] = (x >>> 0) & 0xFFFFFFFF;
+    return asFloat32[0];
+}

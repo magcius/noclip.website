@@ -9,6 +9,7 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
+import {MotionParser, Motion} from "./motion";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -767,7 +768,7 @@ export const enum PathKind {
 export interface Path {
     kind: PathKind,
     length: number,
-    speed: number,
+    duration: number,
     segmentRate: number,
     times: Float32Array,
     points: Float32Array,
@@ -795,18 +796,18 @@ function parsePath(dataMap: DataMap, addr: number): Path {
     const length = view.getUint16(0x02);
     const segmentRate = view.getFloat32(0x04);
     const pointList = view.getUint32(0x08);
-    const speed = view.getFloat32(0x0C);
+    const duration = view.getFloat32(0x0C);
     const timeList = view.getUint32(0x10);
     const quarticList = view.getUint32(0x14);
 
     const timeData = dataMap.getRange(timeList);
     const times = timeData.data.createTypedArray(Float32Array, timeList - timeData.start, length, Endianness.BIG_ENDIAN);
 
-    let pointCount = length * 3;
+    let pointCount = (length + 2) * 3;
     if (kind === PathKind.Bezier)
         pointCount = length * 9;
-    if (kind === PathKind.Hermite)
-        pointCount = (length + 2) * 3;
+    if (kind === PathKind.Linear)
+        pointCount = length * 3;
 
     const pointData = dataMap.getRange(pointList);
     const points = pointData.data.createTypedArray(Float32Array, pointList - pointData.start, pointCount, Endianness.BIG_ENDIAN);
@@ -818,7 +819,7 @@ function parsePath(dataMap: DataMap, addr: number): Path {
     } else
         quartics = new Float32Array(0);
 
-    return { kind, length, segmentRate, speed, times, points, quartics };
+    return { kind, length, segmentRate, duration, times, points, quartics };
 }
 
 export interface AnimationTrack {
@@ -1134,10 +1135,13 @@ export interface StateEdge {
 
 export interface StateBlock {
     animation: number;
-    motionAddress: number;
+    motion: Motion[] | null;
     force: boolean;
     signal: number;
     wait: WaitParams | null;
+    flagSet: number;
+    flagClear: number;
+    allowWater?: boolean;
     edges: StateEdge[];
 }
 
@@ -1155,7 +1159,7 @@ export interface WaitParams {
 interface State {
     startAddress: number;
     blocks: StateBlock[];
-    justRemove: boolean;
+    doCleanup: boolean;
 }
 
 interface StateGraph {
@@ -1179,13 +1183,19 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
     return {states, animations};
 }
 
-const enum GeneralFuncs {
+export const enum GeneralFuncs {
+    EndProcess  = 0x08F2C,
     SendSignal  = 0x0B830,
     Yield       = 0x0BCA8,
+    ArcTan      = 0x19ABC,
+    Random      = 0x19DB0,
     RandomInt   = 0x19E14,
+    GetRoom     = 0xE2184,
+
+    RunAux      = 0x35ED90,
 }
 
-const enum StateFuncs {
+export const enum StateFuncs {
     SetAnimation    = 0x35F138,
     ForceAnimation  = 0x35F15C,
     SetMotion       = 0x35EDF8,
@@ -1194,7 +1204,7 @@ const enum StateFuncs {
     Wait            = 0x35FC54,
     Random          = 0x35ECAC,
 
-    Remove          = 0x35FD70,
+    Cleanup         = 0x35FD70,
     ClaimApple      = 0x36010C,
 
     // only in cave
@@ -1202,7 +1212,7 @@ const enum StateFuncs {
     DanceInteract2  = 0x2C0140,
 }
 
-const enum ObjectField {
+export const enum ObjectField {
     SomeBool        = 0x10,
     MiscFlags       = 0x50, // actually on the parent object
 
@@ -1217,7 +1227,9 @@ const enum ObjectField {
 
     Reference       = 0xB0,
     Mystery         = 0xC0,
-    BadGround       = 0xCC,
+    GroundList      = 0xCC,
+
+    PathParam       = 0xEC,
 }
 
 export const enum EndCondition {
@@ -1228,11 +1240,16 @@ export const enum EndCondition {
 
     // handling custom behavior in cave
     Dance       = 0x100000,
+    // actually from a different set of flags
+    Hidden      = 0x200000,
+    PauseAnim   = 0x400000,
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motionAddress === 0 && block.signal === 0;
+    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.allowWater === undefined;
 }
+
+const motionParser = new MotionParser();
 
 const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
@@ -1249,7 +1266,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         this.state = {
             startAddress,
             blocks: [],
-            justRemove: false,
+            doCleanup: false,
         };
         this.trivial = true;
         this.stateIndex = -1;
@@ -1277,8 +1294,10 @@ class StateParser extends MIPS.NaiveInterpreter {
             edges: [],
             animation: -1,
             force: false,
-            motionAddress: 0,
+            motion: null,
             signal: 0,
+            flagSet: 0,
+            flagClear: 0,
             wait: null,
         };
     }
@@ -1391,7 +1410,11 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.animation = index;
             } break;
             case StateFuncs.SetMotion: {
-                this.currBlock.motionAddress = a1.value;
+                if (a1.value !== 0) {
+                    motionParser.parseFromView(this.dataMap.getView(a1.value))
+                    this.currBlock.motion = motionParser.blocks;
+                } else
+                    this.currBlock.motion = [];
             } break;
             case StateFuncs.Wait:
                 this.currWait.allowInteraction = false;
@@ -1412,8 +1435,10 @@ class StateParser extends MIPS.NaiveInterpreter {
                     edges: [],
                     animation: -1,
                     force: false,
-                    motionAddress: 0,
+                    motion: null,
                     signal: 0,
+                    flagSet: 0,
+                    flagClear: 0,
                     wait: null,
                 };
             } break;
@@ -1436,7 +1461,31 @@ class StateParser extends MIPS.NaiveInterpreter {
                 dummyRegs[0].value = EndCondition.Dance;
                 this.handleFunction(StateFuncs.InteractWait, a0, dummyRegs[0], a2, a3, stackArgs, branch);
             } break;
-
+            case GeneralFuncs.Yield: {
+                // this is usually used to yield until the next frame, but can also serve as an interactionless wait
+                // so add a new wait condition to the current block, preserving any data for the next wait
+                if (a0.value > 1) {
+                    this.currBlock.wait = {
+                        allowInteraction: false,
+                        interactions: [],
+                        duration: a0.value / 30,
+                        durationRange: 0,
+                        loopTarget: 0,
+                        endCondition: EndCondition.Timer,
+                    };
+                    this.state.blocks.push(this.currBlock);
+                    this.currBlock = {
+                        edges: [],
+                        animation: -1,
+                        force: false,
+                        motion: null,
+                        signal: 0,
+                        flagSet: 0,
+                        flagClear: 0,
+                        wait: null,
+                    };
+                }
+            } break;
             case GeneralFuncs.SendSignal: {
                 // only fails because we aren't actually handling conditionals
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
@@ -1447,9 +1496,8 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.recentRandom = a0.value;
                 return a0.value;
             }
-            case StateFuncs.Remove: {
-                if (this.state.blocks.length === 0)
-                    this.state.justRemove = true;
+            case StateFuncs.Cleanup: {
+                this.state.doCleanup = true;
             } break;
             // TODO: figure out apples
             case StateFuncs.ClaimApple:
@@ -1509,14 +1557,30 @@ class StateParser extends MIPS.NaiveInterpreter {
                     this.currWait.loopTarget = value.value;
                 } break;
 
+                case ObjectField.StateFlags: {
+                    if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
+                        this.currBlock.flagSet |= (value.value >>> 0);
+                    else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
+                        this.currBlock.flagClear |= ~(value.value >>> 0);
+                    else
+                        console.warn('unknown flag op', value.lastOp, hexzero(value.value, 8))
+                } break;
+                case ObjectField.MiscFlags: {
+                    if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
+                        this.currBlock.flagSet |= value.value * EndCondition.Hidden;
+                    else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
+                        this.currBlock.flagClear |= (~value.value) * EndCondition.Hidden;
+                    else if (value.lastOp === MIPS.Opcode.NOP && value.value === 0)
+                        this.currBlock.flagClear |= EndCondition.Hidden | EndCondition.PauseAnim;
+                } break;
+                case ObjectField.GroundList: {
+                    this.currBlock.allowWater = value.value !== 0;
+                } break;
                 case ObjectField.SomeBool:
-                case ObjectField.MiscFlags:
                 case ObjectField.FrameTarget:
-                case ObjectField.StateFlags:
                 case ObjectField.Apple:
                 case ObjectField.Reference:
                 case ObjectField.Mystery:
-                case ObjectField.BadGround:
                     break;
 
                 default:
@@ -1534,10 +1598,6 @@ class StateParser extends MIPS.NaiveInterpreter {
             this.state.blocks.push(this.currBlock);
     }
 
-    protected handleUnknown(op: MIPS.Opcode) {
-        this.valid = false; // keep going for state discovery, we'll fix the details later
-    }
-
     private addEdge(edge: StateEdge): void {
         if (emptyStateBlock(this.currBlock) && this.state.blocks.length > 0) {
             // we haven't done anything since the last block, so append it there
@@ -1551,8 +1611,10 @@ class StateParser extends MIPS.NaiveInterpreter {
                 edges: [],
                 animation: -1,
                 force: false,
-                motionAddress: 0,
+                motion: null,
                 signal: 0,
+                flagSet: 0,
+                flagClear: 0,
                 wait: null,
             };
         }

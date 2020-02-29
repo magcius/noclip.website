@@ -4,32 +4,53 @@ import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists } from "../util";
 import { ViewerRenderInput } from "../viewer";
+import { MotionData, runMotion, nextMotionBlock } from "./motion";
 
-const posScratch = vec3.create();
-const scaleScratch = vec3.create();
 const cameraScratch = vec3.create();
 export class Actor extends ModelRenderer {
     private currState = -1;
     private currBlock = 0;
+    public motionData: MotionData;
     private blockEnd = 0;
     private loopTarget = 1;
     private target: Actor | null = null;
 
+    private translation = vec3.create();
+    private euler = vec3.create();
+    private scale = vec3.fromValues(1, 1, 1);
+
     constructor(renderData: RenderData, private spawn: ObjectSpawn, private def: ObjectDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
         // set transform components
-        vec3.copy(posScratch, spawn.pos);
+        vec3.copy(this.translation, spawn.pos);
         if (def.spawn === SpawnType.GROUND)
-            posScratch[1] = findGroundHeight(globals.collision!, spawn.pos[0], spawn.pos[2]);
+            this.translation[1] = findGroundHeight(globals.collision!, spawn.pos[0], spawn.pos[2]);
 
-        vec3.mul(scaleScratch, def.scale, spawn.scale);
-        buildTransform(this.modelMatrix, posScratch, spawn.euler, scaleScratch);
+        vec3.copy(this.euler, spawn.euler);
+
+        vec3.mul(this.scale, def.scale, spawn.scale);
+        buildTransform(this.modelMatrix, this.translation, spawn.euler, this.scale);
+
+        this.motionData = {
+            refPosition: vec3.create(),
+            paused: false,
+            done: false,
+            currMotion: [],
+            pathParam: 0,
+            currBlock: 0,
+            allowWater: false,
+            start: -1,
+
+            path: spawn.path,
+        };
 
         if (def.stateGraph.states.length > 0)
             this.changeState(0, globals);
     }
 
     protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+        if (runMotion(this.translation, this.euler, this.scale, this.motionData, viewerInput, globals))
+            buildTransform(this.modelMatrix, this.translation, this.euler, this.scale);
         while (this.currState >= 0) {
             const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
             if (block.wait !== null) {
@@ -44,8 +65,8 @@ export class Actor extends ModelRenderer {
     }
 
     private changeState(newIndex: number, globals: LevelGlobals): boolean {
-        if (this.def.stateGraph.states[newIndex].justRemove)
-            return false; // ignore pure removal states
+        if (this.def.stateGraph.states[newIndex].doCleanup && this.def.stateGraph.states[newIndex].blocks.length === 0)
+            return false; // ignore states that just get rid of the object
         this.currState = newIndex;
         this.currBlock = -1;
         this.nextBlock(globals);
@@ -56,9 +77,11 @@ export class Actor extends ModelRenderer {
         this.currBlock++;
         const state = this.def.stateGraph.states[this.currState];
         if (this.currBlock >= state.blocks.length) {
+            if (state.doCleanup)
+                this.hidden = true;
             this.currState = -1;
             return;
-         }
+        }
 
         const block = state.blocks[this.currBlock];
         if (block.animation >= 0) {
@@ -72,6 +95,31 @@ export class Actor extends ModelRenderer {
             for (let i = 0; i < globals.allObjects.length; i++) {
                 globals.allObjects[i].receiveSignal(this, block.signal, globals);
             }
+        }
+
+        if (block.flagSet & EndCondition.Motion)
+            this.motionData.paused = true;
+        if (block.flagClear & EndCondition.Motion)
+            this.motionData.paused = false;
+
+        if (block.flagSet & EndCondition.Hidden)
+            this.hidden = true;
+        if (block.flagClear & EndCondition.Hidden)
+            this.hidden = false;
+
+        if (block.flagSet & EndCondition.PauseAnim)
+            this.animationPaused = true;
+        if (block.flagClear & EndCondition.PauseAnim)
+            this.animationPaused = false;
+
+        if (block.allowWater !== undefined)
+            this.motionData.allowWater = block.allowWater;
+
+        if (block.motion !== null) {
+            this.motionData.currMotion = block.motion;
+            this.motionData.currBlock = -1;
+            this.motionData.done = false;
+            nextMotionBlock(this.motionData);
         }
 
         if (block.wait !== null)
@@ -154,16 +202,15 @@ export class Actor extends ModelRenderer {
     }
 
     protected metEndCondition(flags: number, globals: LevelGlobals): boolean {
-        return  (!!(flags & EndCondition.Dance) && globals.currentSong === 0) ||
-                (!!(flags & EndCondition.Timer) && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
-                (!!(flags & EndCondition.Animation) && this.renderers[this.headAnimationIndex].animator.loopCount >= this.loopTarget) ||
-                (!!(flags & EndCondition.Path) && this.animationController.getTimeInSeconds() >= this.blockEnd + 3);
+        return (!!(flags & EndCondition.Dance) && globals.currentSong === 0) ||
+            (!!(flags & EndCondition.Timer) && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
+            (!!(flags & EndCondition.Animation) && this.renderers[this.headAnimationIndex].animator.loopCount >= this.loopTarget) ||
+            (!!(flags & EndCondition.Path) && this.motionData.done);
     }
 
     private basicInteractions(block: WaitParams, viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
-        mat4.getTranslation(posScratch, this.modelMatrix);
         mat4.getTranslation(cameraScratch, viewerInput.camera.worldMatrix);
-        const playerDist = vec3.dist(posScratch, cameraScratch);
+        const playerDist = vec3.dist(this.translation, cameraScratch);
         for (let i = 0; i < block.interactions.length; i++) {
             switch (block.interactions[i].type) {
                 case InteractionType.PokefluteA:
@@ -186,7 +233,7 @@ export class Actor extends ModelRenderer {
                     // hit at most every 10 seconds, and only if we're likely visible
                     if (viewerInput.time < globals.lastPesterBall + 10000)
                         break;
-                    if (playerDist < 2000 && onScreen(viewerInput, posScratch) && Math.random() < viewerInput.deltaTime / 5000) {
+                    if (playerDist < 2000 && onScreen(viewerInput, this.translation) && Math.random() < viewerInput.deltaTime / 5000) {
                         this.changeState(block.interactions[i].index, globals);
                         globals.lastPesterBall = viewerInput.time;
                         return true;
