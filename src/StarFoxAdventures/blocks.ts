@@ -6,6 +6,7 @@ import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { nArray } from '../util';
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { SwapTable } from '../gx/gx_material';
 
 import { SFARenderer } from './render';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
@@ -556,29 +557,86 @@ export class SFABlockRenderer implements BlockRenderer {
                             cprevIsValid = true;
                             tevStage++;
                         }
-    
-                        if (curShader.layers.length === 2 && (curShader.layers[1].tevMode & 0x7f) === 9) {
-                            addTevStageForTextureWithWhiteKonst(0);
-                            addTevStagesForTextureWithMode(9);
-                            addTevStageForMultVtxColor();
+
+                        const textures = [];
+
+                        if ((curShader.flags & 0x80) != 0) {
+                            // Occurs for lava
+                            textures[2] = texColl.getTexture(device, texIds[curShader.layers[0].texNum], true);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                            const texture0x600 = texColl.getTexture(device, 0x600);
+                            textures[0] = texture0x600;
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                            // FIXME: generate special 64x64 texture
+                            textures[1] = texColl.getTexture(device, 0);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                            
+                            mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
+                            mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+                            // TODO: set ind tex matrices
+                            mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                            mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
+                            mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
+                            mb.setTevIndirect(2, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+                            // TODO: set and use tev kcolor
+                            mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_4_8); // TODO
+                            mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8); // TODO
+                            mb.setTevDirect(0);
+                            const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R];
+                            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR0A0);
+                            mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+                            mb.setTevAlphaIn(0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+                            mb.setTevSwapMode(0, undefined, swap3);
+                            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            mb.setTevAlphaOp(0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4, true, GX.Register.PREV);
+                            cprevIsValid = true;
+
+                            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+                            mb.setTevColorIn(1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+                            mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+                            mb.setTevSwapMode(1, undefined, undefined);
+                            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+                            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+                            mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
+                            mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+                            mb.setTevSwapMode(2, undefined, undefined);
+                            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+                            tevStage = 3;
+                            texGenSrc = 4;
+                            texcoordId = 4;
+                            texmapId = 3;
                         } else {
-                            for (let i = 0; i < curShader.layers.length; i++) {
-                                const layer = curShader.layers[i];
-                                if (curShader.flags & 0x40000) {
-                                    addTevStagesForTextureWithSkyAmbient();
-                                } else {
-                                    addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                            if (curShader.layers.length === 2 && (curShader.layers[1].tevMode & 0x7f) === 9) {
+                                addTevStageForTextureWithWhiteKonst(0);
+                                addTevStagesForTextureWithMode(9);
+                                addTevStageForMultVtxColor();
+                            } else {
+                                for (let i = 0; i < curShader.layers.length; i++) {
+                                    const layer = curShader.layers[i];
+                                    if (curShader.flags & 0x40000) {
+                                        addTevStagesForTextureWithSkyAmbient();
+                                    } else {
+                                        addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                                    }
                                 }
+                            }
+
+                            for (let i = 0; i < curShader.layers.length; i++) {
+                                textures.push(texColl.getTexture(device, texIds[curShader.layers[i].texNum], true));
                             }
                         }
     
-                        newModel.setMaterial(mb.finish());
-    
-                        const textures = [];
-                        for (let i = 0; i < curShader.layers.length; i++) {
-                            textures.push(texColl.getTexture(device, texIds[curShader.layers[i].texNum], true));
-                        }
                         newModel.setTextures(textures);
+                        newModel.setMaterial(mb.finish());
     
                         self.models.push(newModel);
                     } catch (e) {

@@ -166,6 +166,7 @@ class TextureFile {
 export class SFATextureCollection implements TextureCollection {
     private textableBin: DataView;
     private texpre: TextureFile;
+    private tex0: TextureFile;
     private tex1: TextureFile;
 
     constructor(private gameInfo: GameInfo) {
@@ -173,15 +174,18 @@ export class SFATextureCollection implements TextureCollection {
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
         const pathBase = this.gameInfo.pathBase;
-        const [textableBin, texpreTab, texpreBin, tex1Tab, tex1Bin] = await Promise.all([
+        const [textableBin, texpreTab, texpreBin, tex0Tab, tex0Bin, tex1Tab, tex1Bin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
             dataFetcher.fetchData(`${pathBase}/TEXPRE.tab`),
             dataFetcher.fetchData(`${pathBase}/TEXPRE.bin`),
+            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`),
+            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`),
         ]);
         this.textableBin = textableBin.createDataView();
         this.texpre = new TextureFile(texpreTab.createDataView(), texpreBin);
+        this.tex0 = new TextureFile(tex0Tab.createDataView(), tex0Bin);
         this.tex1 = new TextureFile(tex1Tab.createDataView(), tex1Bin);
     }
 
@@ -193,7 +197,8 @@ export class SFATextureCollection implements TextureCollection {
             const textableValue = this.textableBin.getUint16(texId * 2);
             if (texId < 3000 || textableValue == 0) {
                 texId = textableValue;
-                throw Error(`TEX0 files are not implemented.`);
+                file = this.tex0;
+                console.log(`loading tex0 #${texId}`);
             } else {
                 texId = textableValue + 1;
                 file = this.texpre;
