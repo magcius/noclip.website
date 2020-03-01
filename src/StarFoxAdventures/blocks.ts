@@ -428,6 +428,7 @@ export class SFABlockRenderer implements BlockRenderer {
                         mb.setCullMode(curShader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
     
                         let tevStage = 0;
+                        let indStageId = GX.IndTexStageID.STAGE0;
                         let texcoordId = GX.TexCoordID.TEXCOORD0;
                         let texmapId = GX.TexMapID.TEXMAP0;
                         let texGenSrc = GX.TexGenSrc.TEX0;
@@ -614,6 +615,7 @@ export class SFABlockRenderer implements BlockRenderer {
                             texGenSrc = 4;
                             texcoordId = 4;
                             texmapId = 3;
+                            indStageId = 2;
                         } else {
                             if (curShader.layers.length === 2 && (curShader.layers[1].tevMode & 0x7f) === 9) {
                                 addTevStageForTextureWithWhiteKonst(0);
@@ -633,6 +635,50 @@ export class SFABlockRenderer implements BlockRenderer {
                             for (let i = 0; i < curShader.layers.length; i++) {
                                 textures.push(texColl.getTexture(device, texIds[curShader.layers[i].texNum], true));
                             }
+                        }
+
+                        if ((curShader.flags & 0x40) != 0) {
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+                            // TODO: create special 128x128 texture
+                            const tex = texColl.getTexture(device, 0);
+                            textures[texmapId] = tex;
+                            // TODO: GXSetIndTexMtx
+                            mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+                            mb.setTevIndirect(tevStage, indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+                            mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
+                            mb.setIndTexOrder(indStageId + 1, texcoordId + 3, texmapId + 1);
+                            // TODO: set texture matrix
+                            mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+                            mb.setTevIndirect(tevStage + 1, indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+                            mb.setIndTexScale(indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+
+                            mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
+                            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+                            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+                            mb.setTevSwapMode(tevStage, undefined, undefined);
+                            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            cprevIsValid = true;
+
+                            mb.setTevOrder(tevStage + 1, texcoordId + 1, texmapId, GX.RasColorChannelID.COLOR0A0);
+                            mb.setTevColorIn(tevStage + 1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+                            mb.setTevAlphaIn(tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+                            mb.setTevSwapMode(tevStage + 1, undefined, undefined);
+                            mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                            // TODO: get special 64x64 lava/warping related texture
+                            const tex2 = texColl.getTexture(device, 0);
+                            textures[texmapId + 1] = tex2;
+
+                            indStageId += 2;
+                            texcoordId += 4;
+                            texmapId += 2;
+                            tevStage += 2;
                         }
     
                         newModel.setTextures(textures);

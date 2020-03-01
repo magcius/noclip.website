@@ -198,11 +198,9 @@ export class SFATextureCollection implements TextureCollection {
             if (texId < 3000 || textableValue == 0) {
                 texId = textableValue;
                 file = this.tex0;
-                console.log(`loading tex0 #${texId}`);
             } else {
                 texId = textableValue + 1;
                 file = this.texpre;
-                console.log(`loading texpre #${texId}`);
             }
         }
 
