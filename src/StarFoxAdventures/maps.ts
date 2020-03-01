@@ -101,7 +101,7 @@ export class MapInstance {
     }
     
     public clearModels() {
-        this.modelHolders = [];
+        this.modelHolders = nArray(3, () => new MapModelHolder());
     }
 
     // Caution: Matrix will be referenced, not copied.
@@ -142,8 +142,7 @@ export class MapInstance {
                         const modelMatrix: mat4 = mat4.create();
                         mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
                         for (let drawStep = 0; drawStep < blockRenderer.getNumDrawSteps(); drawStep++) {
-                            const modelHolder = new MapModelHolder();
-                            this.modelHolders.push(modelHolder);
+                            const modelHolder = this.modelHolders[drawStep];
                             blockRenderer.addToModelHolder(modelHolder, modelMatrix, drawStep);
                         }
                     }
