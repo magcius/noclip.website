@@ -163,34 +163,63 @@ class TextureFile {
     }
 }
 
+async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPath: string): Promise<TextureFile | null> {
+    try {
+        const [tab, bin] = await Promise.all([
+            dataFetcher.fetchData(tabPath),
+            dataFetcher.fetchData(binPath),
+        ])
+        return new TextureFile(tab.createDataView(), bin);
+    } catch (e) {
+        console.warn(`Failed to fetch texture file due to exception:`);
+        console.error(e);
+        return null;
+    }
+}
+
+export class FakeTextureCollection implements TextureCollection {
+    textures: SFATexture[] = [];
+
+    public getTexture(device: GfxDevice, num: number): SFATexture | null {
+        if (this.textures[num] === undefined) {
+            this.textures[num] = makeFakeTexture(device, num);
+        }
+        return this.textures[num];
+    }
+}
+
 export class SFATextureCollection implements TextureCollection {
     private textableBin: DataView;
-    private texpre: TextureFile;
-    private tex0: TextureFile;
-    private tex1: TextureFile;
+    private texpre: TextureFile | null;
+    private tex0: TextureFile | null;
+    private tex1: TextureFile | null;
+    private fakes: FakeTextureCollection = new FakeTextureCollection();
 
     constructor(private gameInfo: GameInfo) {
     }
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
         const pathBase = this.gameInfo.pathBase;
-        const [textableBin, texpreTab, texpreBin, tex0Tab, tex0Bin, tex1Tab, tex1Bin] = await Promise.all([
+        const [textableBin, texpre, tex0, tex1] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
-            dataFetcher.fetchData(`${pathBase}/TEXPRE.tab`),
-            dataFetcher.fetchData(`${pathBase}/TEXPRE.bin`),
-            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.tab`),
-            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX0.bin`),
-            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.tab`),
-            dataFetcher.fetchData(`${pathBase}/${subdir}/TEX1.bin`),
+            fetchTextureFile(dataFetcher,
+                `${pathBase}/TEXPRE.tab`,
+                `${pathBase}/TEXPRE.bin`),
+            fetchTextureFile(dataFetcher,
+                `${pathBase}/${subdir}/TEX0.tab`,
+                `${pathBase}/${subdir}/TEX0.bin`),
+            fetchTextureFile(dataFetcher,
+                `${pathBase}/${subdir}/TEX1.tab`,
+                `${pathBase}/${subdir}/TEX1.bin`),
         ]);
-        this.textableBin = textableBin.createDataView();
-        this.texpre = new TextureFile(texpreTab.createDataView(), texpreBin);
-        this.tex0 = new TextureFile(tex0Tab.createDataView(), tex0Bin);
-        this.tex1 = new TextureFile(tex1Tab.createDataView(), tex1Bin);
+        this.textableBin = textableBin!.createDataView();
+        this.texpre = texpre;
+        this.tex0 = tex0;
+        this.tex1 = tex1;
     }
 
     public getTexture(device: GfxDevice, texId: number, alwaysUseTex1: boolean = false): SFATexture | null {
-        let file: TextureFile;
+        let file: TextureFile | null;
         if (alwaysUseTex1) {
             file = this.tex1;
         } else {
@@ -204,17 +233,10 @@ export class SFATextureCollection implements TextureCollection {
             }
         }
 
-        return file.getTexture(device, texId);
-    }
-}
-
-export class FakeTextureCollection implements TextureCollection {
-    textures: SFATexture[] = [];
-
-    public getTexture(device: GfxDevice, num: number): SFATexture | null {
-        if (this.textures[num] === undefined) {
-            this.textures[num] = makeFakeTexture(device, num);
+        if (file === null) {
+            return this.fakes.getTexture(device, texId);
         }
-        return this.textures[num];
+
+        return file.getTexture(device, texId);
     }
 }
