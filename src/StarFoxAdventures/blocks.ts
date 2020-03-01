@@ -23,7 +23,8 @@ export abstract class ModelHolder {
 }
 
 export abstract class BlockRenderer {
-    public abstract addToModelHolder(holder: ModelHolder, modelMatrix: mat4): void;
+    public abstract getNumDrawSteps(): number;
+    public abstract addToModelHolder(holder: ModelHolder, modelMatrix: mat4, drawStep: number): void;
 }
 
 export interface IBlockCollection {
@@ -118,7 +119,8 @@ class LowBitReader {
 }
 
 export class SFABlockRenderer implements BlockRenderer {
-    public models: ModelInstance[] = [];
+    // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
+    public models: ModelInstance[][] = [];
     public yTranslate: number = 0;
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
@@ -375,7 +377,14 @@ export class SFABlockRenderer implements BlockRenderer {
         }
 
         const self = this;
-        function runBitstream(bitsOffset: number) {
+        function runBitstream(bitsOffset: number, drawStep: number) {
+            const models: ModelInstance[] = [];
+            self.models[drawStep] = models;
+
+            if (bitsOffset === 0) {
+                return;
+            }
+
             const bits = new LowBitReader(blockDv, bitsOffset);
             let done = false;
             let curShader = shaders[0];
@@ -684,7 +693,7 @@ export class SFABlockRenderer implements BlockRenderer {
                         newModel.setTextures(textures);
                         newModel.setMaterial(mb.finish());
     
-                        self.models.push(newModel);
+                        models.push(newModel);
                     } catch (e) {
                         console.error(e);
                     }
@@ -764,21 +773,24 @@ export class SFABlockRenderer implements BlockRenderer {
             }
         }
 
-        runBitstream(bitsOffsets[0]); // Opaques
+        runBitstream(bitsOffsets[0], 0); // Opaques
         for (let i = 1; i < bitsOffsets.length; i++) {
-            if (bitsOffsets[i] != 0) {
-                runBitstream(bitsOffsets[i]); // Translucents and waters
-            }
+            runBitstream(bitsOffsets[i], i); // Translucents and waters
         }
     }
 
-    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
-        for (let i = 0; i < this.models.length; i++) {
+    public getNumDrawSteps() {
+        return this.models.length;
+    }
+
+    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4, drawStep: number) {
+        const models = this.models[drawStep];
+        for (let i = 0; i < models.length; i++) {
             const trans = mat4.create();
             mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
             const matrix = mat4.create();
             mat4.mul(matrix, modelMatrix, trans);
-            holder.addModel(this.models[i], matrix);
+            holder.addModel(models[i], matrix);
         }
     }
 }
@@ -1082,6 +1094,10 @@ export class AncientBlockRenderer implements BlockRenderer {
                 break;
             }
         }
+    }
+
+    public getNumDrawSteps() {
+        return 1;
     }
 
     public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {

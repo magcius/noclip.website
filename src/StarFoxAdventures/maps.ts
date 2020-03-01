@@ -68,10 +68,19 @@ interface MapSceneInfo {
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
 }
 
-export class MapInstance implements ModelHolder {
+class MapModelHolder {
+    public models: ModelInstance[] = [];
+    public modelMatrices: mat4[] = [];
+
+    public addModel(model: ModelInstance, modelMatrix: mat4) {
+        this.models.push(model);
+        this.modelMatrices.push(modelMatrix);
+    }
+}
+
+export class MapInstance {
     private matrix: mat4 = mat4.create();
-    private models: ModelInstance[] = [];
-    private modelMatrices: mat4[] = [];
+    private modelHolders: MapModelHolder[] = [];
     private numRows: number;
     private numCols: number;
     private blockTable: (BlockInfo | null)[][] = [];
@@ -92,13 +101,7 @@ export class MapInstance implements ModelHolder {
     }
     
     public clearModels() {
-        this.models = [];
-        this.modelMatrices = [];
-    }
-
-    public addModel(model: ModelInstance, modelMatrix: mat4) {
-        this.models.push(model);
-        this.modelMatrices.push(modelMatrix);
+        this.modelHolders = [];
     }
 
     // Caution: Matrix will be referenced, not copied.
@@ -110,9 +113,12 @@ export class MapInstance implements ModelHolder {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
         const modelMtx = mat4.create();
-        for (let i = 0; i < this.models.length; i++) {
-            mat4.mul(modelMtx, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx);
+        for (let drawStep = 0; drawStep < this.modelHolders.length; drawStep++) {
+            const modelHolder = this.modelHolders[drawStep];
+            for (let i = 0; i < modelHolder.models.length; i++) {
+                mat4.mul(modelMtx, this.matrix, modelHolder.modelMatrices[i]);
+                modelHolder.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx);
+            }
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -135,7 +141,11 @@ export class MapInstance implements ModelHolder {
                     if (blockRenderer) {
                         const modelMatrix: mat4 = mat4.create();
                         mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                        blockRenderer.addToModelHolder(this, modelMatrix);
+                        for (let drawStep = 0; drawStep < blockRenderer.getNumDrawSteps(); drawStep++) {
+                            const modelHolder = new MapModelHolder();
+                            this.modelHolders.push(modelHolder);
+                            blockRenderer.addToModelHolder(modelHolder, modelMatrix, drawStep);
+                        }
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${y} due to exception:`);

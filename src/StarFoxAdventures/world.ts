@@ -87,7 +87,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
 
     const modelRenderer = new SFABlockRenderer(device, modelData, texColl);
     const modelHolder = new MyModelHolder();
-    modelRenderer.addToModelHolder(modelHolder, mat4.create());
+    modelRenderer.addToModelHolder(modelHolder, mat4.create(), 0);
     return modelHolder;
 }
 
