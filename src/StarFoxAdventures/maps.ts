@@ -7,7 +7,8 @@ import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 
-import { SFARenderer, ModelInstance } from './render';
+import { SFARenderer } from './render';
+import { ModelInstance } from './models';
 import { BlockCollection, IBlockCollection, ModelHolder } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 

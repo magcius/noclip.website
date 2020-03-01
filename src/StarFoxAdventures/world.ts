@@ -18,10 +18,11 @@ import { loadRes } from './resource';
 import { ObjectManager } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFATextureCollection } from './textures';
-import { SFARenderer, ModelInstance } from './render';
+import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { ModelHolder, SFABlockRenderer } from './blocks';
+import { ModelInstance } from './models';
 import { hexdump } from '../util';
 
 const materialParams = new MaterialParams();
