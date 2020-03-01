@@ -130,9 +130,7 @@ export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolde
 }
 
 export function isBckStopped(actor: LiveActor): boolean {
-    const bckCtrl = actor.modelManager!.getBckCtrl();
-    // TODO(jstpierre): Add stopped flags?
-    return bckCtrl.speedInFrames === 0.0;
+    return actor.modelManager!.isBckStopped();
 }
 
 export function getBckFrameMax(actor: LiveActor): number {
@@ -364,6 +362,23 @@ export function isBpkPlaying(actor: LiveActor, name: string): boolean {
 
 export function isBvaPlaying(actor: LiveActor, name: string): boolean {
     return actor.modelManager!.isBvaPlaying(name);
+}
+
+export function isAnyAnimStopped(actor: LiveActor, name: string): boolean {
+    // TODO(jstpierre): I can't figure out what actually checks that the animation *was* playing. Weird.
+    if (!isBckExist(actor, name) || !actor.modelManager!.isBckStopped())
+        return false;
+    if (!isBtkExist(actor, name) || !actor.modelManager!.isBtkStopped())
+        return false;
+    if (!isBpkExist(actor, name) || !actor.modelManager!.isBpkStopped())
+        return false;
+    if (!isBtpExist(actor, name) || !actor.modelManager!.isBtpStopped())
+        return false;
+    if (!isBrkExist(actor, name) || !actor.modelManager!.isBrkStopped())
+        return false;
+    if (!isBvaExist(actor, name) || !actor.modelManager!.isBvaStopped())
+        return false;
+    return true;
 }
 
 export function isActionStart(actor: LiveActor, action: string): boolean {

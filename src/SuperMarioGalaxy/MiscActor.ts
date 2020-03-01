@@ -14,11 +14,11 @@ import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from '.
 import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
-import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
+import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType, isDead } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -2119,13 +2119,17 @@ export class Air extends LiveActor<AirNrv> {
         if (thresholdParam < 0)
             thresholdParam = 70;
 
-        const distInThreshold = 100 * thresholdParam;
+        const distInThreshold = 100.0 * thresholdParam;
         this.distInThresholdSq = distInThreshold*distInThreshold;
-        const distOutThreshold = 100 * (20 + thresholdParam);
+        const distOutThreshold = 100.0 * (20.0 + thresholdParam);
         this.distOutThresholdSq = distOutThreshold*distOutThreshold;
 
         tryStartAllAnim(this, getObjectName(infoIter));
         this.initNerve(AirNrv.In);
+    }
+
+    public isDrawing(): boolean {
+        return !isDead(this) && !isHiddenModel(this);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2134,20 +2138,47 @@ export class Air extends LiveActor<AirNrv> {
         const currentNerve = this.getCurrentNerve();
         const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
 
-        if (currentNerve === AirNrv.Out && distanceToPlayer < this.distInThresholdSq) {
-            if (tryStartAllAnim(this, 'Appear'))
-            this.setNerve(AirNrv.In);
-        } else if (currentNerve === AirNrv.In && distanceToPlayer > this.distOutThresholdSq) {
-            if (tryStartAllAnim(this, 'Disappear'))
-            this.setNerve(AirNrv.Out);
+        if (currentNerve === AirNrv.Out) {
+            if (!isHiddenModel(this) && isAnyAnimStopped(this, 'Disappear'))
+                hideModel(this);
+
+            if (distanceToPlayer < this.distInThresholdSq) {
+                showModel(this);
+                tryStartAllAnim(this, 'Appear');
+                this.setNerve(AirNrv.In);
+            }
+        } else if (currentNerve === AirNrv.In) {
+            if (distanceToPlayer > this.distOutThresholdSq) {
+                tryStartAllAnim(this, 'Disappear');
+                this.setNerve(AirNrv.Out);
+            }
         }
     }
 }
 
+export class PriorDrawAirHolder extends NameObj {
+    public airs: PriorDrawAir[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'PriorDrawAirHolder');
+    }
+
+    public add(air: PriorDrawAir): void {
+        this.airs.push(air);
+    }
+
+    public isExistValidDrawAir(): boolean {
+        for (let i = 0; i < this.airs.length; i++)
+            if (this.airs[i].isDrawing())
+                return true;
+        return false;
+    }
+}
+
 export class PriorDrawAir extends Air {
-    // When this actor is drawing, the core drawing routines change slightly -- Air
-    // draws in a slightly different spot. We don't implement anything close to core drawing
-    // routines yet, so we leave this out for now...
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter);
+    }
 }
 
 const enum ShootingStarNrv { PreShooting, Shooting, WaitForNextShoot }

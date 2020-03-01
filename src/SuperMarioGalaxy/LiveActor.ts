@@ -18,7 +18,7 @@ import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
-import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 
@@ -229,8 +229,8 @@ export class ModelManager {
     }
 
     public isBckStopped(): boolean {
-        // TODO(jstpierre): Play flags
-        return this.xanimePlayer!.frameCtrl.speedInFrames === 0.0;
+        const bckCtrl = this.xanimePlayer!.frameCtrl;
+        return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
     }
 
     public getBtkCtrl(): J3DFrameCtrl {
@@ -245,6 +245,10 @@ export class ModelManager {
         return this.btkPlayer!.isPlaying(name);
     }
 
+    public isBtkStopped(): boolean {
+        return this.btkPlayer!.isStop();
+    }
+
     public getBrkCtrl(): J3DFrameCtrl {
         return this.brkPlayer!.frameCtrl;
     }
@@ -255,6 +259,10 @@ export class ModelManager {
 
     public isBrkPlaying(name: string): boolean {
         return this.brkPlayer!.isPlaying(name);
+    }
+
+    public isBrkStopped(): boolean {
+        return this.brkPlayer!.isStop();
     }
 
     public getBtpCtrl(): J3DFrameCtrl {
@@ -269,6 +277,10 @@ export class ModelManager {
         return this.btpPlayer!.isPlaying(name);
     }
 
+    public isBtpStopped(): boolean {
+        return this.btpPlayer!.isStop();
+    }
+
     public getBpkCtrl(): J3DFrameCtrl {
         return this.bpkPlayer!.frameCtrl;
     }
@@ -281,6 +293,10 @@ export class ModelManager {
         return this.bpkPlayer!.isPlaying(name);
     }
 
+    public isBpkStopped(): boolean {
+        return this.bpkPlayer!.isStop();
+    }
+
     public getBvaCtrl(): J3DFrameCtrl {
         return this.bvaPlayer!.frameCtrl;
     }
@@ -291,6 +307,10 @@ export class ModelManager {
 
     public isBvaPlaying(name: string): boolean {
         return this.bvaPlayer!.isPlaying(name);
+    }
+
+    public isBvaStopped(): boolean {
+        return this.bvaPlayer!.isStop();
     }
 }
 

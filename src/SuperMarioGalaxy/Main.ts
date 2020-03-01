@@ -30,9 +30,9 @@ import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder } from './MiscMap';
@@ -55,6 +55,13 @@ export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): numbe
 
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
+}
+
+function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
+    if (sceneObjHolder.priorDrawAirHolder !== null)
+        return sceneObjHolder.priorDrawAirHolder.isExistValidDrawAir();
+    else
+        return false;
 }
 
 export class SMGRenderer implements Viewer.SceneGfx {
@@ -289,14 +296,15 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
-        // if (isExistPriorDrawAir())
-        // We assume that prior airs are drawing.
-        this.drawOpa(passRenderer, DrawBufferType.SKY);
-        this.drawOpa(passRenderer, DrawBufferType.AIR);
-        this.drawOpa(passRenderer, DrawBufferType.SUN);
-        this.drawXlu(passRenderer, DrawBufferType.SKY);
-        this.drawXlu(passRenderer, DrawBufferType.AIR);
-        this.drawXlu(passRenderer, DrawBufferType.SUN);
+        if (isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
+
         // if (isDrawSpinDriverPathAtOpa())
         //     execute(0x12);
 
@@ -338,7 +346,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.ENEMY);
         this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
         this.drawOpa(passRenderer, 0x15);
-        // if not PriorDrawAir, they would go here...
+        if (!isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
 
         // executeDrawListOpa();
         this.execute(passRenderer, DrawType.OCEAN_RING_OUTSIDE);
@@ -789,6 +804,7 @@ export const enum SceneObj {
     ElectricRailHolder   = 0x59,
     WaterAreaHolder      = 0x62,
     WaterPlantDrawInit   = 0x63,
+    PriorDrawAirHolder   = 0x75,
 }
 
 export class SceneObjHolder {
@@ -812,6 +828,7 @@ export class SceneObjHolder {
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
+    public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
 
@@ -842,6 +859,8 @@ export class SceneObjHolder {
             return this.waterPlantDrawInit;
         else if (sceneObj === SceneObj.ElectricRailHolder)
             return this.electricRailHolder;
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            return this.priorDrawAirHolder;
         return null;
     }
 
@@ -862,6 +881,8 @@ export class SceneObjHolder {
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
         else if (sceneObj === SceneObj.ElectricRailHolder)
             this.electricRailHolder = new ElectricRailHolder(this);
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            this.priorDrawAirHolder = new PriorDrawAirHolder(this);
     }
 
     public destroy(device: GfxDevice): void {
