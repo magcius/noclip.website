@@ -26,19 +26,20 @@ import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, T
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { LightDataHolder, LightDirector } from './LightData';
+import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
-import { WaterAreaHolder } from './MiscMap';
+import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { GravityExplainer } from './GravityExplainer';
+import { AreaObjMgr, AreaObj } from './AreaObj';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -795,9 +796,34 @@ class CaptureSceneDirector {
     }
 }
 
+class AreaObjContainer extends NameObj {
+    private managers: AreaObjMgr<AreaObj>[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'AreaObjContainer');
+        this.managers.push(new LightAreaHolder(sceneObjHolder));
+        this.managers.push(new WaterAreaMgr(sceneObjHolder));
+    }
+
+    public getManager(managerName: string): AreaObjMgr<AreaObj> {
+        for (let i = 0; i < this.managers.length; i++)
+            if (this.managers[i].name === managerName)
+                return this.managers[i];
+        throw "whoops";
+    }
+
+    public getAreaObj<T extends AreaObj>(managerName: string, position: vec3): T | null {
+        const mgr = this.getManager(managerName);
+        return mgr.find_in(position) as (T | null);
+    }
+}
+
 export const enum SceneObj {
-    SensorHitChecked     = 0x00,
+    SensorHitChecker     = 0x00,
+    LightDirector        = 0x06,
+    AreaObjContainer     = 0x0D,
     PlanetGravityManager = 0x32,
+    CoinRotater          = 0x38,
     AirBubbleHolder      = 0x39,
     SwingRopeGroup       = 0x47,
     TrapezeRopeDrawInit  = 0x4A,
@@ -821,7 +847,9 @@ export class SceneObjHolder {
     public messageDataHolder: MessageDataHolder | null = null;
 
     public sensorHitChecker: SensorHitChecker | null = null;
+    public areaObjContainer: AreaObjContainer | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
@@ -843,10 +871,14 @@ export class SceneObjHolder {
     }
 
     public getObj(sceneObj: SceneObj): NameObj | null {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.CoinRotater)
+            return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -865,10 +897,14 @@ export class SceneObjHolder {
     }
 
     private newEachObj(sceneObj: SceneObj): void {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             this.sensorHitChecker = new SensorHitChecker(this);
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.CoinRotater)
+            this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)

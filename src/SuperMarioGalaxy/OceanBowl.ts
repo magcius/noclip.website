@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, getObjectName } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
@@ -85,10 +85,13 @@ export class OceanBowl extends LiveActor {
         this.water = loadBTIData(sceneObjHolder, waterWaveArc, `Water.bti`);
         this.waterIndirect = loadBTIData(sceneObjHolder, waterWaveArc, `WaterIndirect.bti`);
         this.mask = loadBTIData(sceneObjHolder, waterWaveArc, `Mask.bti`);
+
+        sceneObjHolder.create(SceneObj.WaterAreaHolder);
+        sceneObjHolder.waterAreaHolder!.entryOceanBowl(this);
     }
 
     public isInWater(v: vec3): boolean {
-        vec3.sub(scratchVec3, this.translation, v);
+        vec3.sub(scratchVec3, v, this.translation);
 
         const mag = vec3.squaredLength(scratchVec3);
         const radius = this.scale[0] * 100;

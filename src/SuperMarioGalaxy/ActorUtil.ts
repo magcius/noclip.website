@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -813,4 +813,30 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
+}
+
+export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+    const m = vec3.dot(a, b);
+    dst[0] = a[0] - b[0]*m;
+    dst[1] = a[1] - b[1]*m;
+    dst[2] = a[2] - b[2]*m;
+    return m;
+}
+
+function getMaxAbsElementIndex(v: vec3): number {
+    const x = Math.abs(v[0]);
+    const y = Math.abs(v[1]);
+    const z = Math.abs(v[2]);
+    if (x > z && y > z)
+        return 0;
+    else if (y > z)
+        return 1;
+    else
+        return 2;
+}
+
+export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
+    const max = getMaxAbsElementIndex(up);
+    const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
+    makeMtxUpFrontPos(dst, up, front, pos);
 }

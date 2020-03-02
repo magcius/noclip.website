@@ -516,7 +516,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         this.calcAndSetBaseMtxBase();
     }
 
@@ -537,7 +537,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // calcAnmMtx
         vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(viewerInput);
+        this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.modelManager.calcAnim(viewerInput);
     }
 

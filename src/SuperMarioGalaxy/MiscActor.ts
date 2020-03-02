@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -18,7 +18,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -31,6 +31,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexAttribLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { isInWater } from './MiscMap';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -179,14 +180,6 @@ export function scaleMatrixScalar(m: mat4, s: number): void {
     m[2] *= s;
     m[6] *= s;
     m[10] *= s;
-}
-
-export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
-    const m = vec3.dot(a, b);
-    dst[0] = a[0] - b[0]*m;
-    dst[1] = a[1] - b[1]*m;
-    dst[2] = a[2] - b[2]*m;
-    return m;
 }
 
 function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
@@ -476,7 +469,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railMover.movement(sceneObjHolder, viewerInput);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         const hasAnyMapFunction = (
             (this.rotator !== null && this.rotator.isWorking())
         );
@@ -494,7 +487,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             m[13] = this.translation[1];
             m[14] = this.translation[2];
         } else {
-            super.calcAndSetBaseMtx(viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         }
     }
 }
@@ -541,12 +534,12 @@ export class ModelObj extends LiveActor {
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.transformMatrix !== null) {
             mat4.getTranslation(this.translation, this.transformMatrix);
             mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
         } else {
-            super.calcAndSetBaseMtx(viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         }
     }
 }
@@ -745,7 +738,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public turnBckRate = 1.0;
     public railGrounded: boolean = false;
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (!vec3.equals(this.rotation, this.lastRotation)) {
             quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
             vec3.copy(this.lastRotation, this.rotation);
@@ -850,14 +843,14 @@ class PartsModel extends LiveActor {
         super.calcAnim(sceneObjHolder, viewerInput);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.transformMatrix !== null) {
             this.translation[0] = this.transformMatrix[12];
             this.translation[1] = this.transformMatrix[13];
             this.translation[2] = this.transformMatrix[14];
             mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
         } else {
-            super.calcAndSetBaseMtx(viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         }
     }
 }
@@ -944,11 +937,11 @@ export class StarPiece extends LiveActor {
         setEffectColor(this, 'GetAble', this.effectPrmColor, this.effectEnvColor);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // The star piece rotates around the Y axis at 15 degrees every frame.
         const SPEED = MathConstants.DEG_TO_RAD * 15;
         this.rotation[1] += getDeltaTimeFrames(viewerInput) * SPEED;
-        super.calcAndSetBaseMtx(viewerInput);
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
     }
 }
 
@@ -1052,8 +1045,8 @@ export class BlackHole extends LiveActor {
         this.updateModelScale(rangeScale, rangeScale);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAndSetBaseMtx(viewerInput);
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         if (this.effectKeeper !== null) {
             const front = scratchVec3a;
@@ -1439,7 +1432,37 @@ export class TicoComet extends NPCActor {
     }
 }
 
+export class CoinRotater extends NameObj {
+    public coinRotateY: number = 0.0;
+    public coinHiSpeedRotateY: number = 0.0;
+    public coinInWaterRotateY: number = 0.0;
+
+    public coinRotateMtx = mat4.create();
+    public coinHiSpeedRotateMtx = mat4.create();
+    public coinInWaterRotateMtx = mat4.create();
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'CoinRotater');
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        this.coinRotateY += getDeltaTimeFrames(viewerInput) * 8.0 * MathConstants.DEG_TO_RAD;
+        this.coinInWaterRotateY += getDeltaTimeFrames(viewerInput) * 4.0 * MathConstants.DEG_TO_RAD;
+        this.coinHiSpeedRotateY += getDeltaTimeFrames(viewerInput) * 16.0 * MathConstants.DEG_TO_RAD;
+
+        computeModelMatrixR(this.coinRotateMtx, 0, this.coinRotateY, 0);
+        computeModelMatrixR(this.coinInWaterRotateMtx, 0, this.coinInWaterRotateY, 0);
+        computeModelMatrixR(this.coinHiSpeedRotateMtx, 0, this.coinHiSpeedRotateY, 0);
+    }
+}
+
 class Coin extends LiveActor {
+    private isInWater: boolean = false;
+    private useLocalGravity: boolean = false;
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, protected isPurpleCoin: boolean) {
@@ -1454,24 +1477,40 @@ class Coin extends LiveActor {
             const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
             if (isNeedBubble) {
                 this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble", vec3.fromValues(0, 70, 0));
-                tryStartAllAnim(this, "Move");
+                startBck(this.airBubble, 'Move');
             }
+
+            this.useLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg4(infoIter), -1));
         }
 
-        tryStartAllAnim(this, 'Move');
+        this.calcGravityFlag = false;
+        if (this.useLocalGravity) {
+            calcActorAxis(null, this.gravityVector, null, this);
+            vec3.negate(this.gravityVector, this.gravityVector);
+        } else {
+            calcGravity(sceneObjHolder, this);
+        }
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        // TODO(jstpierre): CoinRotater has three separate matrices:
-        //   - getCoinRotateYMatrix()
-        //   - getCoinInWaterRotateYMatrix()
-        //   - getCoinHiSpeedRotateYMatrix()
-        // for now we just spin at 4 degrees per frame lol
-        const SPEED = MathConstants.DEG_TO_RAD * 4;
-        const rotationY = getTimeFrames(viewerInput) * SPEED;
-        computeModelMatrixSRT(scratchMatrix, 1, 1, 1, 0, rotationY, 0, 0, 0, 0);
-        super.calcAndSetBaseMtx(viewerInput);
-        mat4.mul(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchMatrix);
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        this.isInWater = isInWater(sceneObjHolder, this.translation);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.useLocalGravity) {
+            this.calcAndSetBaseMtxBase();
+        } else {
+            vec3.negate(scratchVec3, this.gravityVector);
+            makeMtxUpNoSupportPos(this.modelInstance!.modelMatrix, scratchVec3, this.translation);
+        }
+
+        sceneObjHolder.create(SceneObj.CoinRotater);
+        const coinRotater = sceneObjHolder.coinRotater!;
+        const rotateMtx = this.isInWater ? coinRotater.coinInWaterRotateMtx : coinRotater.coinRotateMtx;
+
+        mat4.mul(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, rotateMtx);
     }
 }
 
@@ -1495,6 +1534,31 @@ export function requestArchivesPurpleCoin(sceneObjHolder: SceneObjHolder, infoIt
     const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
     if (isNeedBubble)
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
+}
+
+export class QuestionCoin extends LiveActor {
+    private useLocalGravity: boolean = false;
+    private mtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'QuestionCoin');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'QuestionCoin');
+        startBpk(this, 'QuestionCoin');
+        connectToSceneItemStrongLight(sceneObjHolder, this);
+
+        this.useLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+
+        // TODO(jstpierre): initAfterPlacement
+        makeMtxTRFromActor(this.mtx, this);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        sceneObjHolder.create(SceneObj.CoinRotater);
+        const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
+        mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
+    }
 }
 
 abstract class CoinGroup extends LiveActor {
@@ -1669,8 +1733,8 @@ export class MiniRouteGalaxy extends LiveActor {
         emitEffect(sceneObjHolder, this, miniatureName);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAndSetBaseMtx(viewerInput);
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         const rotateY = getTimeFrames(viewerInput) * this.rotateSpeed;
         mat4.rotateY(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, rotateY);
@@ -2623,8 +2687,8 @@ export class OceanWaveFloater extends MapObjActor {
         return vec3.length(scratchVec3) * Math.sign(vec3.dot(scratchVec3, this.gravityVector));
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAndSetBaseMtx(viewerInput);
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         vec3.scale(scratchVec3, this.gravityVector, this.waveForce.getCurrentValue());
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3);
@@ -2736,7 +2800,7 @@ class Fish extends LiveActor<FishNrv> {
         this.updateFollowPointPos();
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         makeMtxFrontUpPos(this.modelInstance!.modelMatrix, this.direction, this.fishGroup.upVec, this.translation);
     }
 
@@ -2959,7 +3023,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         */
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
         setTrans(this.modelInstance!.modelMatrix, this.translation);
     }
@@ -3414,7 +3478,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // Gravity vector
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
