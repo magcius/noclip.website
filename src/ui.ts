@@ -1658,9 +1658,9 @@ class XRSettings extends Panel {
         </div>
         `;
 
-        this.EnableXRCheckBox = new Checkbox('Enable VR');
-        this.contents.appendChild(this.EnableXRCheckBox.elem);
-        this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+        this.enableXRCheckBox = new Checkbox('Enable VR');
+        this.contents.appendChild(this.enableXRCheckBox.elem);
+        this.enableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
 
         const displayScaleValue = (value: Number) => {
             return value.toPrecision(5).toString();
