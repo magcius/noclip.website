@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -6369,5 +6369,74 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         super.requestArchives(sceneObjHolder, infoIter);
 
         sceneObjHolder.modelCache.requestObjectData('ElectricRailPoint');
+    }
+}
+
+const enum FluffWindEffectNrv { Init, BrowWind }
+
+class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
+    private effectHostMtx = mat4.create();
+    private effectName: string;
+    private lifetime: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'FluffWindEffect');
+    }
+
+    public initEffectInfo(sceneObjHolder: SceneObjHolder, pos: vec3, front: vec3, up: vec3, effectName: string): void {
+        vec3.copy(this.translation, pos);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        makeMtxFrontUpPos(this.effectHostMtx, front, up, pos);
+        this.effectName = effectName;
+        this.initEffectKeeper(sceneObjHolder, effectName);
+        setEffectHostMtx(this, this.effectName, this.effectHostMtx);
+        this.initNerve(FluffWindEffectNrv.Init);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === FluffWindEffectNrv.Init) {
+            // I think the "randomness" in the original game is just powered by clipping. Here,
+            // we don't have the same clip system. Perhaps we should add it. For now, we just
+            // fudge the start time a bit.
+            if (isFirstStep(this))
+                this.lifetime = getRandomInt(0, 600);
+
+            if (isGreaterStep(this, this.lifetime))
+                this.setNerve(FluffWindEffectNrv.BrowWind);
+        } else if (currentNerve === FluffWindEffectNrv.BrowWind) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, this.effectName);
+                this.lifetime = getRandomInt(60, 240);
+            }
+
+            if (isGreaterStep(this, this.lifetime))
+                this.setNerve(FluffWindEffectNrv.BrowWind);
+        }
+    }
+}
+
+export class FluffWind extends LiveActor {
+    private effects: FluffWindEffect[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        this.initRailRider(sceneObjHolder, infoIter);
+        this.initEffectKeeper(sceneObjHolder, 'FluffWind');
+
+        const count = ((getRailTotalLength(this) / 600.0) | 0) + 1;
+        for (let i = 0; i < count; i++) {
+            const effect = new FluffWindEffect(zoneAndLayer, sceneObjHolder);
+            const coord = i / count * getRailTotalLength(this);
+            calcRailPosAtCoord(scratchVec3a, this, coord);
+            calcRailDirectionAtCoord(scratchVec3b, this, coord);
+            effect.initEffectInfo(sceneObjHolder, scratchVec3a, scratchVec3b, Vec3UnitY, 'FluffWind');
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }

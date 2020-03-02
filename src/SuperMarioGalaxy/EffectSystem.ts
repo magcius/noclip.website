@@ -128,7 +128,7 @@ class ParticleEmitter {
 }
 
 const enum EmitterLoopMode {
-    ONE_TIME, FOREVER,
+    OneTime, Forever,
 }
 
 class SingleEmitter {
@@ -144,7 +144,7 @@ class SingleEmitter {
         // The original engine seems to unnecessarily create a ParticleEmitter
         // and then immediately destroy it to read this field (in scanParticleEmitter).
         // We just read the field directly lol.
-        this.loopMode = resource.res.bem1.maxFrame === 0 ? EmitterLoopMode.FOREVER : EmitterLoopMode.ONE_TIME;
+        this.loopMode = resource.res.bem1.maxFrame === 0 ? EmitterLoopMode.Forever : EmitterLoopMode.OneTime;
     }
 
     public deleteEmitter(): void {
@@ -173,7 +173,10 @@ class SingleEmitter {
     }
 
     public isOneTime(): boolean {
-        return this.loopMode === EmitterLoopMode.ONE_TIME;
+        if (this.isValid())
+            return this.particleEmitter!.baseEmitter!.maxFrame !== 0;
+        else
+            return this.loopMode === EmitterLoopMode.OneTime;
     }
 
     public setDrawParticle(v: boolean) {
@@ -466,6 +469,28 @@ export class MultiEmitter {
             this.childEmitters[i].deleteForeverEmitter();
     }
 
+    public playEmitterOffClipped(): void {
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (!emitter.isValid() || emitter.isOneTime())
+                continue;
+            const baseEmitter = emitter.particleEmitter!.baseEmitter!;
+            baseEmitter.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+            baseEmitter.flags &= ~JPA.BaseEmitterFlags.STOP_DRAW_PARTICLE;
+        }
+    }
+
+    public stopEmitterOnClipped(): void {
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (!emitter.isValid() || emitter.isOneTime())
+                continue;
+            const baseEmitter = emitter.particleEmitter!.baseEmitter!;
+            baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+            baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_DRAW_PARTICLE;
+        }
+    }
+
     public setName(name: string): void {
         this.name = name;
     }
@@ -561,7 +586,7 @@ function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: n
 
 function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean, deltaTimeFrames: number): boolean {
     if (isRegisteredBck(multiEmitter, currentBckName)) {
-        if (loopMode === EmitterLoopMode.FOREVER)
+        if (loopMode === EmitterLoopMode.Forever)
             return true;
 
         // TODO(jstpierre): Check speed
@@ -673,6 +698,16 @@ export class EffectKeeper {
             this.multiEmitters[i].deleteEmitter();
     }
 
+    public playEmitterOffClipped(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].playEmitterOffClipped();
+    }
+
+    public stopEmitterOnClipped(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].stopEmitterOnClipped();
+    }
+
     public changeBck(): void {
         this.changeBckReset = true;
     }
@@ -681,9 +716,9 @@ export class EffectKeeper {
         if (multiEmitter.animNames === null)
             return;
 
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.ONE_TIME, this.changeBckReset, deltaTimeFrames))
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.OneTime, this.changeBckReset, deltaTimeFrames))
             multiEmitter.createOneTimeEmitter(effectSystem);
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.FOREVER, this.changeBckReset, deltaTimeFrames))
+        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.Forever, this.changeBckReset, deltaTimeFrames))
             multiEmitter.createForeverEmitter(effectSystem);
         if (isDelete(multiEmitter, this.currentBckName, xanimePlayer, deltaTimeFrames))
             multiEmitter.deleteEmitter();

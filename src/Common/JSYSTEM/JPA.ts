@@ -1188,8 +1188,8 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
 // the traversal order bit says. In the original code, FORWARD is 0x00, and
 // REVERSE is 0x01.
 const enum TraverseOrder {
-    REVERSE = 0x00,
-    FORWARD = 0x01,
+    Reverse = 0x00,
+    Forward = 0x01,
 }
 
 export interface JPAEmitterCallBack {
@@ -1198,6 +1198,7 @@ export interface JPAEmitterCallBack {
 
 const scratchVec3Points = nArray(4, () => vec3.create());
 export class JPABaseEmitter {
+    private drawParticle = true;
     public flags: BaseEmitterFlags;
     public resData: JPAResourceData;
     public emitterScl = vec3.create();
@@ -1252,15 +1253,7 @@ export class JPABaseEmitter {
     }
 
     public setDrawParticle(v: boolean): void {
-        const stopDraw = !v;
-        if (stopDraw)
-            this.flags |= BaseEmitterFlags.STOP_DRAW_PARTICLE;
-        else
-            this.flags &= ~BaseEmitterFlags.STOP_DRAW_PARTICLE;
-    }
-
-    public getDrawParticle(): boolean {
-        return !(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE);
+        this.drawParticle = v;
     }
 
     public init(resData: JPAResourceData): void {
@@ -1737,7 +1730,7 @@ export class JPABaseEmitter {
 
         const bsp1 = this.resData.res.bsp1;
         const esp1 = this.resData.res.esp1;
-        const reverseOrder = bsp1.traverseOrder === TraverseOrder.REVERSE;
+        const reverseOrder = bsp1.traverseOrder === TraverseOrder.Reverse;
 
         const packetParams = workData.packetParams;
         const materialParams = workData.materialParams;
@@ -1926,7 +1919,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesBase.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.REVERSE) ? n - 1 - i : i;
+                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[index].drawP(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
@@ -1977,7 +1970,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesChild.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.REVERSE) ? n - 1 - i : i;
+                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[index].drawC(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
@@ -1987,7 +1980,7 @@ export class JPABaseEmitter {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
-        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE))
+        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE) || !this.drawParticle)
             return;
 
         const bsp1 = this.resData.res.bsp1;
