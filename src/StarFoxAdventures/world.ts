@@ -161,18 +161,17 @@ class WorldRenderer extends SFARenderer {
         getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
         vec3.negate(cameraFwd, cameraFwd);
         const camPitch = vecPitch(cameraFwd);
-        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+        const camRoll = 0;
 
         // FIXME: This implementation is adapted from the game but correctness is not verified.
         // A different technique should probably be used, since this one ignores camera roll and works poorly in VR.
         // TODO: Implement time of day, which the game implements by blending textures.
         let factor = viewerInput.camera.fovY;
-        let texElevationCoeff = ((atmosTexture.height * (factor * 0.5)) / (0.5*Math.PI)) * 3.0;
-        let camField0x52 = 0; // ???
-        let camField0x54 = camPitch; // ???
-        factor = Math.sin(-camField0x54);
+        // FIXME: Is (.5*Math.PI) below correct?
+        let texElevationCoeff = ((atmosTexture.height * (factor * 0.5)) / (.5*Math.PI)) * 3.0;
+        factor = Math.sin(-camPitch); // FIXME: do I have campitch and camroll mixed up?
         texElevationCoeff *= factor;
-        factor = (atmosTexture.height * 0.5 - 6.0) - (3.0 * (atmosTexture.height * camField0x52));
+        factor = (atmosTexture.height * 0.5 - 6.0) - (3.0 * (atmosTexture.height * camRoll) / Math.PI);
         factor += texElevationCoeff;
         factor *= 32.0;
         factor = factor / (32 * atmosTexture.height);

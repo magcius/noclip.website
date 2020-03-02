@@ -526,11 +526,11 @@ const sceneDescs = [
     // new SFAMapDesc(116, 'loc116', 'Location'), 
     // (end)
 
-    // 'Full Scenes',
-    // new SFAWorldSceneDesc('capeclaw', 'Cape Claw'),
-    // new SFAWorldSceneDesc('hollow', 'ThornTail Hollow'),
-    // new SFAWorldSceneDesc('moonpass', 'Moon Mountain Pass'),
-    // new SFAWorldSceneDesc('warlock', 'Krazoa Palace'),
+    'Full Scenes',
+    new SFAWorldSceneDesc('capeclaw', 'Cape Claw'),
+    new SFAWorldSceneDesc('hollow', 'ThornTail Hollow'),
+    new SFAWorldSceneDesc('moonpass', 'Moon Mountain Pass'),
+    new SFAWorldSceneDesc('warlock', 'Krazoa Palace'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
