@@ -18,7 +18,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -344,7 +344,7 @@ function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
     initInfo.effectFilename = null;
 }
 
-class MapObjActorInitInfo {
+class MapObjActorInitInfo<TNerve extends number = number> {
     public lightType: LightType = LightType.Planet;
     public initLightControl: boolean = false;
     public connectToScene: boolean = false;
@@ -356,7 +356,7 @@ class MapObjActorInitInfo {
     public texChangeFrame: number = -1;
     public rotator: boolean = false;
     public railMover: boolean = false;
-    public initNerve: number | null = null;
+    public initNerve: TNerve | null = null;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -383,7 +383,7 @@ class MapObjActorInitInfo {
         this.railMover = true;
     }
 
-    public setupNerve(nerve: number): void {
+    public setupNerve(nerve: TNerve): void {
         this.initNerve = nerve;
     }
 }
@@ -6569,6 +6569,73 @@ export class Dossun extends LiveActor<DossunNrv> {
             if (isGreaterStep(this, this.maxRisingStep)) {
                 // startSound
                 this.setNerve(DossunNrv.Upper);
+            }
+        }
+    }
+}
+
+const enum TsukidashikunNrv { Relax, WaitForward, SignForward, MoveForward, WaitBack, SignBack, MoveBack }
+
+export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
+    private speed: number;
+    private waitStep: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<TsukidashikunNrv>();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(null);
+        // initInfo.setupSound(4);
+        initInfo.setupNerve(TsukidashikunNrv.MoveBack);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initLightCtrl(sceneObjHolder);
+        this.speed = fallback(getJMapInfoArg0(infoIter), 10.0);
+        this.waitStep = fallback(getJMapInfoArg0(infoIter), 120);
+        moveCoordToNearestPos(this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === TsukidashikunNrv.MoveForward || currentNerve === TsukidashikunNrv.MoveBack) {
+            moveCoordAndFollowTrans(this, this.speed);
+            if (isRailReachedGoal(this)) {
+                reverseRailDirection(this);
+                if (currentNerve === TsukidashikunNrv.MoveForward)
+                    this.setNerve(TsukidashikunNrv.WaitForward);
+                else
+                    this.setNerve(TsukidashikunNrv.WaitBack);
+            }
+        } else if (currentNerve === TsukidashikunNrv.WaitForward || currentNerve === TsukidashikunNrv.WaitBack) {
+            if (isFirstStep(this)) {
+                if (currentNerve === TsukidashikunNrv.WaitForward)
+                    startBva(this, 'FWait');
+                else
+                    startBva(this, 'BWait');
+            }
+
+            if (isGreaterStep(this, this.waitStep)) {
+                if (currentNerve === TsukidashikunNrv.WaitForward)
+                    this.setNerve(TsukidashikunNrv.SignBack);
+                else
+                    this.setNerve(TsukidashikunNrv.SignForward);
+            }
+        } else if (currentNerve === TsukidashikunNrv.SignForward || currentNerve === TsukidashikunNrv.SignBack) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Sign');
+                if (currentNerve === TsukidashikunNrv.SignForward)
+                    startBva(this, 'FSign');
+                else
+                    startBva(this, 'BSign');
+            }
+
+            if (isGreaterStep(this, 60)) {
+                setBckFrameAndStop(this, 0.0);
+                if (currentNerve === TsukidashikunNrv.SignForward)
+                    this.setNerve(TsukidashikunNrv.MoveForward);
+                else
+                    this.setNerve(TsukidashikunNrv.MoveBack);
             }
         }
     }

@@ -512,6 +512,10 @@ export function adjustmentRailCoordSpeed(actor: LiveActor, target: number, maxSp
     actor.railRider!.setSpeed(target);
 }
 
+export function moveCoordToNearestPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(actor.translation);
+}
+
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     actor.railRider!.moveToNearestPos(actor.translation);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
