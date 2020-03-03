@@ -29,6 +29,7 @@ export const enum Opcode {
     SH      = 0x29,
     SW      = 0x2B,
     LWC1    = 0x31,
+    SWC1    = 0x39,
 
     // register opcode block
     REGOP   = 0x100,
@@ -37,10 +38,16 @@ export const enum Opcode {
     AND     = 0x124,
     OR      = 0x125,
 
+    // coprocessor 1 opcode block
+    COPOP   = 0x200,
     MFC1    = 0x200,
     MTC1    = 0x204,
 
+    // float (single) opcode block
     FLOATOP = 0x300,
+    ADDS    = 0x300,
+    SUBS    = 0x301,
+    MOVS    = 0x306,
 }
 
 export const enum RegName {
@@ -89,6 +96,10 @@ export class NaiveInterpreter {
             this.regs[i].value = 0;
             this.regs[i].lastOp = Opcode.NOP;
         }
+        for (let i = 0; i < this.fregs.length; i++) {
+            this.fregs[i].value = 0;
+            this.fregs[i].lastOp = Opcode.NOP;
+        }
         for (let i = 0; i < this.stackArgs.length; i++) {
             this.stackArgs[i].value = 0;
             this.stackArgs[i].lastOp = Opcode.NOP;
@@ -120,10 +131,11 @@ export class NaiveInterpreter {
                 if (rs === Opcode.COP0 || rs === Opcode.COP1)
                     op = Opcode.FLOATOP | (instr & 0x3F);
                 else
-                    op = Opcode.MFC1 | rs;
+                    op = Opcode.COPOP | rs;
             }
             const rt = (instr >>> 16) & 0x1F;
             const rd = (instr >>> 11) & 0x1F;
+            const frd = (instr >>> 6) & 0x1F;
             const imm = view.getInt16(offs + 0x02);
             const u_imm = (instr >>> 0) & 0xFFFF;
             switch (op) {
@@ -179,6 +191,17 @@ export class NaiveInterpreter {
                         }
                     }
                 } break;
+                case Opcode.SWC1: {
+                    if (rs !== RegName.SP)
+                        this.handleStore(op, this.fregs[rt], this.regs[rs], imm);
+                    else {
+                        const stackOffset = (u_imm >>> 2) - 4;
+                        if (stackOffset >= 0 && stackOffset < this.stackArgs.length) {
+                            this.stackArgs[stackOffset].lastOp = this.fregs[rt].lastOp;
+                            this.stackArgs[stackOffset].value = this.fregs[rt].value;
+                        }
+                    }
+                } break;
 
                 // attempt to retrieve a value from the stack
                 case Opcode.LW:
@@ -195,15 +218,17 @@ export class NaiveInterpreter {
                 case Opcode.LB:
                 case Opcode.LBU:
                 case Opcode.LH:
-                case Opcode.LHU: {
+                case Opcode.LHU:
+                case Opcode.LWC1: {
+                    const target = op === Opcode.LWC1 ? this.fregs[rt] : this.regs[rt];
                     if (imm === 0)
-                        this.regs[rt].value = this.guessValue(rs);
+                        target.value = this.guessValue(rs);
                     else if ((this.regs[rs].value & 0xFFFF) === 0)
-                        this.regs[rt].value = this.guessValue(rs) + imm;
+                        target.value = this.guessValue(rs) + imm;
                     else
-                        this.regs[rt].value = imm;
+                        target.value = imm;
 
-                    this.regs[rt].lastOp = op;
+                    target.lastOp = op;
                 } break;
 
                 case Opcode.ADDU: {
@@ -263,6 +288,16 @@ export class NaiveInterpreter {
                 case Opcode.MTC1: {
                     this.fregs[rd].lastOp = this.regs[rt].lastOp;
                     this.fregs[rd].value = this.regs[rt].value;
+                } break;
+                case Opcode.SUBS:
+                case Opcode.ADDS: {
+                    this.fregs[frd].lastOp = op;
+                    this.fregs[frd].value = this.fregs[rd].value;
+                    if (this.fregs[rd].value === 0 || (this.fregs[rd].lastOp === Opcode.LWC1 && this.fregs[rd].value < 0x80000000))
+                        this.fregs[frd].value = this.fregs[rt].value;
+                } break;
+                case Opcode.MOVS: {
+                    this.fregs[frd].lastOp = this.fregs[rd].lastOp;
                 } break;
 
                 default:

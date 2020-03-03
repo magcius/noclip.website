@@ -10,6 +10,7 @@ import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
 import {MotionParser, Motion} from "./motion";
+import { Vec3UnitY, Vec3One } from "../MathHelpers";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -170,7 +171,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             model: skyboxModel,
             translation: vec3.create(),
             euler: vec3.create(),
-            scale: vec3.fromValues(1, 1, 1),
+            scale: vec3.clone(Vec3One),
             parent: -1,
             materials,
         };
@@ -215,14 +216,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
                 behavior: 1,
                 pos: vec3.fromValues(0, 100, 500),
                 euler: vec3.create(),
-                scale: vec3.fromValues(1, 1, 1)
+                scale: vec3.clone(Vec3One),
             },
             {
                 id: 0x3e9,
                 behavior: 0,
                 pos: vec3.fromValues(0, 0, 10000),
                 euler: vec3.fromValues(0, Math.PI, 0),
-                scale: vec3.fromValues(1, 1, 1)
+                scale: vec3.clone(Vec3One),
             },
         );
 
@@ -486,10 +487,7 @@ function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, 
     const states = nArray(2, () => new F3DEX2.RSPState(output, dataMap));
 
     const renderer = selectRenderer(renderFunc);
-    if (renderer === moltresDL)
-        initDL(states[0], false);
-    else
-        initDL(states[0], true);
+    initDL(states[0], true);
     initDL(states[1], false);
 
     let currIndex = 0;
@@ -553,7 +551,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
         parent: -1,
         translation: pos,
         euler: vec3.create(),
-        scale: vec3.fromValues(1, 1, 1),
+        scale: vec3.clone(Vec3One),
         materials,
     };
 
@@ -1011,7 +1009,7 @@ function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
     return {nodes, sharedOutput, animations}
 }
 
-interface GroundPlane {
+export interface GroundPlane {
     normal: vec3; // not actually normalized, really the equation coefficients
     offset: number;
     type: number;
@@ -1026,7 +1024,10 @@ export interface CollisionTree {
 }
 
 export function findGroundHeight(tree: CollisionTree | null, x: number, z: number): number {
-    const plane = findGroundPlane(tree, x / 100, z / 100);
+    return computePlaneHeight(findGroundPlane(tree, x, z), x, z);
+}
+
+export function computePlaneHeight(plane: GroundPlane | null, x: number, z: number): number {
     if (plane === null)
         return 0;
     if (plane.normal[1] === 0)
@@ -1034,9 +1035,17 @@ export function findGroundHeight(tree: CollisionTree | null, x: number, z: numbe
     return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
+const defaultPlane: GroundPlane = {
+    normal: vec3.clone(Vec3UnitY),
+    type: -1,
+    offset: 0,
+};
+
 export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+    x/= 100;
+    z/= 100;
     if (tree === null)
-        return null;
+        return defaultPlane;
     while (true) {
         const test = x * tree.line[0] + z * tree.line[1] + tree.line[2];
         if (test > 0) {
@@ -1087,7 +1096,7 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
             planeList.push({
                 normal: vec3.fromValues(x, z, y), // the plane equation uses z up
                 offset: planeView.getFloat32(start + 0x0C),
-                type: planeView.getUint32(start + 0x10),
+                type: planeView.getUint32(start + 0x10) >>> 8,
             });
         }
         return planeList[index];
@@ -1141,7 +1150,7 @@ export interface StateBlock {
     wait: WaitParams | null;
     flagSet: number;
     flagClear: number;
-    allowWater?: boolean;
+    ignoreGround?: boolean;
     edges: StateEdge[];
 }
 
@@ -1221,11 +1230,14 @@ export const enum ObjectField {
     Behavior        = 0x88,
     StateFlags      = 0x8C,
     Timer           = 0x90,
+    ForwardSpeed    = 0x98,
+    VerticalSpeed   = 0x9C,
+    MovingYaw       = 0xA0,
     LoopTarget      = 0xA4,
     FrameTarget     = 0xA8,
     Transitions     = 0xAC,
 
-    Reference       = 0xB0,
+    StoredValues    = 0xB0,
     Mystery         = 0xC0,
     GroundList      = 0xCC,
 
@@ -1234,19 +1246,20 @@ export const enum ObjectField {
 
 export const enum EndCondition {
     Animation   = 0x01,
-    Path        = 0x02,
+    Motion      = 0x02,
     Timer       = 0x04,
-    Motion      = 0x20,
+    Aux         = 0x08,
+    Target      = 0x10,
+    Pause       = 0x20, // used to pause motion, not as a condition
 
-    // handling custom behavior in cave
-    Dance       = 0x100000,
+    Dance       = 0x100000, // special dance-related behavior in cave
     // actually from a different set of flags
     Hidden      = 0x200000,
     PauseAnim   = 0x400000,
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.allowWater === undefined;
+    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined;
 }
 
 const motionParser = new MotionParser();
@@ -1410,8 +1423,10 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.animation = index;
             } break;
             case StateFuncs.SetMotion: {
+                if (a1.value === 0x802D6B14 && this.state.startAddress === 0x802DB4A8)
+                    break; // this function chooses motion based on the behavior param, fix later
                 if (a1.value !== 0) {
-                    motionParser.parseFromView(this.dataMap.getView(a1.value))
+                    motionParser.parse(this.dataMap, a1.value, this.animationAddresses);
                     this.currBlock.motion = motionParser.blocks;
                 } else
                     this.currBlock.motion = [];
@@ -1574,12 +1589,12 @@ class StateParser extends MIPS.NaiveInterpreter {
                         this.currBlock.flagClear |= EndCondition.Hidden | EndCondition.PauseAnim;
                 } break;
                 case ObjectField.GroundList: {
-                    this.currBlock.allowWater = value.value !== 0;
+                    this.currBlock.ignoreGround = value.value !== 0;
                 } break;
                 case ObjectField.SomeBool:
                 case ObjectField.FrameTarget:
                 case ObjectField.Apple:
-                case ObjectField.Reference:
+                case ObjectField.StoredValues:
                 case ObjectField.Mystery:
                     break;
 
@@ -1653,6 +1668,11 @@ function fixupState(state: State): void {
             state.blocks[0].edges[0].param = 3;
             state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[1].param = 4;
+        } break;
+        // does one of two options based on distance - we just take the first
+        case 0x802DDB60: {
+            state.blocks[0].edges.push(state.blocks[1].edges[1]);
+            state.blocks.splice(1);
         } break;
     }
 }

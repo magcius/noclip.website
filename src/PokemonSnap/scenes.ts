@@ -13,7 +13,7 @@ import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { Actor } from './actor';
+import { createActor } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -23,7 +23,7 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0, allObjects: []};
+    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0, allActors: []};
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -194,11 +194,11 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const def = level.objectInfo[objIndex];
-                    const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
+                    const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
                     if (def.id === 133) // eevee actually uses chansey's path
                         objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
                     sceneRenderer.modelRenderers.push(objectRenderer);
-                    sceneRenderer.globals.allObjects.push(objectRenderer);
+                    sceneRenderer.globals.allActors.push(objectRenderer);
                 }
             }
 

@@ -1,55 +1,56 @@
 import { ModelRenderer, buildTransform, LevelGlobals } from "./render";
-import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge } from "./room";
+import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, runMotion, nextMotionBlock } from "./motion";
+import { Vec3One } from "../MathHelpers";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle } from "./motion";
 
 const cameraScratch = vec3.create();
 export class Actor extends ModelRenderer {
     private currState = -1;
     private currBlock = 0;
-    public motionData: MotionData;
+    public motionData = new MotionData();
     private blockEnd = 0;
     private loopTarget = 1;
     private target: Actor | null = null;
 
-    private translation = vec3.create();
-    private euler = vec3.create();
-    private scale = vec3.fromValues(1, 1, 1);
+    protected translation = vec3.create();
+    protected euler = vec3.create();
+    protected scale = vec3.clone(Vec3One);
 
     constructor(renderData: RenderData, private spawn: ObjectSpawn, private def: ObjectDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
+        this.motionData.path = spawn.path;
+        this.reset(globals);
+    }
+
+    protected reset(globals: LevelGlobals): void {
         // set transform components
-        vec3.copy(this.translation, spawn.pos);
-        if (def.spawn === SpawnType.GROUND)
-            this.translation[1] = findGroundHeight(globals.collision!, spawn.pos[0], spawn.pos[2]);
+        vec3.copy(this.translation, this.spawn.pos);
+        if (this.def.spawn === SpawnType.GROUND)
+            this.translation[1] = findGroundHeight(globals.collision, this.spawn.pos[0], this.spawn.pos[2]);
 
-        vec3.copy(this.euler, spawn.euler);
+        vec3.copy(this.euler, this.spawn.euler);
 
-        vec3.mul(this.scale, def.scale, spawn.scale);
-        buildTransform(this.modelMatrix, this.translation, spawn.euler, this.scale);
+        vec3.mul(this.scale, this.def.scale, this.spawn.scale);
+        buildTransform(this.modelMatrix, this.translation, this.spawn.euler, this.scale);
 
-        this.motionData = {
-            refPosition: vec3.create(),
-            paused: false,
-            done: false,
-            currMotion: [],
-            pathParam: 0,
-            currBlock: 0,
-            allowWater: false,
-            start: -1,
+        this.motionData.reset();
 
-            path: spawn.path,
-        };
+        const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
+        this.motionData.groundHeight = computePlaneHeight(ground, this.translation[0], this.translation[2]);
+        this.motionData.groundType = 0;
+        if (ground !== null)
+            this.motionData.groundType = ground.type;
 
-        if (def.stateGraph.states.length > 0)
+        if (this.def.stateGraph.states.length > 0)
             this.changeState(0, globals);
     }
 
     protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
-        if (runMotion(this.translation, this.euler, this.scale, this.motionData, viewerInput, globals))
+        if (this.motionStep(viewerInput, globals))
             buildTransform(this.modelMatrix, this.translation, this.euler, this.scale);
         while (this.currState >= 0) {
             const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
@@ -97,10 +98,10 @@ export class Actor extends ModelRenderer {
             }
         }
 
-        if (block.flagSet & EndCondition.Motion)
-            this.motionData.paused = true;
-        if (block.flagClear & EndCondition.Motion)
-            this.motionData.paused = false;
+        if (block.flagSet !== 0)
+            this.motionData.stateFlags |= block.flagSet;
+        if (block.flagClear !== 0)
+            this.motionData.stateFlags &= ~block.flagClear;
 
         if (block.flagSet & EndCondition.Hidden)
             this.hidden = true;
@@ -112,14 +113,14 @@ export class Actor extends ModelRenderer {
         if (block.flagClear & EndCondition.PauseAnim)
             this.animationPaused = false;
 
-        if (block.allowWater !== undefined)
-            this.motionData.allowWater = block.allowWater;
+        if (block.ignoreGround !== undefined)
+            this.motionData.ignoreGround = block.ignoreGround;
 
         if (block.motion !== null) {
             this.motionData.currMotion = block.motion;
-            this.motionData.currBlock = -1;
-            this.motionData.done = false;
-            nextMotionBlock(this.motionData);
+            this.motionData.currBlock = 0;
+            this.motionData.start = -1;
+            this.motionData.stateFlags &= ~(EndCondition.Pause | EndCondition.Motion | EndCondition.Target);
         }
 
         if (block.wait !== null)
@@ -205,7 +206,7 @@ export class Actor extends ModelRenderer {
         return (!!(flags & EndCondition.Dance) && globals.currentSong === 0) ||
             (!!(flags & EndCondition.Timer) && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
             (!!(flags & EndCondition.Animation) && this.renderers[this.headAnimationIndex].animator.loopCount >= this.loopTarget) ||
-            (!!(flags & EndCondition.Path) && this.motionData.done);
+            ((flags & this.motionData.stateFlags) !== 0);
     }
 
     private basicInteractions(block: WaitParams, viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
@@ -243,8 +244,70 @@ export class Actor extends ModelRenderer {
         }
         return false;
     }
+
+    protected motionStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
+        if (this.motionData.currMotion.length === 0)
+            return false;
+        const dt = viewerInput.deltaTime / 1000;
+        let result = MotionResult.None;
+        let updated = false;
+        while (this.motionData.currBlock < this.motionData.currMotion.length) {
+            if (this.motionData.start < 0)
+                motionBlockInit(this.motionData, this.translation, this.euler, viewerInput);
+            const block: Motion = this.motionData.currMotion[this.motionData.currBlock];
+            switch (block.kind) {
+                case "animation": {
+                    if (block.index !== this.currAnimation || block.force)
+                        this.setAnimation(block.index);
+                } break;
+                case "path":
+                    result = followPath(this.translation, this.euler, this.motionData, block, dt, globals); break;
+                case "projectile":
+                    result = projectile(this.translation, this.motionData, block, viewerInput.time, globals); break;
+                case "vertical":
+                    result = vertical(this.translation, this.euler, this.motionData, block, dt); break;
+                case "random":
+                    result = randomCircle(this.translation, this.euler, this.motionData, block, dt, globals); break;
+                case "basic": {
+                    switch (block.subtype) {
+                        case BasicMotionKind.Placeholder:
+                        case BasicMotionKind.Wait: {
+                            if ((viewerInput.time - this.motionData.start) / 1000 > block.param)
+                                result = MotionResult.Done;
+                            else
+                                result = MotionResult.None;
+                        } break;
+                    }
+                } break;
+            }
+            if (result !== MotionResult.None)
+                updated = true;
+            if (result === MotionResult.Done) {
+                this.motionData.currBlock++;
+                this.motionData.start = -1;
+            } else
+                return updated;
+        }
+        this.motionData.stateFlags |= EndCondition.Motion | EndCondition.Target;
+        return updated;
+    }
 }
 
 function onScreen(viewerInput: ViewerRenderInput, pos: vec3, radius = 1): boolean {
     return viewerInput.camera.frustum.containsSphere(pos, radius);
+}
+
+class Kakuna extends Actor {
+    protected reset(globals: LevelGlobals): void {
+        super.reset(globals);
+        this.motionData.storedValues[0] = this.translation[1];
+        this.motionData.storedValues[1] = this.motionData.groundHeight + 25;
+    }
+}
+
+export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ObjectDef, globals: LevelGlobals): Actor {
+    switch (def.id) {
+        case 14: return new Kakuna(renderData, spawn, def, globals);
+    }
+    return new Actor(renderData, spawn, def, globals);
 }

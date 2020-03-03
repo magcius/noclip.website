@@ -15,7 +15,7 @@ import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, Vec3One } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Actor } from './actor';
 
@@ -212,7 +212,7 @@ export interface LevelGlobals {
     currentSong: number;
     songStart: number;
     lastPesterBall: number;
-    allObjects: Actor[];
+    allActors: Actor[];
 }
 
 export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): void {
@@ -240,7 +240,7 @@ export class NodeRenderer {
 
     public translation = vec3.create();
     public euler = vec3.create();
-    public scale = vec3.fromValues(1, 1, 1);
+    public scale = vec3.clone(Vec3One);
 
     public animator = new Animator();
     public materials: Material[] = [];
