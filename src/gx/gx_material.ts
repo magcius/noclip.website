@@ -8,7 +8,7 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
-import { assert, nArray } from '../util';
+import { assert } from '../util';
 import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';

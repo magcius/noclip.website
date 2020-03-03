@@ -5,7 +5,7 @@ import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1A
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
-import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../../../gx/gx_render';
+import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
@@ -334,15 +334,6 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
-function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
-    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
-    if (en)
-        colorWriteMask |= bits;
-    else
-        colorWriteMask &= ~bits;
-    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
-}
-
 type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
 
 const materialParams = new MaterialParams();
@@ -383,6 +374,10 @@ export class MaterialInstance {
 
     public setColorWriteEnabled(v: boolean): void {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
+    }
+
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
