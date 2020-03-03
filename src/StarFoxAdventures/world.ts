@@ -77,7 +77,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const texColl = new SFATextureCollection(gameInfo);
     await texColl.create(dataFetcher, 'swaphol');
 
-    const modelData = loadRes(modelsBin.subarray(0x164));
+    const modelData = loadRes(modelsBin.subarray(0x35604));
     hexdump(modelData);
     
     window.main.downloadModel = () => {

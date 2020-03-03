@@ -95,6 +95,15 @@ interface SFAMaterial {
 
 export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[]): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
+    const textures = [] as (SFATexture | null)[];
+    let tevStage = 0;
+    let indStageId = GX.IndTexStageID.STAGE0;
+    let texcoordId = GX.TexCoordID.TEXCOORD0;
+    let texmapId = GX.TexMapID.TEXMAP0;
+    let texGenSrc = GX.TexGenSrc.TEX0;
+    let cprevIsValid = false;
+    let aprevIsValid = false;
+
     if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
@@ -111,13 +120,6 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
     mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
 
-    let tevStage = 0;
-    let indStageId = GX.IndTexStageID.STAGE0;
-    let texcoordId = GX.TexCoordID.TEXCOORD0;
-    let texmapId = GX.TexMapID.TEXMAP0;
-    let texGenSrc = GX.TexGenSrc.TEX0;
-    let cprevIsValid = false;
-    let aprevIsValid = false;
     function addTevStagesForTextureWithSkyAmbient() {
         // TODO: set texture matrix
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
@@ -166,6 +168,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         switch (mode) {
         case 0:
             mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            break;
+        case 1: // Default case in original executable
+            mb.setTevColorIn(tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
             break;
         case 9:
             mb.setTevColorIn(tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
@@ -243,9 +248,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         tevStage++;
     }
 
-    const textures = [];
-
-    if ((shader.flags & 0x80) != 0) {
+    function addTevStagesForLava() { // and other similar effects?
         // Occurs for lava
         textures[2] = texColl.getTexture(device, texIds[shader.layers[0].texNum], true);
         // TODO: set texture matrix
@@ -300,28 +303,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         texcoordId = 4;
         texmapId = 3;
         indStageId = 2;
-    } else {
-        if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
-            addTevStageForTextureWithWhiteKonst(0);
-            addTevStagesForTextureWithMode(9);
-            addTevStageForMultVtxColor();
-        } else {
-            for (let i = 0; i < shader.layers.length; i++) {
-                const layer = shader.layers[i];
-                if (shader.flags & 0x40000) {
-                    addTevStagesForTextureWithSkyAmbient();
-                } else {
-                    addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
-                }
-            }
-        }
-
-        for (let i = 0; i < shader.layers.length; i++) {
-            textures.push(texColl.getTexture(device, texIds[shader.layers[i].texNum], true));
-        }
     }
 
-    if ((shader.flags & 0x40) != 0) {
+    function addTevStagesForShaderFlags0x40() { // not quite sure where this occurs
         // TODO: set texture matrix
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
         // TODO: set texture matrix
@@ -363,6 +347,33 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         texcoordId += 4;
         texmapId += 2;
         tevStage += 2;
+    }
+
+    if ((shader.flags & 0x80) != 0) {
+        addTevStagesForLava();
+    } else {
+        if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
+            addTevStageForTextureWithWhiteKonst(0);
+            addTevStagesForTextureWithMode(9);
+            addTevStageForMultVtxColor();
+        } else {
+            for (let i = 0; i < shader.layers.length; i++) {
+                const layer = shader.layers[i];
+                if (shader.flags & 0x40000) {
+                    addTevStagesForTextureWithSkyAmbient();
+                } else {
+                    addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                }
+            }
+        }
+
+        for (let i = 0; i < shader.layers.length; i++) {
+            textures.push(texColl.getTexture(device, texIds[shader.layers[i].texNum], true));
+        }
+    }
+
+    if ((shader.flags & 0x40) != 0) {
+        addTevStagesForShaderFlags0x40();
     }
 
     return {
