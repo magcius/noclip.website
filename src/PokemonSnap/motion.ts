@@ -41,6 +41,7 @@ export class MotionData {
 
     public pathParam: number;
     public start = -1;
+    public auxStart = -1;
     public startPos = vec3.create();
     public movingYaw: number;
     public ySpeed: number;
@@ -64,6 +65,7 @@ export class MotionData {
 
         this.pathParam = 0;
         this.start = -1;
+        this.auxStart = -1;
         vec3.copy(this.startPos, Vec3Zero);
         this.movingYaw = 0;
         this.ySpeed = 0;
@@ -95,7 +97,7 @@ function lookupValue(data: MotionData, param: ObjParam): number {
 }
 
 
-interface FollowPath {
+export interface FollowPath {
     kind: "path";
     speed: ObjParam;
     start: PathStart;
@@ -555,7 +557,7 @@ export function randomCircle(pos: vec3, euler: vec3, data: MotionData, block: Ra
     posScratch[2] = data.refPosition[2] + block.radius * Math.cos(data.movingYaw);
     if (attemptMove(pos, posScratch, data, globals, MoveFlags.Ground))
         return MotionResult.Done;
-    const delta = angleDist(euler[1], data.movingYaw + Math.PI/2);
-    euler[1] += clampRange(delta, block.maxTurn*30*dt);
+    const delta = angleDist(euler[1], data.movingYaw + Math.PI / 2);
+    euler[1] += clampRange(delta, block.maxTurn * 30 * dt);
     return MotionResult.Update;
 }

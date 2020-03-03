@@ -1,26 +1,45 @@
 import { ModelRenderer, buildTransform, LevelGlobals } from "./render";
-import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight } from "./room";
+import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
-import { assertExists } from "../util";
+import { assertExists, assert, hexzero } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { Vec3One } from "../MathHelpers";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle } from "./motion";
+import { Vec3One, lerp, MathConstants } from "../MathHelpers";
+import { getPathPoint } from "./animation";
+
+function sendGlobalSignal(source: Actor, signal: number, globals: LevelGlobals): void {
+    for (let i = 0; i < globals.allActors.length; i++) {
+        globals.allActors[i].receiveSignal(source, signal, globals);
+    }
+}
+
+function sendSignalToID(source: Actor, signal: number, targetID: number, globals: LevelGlobals): void {
+    for (let i = 0; i < globals.allActors.length; i++) {
+        if (globals.allActors[i].def.id !== targetID)
+            continue;
+        globals.allActors[i].receiveSignal(source, signal, globals);
+        break;
+    }
+}
 
 const cameraScratch = vec3.create();
 export class Actor extends ModelRenderer {
-    private currState = -1;
-    private currBlock = 0;
     public motionData = new MotionData();
+    protected currState = -1;
+    protected currBlock = 0;
+    protected currAux = 0;
+
     private blockEnd = 0;
     private loopTarget = 1;
+    private photoTimer = 0;
     private target: Actor | null = null;
 
     protected translation = vec3.create();
     protected euler = vec3.create();
     protected scale = vec3.clone(Vec3One);
 
-    constructor(renderData: RenderData, private spawn: ObjectSpawn, private def: ObjectDef, globals: LevelGlobals) {
+    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ObjectDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
         this.motionData.path = spawn.path;
         this.reset(globals);
@@ -45,27 +64,47 @@ export class Actor extends ModelRenderer {
         if (ground !== null)
             this.motionData.groundType = ground.type;
 
+        this.currAux = 0;
+        if (this.animations.length > 0)
+            this.setAnimation(0);
+
         if (this.def.stateGraph.states.length > 0)
             this.changeState(0, globals);
     }
 
     protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
-        if (this.motionStep(viewerInput, globals))
+        let updated = this.motionStep(viewerInput, globals);
+        if (this.auxStep(viewerInput, globals))
+            updated = true;
+        if (updated)
             buildTransform(this.modelMatrix, this.translation, this.euler, this.scale);
         while (this.currState >= 0) {
-            const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
+            const state = this.def.stateGraph.states[this.currState];
+            const result = this.stateOverride(state.startAddress, viewerInput, globals);
+            if (result === MotionResult.Update)
+                continue;
+            else if (result === MotionResult.Done)
+                break;
+            const block = state.blocks[this.currBlock];
             if (block.wait !== null) {
                 if (block.wait.allowInteraction && this.basicInteractions(block.wait, viewerInput, globals))
                     continue;
                 if (!this.metEndCondition(block.wait.endCondition, globals))
                     break;
             }
-            if (!this.handleTransition(block.edges, globals))
+            if (!this.chooseEdge(block.edges, globals))
                 this.nextBlock(globals);
         }
     }
 
-    private changeState(newIndex: number, globals: LevelGlobals): boolean {
+    // for actors with special state logic
+    protected stateOverride(stateAddr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        return MotionResult.None;
+    }
+
+    protected changeState(newIndex: number, globals: LevelGlobals): boolean {
+        if (newIndex === -1)
+            return false;
         if (this.def.stateGraph.states[newIndex].doCleanup && this.def.stateGraph.states[newIndex].blocks.length === 0)
             return false; // ignore states that just get rid of the object
         this.currState = newIndex;
@@ -92,10 +131,16 @@ export class Actor extends ModelRenderer {
             this.loopTarget = currLoops + (block.wait !== null && block.wait.loopTarget > 0 ? block.wait.loopTarget : 1);
         }
 
-        if (block.signal > 0) {
-            for (let i = 0; i < globals.allObjects.length; i++) {
-                globals.allObjects[i].receiveSignal(this, block.signal, globals);
-            }
+        if (block.signal > 0)
+            sendGlobalSignal(this, block.signal, globals);
+
+        if (block.auxAddress >= 0) {
+            this.currAux = block.auxAddress;
+            if (block.auxAddress > 0) {
+                this.motionData.stateFlags &= ~EndCondition.Aux;
+                this.motionData.auxStart = -1;
+            } else
+                this.motionData.stateFlags |= EndCondition.Aux;
         }
 
         if (block.flagSet !== 0)
@@ -127,7 +172,7 @@ export class Actor extends ModelRenderer {
             this.blockEnd = this.animationController.getTimeInSeconds() + block.wait.duration + block.wait.durationRange * Math.random();
     }
 
-    protected receiveSignal(source: Actor, signal: number, globals: LevelGlobals): void {
+    public receiveSignal(source: Actor, signal: number, globals: LevelGlobals): void {
         if (this.currState === -1)
             return;
         const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
@@ -163,41 +208,47 @@ export class Actor extends ModelRenderer {
                 default:
                     this.target = source;
             }
-            this.changeState(block.wait.interactions[i].index, globals);
+            this.followEdge(block.wait.interactions[i], globals);
             break;
         }
     }
 
-    private handleTransition(edges: StateEdge[], globals: LevelGlobals): boolean {
+    private followEdge(edge: StateEdge, globals: LevelGlobals): boolean {
+        if (edge.auxFunc !== 0) {
+            this.currAux = edge.auxFunc;
+            this.motionData.stateFlags &= ~EndCondition.Aux;
+            this.motionData.auxStart = -1;
+        }
+        return this.changeState(edge.index, globals);
+    }
+
+    private chooseEdge(edges: StateEdge[], globals: LevelGlobals): boolean {
         let random = Math.random();
+        let done = false;
         for (let i = 0; i < edges.length; i++) {
             switch (edges[i].type) {
                 case InteractionType.Basic:
-                    return this.changeState(edges[i].index, globals);
+                    done = true; break;
                 case InteractionType.Random: {
                     random -= edges[i].param;
-                    if (random < 0)
-                        return this.changeState(edges[i].index, globals);
+                    done = random < 0;
                 } break;
-                case InteractionType.Behavior: {
-                    if (this.spawn.behavior === edges[i].param)
-                        return this.changeState(edges[i].index, globals);
-                } break;
-                case InteractionType.NonzeroBehavior: {
-                    if (this.spawn.behavior !== 0)
-                        return this.changeState(edges[i].index, globals);
-                } break;
+                case InteractionType.Behavior:
+                    done = this.spawn.behavior === edges[i].param; break;
+                case InteractionType.NonzeroBehavior:
+                    done = this.spawn.behavior !== 0; break;
                 case InteractionType.Flag:
                 case InteractionType.NotFlag: {
                     const metCondition = this.metEndCondition(edges[i].param, globals);
-                    if (metCondition === (edges[i].type === InteractionType.Flag))
-                        return this.changeState(edges[i].index, globals);
+                    done = metCondition === (edges[i].type === InteractionType.Flag);
                 } break;
-                case InteractionType.HasTarget: {
-                    if (this.target !== null)
-                        return this.changeState(edges[i].index, globals);
-                } break;
+                case InteractionType.HasTarget:
+                    done = this.target !== null; break;
+                case InteractionType.OverWater:
+                    done = this.motionData.groundType === 0x337FB2 || this.motionData.groundType === 0x7F66; break;
             }
+            if (done)
+                return this.followEdge(edges[i], globals);
         }
         return false;
     }
@@ -212,6 +263,7 @@ export class Actor extends ModelRenderer {
     private basicInteractions(block: WaitParams, viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
         mat4.getTranslation(cameraScratch, viewerInput.camera.worldMatrix);
         const playerDist = vec3.dist(this.translation, cameraScratch);
+        const onScreen = viewerInput.camera.frustum.containsSphere(this.translation, 100);
         for (let i = 0; i < block.interactions.length; i++) {
             switch (block.interactions[i].type) {
                 case InteractionType.PokefluteA:
@@ -219,27 +271,34 @@ export class Actor extends ModelRenderer {
                 case InteractionType.PokefluteC: {
                     // game radius is 1400 for song effects
                     if (playerDist < 3000 && block.interactions[i].type === globals.currentSong) {
-                        this.changeState(block.interactions[i].index, globals);
-                        return true;
+                        return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
                 case InteractionType.NearPlayer: {
                     if (playerDist < block.interactions[i].param) {
-                        this.changeState(block.interactions[i].index, globals);
-                        return true;
+                        return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
                 case InteractionType.PesterBall:
-                case InteractionType.Hit: {
+                case InteractionType.AppleHit: {
                     // hit at most every 10 seconds, and only if we're likely visible
-                    if (viewerInput.time < globals.lastPesterBall + 10000)
+                    if (viewerInput.time < globals.lastPesterBall + 10000 && playerDist > 400)
                         break;
-                    if (playerDist < 2000 && onScreen(viewerInput, this.translation) && Math.random() < viewerInput.deltaTime / 5000) {
-                        this.changeState(block.interactions[i].index, globals);
+                    if (playerDist < 1500 && onScreen && playerDist * Math.random() < viewerInput.deltaTime / 20) {
                         globals.lastPesterBall = viewerInput.time;
-                        return true;
+                        return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
+                case InteractionType.Photo: {
+                    if (onScreen && !this.hidden && playerDist < 4000)
+                        this.photoTimer += viewerInput.deltaTime;
+                    else
+                        this.photoTimer = 0;
+                    if (this.photoTimer > 3000) {
+                        this.photoTimer = 0;
+                        return this.followEdge(block.interactions[i], globals);
+                    }
+                }
             }
         }
         return false;
@@ -286,15 +345,41 @@ export class Actor extends ModelRenderer {
                 this.motionData.currBlock++;
                 this.motionData.start = -1;
             } else
-                return updated;
+                break;
         }
-        this.motionData.stateFlags |= EndCondition.Motion | EndCondition.Target;
+        if (this.motionData.currBlock >= this.motionData.currMotion.length)
+            this.motionData.stateFlags |= EndCondition.Motion | EndCondition.Target;
+
+        result = this.auxStep(viewerInput, globals);
+        if (result !== MotionResult.None)
+            updated = true;
+        if (result === MotionResult.Done) {
+            this.currAux = 0;
+            this.motionData.stateFlags |= EndCondition.Aux;
+        }
         return updated;
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        return MotionResult.None;
     }
 }
 
-function onScreen(viewerInput: ViewerRenderInput, pos: vec3, radius = 1): boolean {
-    return viewerInput.camera.frustum.containsSphere(pos, radius);
+class Squirtle extends Actor {
+    private depth = -95;
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802CBA90) {
+            if (this.motionData.auxStart < 0)
+                this.motionData.auxStart = viewerInput.time;
+            const water = findGroundHeight(globals.collision, this.translation[0], this.translation[2]);
+            const t = (viewerInput.time - this.motionData.auxStart) / 1000;
+            this.translation[1] = water + 10 * Math.sin(t / 1.5 * MathConstants.TAU) + this.depth;
+            this.depth = Math.min(this.depth + 60 * viewerInput.deltaTime / 1000, -45);
+            return MotionResult.Update;
+        }
+        return MotionResult.None;
+    }
 }
 
 class Kakuna extends Actor {
@@ -305,9 +390,124 @@ class Kakuna extends Actor {
     }
 }
 
+class Grimer extends Actor {
+    private static flags = 0;
+
+    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        let mask = 0;
+        switch (addr) {
+            case 0x802C0960:
+                mask = 1; break;
+            case 0x802C09C4:
+                mask = 2; break;
+            case 0x802C0A28:
+                mask = 4; break;
+            case 0x802C0A8C:
+                mask = 8; break;
+        }
+        // the listed functions wait for the given bit to be set
+        // if it is, let the state logic run, making the actor appear
+        if (!!(Grimer.flags & mask) || mask === 0)
+            return MotionResult.None;
+        else
+            return MotionResult.Done;
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802C1018) {
+            Grimer.flags |= 1 << (this.spawn.behavior - 1);
+            return MotionResult.Done;
+        }
+        return MotionResult.None;
+    }
+}
+
+// effectively the same extra logic as Grimer, but done in a more confusing way
+class Lapras extends Actor {
+    private static flags = 0;
+
+    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        let mask = 0;
+        switch (addr) {
+            case 0x802C816C:
+                mask = 1; break;
+            case 0x802C81C4:
+                mask = 2; break;
+            case 0x802C821C:
+                mask = 4; break;
+        }
+        if (!!(Lapras.flags & mask) || mask === 0)
+            return MotionResult.None;
+        else
+            return MotionResult.Done;
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === fakeAux) {
+            // this is handled in a much more complicated way using state transitions,
+            // possibly to ensure the values are only changed once, though it doesn't matter
+            Lapras.flags |= 1 << this.spawn.behavior;
+            if (this.spawn.behavior === 2)
+                Lapras.flags |= 2;
+            return MotionResult.Done;
+        }
+        return MotionResult.None;
+    }
+}
+
+const actorScratch = vec3.create();
+class Porygon extends Actor {
+    private startAngle = 0;
+    private amplitude = 0;
+    private endHeight = 0;
+
+    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        switch (addr) {
+            case 0x802DD0E0: {
+                if (this.spawn.behavior === 1 && this.currAnimation !== 1)
+                    this.setAnimation(1);
+            } break;
+            case 0x802DD1D4: {
+                // should see if signals matter, as this skips proper handling
+                this.currBlock = this.spawn.behavior - 1;
+            } break;
+            case 0x802DD398: {
+                if (this.currBlock === 2 && this.spawn.behavior === 2)
+                    sendSignalToID(this, 0x2B, 1019, globals);
+            } break;
+        }
+
+        return MotionResult.None;
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802DD53C) {
+            if (this.motionData.auxStart < 0) {
+                this.motionData.auxStart = viewerInput.time;
+                assert(this.motionData.start >= 0, 'aux before path');
+                getPathPoint(actorScratch, this.motionData.path!, 1);
+                vec3.scale(actorScratch, actorScratch, 100);
+                this.endHeight = findGroundHeight(globals.collision, actorScratch[0], actorScratch[2]);
+                this.amplitude = this.translation[1] + 50 - this.endHeight;
+                this.startAngle = Math.asin((this.translation[1] - this.endHeight) / this.amplitude);
+            }
+            const frac = (viewerInput.time - this.motionData.auxStart) / 1000 * 3 / this.motionData.path!.duration;
+            if (frac > 1)
+                return MotionResult.Done;
+            this.translation[1] = this.endHeight + this.amplitude * Math.sin(lerp(this.startAngle, Math.PI, frac));
+            return MotionResult.Update;
+        }
+        return MotionResult.None;
+    }
+}
+
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ObjectDef, globals: LevelGlobals): Actor {
     switch (def.id) {
+        case 7: return new Squirtle(renderData, spawn, def, globals);
         case 14: return new Kakuna(renderData, spawn, def, globals);
+        case 88: return new Grimer(renderData, spawn, def, globals);
+        case 131: return new Lapras(renderData, spawn, def, globals);
+        case 137: return new Porygon(renderData, spawn, def, globals);
     }
     return new Actor(renderData, spawn, def, globals);
 }

@@ -9,7 +9,7 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
-import {MotionParser, Motion} from "./motion";
+import {MotionParser, Motion, FollowPath} from "./motion";
 import { Vec3UnitY, Vec3One } from "../MathHelpers";
 
 export interface Level {
@@ -1116,13 +1116,14 @@ export const enum InteractionType {
     PokefluteC  = 0x07,
     // might have these wrong, there are other "hit" ones, too
     PesterBall  = 0x09,
-    Hit         = 0x0D,
+    AppleHit    = 0x0D,
     // there seem to be a few apple interactions
     Apple       = 0x0F,
     NearPlayer  = 0x10,
+    Photo       = 0x18,
 
     EndMarker   = 0x3A,
-    // not assigned by game
+    // not used by game
     Basic,
     Random,
     Flag,
@@ -1138,13 +1139,15 @@ export const enum InteractionType {
 
 export interface StateEdge {
     type: InteractionType;
-    index: number;
     param: number;
+    index: number;
+    auxFunc: number;
 }
 
 export interface StateBlock {
     animation: number;
     motion: Motion[] | null;
+    auxAddress: number;
     force: boolean;
     signal: number;
     wait: WaitParams | null;
@@ -1200,8 +1203,6 @@ export const enum GeneralFuncs {
     Random      = 0x19DB0,
     RandomInt   = 0x19E14,
     GetRoom     = 0xE2184,
-
-    RunAux      = 0x35ED90,
 }
 
 export const enum StateFuncs {
@@ -1212,6 +1213,8 @@ export const enum StateFuncs {
     InteractWait    = 0x35FBF0,
     Wait            = 0x35FC54,
     Random          = 0x35ECAC,
+    RunAux          = 0x35ED90,
+    EndAux          = 0x35EDC8,
 
     Cleanup         = 0x35FD70,
     ClaimApple      = 0x36010C,
@@ -1259,7 +1262,7 @@ export const enum EndCondition {
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined;
+    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1;
 }
 
 const motionParser = new MotionParser();
@@ -1308,6 +1311,7 @@ class StateParser extends MIPS.NaiveInterpreter {
             animation: -1,
             force: false,
             motion: null,
+            auxAddress: -1,
             signal: 0,
             flagSet: 0,
             flagClear: 0,
@@ -1379,7 +1383,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         type = InteractionType.Unknown;
                     }
                 }
-                this.addEdge({type, param, index});
+                this.addEdge({type, param, index, auxFunc: 0});
             } break;
             case StateFuncs.Random: {
                 let randomStart = a1.value;
@@ -1403,7 +1407,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         break;
                     const stateAddr = randomView.getUint32(offs + 0x04);
                     const state = parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses);
-                    this.addEdge({ type: InteractionType.Random, index: state, param: weight / total });
+                    this.addEdge({ type: InteractionType.Random, index: state, param: weight / total, auxFunc: 0 });
                     offs += 8;
                 }
                 this.done = true;
@@ -1451,6 +1455,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     animation: -1,
                     force: false,
                     motion: null,
+                    auxAddress: -1,
                     signal: 0,
                     flagSet: 0,
                     flagClear: 0,
@@ -1494,6 +1499,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         animation: -1,
                         force: false,
                         motion: null,
+                        auxAddress: -1,
                         signal: 0,
                         flagSet: 0,
                         flagClear: 0,
@@ -1506,6 +1512,17 @@ class StateParser extends MIPS.NaiveInterpreter {
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
                 this.currBlock.signal = a1.value;
             } break;
+            case StateFuncs.RunAux: {
+                if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
+                    this.handleFunction(StateFuncs.SetState, a0, a1, a2, a3, stackArgs, null);
+                    this.done = true;
+                } else
+                    this.currBlock.auxAddress = a1.value;
+            } break;
+            case StateFuncs.EndAux: {
+                assert(this.currBlock.auxAddress === -1);
+                this.currBlock.auxAddress = 0;
+            }
 
             case GeneralFuncs.RandomInt: {
                 this.recentRandom = a0.value;
@@ -1543,17 +1560,15 @@ class StateParser extends MIPS.NaiveInterpreter {
                             break;
                         const stateAddr = tView.getUint32(offs + 0x04);
                         const radius = tView.getFloat32(offs + 0x08);
-                        const otherFunc = tView.getUint32(offs + 0x0C);
+                        const auxFunc = tView.getUint32(offs + 0x0C);
                         offs += 0x10;
 
-                        // TODO: handle the other function
-                        if (stateAddr !== 0) {
-                            this.currWait.interactions.push({
-                                type,
-                                param: radius,
-                                index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
-                            });
-                        }
+                        this.currWait.interactions.push({
+                            type,
+                            param: radius,
+                            index: stateAddr > 0 ? parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses) : -1,
+                            auxFunc,
+                        });
                     }
                 } break;
                 case ObjectField.Timer: {
@@ -1627,6 +1642,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                 animation: -1,
                 force: false,
                 motion: null,
+                auxAddress: -1,
                 signal: 0,
                 flagSet: 0,
                 flagClear: 0,
@@ -1649,6 +1665,8 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
 
     return parser.stateIndex;
 }
+
+export const fakeAux = 0x123456;
 
 // make minor changes to specific states
 function fixupState(state: State): void {
@@ -1674,5 +1692,28 @@ function fixupState(state: State): void {
             state.blocks[0].edges.push(state.blocks[1].edges[1]);
             state.blocks.splice(1);
         } break;
+        // ignore porygon camera shot loop
+        case 0x802DD398: {
+            state.blocks[0].edges = [];
+        } break;
+        // squirtle clears its bobbing behavior in an odd way
+        case 0x802CB9BC:
+        case 0x802CBC74:
+        case 0x802CBD74: {
+            state.blocks[0].auxAddress = 0;
+        } break;
+        // for some reason follows the ground in an aux process
+        // do it the easy way instead
+        case 0x802CC104: {
+            (state.blocks[1].motion![0] as FollowPath).flags = 0x3;
+            state.blocks[1].auxAddress = 0;
+        } break;
+        // add fake handling for lapras photo interaction
+        case 0x802C7F74: {
+            state.blocks[0].wait!.allowInteraction = true;
+            state.blocks[0].wait!.interactions.push({type: InteractionType.Photo, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[1].wait!.allowInteraction = true;
+            state.blocks[1].wait!.interactions.push({type: InteractionType.Photo, param: 0, index: -1, auxFunc: fakeAux});
+        }
     }
 }
