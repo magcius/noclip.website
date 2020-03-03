@@ -6,7 +6,7 @@ import * as GX from '../gx/gx_enum';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { assert, assertExists, align } from '../util';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer';
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
@@ -84,6 +84,8 @@ class TDDrawVtxSpec {
 }
 
 export class TDDraw extends TDDrawVtxSpec {
+    public frequencyHint = GfxBufferFrequencyHint.DYNAMIC;
+
     private inputState: GfxInputState | null = null;
     private vertexBuffer: GfxBuffer | null = null;
     private indexBuffer: GfxBuffer | null = null;
@@ -227,7 +229,7 @@ export class TDDraw extends TDDrawVtxSpec {
         if (this.recreateVertexBuffer) {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);
-            this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+            this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.VERTEX, this.frequencyHint);
             this.recreateVertexBuffer = false;
             recreateInputState = true;
         }
@@ -235,7 +237,7 @@ export class TDDraw extends TDDrawVtxSpec {
         if (this.recreateIndexBuffer) {
             if (this.indexBuffer !== null)
                 device.destroyBuffer(this.indexBuffer);
-            this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.DYNAMIC);
+            this.indexBuffer = device.createBuffer((this.indexData.byteLength + 3) >>> 2, GfxBufferUsage.INDEX, this.frequencyHint);
             this.recreateIndexBuffer = false;
             recreateInputState = true;
         }
@@ -257,6 +259,15 @@ export class TDDraw extends TDDrawVtxSpec {
         }
     }
 
+    // TODO(jstpierre): This class is playing, like, triple duty. Clean up at some point.
+    public makeRenderInstFull(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
+        this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.currentIndex);
+        return renderInst;
+    }
+
     public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
         const renderInst = renderInstManager.pushRenderInst();
@@ -266,12 +277,16 @@ export class TDDraw extends TDDrawVtxSpec {
         return renderInst;
     }
 
-    public endAndUpload(device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
-        this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
+    public endAndUploadCache(device: GfxDevice, cache: GfxRenderCache): void {
+        this.flushDeviceObjects(device, cache);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
         hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
         device.submitPass(hostAccessPass);
+    }
+
+    public endAndUpload(device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
+        return this.endAndUploadCache(device, renderInstManager.gfxRenderCache);
     }
 
     public endDraw(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {

@@ -232,7 +232,7 @@ class WorldRenderer extends SFARenderer {
         submitScratchRenderInst(device, renderInstManager, this.materialHelperObjectSphere, renderInst, viewerInput);
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
-        
+
         template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
         for (let i = 0; i < this.aModel.models.length; i++) {

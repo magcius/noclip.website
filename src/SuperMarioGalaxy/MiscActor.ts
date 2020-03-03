@@ -23,8 +23,8 @@ import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
 import * as GX from '../gx/gx_enum';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TextureMapping } from '../TextureHolder';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -6056,6 +6056,12 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.frequencyHint = GfxBufferFrequencyHint.STATIC;
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        this.drawAndUploadRail(sceneObjHolder);
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
@@ -6140,14 +6146,18 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         }
     }
 
-    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
+    private drawAndUploadRail(sceneObjHolder: SceneObjHolder): void {
         this.ddraw.beginDraw();
 
         this.drawPlane(this.ddraw, this.size, this.size, -this.size, -this.size);
         this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
 
-        const device = sceneObjHolder.modelCache.device;
-        this.ddraw.endDraw(device, renderInstManager);
+        const modelCache = sceneObjHolder.modelCache;
+        this.ddraw.endAndUploadCache(modelCache.device, modelCache.cache);
+    }
+
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
+        this.ddraw.makeRenderInstFull(sceneObjHolder.modelCache.device, renderInstManager);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -6205,6 +6215,12 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddraw.frequencyHint = GfxBufferFrequencyHint.STATIC;
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        this.drawAndUploadRail(sceneObjHolder);
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
@@ -6353,6 +6369,16 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         }
     }
 
+    private drawAndUploadRail(sceneObjHolder: SceneObjHolder): void {
+        this.ddraw.beginDraw();
+
+        this.drawPlane(sceneObjHolder, this.ddraw, this.size, this.size, -this.size, -this.size);
+        this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
+
+        const modelCache = sceneObjHolder.modelCache;
+        this.ddraw.endAndUploadCache(modelCache.device, modelCache.cache);
+    }
+
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
         materialParams.u_Color[ColorKind.C1].a = this.alpha;
         const mtx = materialParams.u_TexMtx[1];
@@ -6361,13 +6387,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         mtx[0] = scale;
         mtx[12] = (-0.25 * scale * this.coordPhaseAnim) / 100.0;
 
-        this.ddraw.beginDraw();
-
-        this.drawPlane(sceneObjHolder, this.ddraw, this.size, this.size, -this.size, -this.size);
-        this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
-
-        const device = sceneObjHolder.modelCache.device;
-        this.ddraw.endDraw(device, renderInstManager);
+        this.ddraw.makeRenderInstFull(sceneObjHolder.modelCache.device, renderInstManager);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
