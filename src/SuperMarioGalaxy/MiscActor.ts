@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0 } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -18,7 +18,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw } from './DDraw';
@@ -190,6 +190,11 @@ function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number 
 function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
     const t = Math.sin((v0 / v3) * Math.PI * 0.5);
     return lerp(v1, v2, t);
+}
+
+function getEaseInOutValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.cos((v0 / v3) * Math.PI);
+    return lerp(v1, v2, 0.5 * (1 - t));
 }
 
 function getRandomVector(dst: vec3, range: number): void {
@@ -6438,5 +6443,133 @@ export class FluffWind extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}
+
+export class OceanFloaterLandParts extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+
+        if (isConnectedWithRail(infoIter)) {
+            this.initRailRider(sceneObjHolder, infoIter);
+        }
+
+        if (this.name === 'OceanFloaterTypeU') {
+            // Checks whether the "Rise" flag is done. We assume it is.
+            moveCoordToEndPos(this);
+            moveTransToCurrentRailPos(this);
+        }
+    }
+}
+
+function isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder): boolean {
+    return false;
+}
+
+const enum DossunNrv { Upper, FallSign, Falling, OnGround, Rising, }
+
+export class Dossun extends LiveActor<DossunNrv> {
+    private upperHeight: number;
+    private maxUpperStep: number;
+    private maxFallingStep: number;
+    private maxRisingStep: number;
+    private lowerPos = vec3.create();
+    private upperPos = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        // initMapToolInfo
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.upperHeight = fallback(getJMapInfoArg0(infoIter), 1000.0);
+        this.maxUpperStep = fallback(getJMapInfoArg1(infoIter), 180);
+        vec3.copy(this.lowerPos, this.translation);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Dossun');
+        startBva(this, 'Wait');
+
+        connectToSceneCollisionEnemyStrongLight(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        // this.initHitSensor();
+        // this.initCollisionParts();
+        this.initEffectKeeper(sceneObjHolder, null);
+        // this.initSound();
+        // this.initShadow();
+        this.initNerve(DossunNrv.Upper);
+        // setClippingTypeSphereContainsModelBoundingBox
+
+        this.calcParameters(sceneObjHolder);
+    }
+
+    private calcParameters(sceneObjHolder: SceneObjHolder): void {
+        vec3.set(scratchVec3, 0.0, this.upperHeight, 0.0);
+        transformVec3Mat4w0(scratchVec3, this.getBaseMtx()!, scratchVec3);
+        vec3.add(this.upperPos, this.lowerPos, scratchVec3);
+
+        const fallingSpeed = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 70.0 : 30.0;
+        this.maxFallingStep = this.upperHeight / fallingSpeed;
+
+        const risingSpeed = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 25.0 : 70.0;
+        this.maxRisingStep = this.upperHeight / risingSpeed;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === DossunNrv.Upper) {
+            if (isFirstStep(this))
+                vec3.copy(this.translation, this.upperPos);
+
+            if (isGreaterStep(this, this.maxUpperStep))
+                this.setNerve(DossunNrv.FallSign);
+        } else if (currentNerve === DossunNrv.FallSign) {
+            if (isFirstStep(this)) {
+                startBck(this, 'FallStart');
+                startBva(this, 'Attack');
+
+                if (isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder)) {
+                    setBckRate(this, 2.5);
+                    setBvaRate(this, 2.5);
+                }
+
+                // startSound
+            }
+
+            if (isBckStopped(this))
+                this.setNerve(DossunNrv.Falling);
+        } else if (currentNerve === DossunNrv.Falling) {
+            const t = getEaseInValue(this.getNerveStep(), 0.0, 1.0, this.maxFallingStep);
+            vec3.lerp(this.translation, this.upperPos, this.lowerPos, t);
+
+            // startLevelSound
+            if (isGreaterStep(this, this.maxFallingStep))
+                this.setNerve(DossunNrv.OnGround);
+        } else if (currentNerve === DossunNrv.OnGround) {
+            if (isFirstStep(this)) {
+                vec3.copy(this.translation, this.lowerPos);
+                // startRumbleWithShakeCameraNormalWeak
+                // startSound
+                emitEffect(sceneObjHolder, this, 'Land');
+            }
+
+            const step = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 120 : 48;
+            if (isGreaterStep(this, step))
+                this.setNerve(DossunNrv.Rising);
+        } else if (currentNerve === DossunNrv.Rising) {
+            if (isFirstStep(this))
+                startBva(this, 'Wait');
+
+            const t = getEaseInOutValue(this.getNerveStep(), 0.0, 1.0, this.maxRisingStep);
+            vec3.lerp(this.translation, this.lowerPos, this.upperPos, t);
+            // startLevelSound
+            if (isGreaterStep(this, this.maxRisingStep)) {
+                // startSound
+                this.setNerve(DossunNrv.Upper);
+            }
+        }
     }
 }

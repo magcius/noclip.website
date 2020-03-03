@@ -125,6 +125,10 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x2A, -1, -1, -1);
 }
 
+export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
@@ -331,6 +335,11 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function setBvaRate(actor: LiveActor, rate: number): void {
+    const ctrl = actor.modelManager!.getBvaCtrl();
+    ctrl.speedInFrames = rate;
+}
+
 export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
     // TODO(jstpierre): Support stopped flag?
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
@@ -525,6 +534,10 @@ export function moveCoord(actor: LiveActor, speed: number): void {
 
 export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
     moveCoord(actor, speed);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveTransToCurrentRailPos(actor: LiveActor): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
