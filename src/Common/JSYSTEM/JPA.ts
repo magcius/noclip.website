@@ -1299,6 +1299,7 @@ export class JPABaseEmitter {
             this.flags |= BaseEmitterFlags.TERMINATED;
 
         this.emitterCallBack = null;
+        this.userData = null;
     }
 
     public deleteAllParticle(): void {

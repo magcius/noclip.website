@@ -102,6 +102,7 @@ class ParticleEmitter {
     public didInit = false;
 
     public init(baseEmitter: JPA.JPABaseEmitter): void {
+        assert(this.baseEmitter === null);
         this.baseEmitter = baseEmitter;
         this.baseEmitter.flags |= JPA.BaseEmitterFlags.DO_NOT_TERMINATE;
         this.didInit = false;
@@ -164,11 +165,13 @@ class SingleEmitter {
     }
 
     public link(particleEmitter: ParticleEmitter): void {
+        assert(this.particleEmitter === null);
         this.particleEmitter = particleEmitter;
         this.particleEmitter.baseEmitter!.userData = this;
     }
 
     public unlink(): void {
+        this.particleEmitter!.baseEmitter!.userData = null;
         this.particleEmitter = null;
     }
 
@@ -876,6 +879,7 @@ export class EffectSystem {
     public forceDeleteEmitter(emitter: ParticleEmitter): void {
         if (emitter.baseEmitter!.userData !== null) {
             const singleEmitter = emitter.baseEmitter!.userData as SingleEmitter;
+            assert(emitter === singleEmitter.particleEmitter);
             singleEmitter.particleEmitter = null;
         }
 

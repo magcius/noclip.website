@@ -6512,7 +6512,7 @@ export class Dossun extends LiveActor<DossunNrv> {
         const fallingSpeed = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 70.0 : 30.0;
         this.maxFallingStep = this.upperHeight / fallingSpeed;
 
-        const risingSpeed = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 25.0 : 70.0;
+        const risingSpeed = isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder) ? 70.0 : 25.0;
         this.maxRisingStep = this.upperHeight / risingSpeed;
     }
 
