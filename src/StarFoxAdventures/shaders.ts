@@ -349,11 +349,36 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         tevStage += 2;
     }
 
+    function blendWithTinyFramebufferTexture() {
+        console.warn(`tiny framebuffer not implemented`);
+        // TODO: set texture matrix
+        // TODO: load tiny framebuffer texture
+        // loadTinyFramebufferTexture(gTexMapID);
+        // GXSetTexCoordGen2(gTexCoordID,GX_TG_MTX3x4,GX_TG_POS,0x24,0,0x7d);
+        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+        mb.setTevDirect(tevStage);
+        mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_2_8);
+        mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
+        mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        mb.setTevSwapMode(tevStage, undefined, undefined);
+        mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        cprevIsValid = true;
+
+        texcoordId++;
+        texmapId++;
+        tevStage++;
+    }
+
     if ((shader.flags & 0x80) != 0) {
         addTevStagesForLava();
     } else {
         if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
             addTevStageForTextureWithWhiteKonst(0);
+            if (shader.flags & 0x100) {
+                blendWithTinyFramebufferTexture();
+            }
             addTevStagesForTextureWithMode(9);
             addTevStageForMultVtxColor();
         } else {
@@ -364,6 +389,11 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
                 } else {
                     addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
                 }
+            }
+
+            if (shader.flags & 0x100) {
+                // Occurs in Krazoa Palace
+                blendWithTinyFramebufferTexture();
             }
         }
 
