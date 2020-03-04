@@ -128,8 +128,8 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: number): void {
-        super.updateSpine(sceneObjHolder, currentNerve);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (isFirstStep(this)) {
             if (this.firstStepCallback !== null)

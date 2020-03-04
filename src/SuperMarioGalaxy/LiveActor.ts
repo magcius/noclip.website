@@ -582,7 +582,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -604,7 +604,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.modelManager.update(deltaTimeFrames);
 
         if (this.spine !== null) {
-            this.updateSpine(sceneObjHolder, this.getCurrentNerve());
+            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
             this.spine.update(deltaTimeFrames);
         }
 

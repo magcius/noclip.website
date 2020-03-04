@@ -1346,16 +1346,14 @@ export class Penguin extends NPCActor<PenguinNrv> {
         this.initNerve(PenguinNrv.Wait);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        const currentNerve = this.getCurrentNerve();
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PenguinNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PenguinNrv.Wait) {
             if (isFirstStep(this))
                 this.diveCounter = getRandomInt(120, 300);
 
-            tryTalkNearPlayerAndStartMoveTalkAction(this, getDeltaTimeFrames(viewerInput));
+            tryTalkNearPlayerAndStartMoveTalkAction(this, deltaTimeFrames);
 
             if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
                 this.setNerve(PenguinNrv.Dive);
@@ -1984,10 +1982,8 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         this.initNerve(FountainBigNrv.WaitPhase);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        const currentNerve = this.getCurrentNerve();
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FountainBigNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FountainBigNrv.WaitPhase) {
             if (isGreaterStep(this, this.randomPhase)) {
@@ -6428,10 +6424,9 @@ class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
         this.initNerve(FluffWindEffectNrv.Init);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FluffWindEffectNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === FluffWindEffectNrv.Init) {
             // I think the "randomness" in the original game is just powered by clipping. Here,
             // we don't have the same clip system. Perhaps we should add it. For now, we just
@@ -6546,10 +6541,9 @@ export class Dossun extends LiveActor<DossunNrv> {
         this.maxRisingStep = this.upperHeight / risingSpeed;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: DossunNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === DossunNrv.Upper) {
             if (isFirstStep(this))
                 vec3.copy(this.translation, this.upperPos);
@@ -6625,8 +6619,8 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         moveCoordToNearestPos(this);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv): void {
-        super.updateSpine(sceneObjHolder, currentNerve);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TsukidashikunNrv.MoveForward || currentNerve === TsukidashikunNrv.MoveBack) {
             moveCoordAndFollowTrans(this, this.speed);
