@@ -12,6 +12,7 @@ import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx,
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
@@ -153,6 +154,14 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        // Prolog
+        const skyTemplate = this.renderHelper.pushTemplateRenderInst();
+        const oldProjection = mat4.create();
+        mat4.copy(oldProjection, viewerInput.camera.projectionMatrix);
+        mat4.identity(viewerInput.camera.projectionMatrix);
+        fillSceneParamsDataOnTemplate(skyTemplate, viewerInput, false);
+
+        // Body
         const atmos = this.envfxMan.atmosphere;
         const atmosTexture = atmos.textures[0]!;
 
@@ -203,13 +212,31 @@ class WorldRenderer extends SFARenderer {
         submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
 
         this.ddraw.endAndUpload(device, renderInstManager);
+        
+        // Epilog
+        renderInstManager.popTemplateRenderInst();
+
+        mat4.copy(viewerInput.camera.projectionMatrix, oldProjection);
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        
+        renderInstManager.drawOnPassRenderer(device, this.renderPass);
+        renderInstManager.resetRenderInsts();
+        device.submitPass(this.renderPass);
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        // Prolog
+        const template = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+        // Body
         this.mapInstance.prepareToRender(device, renderInstManager, viewerInput);
 
-        let template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        let objtemplate = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);
         this.objddraw.beginDraw();
         for (let i = 0; i < 50; i++) {
             const obj = this.objectSpheres[i];
@@ -233,12 +260,23 @@ class WorldRenderer extends SFARenderer {
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
         
-        template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        let modeltemplate = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
         for (let i = 0; i < this.aModel.models.length; i++) {
             this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i]);
         }
         renderInstManager.popTemplateRenderInst();
+        
+        // Epilog
+        renderInstManager.popTemplateRenderInst();
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        
+        renderInstManager.drawOnPassRenderer(device, this.renderPass);
+        renderInstManager.resetRenderInsts();
+        device.submitPass(this.renderPass);
     }
 }
 
