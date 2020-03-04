@@ -316,26 +316,25 @@ class MapSceneRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        // Prolog
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
-
-        // Body
         for (let i = 0; i < this.map.getNumDrawSteps(); i++) {
+            // Prolog
+            const template = this.renderHelper.pushTemplateRenderInst();
+            fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+            // Body
             this.map.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+
+            // Epilog
+            renderInstManager.popTemplateRenderInst();
+    
+            let hostAccessPass = device.createHostAccessPass();
+            this.prepareToRender(device, hostAccessPass, viewerInput);
+            device.submitPass(hostAccessPass);
+            
+            renderInstManager.drawOnPassRenderer(device, this.renderPass);
+            renderInstManager.resetRenderInsts();
             this.copyToSceneTexture(device);
         }
-
-        // Epilog
-        renderInstManager.popTemplateRenderInst();
-
-        let hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        
-        renderInstManager.drawOnPassRenderer(device, this.renderPass);
-        renderInstManager.resetRenderInsts();
-        device.submitPass(this.renderPass);
     }
 }
 
