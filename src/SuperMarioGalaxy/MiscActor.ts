@@ -6625,10 +6625,9 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         moveCoordToNearestPos(this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv): void {
+        super.updateSpine(sceneObjHolder, currentNerve);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === TsukidashikunNrv.MoveForward || currentNerve === TsukidashikunNrv.MoveBack) {
             moveCoordAndFollowTrans(this, this.speed);
             if (isRailReachedGoal(this)) {

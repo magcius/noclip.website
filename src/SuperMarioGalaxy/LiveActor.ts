@@ -582,39 +582,57 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve): void {
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.calcGravityFlag)
+            calcGravity(sceneObjHolder, this);
+
         if (this.hitSensorKeeper !== null)
             this.hitSensorKeeper.doObjCol();
 
-        if (this.visibleAlive) {
-            const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        if (!this.visibleAlive)
+            return;
 
-            if (this.calcGravityFlag)
-                calcGravity(sceneObjHolder, this);
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
-            if (this.modelManager !== null)
-                this.modelManager.update(deltaTimeFrames);
+        if (this.modelManager !== null)
+            this.modelManager.update(deltaTimeFrames);
 
-            // TODO(jstpierre): Split out updateSpine to a vfunc or something.
-            if (this.spine !== null)
-                this.spine.update(deltaTimeFrames);
-
-            // TODO(jstpierre): Add control vfunc here.
-
-            // updateBinder
-            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
-
-            if (this.effectKeeper !== null) {
-                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
-                this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-            }
-
-            if (this.actorLightCtrl !== null)
-                this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
-
-            if (this.hitSensorKeeper !== null)
-                this.hitSensorKeeper.update();
+        if (this.spine !== null) {
+            this.updateSpine(sceneObjHolder, this.getCurrentNerve());
+            this.spine.update(deltaTimeFrames);
         }
+
+        if (!this.visibleAlive)
+            return;
+
+        this.control(sceneObjHolder, viewerInput);
+
+        if (!this.visibleAlive)
+            return;
+
+        // updateBinder()
+        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+
+        // EffectKeeper::update()
+        if (this.effectKeeper !== null) {
+            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
+            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
+        }
+
+        // ActorPadAndCameraCtrl::update()
+
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+
+        // tryUpdateHitSensorsAll()
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
     }
 }
 
