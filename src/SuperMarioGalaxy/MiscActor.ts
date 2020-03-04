@@ -21,9 +21,9 @@ import { WorldmapPointInfo } from './LegacyActor';
 import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
-import { TDDraw } from './DDraw';
+import { TDDraw, TSDraw } from './DDraw';
 import * as GX from '../gx/gx_enum';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TextureMapping } from '../TextureHolder';
@@ -6031,7 +6031,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     private separators: ElectricRailSeparator[] = [];
     private useGlobalGravity: boolean = false;
     private size = 30.0;
-    private ddraw = new TDDraw();
+    private ddraw = new TSDraw();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ElectricRail');
@@ -6056,7 +6056,6 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-        this.ddraw.frequencyHint = GfxBufferFrequencyHint.STATIC;
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -6119,7 +6118,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         }
     }
 
-    private drawPlane(ddraw: TDDraw, x0: number, y0: number, x1: number, y1: number): void {
+    private drawPlane(ddraw: TSDraw, x0: number, y0: number, x1: number, y1: number): void {
         for (let i = 0; i < this.height; i++) {
             const y = 100.0 * i;
 
@@ -6153,11 +6152,17 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.drawPlane(this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endAndUploadCache(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
-        this.ddraw.makeRenderInstFull(sceneObjHolder.modelCache.device, renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.ddraw.setOnRenderInst(renderInst);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -6176,7 +6181,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private separators: vec3[] = [];
     private points: ElectricRailPoint[] = [];
     private size = 30.0;
-    private ddraw = new TDDraw();
+    private ddraw = new TSDraw();
     private coordPhaseAnim: number = 0.0;
     private alpha: number = 1.0;
 
@@ -6215,7 +6220,6 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-        this.ddraw.frequencyHint = GfxBufferFrequencyHint.STATIC;
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -6330,7 +6334,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.updatePointPosAndModel(sceneObjHolder);
     }
 
-    private drawPlane(sceneObjHolder: SceneObjHolder, ddraw: TDDraw, x0: number, y0: number, x1: number, y1: number): void {
+    private drawPlane(sceneObjHolder: SceneObjHolder, ddraw: TSDraw, x0: number, y0: number, x1: number, y1: number): void {
         const railLength = getRailTotalLength(this);
 
         for (let i = 0; i < this.height; i++) {
@@ -6376,7 +6380,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.drawPlane(sceneObjHolder, this.ddraw, -this.size, this.size, this.size, -this.size);
 
         const modelCache = sceneObjHolder.modelCache;
-        this.ddraw.endAndUploadCache(modelCache.device, modelCache.cache);
+        this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void {
@@ -6387,7 +6391,13 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         mtx[0] = scale;
         mtx[12] = (-0.25 * scale * this.coordPhaseAnim) / 100.0;
 
-        this.ddraw.makeRenderInstFull(sceneObjHolder.modelCache.device, renderInstManager);
+        const renderInst = renderInstManager.newRenderInst();
+        this.ddraw.setOnRenderInst(renderInst);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
