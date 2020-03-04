@@ -6,6 +6,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
+import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
 import { ModelInstance } from './models';
@@ -109,16 +110,18 @@ export class MapInstance {
         this.matrix = matrix;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    public getNumDrawSteps(): number {
+        return this.modelHolders.length;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawStep: number, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
         const modelMtx = mat4.create();
-        for (let drawStep = 0; drawStep < this.modelHolders.length; drawStep++) {
-            const modelHolder = this.modelHolders[drawStep];
-            for (let i = 0; i < modelHolder.models.length; i++) {
-                mat4.mul(modelMtx, this.matrix, modelHolder.modelMatrices[i]);
-                modelHolder.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx);
-            }
+        const modelHolder = this.modelHolders[drawStep];
+        for (let i = 0; i < modelHolder.models.length; i++) {
+            mat4.mul(modelMtx, this.matrix, modelHolder.modelMatrices[i]);
+            modelHolder.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx, sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -318,7 +321,10 @@ class MapSceneRenderer extends SFARenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
         // Body
-        this.map.prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.map.getNumDrawSteps(); i++) {
+            this.map.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+            this.copyToSceneTexture(device);
+        }
 
         // Epilog
         renderInstManager.popTemplateRenderInst();

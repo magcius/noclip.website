@@ -233,7 +233,10 @@ class WorldRenderer extends SFARenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
         // Body
-        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
+            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+            this.copyToSceneTexture(device);
+        }
 
         let objtemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);
@@ -263,7 +266,7 @@ class WorldRenderer extends SFARenderer {
         let modeltemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
         for (let i = 0; i < this.aModel.models.length; i++) {
-            this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i]);
+            this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i], this.sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
         

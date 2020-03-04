@@ -1,8 +1,9 @@
-import { GfxDevice} from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxTexture, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParams } from '../gx/gx_render';
+import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFATexture, TextureCollection } from './textures';
 
@@ -88,14 +89,14 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
     return shader
 }
 
-interface SFAMaterial {
+export interface SFAMaterial {
     material: GXMaterial;
-    textures: (SFATexture | null)[];
+    textures: (SFATexture | string | null)[];
 }
 
 export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[]): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
-    const textures = [] as (SFATexture | null)[];
+    const textures = [] as (SFATexture | string | null)[];
     let tevStage = 0;
     let indStageId = GX.IndTexStageID.STAGE0;
     let texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -350,12 +351,16 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     }
 
     function blendWithTinyFramebufferTexture() {
-        console.warn(`tiny framebuffer not implemented`);
+        // Used in reflective floors
+
         // TODO: set texture matrix
         // TODO: load tiny framebuffer texture
-        // loadTinyFramebufferTexture(gTexMapID);
         // GXSetTexCoordGen2(gTexCoordID,GX_TG_MTX3x4,GX_TG_POS,0x24,0,0x7d);
-        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+        // mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        // TODO: Framebuffer is downscaled by a factor of 8 (640x480 to 80x60).
+        const tex: string = 'fb_color_downscale_8x';
+        textures[texmapId] = tex;
         mb.setTevDirect(tevStage);
         mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_2_8);
         mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO);
@@ -392,7 +397,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             }
 
             if (shader.flags & 0x100) {
-                // Occurs in Krazoa Palace
+                // Occurs in Krazoa Palace's reflective floors
                 blendWithTinyFramebufferTexture();
             }
         }

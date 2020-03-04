@@ -37,6 +37,7 @@ export abstract class SFARendererHelper implements Viewer.SceneGfx {
 
 export class SFARenderer extends SFARendererHelper {
     protected renderPass: GfxRenderPass;
+    protected viewport: any;
     protected sceneTexture = new ColorTexture();
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {}
@@ -47,16 +48,22 @@ export class SFARenderer extends SFARendererHelper {
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
+    protected copyToSceneTexture(device: GfxDevice) {
+        device.submitPass(this.renderPass);
+        this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderPass = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        this.viewport = viewerInput.viewport;
+        this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
         this.renderSky(device, renderInstManager, viewerInput);
         this.renderWorld(device, renderInstManager, viewerInput);
 
-        this.renderPass = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor);
         return this.renderPass;
     }
 }

@@ -11,7 +11,7 @@ import { SFARenderer } from './render';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader } from './shaders';
+import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, SFAMaterial } from './shaders';
 import { ModelInstance } from './models';
 
 export abstract class BlockFetcher {
@@ -419,8 +419,7 @@ export class SFABlockRenderer implements BlockRenderer {
                     try {
                         const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                         const material = buildMaterialFromShader(device, curShader, texColl, texIds);
-                        newModel.setTextures(material.textures);
-                        newModel.setMaterial(material.material);
+                        newModel.setMaterial(material);
                         models.push(newModel);
                     } catch (e) {
                         console.warn(`Failed to create model and shader instance due to exception:`);
@@ -779,12 +778,12 @@ export class AncientBlockRenderer implements BlockRenderer {
                         texmapId++;
                         texGenSrc++;
                     }
-                    newModel.setMaterial(mb.finish());
 
-                    newModel.setTextures([
-                        texColl.getTexture(device, texIds[shader.tex0Num], true),
-                        // texColl.getTexture(device, texIds[shader.tex1Num], true),
-                    ]);
+                    const material: SFAMaterial = {
+                        material: mb.finish(),
+                        textures: [texColl.getTexture(device, texIds[shader.tex0Num], true)],
+                    }
+                    newModel.setMaterial(material);
 
                     this.models.push(newModel);
                 } catch (e) {
