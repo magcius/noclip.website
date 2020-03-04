@@ -8,7 +8,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GXMaterial } from '../gx/gx_material';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFATexture } from './textures';
 
@@ -16,7 +16,6 @@ import { SFATexture } from './textures';
 export abstract class SFARendererHelper implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
-    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -46,32 +45,43 @@ export class SFARenderer extends SFARendererHelper {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         // Draw sky
         const skyTemplate = this.renderHelper.pushTemplateRenderInst();
         const oldProjection = mat4.create();
         mat4.copy(oldProjection, viewerInput.camera.projectionMatrix);
         mat4.identity(viewerInput.camera.projectionMatrix);
         fillSceneParamsDataOnTemplate(skyTemplate, viewerInput, false);
-        this.renderSky(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderSky(device, renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
 
         mat4.copy(viewerInput.camera.projectionMatrix, oldProjection);
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        
+        let passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        device.submitPass(passRenderer);
 
         // Draw world
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        this.renderWorld(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-        
-        const hostAccessPass = device.createHostAccessPass();
+        this.renderWorld(device, renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
+        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
+        // Pass will be submitted by the caller
         return passRenderer;
     }
 }
