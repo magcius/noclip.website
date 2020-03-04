@@ -6610,7 +6610,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         initInfo.setupConnectToScene();
         initInfo.setupEffect(null);
         // initInfo.setupSound(4);
-        initInfo.setupNerve(TsukidashikunNrv.MoveBack);
+        initInfo.setupNerve(TsukidashikunNrv.WaitBack);
         initInfo.initLightControl = true;
         initInfo.lightType = LightType.Strong;
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
@@ -6623,7 +6623,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TsukidashikunNrv.MoveForward || currentNerve === TsukidashikunNrv.MoveBack) {
-            moveCoordAndFollowTrans(this, this.speed);
+            moveCoordAndFollowTrans(this, this.speed * deltaTimeFrames);
             if (isRailReachedGoal(this)) {
                 reverseRailDirection(this);
                 if (currentNerve === TsukidashikunNrv.MoveForward)
