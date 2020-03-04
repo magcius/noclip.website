@@ -22,7 +22,6 @@ import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
-import { setAttachmentStateSimple } from '../../../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { translateSampler } from '../JUTTexture';
 
 export class ShapeInstanceState {

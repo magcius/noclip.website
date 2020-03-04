@@ -570,6 +570,14 @@ function patchBMD(bmd: BMD): void {
                 shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
         }
     }
+
+    // Sort shapes by material name. Yes, this is what the actual game does.
+    // ref. DrawBuffer::sortShapeDrawer.
+    bmd.shp1.shapes.sort((a, b) => {
+        const mata = bmd.mat3.materialEntries[a.materialIndex];
+        const matb = bmd.mat3.materialEntries[b.materialIndex];
+        return mata.name.localeCompare(matb.name);
+    });
 }
 
 const scratchMatrix = mat4.create();
