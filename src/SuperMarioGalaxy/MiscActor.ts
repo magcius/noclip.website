@@ -6617,8 +6617,9 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         initInfo.setupEffect(null);
         // initInfo.setupSound(4);
         initInfo.setupNerve(TsukidashikunNrv.MoveBack);
+        initInfo.initLightControl = true;
+        initInfo.lightType = LightType.Strong;
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
-        this.initLightCtrl(sceneObjHolder);
         this.speed = fallback(getJMapInfoArg0(infoIter), 10.0);
         this.waitStep = fallback(getJMapInfoArg0(infoIter), 120);
         moveCoordToNearestPos(this);
