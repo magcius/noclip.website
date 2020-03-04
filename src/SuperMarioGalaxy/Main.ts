@@ -310,7 +310,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         //     execute(0x12);
 
         // Clear depth buffer.
-        passRenderer.endPass();
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
@@ -396,7 +395,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
         // So, end our pass here and do indirect.
         // execute(0x2d);
-        passRenderer.endPass();
         device.submitPass(passRenderer);
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
@@ -426,7 +424,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // executeDrawImageEffect()
         if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
-            passRenderer.endPass();
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);

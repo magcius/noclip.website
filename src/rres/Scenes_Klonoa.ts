@@ -80,7 +80,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, KlonoaPass.SKYBOX);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
@@ -88,7 +87,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
         let lastPassRenderer: GfxRenderPass;
         if (hasAnyVisible(this.renderHelper.renderInstManager, KlonoaPass.INDIRECT)) {
-            opaquePassRenderer.endPass();
             device.submitPass(opaquePassRenderer);
 
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };

@@ -179,7 +179,6 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(ZTPPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
@@ -189,7 +188,6 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         let lastPassRenderer: GfxRenderPass;
         renderInstManager.setVisibleByFilterKeyExact(ZTPPass.INDIRECT);
         if (renderInstManager.hasAnyVisible()) {
-            opaquePassRenderer.endPass();
             device.submitPass(opaquePassRenderer);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);

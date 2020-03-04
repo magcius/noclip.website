@@ -80,7 +80,6 @@ class ClearScene {
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
         this.renderPassDescriptor.colorResolveTo = viewerRenderInput.onscreenTexture;
         const renderPass = device.createRenderPass(this.renderPassDescriptor);
-        renderPass.endPass();
         device.submitPass(renderPass);
         return null;
     }
@@ -164,14 +163,12 @@ export class Viewer {
             // Legacy API: needs resolve.
             const descriptor = this.gfxDevice.queryRenderPass(renderPass);
 
-            renderPass.endPass();
             this.gfxDevice.submitPass(renderPass);
 
             // Resolve.
             this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
             this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
             const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-            resolvePass.endPass();
             this.gfxDevice.submitPass(resolvePass);
         }
     }

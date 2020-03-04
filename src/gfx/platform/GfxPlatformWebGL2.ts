@@ -318,7 +318,6 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
-    public endPass(): void                        { }
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
