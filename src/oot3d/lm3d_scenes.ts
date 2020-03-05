@@ -54,6 +54,37 @@ class SceneDesc implements Viewer.SceneDesc {
                         return;
 
                     const roomGar = ZAR.parse(roomGarFile.buffer);
+                    const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
+                    for(const record of roomFurnitureEntries.records){
+                        // TODO(SpaceCats): Using getField(dmd_name) doesn't work... need to figure out why
+                        const cmbFilename: string = record[6];
+                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${cmbFilename}.cmb`);
+                        
+                        if(cmbFile != undefined){
+                            const cmb = CMB.parse(cmbFile.buffer);
+
+                            const cmbData = new CmbData(device, cmb);
+                            textureHolder.addTextures(device, cmb.textures);
+                            renderer.cmbData.push(cmbData);
+        
+                            const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
+                            cmbRenderer.whichTexture = 1;
+                            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                            console.log(`${cmbFilename} index is ${renderer.cmbRenderers.length}`);
+                            CMB.calcModelMtx(cmbRenderer.modelMatrix,
+                                1, 1, 1,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_y") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_z") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "pos_x"),
+                                BCSV.getField(roomFurnitureEntries, record, "pos_y"),
+                                BCSV.getField(roomFurnitureEntries, record, "pos_z")
+                            );
+
+                            renderer.cmbRenderers.push(cmbRenderer);
+                        }
+
+                    }
 
                     // TODO(jstpierre): How does the engine know which CMB file to spawn?
                     const firstCMB = assertExists(roomGar.files.find((file) => file.name.endsWith('.cmb')));
