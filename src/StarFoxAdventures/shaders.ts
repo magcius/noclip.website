@@ -379,9 +379,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         indStageId = 2;
     }
 
-    function addTevStagesForShaderFlags0x40() { // not quite sure where this occurs
+    function addTevStagesForWater() {
         // TODO: set texture matrix
-        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, GX.PostTexGenMatrix.PTIDENTITY /* TODO */);
         // TODO: set texture matrix
         mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
         // TODO: create special 128x128 texture
@@ -413,9 +413,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setTevSwapMode(tevStage + 1, undefined, undefined);
         mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        // TODO: get special 64x64 lava/warping related texture
-        const tex2 = texColl.getTexture(device, 0);
-        textures[texmapId + 1] = makeMaterialTexture(tex2);
+        textures[texmapId + 1] = makeMaterialTexture(makeWavyTexture(device));
 
         indStageId += 2;
         texcoordId += 4;
@@ -449,6 +447,8 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     if ((shader.flags & 0x80) != 0) {
         addTevStagesForLava();
+    } else if ((shader.flags & 0x40) != 0) {
+        addTevStagesForWater();
     } else {
         if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
             addTevStageForTextureWithWhiteKonst(0);
@@ -476,10 +476,6 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         for (let i = 0; i < shader.layers.length; i++) {
             textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
         }
-    }
-
-    if ((shader.flags & 0x40) != 0) {
-        addTevStagesForShaderFlags0x40();
     }
 
     return {
