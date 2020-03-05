@@ -11,7 +11,7 @@ import { SFARenderer } from './render';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, SFAMaterial } from './shaders';
+import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, SFAMaterial, makeMaterialTexture } from './shaders';
 import { ModelInstance } from './models';
 
 export abstract class BlockFetcher {
@@ -781,7 +781,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                     const material: SFAMaterial = {
                         material: mb.finish(),
-                        textures: [texColl.getTexture(device, texIds[shader.tex0Num], true)],
+                        textures: [makeMaterialTexture(texColl.getTexture(device, texIds[shader.tex0Num], true))],
                     }
                     newModel.setMaterial(material);
 

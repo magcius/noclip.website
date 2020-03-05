@@ -4,6 +4,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParams } from '../gx/gx_render';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxSampler, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
 
@@ -89,14 +90,85 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
     return shader
 }
 
+export interface SFAMaterialTexture_Texture {
+    kind: 'texture';
+    texture: SFATexture;
+}
+
+export interface SFAMaterialTexture_FbColorDownscaled8x {
+    kind: 'fb-color-downscaled-8x'; // FIXME: In addition to downscaling, some filtering is applied (I think)
+}
+
+export type SFAMaterialTexture =
+    SFAMaterialTexture_Texture |
+    SFAMaterialTexture_FbColorDownscaled8x |
+    null;
+
+export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialTexture {
+    if (texture) {
+        return { kind: 'texture', texture };
+    } else {
+        return null;
+    }
+}
+
 export interface SFAMaterial {
     material: GXMaterial;
-    textures: (SFATexture | string | null)[];
+    textures: SFAMaterialTexture[];
+}
+
+function makeWavyTexture(device: GfxDevice): SFATexture {
+    // This function generates a texture with a wavy pattern used for water and lava.
+    // Strangely, the original function to generate this function is not customizable and
+    // generates the same texture every time. (?)
+    
+    const width = 64;
+    const height = 64;
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+    const gfxSampler = device.createSampler({
+        wrapS: GfxWrapMode.REPEAT,
+        wrapT: GfxWrapMode.REPEAT,
+        minFilter: GfxTexFilterMode.BILINEAR,
+        magFilter: GfxTexFilterMode.BILINEAR,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0,
+        maxLOD: 100,
+    });
+
+    const pixels = new Uint8Array(4 * width * height);
+
+    function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+        const idx = 4 * (y * width + x)
+        pixels[idx] = r
+        pixels[idx + 1] = g
+        pixels[idx + 2] = b
+        pixels[idx + 3] = a
+    }
+
+    let X_MUL = 0.39275 // Approximately pi / 8
+    let Y_MUL = 0.0981875 // Approximately pi / 32
+    for (let y = 0; y < height; y++) {
+        let yAngle = Y_MUL * y
+        for (let x = 0; x < width; x++) {
+            let xAngle = X_MUL * x
+            let iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle)
+            let aFactor = Math.cos(X_MUL * x * xAngle)
+            let I = 127 * iFactor + 127
+            let A = 127 * iFactor * aFactor + 127
+            plot(y, x, I, I, I, A)
+        }
+    }
+
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+    device.submitPass(hostAccessPass);
+
+    return { gfxTexture, gfxSampler, width, height }
 }
 
 export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[]): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
-    const textures = [] as (SFATexture | string | null)[];
+    const textures = [] as SFAMaterialTexture[];
     let tevStage = 0;
     let indStageId = GX.IndTexStageID.STAGE0;
     let texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -251,15 +323,16 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     function addTevStagesForLava() { // and other similar effects?
         // Occurs for lava
-        textures[2] = texColl.getTexture(device, texIds[shader.layers[0].texNum], true);
+        textures[2] = makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[0].texNum], true));
         // TODO: set texture matrix
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         const texture0x600 = texColl.getTexture(device, 0x600);
-        textures[0] = texture0x600;
+        textures[0] = makeMaterialTexture(texture0x600);
         // TODO: set texture matrix
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        // FIXME: generate special 64x64 texture
-        textures[1] = texColl.getTexture(device, 0);
+        // FIXME: Don't generate a new wavy texture every time.
+        // Find a place to stash one and reuse it.
+        textures[1] = makeMaterialTexture(makeWavyTexture(device));
         // TODO: set texture matrix
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         
@@ -313,7 +386,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
         // TODO: create special 128x128 texture
         const tex = texColl.getTexture(device, 0);
-        textures[texmapId] = tex;
+        textures[texmapId] = makeMaterialTexture(tex);
         // TODO: GXSetIndTexMtx
         mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
         // TODO: set texture matrix
@@ -342,7 +415,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         // TODO: get special 64x64 lava/warping related texture
         const tex2 = texColl.getTexture(device, 0);
-        textures[texmapId + 1] = tex2;
+        textures[texmapId + 1] = makeMaterialTexture(tex2);
 
         indStageId += 2;
         texcoordId += 4;
@@ -358,9 +431,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         // GXSetTexCoordGen2(gTexCoordID,GX_TG_MTX3x4,GX_TG_POS,0x24,0,0x7d);
         // mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        // TODO: Framebuffer is downscaled by a factor of 8 (640x480 to 80x60).
-        const tex: string = 'fb_color_downscale_8x';
-        textures[texmapId] = tex;
+        textures[texmapId] = { kind: 'fb-color-downscaled-8x' };
         mb.setTevDirect(tevStage);
         mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_2_8);
         mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO);
@@ -403,7 +474,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         }
 
         for (let i = 0; i < shader.layers.length; i++) {
-            textures.push(texColl.getTexture(device, texIds[shader.layers[i].texNum], true));
+            textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
         }
     }
 

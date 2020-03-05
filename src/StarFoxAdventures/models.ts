@@ -54,35 +54,32 @@ export class ModelInstance {
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
 
         for (let i = 0; i < 8; i++) {
-            if (this.material.textures[i] !== null) {
-                let tex = this.material.textures[i];
-                if (tex === 'fb_color_downscale_8x') {
-                    this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
-                    if (this.sceneTextureSampler === null) {
-                        this.sceneTextureSampler = device.createSampler({
-                            wrapS: GfxWrapMode.REPEAT,
-                            wrapT: GfxWrapMode.REPEAT,
-                            minFilter: GfxTexFilterMode.BILINEAR,
-                            magFilter: GfxTexFilterMode.BILINEAR,
-                            mipFilter: GfxMipFilterMode.NO_MIP,
-                            minLOD: 0,
-                            maxLOD: 100,
-                        });
-                    }
-                    this.materialParams.m_TextureMapping[i].gfxSampler = this.sceneTextureSampler;
-                    this.materialParams.m_TextureMapping[i].width = sceneTexture.width;
-                    this.materialParams.m_TextureMapping[i].height = sceneTexture.height;
-                    this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-                } else if (tex !== undefined) {
-                    tex = tex as SFATexture;
-                    this.materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
-                    this.materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
-                    this.materialParams.m_TextureMapping[i].width = tex.width;
-                    this.materialParams.m_TextureMapping[i].height = tex.height;
-                    this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-                }
-            } else {
+            const tex = this.material.textures[i];
+            if (tex === undefined || tex === null) {
                 this.materialParams.m_TextureMapping[i].reset();
+            } else if (tex.kind === 'fb-color-downscaled-8x') {
+                this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
+                if (this.sceneTextureSampler === null) {
+                    this.sceneTextureSampler = device.createSampler({
+                        wrapS: GfxWrapMode.REPEAT,
+                        wrapT: GfxWrapMode.REPEAT,
+                        minFilter: GfxTexFilterMode.BILINEAR,
+                        magFilter: GfxTexFilterMode.BILINEAR,
+                        mipFilter: GfxMipFilterMode.NO_MIP,
+                        minLOD: 0,
+                        maxLOD: 100,
+                    });
+                }
+                this.materialParams.m_TextureMapping[i].gfxSampler = this.sceneTextureSampler;
+                this.materialParams.m_TextureMapping[i].width = sceneTexture.width;
+                this.materialParams.m_TextureMapping[i].height = sceneTexture.height;
+                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
+            } else if (tex.kind === 'texture') {
+                this.materialParams.m_TextureMapping[i].gfxTexture = tex.texture.gfxTexture;
+                this.materialParams.m_TextureMapping[i].gfxSampler = tex.texture.gfxSampler;
+                this.materialParams.m_TextureMapping[i].width = tex.texture.width;
+                this.materialParams.m_TextureMapping[i].height = tex.texture.height;
+                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
             }
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
