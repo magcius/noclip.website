@@ -1748,6 +1748,11 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
             b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Ms) {
+            const zar = await fetchArchive(`zelda_ms.zar`);
+            const b = buildModel(zar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ms_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Okuta) {
             const zar = await fetchArchive(`zelda_oc2.zar`);
             const b = buildModel(zar, `model/octarock.cmb`);
