@@ -8,7 +8,7 @@ import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
-import { assert, assertExists } from '../util';
+import { assert, assertExists, readString } from '../util';
 import { mat4 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -148,57 +148,86 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchNARC(`map_matrix.narc`, 'map_matrix');
         await modelCache.waitForLoad();
 
+        //Spacecats: TODO - General cleaning and organization. Fix issues with a few map chunks.
 
         const tilesets = new Map<number, BTX0>();
         const renderers: MDL0Renderer[] = [];
-        
+        const map_matrix: number[][] = [];
+        const tileset_indicies: number[] = [];
+
+        const headerCount = (await dataFetcher.fetchData(`${pathBase}/mapname.bin`)).byteLength / 16;
+        const arm9 = (await dataFetcher.fetchData(`${pathBase}/arm9.bin`)).createDataView();
+        for (let i = 0; i < headerCount; i++) {
+            tileset_indicies[i] = arm9.getUint8(0xE601C + (24 * i));
+        }
+
+        const mapMatrixData = assertExists(modelCache.getFileData(`map_matrix/0.bin`)).createDataView();
+        let currentMatrixOffset = 0x08;
+        for (let y = 0; y < 30; y++) {
+            map_matrix[y] = [];
+            for (let x = 0; x < 30; x++) {
+                map_matrix[y][x] = mapMatrixData.getUint16(currentMatrixOffset, true);
+                currentMatrixOffset += 2;
+            }   
+        }
+
         //SpaceCats: This is a hack, but it works.
         let set_index = 0;
         while(modelCache.getFileData(`map_tex_set/${set_index}.bin`) != null){
             tilesets.set(set_index, parseNSBTX(assertExists(modelCache.getFileData(`map_tex_set/${set_index}.bin`))));
             set_index++;
         }
+        
+        for (let x = 0; x < 900; x++) {
+            try {
+                const mapDataFile = assertExists(modelCache.getFileData(`land_data/${x}.bin`));
+                const mapData = assertExists(mapDataFile).createDataView();
+                
+                const objectOffset = mapData.getUint32(0x00, true) + 0x10;
+                const modelOffset = mapData.getUint32(0x04, true) + objectOffset;
+                const modelSize = mapData.getUint32(0x08, true);
+                
+                const embeddedModelBMD = parseNSBMD(mapDataFile.slice(modelOffset, modelOffset + modelSize));
 
-        //TODO: Fix this so it uses map_matrix to load all of the map chunks in the right places. 
+                const chunkX = parseInt(embeddedModelBMD.models[0].name.slice(3, 5));
+                const chunkY = parseInt(embeddedModelBMD.models[0].name.slice(6, 8));
 
-        for (let y = 0; y < 30; y++) {
-            for (let x = 0; x < 30; x++) {
-                try {
-                    const mapDataFile = assertExists(modelCache.getFileData(`land_data/${(y * 30) + x}.bin`));
-                    const mapData = assertExists(mapDataFile).createDataView();
-                    
-                    const objectOffset = mapData.getUint32(0x00, true) + 0x10;
-                    const modelOffset = mapData.getUint32(0x04, true) + objectOffset;
-                    const modelSize = mapData.getUint32(0x08, true);
-                    
-                    const mapTextureID = mapData.getUint8(modelOffset+0xBA);
-                    const embeddedModelBMD = parseNSBMD(mapDataFile.slice(modelOffset, modelOffset + modelSize));
-                    const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(mapTextureID)!.tex0));
-                    mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [x * 512, 0, y * 512]);
-                    renderers.push(mapRenderer);
-                    
-                    const objectCount = (modelOffset - objectOffset) / 0x30;
-                    for (let objIndex = 0; objIndex < objectCount; objIndex++) {
-                        const currentObjOffset = objectOffset + (objIndex * 0x30);
-                        const modelID = mapData.getUint32(currentObjOffset, true);
-                        
-                        const posX = fx32(mapData.getInt32(currentObjOffset + 0x04, true));
-                        const posY = fx32(mapData.getInt32(currentObjOffset + 0x08, true));
-                        const posZ = fx32(mapData.getInt32(currentObjOffset + 0x0C, true));
-                        
-                        const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
-                        const objBmd = parseNSBMD(modelFile);
-                        
-                        const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
-                        mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [posX + (x * 512), posY, posZ + (y * 512)]);
-                        
-                        renderers.push(renderer);
-                    }   
-                    
-                } catch (error) {
-                    console.error(error);
+                if(isNaN(chunkX) || isNaN(chunkY)){
+                    continue;
                 }
 
+                let tilesetIndex = tileset_indicies[map_matrix[chunkY][chunkX]];
+
+                //Spacecats: default tileset for the overworld is 15?, set tileset to that if for whatever reason the tileset doesnt exist
+
+                if (!tilesets.has(tilesetIndex)) {
+                    tilesetIndex = 15;
+                }
+
+                const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
+                mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(chunkX * 512), 0, (chunkY * 512)]);
+                renderers.push(mapRenderer);
+                
+                const objectCount = (modelOffset - objectOffset) / 0x30;
+                for (let objIndex = 0; objIndex < objectCount; objIndex++) {
+                    const currentObjOffset = objectOffset + (objIndex * 0x30);
+                    const modelID = mapData.getUint32(currentObjOffset, true);
+                    
+                    const posX = fx32(mapData.getInt32(currentObjOffset + 0x04, true));
+                    const posY = fx32(mapData.getInt32(currentObjOffset + 0x08, true));
+                    const posZ = fx32(mapData.getInt32(currentObjOffset + 0x0C, true));
+                    
+                    const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
+                    const objBmd = parseNSBMD(modelFile);
+                    
+                    const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
+                    mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (chunkX * 512)), posY, (posZ + (chunkY * 512))]);
+                    
+                    renderers.push(renderer);
+                }   
+                
+            } catch (error) {
+                console.error(error);
             }
         }
 
@@ -210,7 +239,7 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
 const id = 'pkmnpl';
 const name = 'Pokemon Platinum';
 const sceneDescs = [
-    new PokemonPlatinumSceneDesc("0", "Sinnoh")
+    new PokemonPlatinumSceneDesc("0", "Sinnoh Region")
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
