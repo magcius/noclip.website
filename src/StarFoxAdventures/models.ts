@@ -58,6 +58,7 @@ export class ModelInstance {
             if (tex === undefined || tex === null) {
                 this.materialParams.m_TextureMapping[i].reset();
             } else if (tex.kind === 'fb-color-downscaled-8x') {
+                // TODO: Downscale to 1/8th size and apply filtering
                 this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
                 if (this.sceneTextureSampler === null) {
                     this.sceneTextureSampler = device.createSampler({

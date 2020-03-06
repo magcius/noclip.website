@@ -145,17 +145,76 @@ function makeWavyTexture(device: GfxDevice): SFATexture {
         pixels[idx + 3] = a
     }
 
-    let X_MUL = 0.39275 // Approximately pi / 8
-    let Y_MUL = 0.0981875 // Approximately pi / 32
+    const X_MUL = 0.39275 // Approximately pi / 8
+    const Y_MUL = 0.0981875 // Approximately pi / 32
     for (let y = 0; y < height; y++) {
-        let yAngle = Y_MUL * y
+        const yAngle = Y_MUL * y
         for (let x = 0; x < width; x++) {
-            let xAngle = X_MUL * x
-            let iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle)
-            let aFactor = Math.cos(X_MUL * x * xAngle)
-            let I = 127 * iFactor + 127
-            let A = 127 * iFactor * aFactor + 127
+            const xAngle = X_MUL * x
+            const iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle)
+            const aFactor = Math.cos(X_MUL * x * xAngle)
+            const I = 127 * iFactor + 127
+            const A = 127 * iFactor * aFactor + 127
             plot(y, x, I, I, I, A)
+        }
+    }
+
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+    device.submitPass(hostAccessPass);
+
+    return { gfxTexture, gfxSampler, width, height }
+}
+
+function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
+    // This function generates a texture with a circular pattern used for water.
+    // Strangely, the original function to generate this function is not customizable and
+    // generates the same texture every time. (?)
+    
+    const width = 128;
+    const height = 128;
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+    const gfxSampler = device.createSampler({
+        wrapS: GfxWrapMode.REPEAT,
+        wrapT: GfxWrapMode.REPEAT,
+        minFilter: GfxTexFilterMode.BILINEAR,
+        magFilter: GfxTexFilterMode.BILINEAR,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0,
+        maxLOD: 100,
+    });
+
+    const pixels = new Uint8Array(4 * width * height);
+
+    function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+        const idx = 4 * (y * width + x)
+        pixels[idx] = r
+        pixels[idx + 1] = g
+        pixels[idx + 2] = b
+        pixels[idx + 3] = a
+    }
+
+    for (let y = 0; y < height; y++) {
+        const fy = (y - 64) / 64
+        for (let x = 0; x < width; x++) {
+            const fx = (x - 64) / 64
+            let dist = Math.hypot(fx, fy);
+            if (dist < 0.25 || 0.75 < dist) {
+                dist = 0.0
+            } else {
+                let f = 2.0 * (dist - 0.25)
+                if (f <= 0.5) {
+                    f = 0.5 - f
+                } else {
+                    f = f - 0.5
+                }
+                dist = -(2.0 * f - 1.0)
+                if (0.0 < dist) {
+                    dist = Math.sqrt(dist)
+                }
+            }
+            const I = 16 * dist
+            plot(y, x, I, I, I, I)
         }
     }
 
@@ -384,9 +443,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, GX.PostTexGenMatrix.PTIDENTITY /* TODO */);
         // TODO: set texture matrix
         mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
-        // TODO: create special 128x128 texture
-        const tex = texColl.getTexture(device, 0);
-        textures[texmapId] = makeMaterialTexture(tex);
+        // TODO: don't generate a new water-related texture every time.
+        // Find a place to stash one and reuse it.
+        textures[texmapId] = makeMaterialTexture(makeWaterRelatedTexture(device));
         // TODO: GXSetIndTexMtx
         mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
         // TODO: set texture matrix
@@ -446,17 +505,24 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     }
 
     if ((shader.flags & 0x80) != 0) {
+        console.log(`Found some lava!`);
         addTevStagesForLava();
     } else if ((shader.flags & 0x40) != 0) {
+        console.log(`Found some water!`);
         addTevStagesForWater();
     } else {
         if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
             addTevStageForTextureWithWhiteKonst(0);
             if (shader.flags & 0x100) {
+                console.log(`Found some reflective surfaces (special case)!`);
                 blendWithTinyFramebufferTexture();
             }
             addTevStagesForTextureWithMode(9);
             addTevStageForMultVtxColor();
+
+            for (let i = 0; i < shader.layers.length; i++) {
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
+            }
         } else {
             for (let i = 0; i < shader.layers.length; i++) {
                 const layer = shader.layers[i];
@@ -467,14 +533,15 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
                 }
             }
 
+            for (let i = 0; i < shader.layers.length; i++) {
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
+            }
+
             if (shader.flags & 0x100) {
                 // Occurs in Krazoa Palace's reflective floors
+                console.log(`Found some reflective surfaces (normal case)!`);
                 blendWithTinyFramebufferTexture();
             }
-        }
-
-        for (let i = 0; i < shader.layers.length; i++) {
-            textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
         }
     }
 
