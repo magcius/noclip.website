@@ -20,8 +20,8 @@ export interface SFATextureArray {
 }
 
 export abstract class TextureCollection {
-    public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1?: boolean): SFATextureArray | null;
-    public getTexture(device: GfxDevice, num: number, alwaysUseTex1?: boolean) : SFATexture | null {
+    public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
+    public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
         if (texArray) {
             return texArray.textures[0];
@@ -251,12 +251,15 @@ export class SFATextureCollection extends TextureCollection {
             file = this.tex1;
         } else {
             const textableValue = this.textableBin.getUint16(texId * 2);
+            console.log(`texid ${texId} translated to textable value ${textableValue}`);
             if (texId < 3000 || textableValue == 0) {
                 texId = textableValue;
                 file = this.tex0;
+                console.log(`translated to tex0 num ${texId}`);
             } else {
                 texId = textableValue + 1;
                 file = this.texpre;
+                console.log(`translated to texpre num ${texId}`);
             }
         }
 

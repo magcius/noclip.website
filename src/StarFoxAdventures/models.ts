@@ -87,7 +87,9 @@ export class ModelInstance {
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
-        this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera, modelMatrix);
+        for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
+            this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, modelMatrix);
+        }
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);

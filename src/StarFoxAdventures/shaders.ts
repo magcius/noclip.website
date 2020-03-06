@@ -225,7 +225,7 @@ function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
     return { gfxTexture, gfxSampler, width, height }
 }
 
-export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[]): SFAMaterial {
+export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
     const textures = [] as SFAMaterialTexture[];
     let tevStage = 0;
@@ -382,10 +382,10 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     function addTevStagesForLava() { // and other similar effects?
         // Occurs for lava
-        textures[2] = makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[0].texNum], true));
+        textures[2] = makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[0].texNum], alwaysUseTex1));
         // TODO: set texture matrix
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        const texture0x600 = texColl.getTexture(device, 0x600);
+        const texture0x600 = texColl.getTexture(device, 0x600, alwaysUseTex1); // FIXME: don't always use tex1?
         textures[0] = makeMaterialTexture(texture0x600);
         // TODO: set texture matrix
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -521,7 +521,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             addTevStageForMultVtxColor();
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
             }
         } else {
             for (let i = 0; i < shader.layers.length; i++) {
@@ -534,7 +534,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             }
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], true)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
             }
 
             if (shader.flags & 0x100) {

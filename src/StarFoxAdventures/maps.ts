@@ -352,7 +352,6 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
-        // FIXME: The best method is to create default save states for each map.
         const matrix = mat4.create();
         mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
         mapRenderer.setMatrix(matrix);

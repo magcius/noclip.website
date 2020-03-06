@@ -74,11 +74,23 @@ function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: str
 
 async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo) {
     const pathBase = gameInfo.pathBase;
-    const modelsBin = await dataFetcher.fetchData(`${pathBase}/MODELS.bin`);
     const texColl = new SFATextureCollection(gameInfo);
-    await texColl.create(dataFetcher, 'swaphol');
+    const [modelsTabData, modelsBin, _] = await Promise.all([
+        dataFetcher.fetchData(`${pathBase}/crfort/MODELS.tab`),
+        dataFetcher.fetchData(`${pathBase}/crfort/MODELS.bin`),
+        texColl.create(dataFetcher, 'crfort'),
+    ]);
+    const modelsTab = modelsTabData.createDataView();
 
-    const modelData = loadRes(modelsBin.subarray(0x35604));
+    const MODEL_NUM = 0x24 / 4
+
+    const modelTabValue = modelsTab.getUint32(MODEL_NUM * 4);
+    if (modelTabValue === 0) {
+        throw Error(`Model #${MODEL_NUM} not found`);
+    }
+
+    const modelOffs = modelTabValue & 0xffffff;
+    const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     hexdump(modelData);
     
     window.main.downloadModel = () => {
@@ -187,13 +199,6 @@ class WorldRenderer extends SFARenderer {
 
         const t0 = factor;
         const t1 = factor - (texElevationCoeff * 2.0) / atmosTexture.height;
-        // const t0 = (camPitch / Math.PI + 1.0) / 2.0;
-        // const t1 = t0;
-
-        const ctx = getDebugOverlayCanvas2D();
-        ctx.fillStyle = '#eeeeee';
-        ctx.font = '16px sans-serif';
-        ctx.fillText(`Pitch: ${camPitch}`, 300, 100);
 
         this.ddraw.beginDraw();
 
@@ -233,10 +238,12 @@ class WorldRenderer extends SFARenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
         // Body
-        for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
-            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
-            this.copyToSceneTexture(device);
-        }
+        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, 0, this.sceneTexture);
+        this.copyToSceneTexture(device);
+        // for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
+        //     this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+        //     this.copyToSceneTexture(device);
+        // }
 
         let objtemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);

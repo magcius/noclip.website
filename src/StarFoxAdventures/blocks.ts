@@ -170,6 +170,7 @@ export class SFABlockRenderer implements BlockRenderer {
             case 0:
                 // Used in character and object models
                 fields = {
+                    alwaysUseTex1: false,
                     texOffset: 32,
                     texCount: 242,
                     posOffset: 40,
@@ -202,6 +203,7 @@ export class SFABlockRenderer implements BlockRenderer {
             case 264:
                 // Used in map blocks
                 fields = {
+                    alwaysUseTex1: true,
                     texOffset: 0x54,
                     texCount: 0xa0,
                     posOffset: 0x58,
@@ -285,7 +287,7 @@ export class SFABlockRenderer implements BlockRenderer {
 
         const shaders: Shader[] = [];
         offs = shaderOffset;
-        const shaderFields = SFA_SHADER_FIELDS;
+        const shaderFields = fields.shaderFields;
         for (let i = 0; i < shaderCount; i++) {
             const shaderBin = blockData.subarray(offs, shaderFields.size).createDataView();
             const shader = parseShader(shaderBin, shaderFields);
@@ -418,7 +420,7 @@ export class SFABlockRenderer implements BlockRenderer {
     
                     try {
                         const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                        const material = buildMaterialFromShader(device, curShader, texColl, texIds);
+                        const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1);
                         newModel.setMaterial(material);
                         models.push(newModel);
                     } catch (e) {
