@@ -182,26 +182,17 @@ class WorldRenderer extends SFARenderer {
         getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
         vec3.negate(cameraFwd, cameraFwd);
         const camPitch = vecPitch(cameraFwd);
-        const camRoll = 0;
+        const camRoll = Math.PI / 2;
 
         // FIXME: This implementation is adapted from the game but correctness is not verified.
-        // A different technique should probably be used, since this one ignores camera roll and works poorly in VR.
-        // TODO: Implement time of day, which the game implements by blending textures.
-        let factor = viewerInput.camera.fovY;
-        // FIXME: Is (.5*Math.PI) below correct?
-        let texElevationCoeff = ((atmosTexture.height * (factor * 0.5)) / (.5*Math.PI)) * 3.0;
-        factor = Math.sin(-camPitch); // FIXME: do I have campitch and camroll mixed up?
-        texElevationCoeff *= factor;
-        factor = (atmosTexture.height * 0.5 - 6.0) - (3.0 * (atmosTexture.height * camRoll) / Math.PI);
-        factor += texElevationCoeff;
-        factor *= 32.0;
-        factor = factor / (32 * atmosTexture.height);
-
-        const t0 = factor;
-        const t1 = factor - (texElevationCoeff * 2.0) / atmosTexture.height;
+        // A different technique should probably be used, since this one works poorly in VR.
+        // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
+        const fovRollFactor = 3.0 * (atmosTexture.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+        const pitchFactor = (0.5 * atmosTexture.height - 6.0) - (3.0 * atmosTexture.height * camPitch / Math.PI);
+        const t0 = (pitchFactor + fovRollFactor) / atmosTexture.height;
+        const t1 = t0 - (fovRollFactor * 2.0) / atmosTexture.height;
 
         this.ddraw.beginDraw();
-
         this.ddraw.begin(GX.Command.DRAW_QUADS);
         this.ddraw.position3f32(-1, -1, -1);
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
