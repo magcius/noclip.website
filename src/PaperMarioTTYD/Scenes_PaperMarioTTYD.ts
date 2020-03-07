@@ -1,5 +1,5 @@
 
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, makeTextureDescriptor2D, GfxFormat } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import { TPLTextureHolder, WorldRenderer } from './render';
 import * as TPL from './tpl';
@@ -43,6 +43,15 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             backgroundTextureName = `bg_${this.id}`;
             const bgTpl = TPL.parse(bgBuffer, [backgroundTextureName]);
             textureHolder.addTPLTextures(device, bgTpl);
+        }
+
+        if (textureHolder.hasTexture('tou_k_dummy')) {
+            // Replace dummy texture with a pure green.
+            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadTextureData(gfxTexture, 0, [new Uint8Array([0x00, 0xFF, 0x00, 0xFF])]);
+            device.submitPass(hostAccessPass);
+            textureHolder.setTextureOverride('tou_k_dummy', { width: 1, height: 1, flipY: false, gfxTexture });
         }
 
         return new WorldRenderer(device, d, textureHolder, backgroundTextureName);

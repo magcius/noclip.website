@@ -448,8 +448,6 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public playAnimationName(animationName: string): boolean {
-        this.stopAllAnimations();
-
         const animation = this.d.animations.find((a) => a.name === animationName);
         if (animation) {
             this.playAnimation(animation);
