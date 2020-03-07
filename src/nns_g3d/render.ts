@@ -10,7 +10,7 @@ import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
 import AnimationController from "../AnimationController";
-import { nArray, assertExists } from "../util";
+import { nArray, assertExists, fallback } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
@@ -32,9 +32,8 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
 
 const scratchTexMatrix = mat2d.create();
 class MaterialInstance {
-    private texture: TEX0Texture;
-    private gfxTextures: GfxTexture[] = [];
     private textureNames: string[] = [];
+    private gfxTextures: GfxTexture[] = [];
     private gfxSampler: GfxSampler | null = null;
     private textureMappings: TextureMapping[] = nArray(1, () => new TextureMapping());
     public viewerTextures: Viewer.Texture[] = [];
@@ -45,11 +44,10 @@ class MaterialInstance {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
-        this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
-        this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
 
-        if (this.gfxTextures.length > 0) {
+        const texture = this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
+        if (texture !== null) {
             this.gfxSampler = device.createSampler({
                 minFilter: GfxTexFilterMode.POINT,
                 magFilter: GfxTexFilterMode.POINT,
@@ -68,7 +66,7 @@ class MaterialInstance {
         // NITRO's Rendering Engine uses two passes. Opaque, then Transparent.
         // A transparent polygon is one that has an alpha of < 0xFF, or uses
         // A5I3 / A3I5 textures.
-        const isTranslucent = (this.material.alpha < 0xFF) || (this.texture && textureFormatIsTranslucent(this.texture.format));
+        const isTranslucent = (this.material.alpha < 0xFF) || (texture !== null && textureFormatIsTranslucent(texture.format));
         const xl = !!((this.material.polyAttribs >>> 11) & 0x01);
         const depthWrite = xl || !isTranslucent;
 
@@ -95,7 +93,7 @@ class MaterialInstance {
         return this.pat0Animator !== null;
     }
 
-    public translatePAT0Textures(device: GfxDevice, hostAccessPass: GfxHostAccessPass, tex0: TEX0): void {
+    public translatePAT0Textures(device: GfxDevice, tex0: TEX0): void {
         if (this.pat0Animator === null)
             return;
 
@@ -111,15 +109,15 @@ class MaterialInstance {
         }
     }
 
-    private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null) {
+    private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null): TEX0Texture | null {
         if (tex0 === null || textureName === null)
-            return;
+            return null;
 
         const texture = assertExists(tex0.textures.find((t) => t.name === textureName));
         const palette = paletteName !== null ? assertExists(tex0.palettes.find((t) => t.name === paletteName)) : null;
         const fullTextureName = `${textureName}/${paletteName}`;
         if (this.textureNames.indexOf(fullTextureName) >= 0)
-            return;
+            return texture;
         this.textureNames.push(fullTextureName);
 
         const inTexture: Texture = { ...texture, palData: palette !== null ? palette.data : null } as Texture;
@@ -131,6 +129,7 @@ class MaterialInstance {
         device.submitPass(hostAccessPass);
 
         this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
+        return texture;
     }
 
     public setOnRenderInst(template: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
@@ -339,12 +338,10 @@ export class MDL0Renderer {
     }
 
     public bindPAT0(device: GfxDevice, pat0: PAT0, animationController: AnimationController = this.animationController): void {
-        const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.materialInstances.length; i++) {
             if (this.materialInstances[i].bindPAT0(animationController, pat0))
-                this.materialInstances[i].translatePAT0Textures(device, hostAccessPass, this.tex0);
+                this.materialInstances[i].translatePAT0Textures(device, this.tex0);
         }
-        device.submitPass(hostAccessPass);
     }
 
     private execSBC(device: GfxDevice) {

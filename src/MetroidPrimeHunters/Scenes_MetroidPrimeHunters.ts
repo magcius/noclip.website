@@ -16,6 +16,7 @@ import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
+import { CameraController } from '../Camera';
 
 const pathBase = `MetroidPrimeHunters`;
 
@@ -75,6 +76,11 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public stageRenderer: MPHRenderer) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
         this.textureHolder = new FakeTextureHolder(this.stageRenderer.viewerTextures);
+    }
+
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
+        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

@@ -326,11 +326,14 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
             // Value established by trial and error. Needs more research. See
             // http://wiki.tockdom.com/wiki/Object/Psea
-            b1.modelMatrix[13] -= 8550;
-            b2.modelMatrix[13] -= 8550;
-            b3.modelMatrix[13] -= 8550;
-            b4.modelMatrix[13] -= 8550;
-            b5.modelMatrix[13] -= 8550;
+            //b1.modelMatrix[13] -= 8550;
+            //b2.modelMatrix[13] -= 8550;
+            //b3.modelMatrix[13] -= 8550;
+            //b4.modelMatrix[13] -= 8550;
+            //b5.modelMatrix[13] -= 8550;
+
+            //Offset not needed anymore?
+
         } else if (gobj.objectId === 0x0003) { // lensFX
             // Lens flare effect -- runtime determined, not a BRRES.
         } else if (gobj.objectId === 0x0015) { // sound_Mii
@@ -348,8 +351,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0072) { // sunDS
             spawnSimpleObject(`sunDS`);
         } else if (gobj.objectId === 0x0073) { // coin
-            spawnSimpleObject(`coin`);  
-            // Kinda partially clipped into the floor, and doesn't spin
+            const b = spawnSimpleObject(`coin`);
+            b.modelMatrix[13] += 15;
+            // pull it out the ground, doesn't spin still
         } else if (gobj.objectId === 0x00ca) { // MashBalloonGC
             spawnSimpleObject(`MashBalloonGC`);
         } else if (gobj.objectId === 0x00cb) { // WLwallGC
@@ -373,7 +377,6 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnSimpleObject(`penguin_m`);
         } else if (gobj.objectId === 0x00d9) { // penguin_l
             spawnSimpleObject(`penguin_l`);
-            // penguins are missing eyes, the horror!
         } else if (gobj.objectId === 0x00da) { // castleballoon1
             spawnSimpleObject(`castleballoon1`);
         } else if (gobj.objectId === 0x00db) { // dossunc
@@ -395,9 +398,11 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnSimpleObject(`CarA2`);
         } else if (gobj.objectId === 0x00e8) { // CarA3
             spawnSimpleObject(`CarA3`);
-        //} else if (gobj.objectId === 0x00e9) { // Hwanwan
-        //    spawnObject(`wanwan`);
-            // smaller than it should be and half clipped into the floor
+        } else if (gobj.objectId === 0x00e9) { // Hwanwan
+            const b = spawnSimpleObject(`wanwan`);
+            mat4.scale(b.modelMatrix, b.modelMatrix, [4, 4, 4])
+            b.modelMatrix[13] += 125;
+            // scales up and out of the ground to look closer to ingame
         } else if (gobj.objectId === 0x00eb) { // Twanwan
             const b = spawnSimpleObject(`Twanwan`);
             b.modelMatrix[13] += 150;
@@ -588,7 +593,8 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0196) { // wanwan
             spawnSimpleObject(`wanwan`);
         } else if (gobj.objectId === 0x0197) { // poihana
-            spawnSimpleObject(`poihana`);
+            const b = spawnSimpleObject(`poihana`);
+            b.modelMatrix[13] += 25; // pull him out of the ground
         } else if (gobj.objectId === 0x0198) { // DKrockGC
             spawnSimpleObject(`DKrockGC`);
         } else if (gobj.objectId === 0x0199) { // sanbo
@@ -606,7 +612,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x01a2) { // pakkun_dokan
             spawnSimpleObject(`pakkun_dokan`);
         //} else if (gobj.objectId === 0x01a3) { // begoman_spike
-        //    spawnObject(`begoman_spike`);
+        //    spawnSimpleObject(`begoman_spike`);
         } else if (gobj.objectId === 0x01a4) { // FireSnake
             spawnSimpleObject(`FireSnake`);
         } else if (gobj.objectId === 0x01a5) { // koopaFirebar
