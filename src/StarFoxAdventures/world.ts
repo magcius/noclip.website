@@ -184,8 +184,9 @@ class WorldRenderer extends SFARenderer {
         const camPitch = vecPitch(cameraFwd);
         const camRoll = Math.PI / 2;
 
-        // FIXME: This implementation is adapted from the game but correctness is not verified.
-        // A different technique should probably be used, since this one works poorly in VR.
+        // Draw atmosphere
+        // FIXME: This implementation is adapted from the game, but correctness is not verified.
+        // We should probably use a different technique, since this one works poorly in VR.
         // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
         const fovRollFactor = 3.0 * (atmosTexture.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
         const pitchFactor = (0.5 * atmosTexture.height - 6.0) - (3.0 * atmosTexture.height * camPitch / Math.PI);
@@ -245,6 +246,7 @@ class WorldRenderer extends SFARenderer {
             // TODO: draw sphere
             // XXX: radius is too big to be workable. Or sometimes it's 0.
             obj.radius = 64;
+            
             this.objddraw.begin(GX.Command.DRAW_QUADS);
             this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
             this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
