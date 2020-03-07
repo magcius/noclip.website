@@ -151,7 +151,6 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
         //Spacecats: TODO - General cleaning and organization. Fix issues with a few map chunks.
 
         const tilesets = new Map<number, BTX0>();
-        const building_textures = parseNSBTX((await dataFetcher.fetchData(`${pathBase}/build_tex.nsbtx`)));
         const renderers: MDL0Renderer[] = [];
         const map_matrix_headers: number[][] = [];
         const map_matrix_height: number[][] = [];
@@ -174,6 +173,8 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
             }   
         }
 
+        //SpaceCats: Leaving these two as seperate since for loading the underground and some indoor maps this secondary section might be disabled
+
         for (let y = 0; y < 30; y++) {
             map_matrix_height[y] = [];
             for (let x = 0; x < 30; x++) {
@@ -192,12 +193,6 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
 
         //SpaceCats: This is a hack, but it works.
         let set_index = 0;
-        while(modelCache.getFileData(`map_tex_set/${set_index}.bin`) != null){
-            tilesets.set(set_index, parseNSBTX(assertExists(modelCache.getFileData(`map_tex_set/${set_index}.bin`))));
-            set_index++;
-        }
-
-        set_index = 0;
         while(modelCache.getFileData(`map_tex_set/${set_index}.bin`) != null){
             tilesets.set(set_index, parseNSBTX(assertExists(modelCache.getFileData(`map_tex_set/${set_index}.bin`))));
             set_index++;
