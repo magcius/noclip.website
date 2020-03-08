@@ -17,6 +17,7 @@ import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUni
 import { SceneContext } from '../SceneBase';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA, fx32 } from './NNS_G3D';
 import { CameraController } from '../Camera';
+import { AABB } from '../Geometry';
 
 const pathBase = `pkmnpl`;
 class ModelCache {
@@ -78,7 +79,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public createCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(8/60);
+        c.setSceneMoveSpeedMult(1);
         return c;
     }
 
@@ -157,10 +158,9 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
         const map_matrix_files: number[][] = [];
         const tileset_indicies: number[] = [];
 
-        const headerCount = (await dataFetcher.fetchData(`${pathBase}/mapname.bin`)).byteLength / 16;
-        const arm9 = (await dataFetcher.fetchData(`${pathBase}/arm9.bin`)).createDataView();
-        for (let i = 0; i < headerCount; i++) {
-            tileset_indicies[i] = arm9.getUint8(0xE601C + (24 * i));
+        const mapHeaders = (await dataFetcher.fetchData(`${pathBase}/maps.bin`)).createDataView();
+        for (let i = 0; i < 700; i++) {
+            tileset_indicies[i] = mapHeaders.getUint8((24 * i));
         }
 
         const mapMatrixData = assertExists(modelCache.getFileData(`map_matrix/0.bin`)).createDataView();
@@ -212,16 +212,20 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                     const modelSize = mapData.getUint32(0x08, true);
                     
                     const embeddedModelBMD = parseNSBMD(mapDataFile.slice(modelOffset, modelOffset + modelSize));
-
                     const tilesetIndex = tileset_indicies[map_matrix_headers[y][x]];
+                    const bbox = new AABB(-256, -256, -256, 256, 256, 256);
                     
                     try{
-                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
+                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0), true);
                         mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(x * 512), map_matrix_height[y][x]*8, (y * 512)]);
+                        mapRenderer.bbox = bbox;
+                        bbox.transform(bbox, mapRenderer.modelMatrix);
                         renderers.push(mapRenderer);
                     } catch {
-                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(6)!.tex0));
+                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(6)!.tex0), true);
                         mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(x * 512), map_matrix_height[y][x]*8, (y * 512)]);
+                        mapRenderer.bbox = bbox;
+                        bbox.transform(bbox, mapRenderer.modelMatrix);
                         renderers.push(mapRenderer);
                     }
                     
@@ -237,9 +241,9 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                         const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
                         const objBmd = parseNSBMD(modelFile);
 
-                        const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
+                        const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0), true);
+                        renderer.bbox = bbox;
                         mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
-                        
                         renderers.push(renderer);
                     }
                    
