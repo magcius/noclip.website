@@ -54,6 +54,7 @@ import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperS
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
+import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -137,6 +138,7 @@ const sceneGroups = [
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
+    Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,

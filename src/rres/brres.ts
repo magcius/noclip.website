@@ -20,7 +20,7 @@ import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color';
-import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
+import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
 import { Camera } from '../Camera';
@@ -86,29 +86,29 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS *  sinR;
-    dst[12] = scaleS * (-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5)) + 0.5;
+    dst[12] = scaleS * ((-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5))) + 0.5;
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * ( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5)) + 0.5;
+    dst[13] = scaleT * (( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5))) + 0.5;
 }
 
 const enum TexMatrixMode {
-    BASIC = -1,
-    MAYA = 0,
+    Basic = -1,
+    Maya = 0,
     XSI = 1,
-    MAX = 2,
+    Max = 2,
 };
 
 function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     switch (texMtxMode) {
-    case TexMatrixMode.BASIC:
+    case TexMatrixMode.Basic:
         return calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT);
-    case TexMatrixMode.MAYA:
+    case TexMatrixMode.Maya:
         return calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
     case TexMatrixMode.XSI:
         return calcTexMtx_XSI(dst, scaleS, scaleT, rotation, translationS, translationT);
-    case TexMatrixMode.MAX:
+    case TexMatrixMode.Max:
         return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
     default:
         throw "whoops";
@@ -1641,7 +1641,7 @@ export class SRT0TexMtxAnimator {
     }
 
     public calcIndTexMtx(dst: mat4): void {
-        this._calcTexMtx(dst, TexMatrixMode.BASIC);
+        this._calcTexMtx(dst, TexMatrixMode.Basic);
     }
 
     public calcTexMtx(dst: mat4): void {
@@ -3115,13 +3115,62 @@ export class LightSetting {
 }
 
 export class SCN0Animator {
-    constructor(private animationController: AnimationController, private scn0: SCN0) {
+    private scratchPos = vec3.create();
+    private scratchAim = vec3.create();
+
+    constructor(private animationController: AnimationController, public scn0: SCN0) {
+    }
+
+    public calcCameraPositionAim(camera: Camera, cameraIndex: number): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+        const scn0Cam = this.scn0.cameras[cameraIndex];
+
+        const posX = sampleFloatAnimationTrack(scn0Cam.posX, animFrame);
+        const posY = sampleFloatAnimationTrack(scn0Cam.posY, animFrame);
+        const posZ = sampleFloatAnimationTrack(scn0Cam.posZ, animFrame);
+        vec3.set(this.scratchPos, posX, posY, posZ);
+
+        if (scn0Cam.cameraType === SCN0_CameraType.AIM) {
+            const aimX = sampleFloatAnimationTrack(scn0Cam.aimX, animFrame);
+            const aimY = sampleFloatAnimationTrack(scn0Cam.aimY, animFrame);
+            const aimZ = sampleFloatAnimationTrack(scn0Cam.aimZ, animFrame);
+            vec3.set(this.scratchAim, aimX, aimY, aimZ);
+
+            mat4.lookAt(camera.viewMatrix, this.scratchPos, this.scratchAim, Vec3UnitY);
+
+            // TODO(jstpierre): What units is twist in?
+            // const twist = sampleFloatAnimationTrack(scn0Cam.twist, animFrame);
+            // mat4.rotateZ(camera.viewMatrix, camera.viewMatrix, twist);
+
+            mat4.invert(camera.worldMatrix, camera.viewMatrix);
+        } else {
+            // TODO(jstpierre): Support rotation.
+            assert(false);
+        }
+
+        camera.worldMatrixUpdated();
+    }
+
+    public calcCameraProjection(camera: Camera, cameraIndex: number): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+        const scn0Cam = this.scn0.cameras[cameraIndex];
+
+        if (scn0Cam.projType === GX.ProjectionType.PERSPECTIVE) {
+            const perspFovy = sampleFloatAnimationTrack(scn0Cam.perspFovy, animFrame);
+            const fovY = MathConstants.DEG_TO_RAD * perspFovy;
+            const aspect = sampleFloatAnimationTrack(scn0Cam.aspect, animFrame);
+            const near = sampleFloatAnimationTrack(scn0Cam.near, animFrame);
+            const far = sampleFloatAnimationTrack(scn0Cam.far, animFrame);
+            camera.setPerspective(fovY, aspect, near, far);
+        } else {
+            // TODO(jstpierre): Orthographic.
+        }
     }
 
     public calcCameraClipPlanes(camera: Camera, cameraIndex: number): void {
         const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
-
         const scn0Cam = this.scn0.cameras[cameraIndex];
+
         const near = sampleFloatAnimationTrack(scn0Cam.near, animFrame);
         const far = sampleFloatAnimationTrack(scn0Cam.far, animFrame);
 
