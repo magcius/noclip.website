@@ -8,18 +8,18 @@ import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
-import { assert, assertExists, readString } from '../util';
+import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
-import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA, fx32 } from './NNS_G3D';
+import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D';
 import { CameraController } from '../Camera';
 import { AABB } from '../Geometry';
 
-const pathBase = `pkmnpl`;
+const pathBase = `PokemonPlatinum`;
 class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     public fileDataCache = new Map<string, ArrayBufferSlice>();
