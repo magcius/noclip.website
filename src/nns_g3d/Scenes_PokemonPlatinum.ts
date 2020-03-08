@@ -188,56 +188,54 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
             tilesets.set(set_index, parseNSBTX(assertExists(modelCache.getFileData(`map_tex_set/${set_index}.bin`))));
             set_index++;
         }
-        
+
         for (let y = 0; y < 30; y++) {
             for (let x = 0; x < 30; x++) {
                 try {
-                    if(map_matrix_files[y][x] == 0xFFFF){
+                    if (map_matrix_files[y][x] === 0xFFFF)
                         continue;
-                    }
+
                     const mapDataFile = assertExists(modelCache.getFileData(`land_data/${map_matrix_files[y][x]}.bin`));
                     const mapData = assertExists(mapDataFile).createDataView();
-                    
+
                     const objectOffset = mapData.getUint32(0x00, true) + 0x10;
                     const modelOffset = mapData.getUint32(0x04, true) + objectOffset;
                     const modelSize = mapData.getUint32(0x08, true);
-                    
+
                     const embeddedModelBMD = parseNSBMD(mapDataFile.slice(modelOffset, modelOffset + modelSize));
                     const tilesetIndex = tileset_indicies[map_matrix_headers[y][x]];
                     const bbox = new AABB(-256, -256, -256, 256, 256, 256);
-                    
-                    try{
-                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0), true);
-                        mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(x * 512), map_matrix_height[y][x]*8, (y * 512)]);
-                        mapRenderer.bbox = bbox;
-                        bbox.transform(bbox, mapRenderer.modelMatrix);
-                        renderers.push(mapRenderer);
-                    } catch {
-                        const mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(6)!.tex0), true);
-                        mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(x * 512), map_matrix_height[y][x]*8, (y * 512)]);
-                        mapRenderer.bbox = bbox;
-                        bbox.transform(bbox, mapRenderer.modelMatrix);
-                        renderers.push(mapRenderer);
+
+                    let mapRenderer: MDL0Renderer;
+                    try {
+                        mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
+                    } catch(e) {
+                        mapRenderer = new MDL0Renderer(device, embeddedModelBMD.models[0], assertExists(tilesets.get(6)!.tex0));
                     }
-                    
+
+                    mat4.translate(mapRenderer.modelMatrix, mapRenderer.modelMatrix, [(x * 512), map_matrix_height[y][x]*8, (y * 512)]);
+                    mapRenderer.bbox = bbox;
+                    bbox.transform(bbox, mapRenderer.modelMatrix);
+                    renderers.push(mapRenderer);
+
                     const objectCount = (modelOffset - objectOffset) / 0x30;
                     for (let objIndex = 0; objIndex < objectCount; objIndex++) {
                         const currentObjOffset = objectOffset + (objIndex * 0x30);
                         const modelID = mapData.getUint32(currentObjOffset, true);
-                        
+
                         const posX = fx32(mapData.getInt32(currentObjOffset + 0x04, true));
                         const posY = fx32(mapData.getInt32(currentObjOffset + 0x08, true));
                         const posZ = fx32(mapData.getInt32(currentObjOffset + 0x0C, true));
-                        
+
                         const modelFile = assertExists(modelCache.getFileData(`build_model/${modelID}.bin`));
                         const objBmd = parseNSBMD(modelFile);
 
-                        const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0), true);
+                        const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
+                        possibleLeak = renderer;
                         renderer.bbox = bbox;
                         mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
                         renderers.push(renderer);
                     }
-                   
                 } catch (error) {
                     console.error(error);
                 }

@@ -124,6 +124,7 @@ class MaterialInstance {
         const inTexture: Texture = { ...texture, palData: palette !== null ? palette.data : null } as Texture;
         const pixels = readTexture(inTexture);
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
+        device.setResourceName(gfxTexture, textureName);
         this.gfxTextures.push(gfxTexture);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
@@ -304,7 +305,6 @@ const enum BillboardMode {
 export class MDL0Renderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
-    public useBBox: boolean = false;
     public animationController = new AnimationController();
 
     private gfxProgram: GfxProgram;
@@ -312,10 +312,9 @@ export class MDL0Renderer {
     private shapeInstances: ShapeInstance[] = [];
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
-    public bbox: AABB = new AABB();
+    public bbox: AABB | null = null;
 
-    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0, usebb = false) {
-        this.useBBox = usebb;
+    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -418,7 +417,9 @@ export class MDL0Renderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if(this.useBBox && !viewerInput.camera.frustum.contains(this.bbox)) return;
+        if(this.bbox !== null && !viewerInput.camera.frustum.contains(this.bbox))
+            return;
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.nodes.length; i++)
