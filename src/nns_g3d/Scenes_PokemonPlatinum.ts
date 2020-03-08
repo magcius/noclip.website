@@ -231,7 +231,6 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                         const objBmd = parseNSBMD(modelFile);
 
                         const renderer = new MDL0Renderer(device, objBmd.models[0], assertExists(objBmd.tex0));
-                        possibleLeak = renderer;
                         renderer.bbox = bbox;
                         mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [(posX + (x * 512)), posY, (posZ + (y * 512))]);
                         renderers.push(renderer);
