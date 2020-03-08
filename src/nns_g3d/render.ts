@@ -306,6 +306,7 @@ const enum BillboardMode {
 export class MDL0Renderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
+    public useBBox: boolean = false;
     public animationController = new AnimationController();
 
     private gfxProgram: GfxProgram;
@@ -313,9 +314,10 @@ export class MDL0Renderer {
     private shapeInstances: ShapeInstance[] = [];
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
-    public bbox: AABB | null = null;
+    public bbox: AABB = new AABB();
 
-    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0) {
+    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0, usebb = false) {
+        this.useBBox = usebb;
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -418,9 +420,7 @@ export class MDL0Renderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if(this.bbox !== null && !viewerInput.camera.frustum.contains(this.bbox))
-            return;
-
+        if(this.useBBox && !viewerInput.camera.frustum.contains(this.bbox)) return;
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.nodes.length; i++)
