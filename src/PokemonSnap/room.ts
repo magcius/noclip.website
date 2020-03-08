@@ -42,7 +42,7 @@ export interface ObjectSpawn {
     path?: Path;
 }
 
-export interface ObjectDef {
+export interface ActorDef {
     id: number;
     nodes: GFXNode[];
     sharedOutput: RSPSharedOutput;
@@ -53,13 +53,25 @@ export interface ObjectDef {
     globalPointer: number;
 }
 
+export interface StaticDef {
+    id: number;
+    node: GFXNode;
+    sharedOutput: RSPSharedOutput;
+}
+
+type ObjectDef = ActorDef | StaticDef;
+
+export function isActor(def: ObjectDef): def is ActorDef {
+    return !!(def as any).stateGraph;
+}
+
 export interface LevelArchive {
     Name: number;
     Data: ArrayBufferSlice;
     Code: ArrayBufferSlice;
     StartAddress: number;
     CodeStartAddress: number;
-    Rooms: number;
+    Header: number;
     Objects: number;
     Collision: number;
 };
@@ -134,17 +146,6 @@ function getCartAnimationAddresses(id: number): number[] {
 
 export function parseLevel(archives: LevelArchive[]): Level {
     const level = archives[0];
-    const view = level.Data.createDataView();
-
-    const rooms: Room[] = [];
-    let offs = level.Rooms - level.StartAddress;
-    const pathRooms = view.getUint32(offs + 0x00);
-    const nonPathRooms = view.getUint32(offs + 0x04);
-    const skyboxDescriptor = view.getUint32(offs + 0x08);
-
-    const sharedCache = new RDP.TextureCache();
-
-    let skybox: Room | null = null;
 
     const dataMap = new DataMap([
         { data: level.Data, start: level.StartAddress },
@@ -156,6 +157,18 @@ export function parseLevel(archives: LevelArchive[]): Level {
             { data: archives[i].Code, start: archives[i].CodeStartAddress },
         );
     }
+
+    const rooms: Room[] = [];
+    const roomHeader = dataMap.deref(level.Header);
+
+    const view = dataMap.getView(roomHeader);
+    const pathRooms = view.getUint32(0x00);
+    const nonPathRooms = view.getUint32(0x04);
+    const skyboxDescriptor = view.getUint32(0x08);
+
+    const sharedCache = new RDP.TextureCache();
+
+    let skybox: Room | null = null;
 
     if (skyboxDescriptor > 0) {
         const skyboxView = dataMap.getView(skyboxDescriptor);
@@ -196,16 +209,18 @@ export function parseLevel(archives: LevelArchive[]): Level {
         };
     }
 
-    offs = pathRooms - level.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+    const pathView = dataMap.getView(pathRooms);
+    let offs = 0;
+    while (pathView.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, pathView.getUint32(offs), sharedCache));
         offs += 4;
     }
 
     // also different material handling?
-    offs = nonPathRooms - level.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+    const nonPathView = dataMap.getView(nonPathRooms);
+    offs = 0;
+    while (nonPathView.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, nonPathView.getUint32(offs), sharedCache));
         offs += 4;
     }
 
@@ -260,6 +275,37 @@ export function parseLevel(archives: LevelArchive[]): Level {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
 
+        }
+    }
+
+    const statics = dataMap.deref(level.Header + 0x04);
+    if (statics !== 0) {
+        const staticView = dataMap.getView(statics);
+        offs = 0;
+        while (true) {
+            const id = staticView.getInt32(offs + 0x00);
+            if (id === -1)
+                break;
+            const func = staticView.getUint32(offs + 0x04);
+            const dlStart = staticView.getUint32(offs + 0x08);
+            assert(func === 0x800e30b0, hexzero(func, 8));
+
+            const sharedOutput = new RSPSharedOutput();
+            const states = [new F3DEX2.RSPState(sharedOutput, dataMap)];
+            initDL(states[0], true);
+
+            const model = runRoomDL(dataMap, dlStart, states);
+            const node: GFXNode = {
+                model,
+                billboard: 0,
+                parent: -1,
+                translation: vec3.create(),
+                euler: vec3.create(),
+                scale: vec3.clone(Vec3One),
+                materials: [],
+            };
+            objectInfo.push({ id, node, sharedOutput });
+            offs += 0x0C;
         }
     }
 
@@ -533,7 +579,9 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     const pos = getVec3(view, 0x04);
     const yaw = view.getFloat32(0x10);
     assert(yaw === 0);
-    const objectSpawns = view.getUint32(0x1C); // other lists before and after
+    const staticSpawns = view.getUint32(0x18);
+    const objectSpawns = view.getUint32(0x1C);
+    // one more list here
 
     vec3.scale(pos, pos, 100);
     const roomView = dataMap.getView(roomGeoStart);
@@ -568,6 +616,22 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     }
 
     const objects: ObjectSpawn[] = [];
+    if (staticSpawns > 0) {
+        const objView = dataMap.getView(staticSpawns);
+        let offs = 0;
+        while (true) {
+            const id = objView.getInt32(offs + 0x00);
+            if (id === -1)
+                break;
+            const objPos = getVec3(objView, offs + 0x04);
+            vec3.scale(objPos, objPos, 100);
+            vec3.add(objPos, objPos, pos);
+            const euler = getVec3(objView, offs + 0x10);
+            const scale = getVec3(objView, offs + 0x1C);
+            objects.push({ id, behavior: 0, pos: objPos, euler, scale });
+            offs += 0x28;
+        }
+    }
     if (objectSpawns > 0) {
         const objView = dataMap.getView(objectSpawns);
         let offs = 0;

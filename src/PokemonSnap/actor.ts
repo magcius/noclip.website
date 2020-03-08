@@ -1,5 +1,5 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
@@ -133,7 +133,7 @@ export class Actor extends ModelRenderer {
     public euler = vec3.create();
     public scale = vec3.clone(Vec3One);
 
-    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ObjectDef, globals: LevelGlobals) {
+    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
         this.motionData.path = spawn.path;
         this.reset(globals);
@@ -651,7 +651,7 @@ class Porygon extends Actor {
     }
 }
 
-export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ObjectDef, globals: LevelGlobals): Actor {
+export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
     switch (def.id) {
         case 7: return new Squirtle(renderData, spawn, def, globals);
         case 14: return new Kakuna(renderData, spawn, def, globals);

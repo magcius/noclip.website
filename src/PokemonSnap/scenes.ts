@@ -7,8 +7,8 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { SnapPass, ModelRenderer } from './render';
-import { LevelArchive, parseLevel } from './room';
+import { SnapPass, ModelRenderer, buildTransform } from './render';
+import { LevelArchive, parseLevel, isActor } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
@@ -127,7 +127,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=2`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=3`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
@@ -185,11 +185,17 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const def = level.objectInfo[objIndex];
-                    const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
-                    if (def.id === 133) // eevee actually uses chansey's path
-                        objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
-                    sceneRenderer.modelRenderers.push(objectRenderer);
-                    sceneRenderer.globals.allActors.push(objectRenderer);
+                    if (isActor(def)) {
+                        const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
+                        if (def.id === 133) // eevee actually uses chansey's path
+                            objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
+                        sceneRenderer.globals.allActors.push(objectRenderer);
+                        sceneRenderer.modelRenderers.push(objectRenderer);
+                    } else {
+                        const objectRenderer = new ModelRenderer(objectDatas[objIndex], [def.node], []);
+                        buildTransform(objectRenderer.modelMatrix, objects[j].pos, objects[j].euler, objects[j].scale);
+                        sceneRenderer.modelRenderers.push(objectRenderer);
+                    }
                 }
             }
 
