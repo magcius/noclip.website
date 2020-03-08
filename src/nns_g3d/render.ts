@@ -13,6 +13,7 @@ import AnimationController from "../AnimationController";
 import { nArray, assertExists, fallback } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { AABB } from "../Geometry";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -303,6 +304,7 @@ const enum BillboardMode {
 export class MDL0Renderer {
     public modelMatrix = mat4.create();
     public isSkybox: boolean = false;
+    public useBBox: boolean = false;
     public animationController = new AnimationController();
 
     private gfxProgram: GfxProgram;
@@ -310,8 +312,10 @@ export class MDL0Renderer {
     private shapeInstances: ShapeInstance[] = [];
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
+    public bbox: AABB = new AABB();
 
-    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0) {
+    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0, usebb = false) {
+        this.useBBox = usebb;
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -414,6 +418,7 @@ export class MDL0Renderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if(this.useBBox && !viewerInput.camera.frustum.contains(this.bbox)) return;
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.nodes.length; i++)
