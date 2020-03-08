@@ -236,7 +236,7 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                 renderers.push(mapRenderer);
 
                 const objectCount = (modelOffset - objectOffset) / 0x30;
-                for (let objIndex = 0; objIndex < 0; objIndex++) {
+                for (let objIndex = 0; objIndex < objectCount; objIndex++) {
                     const currentObjOffset = objectOffset + (objIndex * 0x30);
                     const modelID = mapData.getUint32(currentObjOffset, true);
 
