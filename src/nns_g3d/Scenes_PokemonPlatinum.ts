@@ -79,7 +79,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public createCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(1);
+        c.setSceneMoveSpeedMult(10);
         return c;
     }
 
