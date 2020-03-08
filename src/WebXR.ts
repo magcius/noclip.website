@@ -72,7 +72,7 @@ export class WebXRContext {
     }
 
     public end() {
-        if (this.xrSession !== null)
+        if (this.xrSession)
             this.xrSession.end();
         this.xrSession = null;
     }
