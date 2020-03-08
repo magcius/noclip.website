@@ -153,8 +153,11 @@ export class NaiveInterpreter {
                 case Opcode.BNE:
                 case Opcode.BNEL:
                 case Opcode.BEQL: {
-                    if (imm <= 0 || currBranch !== null) {
-                        // don't handle loops or nested conditionals
+                    // don't try to track loops or nested conditionals
+                    if (imm <= 0) {
+                        this.handleLoop(op, this.regs[rs], this.regs[rt], imm);
+                        break;
+                    } else if (currBranch !== null) {
                         this.handleUnknown(op);
                         break;
                     }
@@ -364,6 +367,10 @@ export class NaiveInterpreter {
 
     // handler for unknown instructions, by default just mark invalid
     protected handleUnknown(op: Opcode): void {
+        this.valid = false;
+    }
+
+    protected handleLoop(op: Opcode, left: Register, right: Register, offset: number): void {
         this.valid = false;
     }
 

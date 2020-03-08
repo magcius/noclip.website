@@ -2,10 +2,10 @@ import * as MIPS from "./mips";
 import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room";
 import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero } from "../MathHelpers";
 import { vec3, mat4 } from "gl-matrix";
-import { LevelGlobals } from "./render";
 import { getPathPoint, getPathTangent } from "./animation";
 import { hexzero, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
+import { LevelGlobals } from "./actor";
 
 const enum MotionFuncs {
     PathPoint       = 0x01FCA4,
@@ -24,8 +24,8 @@ const enum MotionFuncs {
     WalkToTarget    = 0x361748,
     WalkToTarget2   = 0x36194C,     // functionally identical
     SetTarget       = 0x361B50,
-    StepToTarget    = 0x361B68,
-    ApproachTarget  = 0x361E58,
+    StepToPoint     = 0x361B68,
+    ApproachPoint   = 0x361E58,
     ResetPos        = 0x362050,
     Path            = 0x3620C8,
     WaterSplash     = 0x35E174,
@@ -47,6 +47,7 @@ export class MotionData {
     public ySpeed: number;
 
     public refPosition = vec3.create();
+    public storedPos = vec3.create();
     public ignoreGround: boolean;
     public groundType = 0;
     public groundHeight = 0;
@@ -71,6 +72,7 @@ export class MotionData {
         this.ySpeed = 0;
         this.ignoreGround = false;
         vec3.copy(this.refPosition, Vec3Zero);
+        vec3.copy(this.storedPos, Vec3Zero);
     }
 }
 
@@ -96,7 +98,6 @@ function lookupValue(data: MotionData, param: ObjParam): number {
         return data.storedValues[param.index];
 }
 
-
 export interface FollowPath {
     kind: "path";
     speed: ObjParam;
@@ -114,7 +115,7 @@ interface FaceTarget {
 
 interface WalkToTarget {
     kind: "walkToTarget";
-    speed: number;
+    forwardSpeed: number;
     radius: number;
     maxTurn: number;
     flags: number;
@@ -162,9 +163,17 @@ interface Animation {
     force: boolean;
 }
 
+interface Linear {
+    kind: "linear";
+    duration: number;
+    velocity: vec3;
+    turnSpeed: number;
+}
+
 export const enum BasicMotionKind {
     Placeholder,
     Wait,
+    Song,
 }
 
 interface BasicMotion {
@@ -173,7 +182,7 @@ interface BasicMotion {
     param: number;
 }
 
-export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical;
+export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear;
 
 export class MotionParser extends MIPS.NaiveInterpreter {
     public blocks: Motion[] = [];
@@ -184,6 +193,8 @@ export class MotionParser extends MIPS.NaiveInterpreter {
     private ySpeed = 0;
     private yawDirection = Direction.Forward;
     private movingYaw = 0;
+    private positionOffset = vec3.create();
+    private yawOffset = 0;
 
     public reset(): void {
         super.reset();
@@ -192,6 +203,8 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         this.forwardSpeed = 0;
         this.ySpeed = 0;
         this.movingYaw = 0;
+        vec3.copy(this.positionOffset, Vec3Zero);
+        this.yawOffset = 0;
     }
 
     public parse(dataMap: DataMap, startAddress: number, animations: number[]): boolean {
@@ -202,16 +215,16 @@ export class MotionParser extends MIPS.NaiveInterpreter {
 
     private getFloatValue(reg: MIPS.Register): number {
         let value = 0;
-        if (reg.lastOp === MIPS.Opcode.LWC1 || reg.lastOp === MIPS.Opcode.LW)
+        if (reg.value > 0x80000000 && reg.value < 0x80400000)
             value = bitsAsFloat32(this.dataMap.deref(reg.value));
         else
             value = bitsAsFloat32(reg.value);
-        assert((value === 0 || Math.abs(value) > 1e-6) && Math.abs(value) < 1e6, `bad float value ${hexzero(reg.value, 8)}`);
+        assert((value === 0 || Math.abs(value) > 1e-6) && Math.abs(value) < 1e6, `bad float value ${hexzero(reg.value, 8)}}`);
         return value;
     }
 
     private getFloatParam(reg: MIPS.Register): ObjParam {
-        if ((reg.lastOp === MIPS.Opcode.LWC1 || reg.lastOp === MIPS.Opcode.LW) && reg.value < 0x80000000) {
+        if (reg.value < 0x100) {
             const index = (reg.value - ObjectField.StoredValues) >>> 2;
             if (index >= 3) {
                 console.warn("bad stored value index", index);
@@ -308,6 +321,30 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     maxTurn: this.getFloatValue(a2),
                 });
             } break;
+            case MotionFuncs.WalkToTarget:
+            case MotionFuncs.WalkToTarget2: {
+                this.blocks.push({
+                    kind: "walkToTarget",
+                    forwardSpeed: this.forwardSpeed,
+                    radius: this.getFloatValue(a1),
+                    maxTurn: this.getFloatValue(a2),
+                    flags: a3.value | MoveFlags.Ground,
+                });
+            } break;
+            case MotionFuncs.FaceTarget: {
+                this.blocks.push({
+                    kind: "faceTarget",
+                    maxTurn: this.getFloatValue(a1),
+                    flags: a2.value,
+                });
+            } break;
+            case MotionFuncs.GetSong: {
+                this.blocks.push({
+                    kind: "basic",
+                    subtype: BasicMotionKind.Song,
+                    param: 0,
+                });
+            } break;
             case StateFuncs.InteractWait: {
                 assert(a1.value === EndCondition.Timer && this.timer > 0);
                 this.blocks.push({
@@ -335,6 +372,33 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         if (op === MIPS.Opcode.SW || op === MIPS.Opcode.SWC1) {
             // same condition as StateParser, looks like loading a struct field
             switch (offset) {
+                case 0x4:
+                case 0x8:
+                case 0xC: {
+                    if ((value.lastOp !== MIPS.Opcode.ADDS && value.lastOp !== MIPS.Opcode.SUBS) || value.value < 0x100)
+                        break;
+                    let delta = this.getFloatValue(value);
+                    if (value.lastOp === MIPS.Opcode.SUBS)
+                        delta *= -1;
+                    if (target.lastOp === MIPS.Opcode.ADDIU && target.value === 4)
+                        this.positionOffset[(offset - 4) >>> 2] = delta;
+                    else if (target.lastOp === MIPS.Opcode.ADDIU && target.value === 0x14) {
+                        assert(offset === 0xC);
+                        this.yawOffset = delta;
+                    }
+                } break;
+                case ObjectField.TranslationX:
+                case ObjectField.TranslationY:
+                case ObjectField.TranslationZ: {
+                    if (op !== MIPS.Opcode.SWC1 || target.lastOp !== MIPS.Opcode.LW || target.value !== 0x48 )
+                        break;
+                    if (!(value.lastOp === MIPS.Opcode.ADDS || value.lastOp === MIPS.Opcode.SUBS) || value.value < 0x100)
+                        break;
+                    let delta = this.getFloatValue(value);
+                    if (value.lastOp === MIPS.Opcode.SUBS)
+                        delta *= -1;
+                    this.positionOffset[(offset - ObjectField.TranslationX) >> 2] = delta;
+                } break;
                 case ObjectField.Timer: {
                     assert(op === MIPS.Opcode.SW && value.lastOp === MIPS.Opcode.ADDIU);
                     this.timer = value.value / 30;
@@ -361,6 +425,27 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         }
     }
 
+    protected handleLoop(op: MIPS.Opcode, left: MIPS.Register, right: MIPS.Register, offset: number): void {
+        let frames = 0;
+        if (!(op === MIPS.Opcode.BNE || op === MIPS.Opcode.BNEL) ||
+            !(left.lastOp === MIPS.Opcode.ADDIU || left.lastOp === MIPS.Opcode.NOP) ||
+            !(right.lastOp === MIPS.Opcode.ADDIU || right.lastOp === MIPS.Opcode.NOP)
+        )
+            return; // doesn't look like a for loop
+        if (left.value > 15 && right.value === 0)
+            frames = left.value + 1;
+        else if (left.value === 1 && right.value > 15)
+            frames = right.value;
+        const velocity = vec3.clone(this.positionOffset);
+        vec3.scale(velocity, velocity, 30);
+        this.blocks.push({
+            kind: "linear",
+            duration: frames / 30,
+            velocity,
+            turnSpeed: this.yawOffset * 30,
+        });
+    }
+
     protected finish(): void {
         // if we couldn't understand the function, add a placeholder 5 second wait
         if (this.blocks.length === 0)
@@ -379,8 +464,12 @@ const enum MoveFlags {
     SmoothTurn  = 0x80,
 }
 
+export interface Target {
+    translation: vec3;
+}
+
 const blockScratch = vec3.create();
-export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewerInput: ViewerRenderInput): void {
+export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewerInput: ViewerRenderInput, target: Target | null): MotionResult {
     data.start = viewerInput.time;
     vec3.copy(data.startPos, pos);
     const block: Motion = data.currMotion[data.currBlock];
@@ -422,12 +511,26 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
             data.ySpeed = block.startSpeed;
         } break;
         case "random": {
-            const centerAngle = euler[1] + Math.PI * (1 + 2/3 * Math.floor(Math.random() * 3));
+            const centerAngle = euler[1] + Math.PI * (1 + 2 / 3 * Math.floor(Math.random() * 3));
             data.refPosition[0] = pos[0] + block.radius * Math.sin(centerAngle);
             data.refPosition[2] = pos[2] + block.radius * Math.cos(centerAngle);
             data.movingYaw = centerAngle - Math.PI;
         } break;
+        case "walkToTarget": {
+            if (target === null)
+                return MotionResult.Done;
+            vec3.copy(data.refPosition, target.translation);
+        } break;
+        case "faceTarget": {
+            if (block.flags & 0x20)
+                mat4.getTranslation(data.refPosition, viewerInput.camera.worldMatrix);
+            else if (target !== null)
+                vec3.copy(data.refPosition, target.translation);
+            else
+                return MotionResult.Done;
+        } break;
     }
+    return MotionResult.None;
 }
 
 const moveScratch = vec3.create();
@@ -482,6 +585,18 @@ export const enum MotionResult {
     Done,
 }
 
+export function canHearSong(pos: vec3, globals: LevelGlobals): boolean {
+    if (globals.currentSong === 0)
+        return false;
+    return vec3.dist(pos, globals.translation) < 2500; // game radius is 1400 for song effects
+}
+
+function stepYawTowards(euler: vec3, target: number, maxTurn: number, dt: number): boolean {
+    const dist = angleDist(euler[1], target);
+    euler[1] += clampRange(dist, maxTurn * dt * 30);
+    return Math.abs(dist) < maxTurn * dt * 30;
+}
+
 const tangentScratch = vec3.create();
 const posScratch = vec3.create();
 export function followPath(pos: vec3, euler: vec3, data: MotionData, block: FollowPath, dt: number, globals: LevelGlobals): MotionResult {
@@ -509,7 +624,7 @@ export function followPath(pos: vec3, euler: vec3, data: MotionData, block: Foll
         if (block.flags & MoveFlags.SnapTurn)
             euler[1] = yaw;
         else
-            euler[1] += clampRange(angleDist(euler[1], yaw), block.maxTurn * dt * 30);
+            stepYawTowards(euler, yaw, block.maxTurn, dt);
     }
     return MotionResult.Update;
 }
@@ -557,7 +672,53 @@ export function randomCircle(pos: vec3, euler: vec3, data: MotionData, block: Ra
     posScratch[2] = data.refPosition[2] + block.radius * Math.cos(data.movingYaw);
     if (attemptMove(pos, posScratch, data, globals, MoveFlags.Ground))
         return MotionResult.Done;
-    const delta = angleDist(euler[1], data.movingYaw + Math.PI / 2);
-    euler[1] += clampRange(delta, block.maxTurn * 30 * dt);
+    stepYawTowards(euler, data.movingYaw + Math.PI / 2, block.maxTurn, dt);
+    return MotionResult.Update;
+}
+
+export function linear(pos: vec3, euler: vec3, data: MotionData, block: Linear, dt: number, t: number): MotionResult {
+    vec3.scaleAndAdd(pos, pos, block.velocity, dt);
+    euler[1] += block.turnSpeed * dt;
+    if ((t - data.start) / 1000 >= block.duration)
+        return MotionResult.Done;
+    return MotionResult.Update;
+}
+
+export function walkToTarget(pos: vec3, euler: vec3, data: MotionData, block: WalkToTarget, target: Target | null, dt: number, globals: LevelGlobals): MotionResult {
+    if (block.flags & 2) {
+        if (target === null)
+            return MotionResult.Done;
+        vec3.copy(data.refPosition, target.translation);
+    }
+    const yawToTarget = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
+    vec3.copy(posScratch, pos);
+    posScratch[0] += block.forwardSpeed * dt * Math.sin(yawToTarget);
+    posScratch[2] += block.forwardSpeed * dt * Math.cos(yawToTarget);
+    if (attemptMove(pos, posScratch, data, globals, block.flags))
+        return MotionResult.Done;
+    stepYawTowards(euler, yawToTarget, block.maxTurn, dt);
+    if (vec3.dist(data.refPosition, pos) < block.radius) {
+        data.stateFlags |= EndCondition.Target;
+        return MotionResult.Done;
+    }
+    return MotionResult.Update;
+}
+
+export function faceTarget(pos: vec3, euler: vec3, data: MotionData, block: FaceTarget, target: Target | null, dt: number, globals: LevelGlobals): MotionResult {
+    if (block.flags & 2) {
+        if (block.flags & 0x20)
+            vec3.copy(data.refPosition, globals.translation);
+        else if (target === null)
+            return MotionResult.Done;
+        else
+            vec3.copy(data.refPosition, target.translation);
+    }
+    if ((block.flags & 4) && !canHearSong(pos, globals))
+        return MotionResult.Done;
+    let targetYaw = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
+    if (block.flags & 0x40)
+        targetYaw += Math.PI;
+    if (stepYawTowards(euler, targetYaw, block.maxTurn, dt) && !(block.flags & 8))
+        return MotionResult.Done;
     return MotionResult.Update;
 }
