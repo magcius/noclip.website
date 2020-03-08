@@ -12,6 +12,14 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RetroSceneRenderer } from './scenes';
 import { SceneContext } from '../SceneBase';
 import { colorFromRGBA } from '../Color';
+import { CameraController } from '../Camera';
+
+class DKCRSceneRenderer extends RetroSceneRenderer {
+    public createCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(4/60 * 0.1);
+        return c;
+    }
+}
 
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -31,7 +39,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 const area: MLVL.Area = mlvl.areaTable[0];
                 const mrea: MREA.MREA = assertExists(resourceSystem.loadAssetByID<MREA.MREA>(area.areaMREAID, 'MREA'));
                 const textureHolder = new RetroTextureHolder();
-                const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
+                const renderer = new DKCRSceneRenderer(device, mlvl, textureHolder);
                 colorFromRGBA(renderer.worldAmbientColor, 0.5, 0.5, 0.5, 1.0);
                 const cache = renderer.renderHelper.getCache();
                 const mreaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, this.name, mrea);

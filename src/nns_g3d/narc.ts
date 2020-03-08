@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, hexdump } from "../util";
+import { assert, readString } from "../util";
 
 export interface NitroFSEntry {
     path: string | null;
@@ -98,7 +98,6 @@ export function parse(buffer: ArrayBufferSlice): NitroFS {
     assert(readString(buffer, fimgBlockOffs + 0x00, 0x04) === 'GMIF');
     const fimgBlockSize = view.getUint32(fimgBlockOffs + 0x04, true);
     const imgBuffer = buffer.subarray(fimgBlockOffs + 0x08, fimgBlockSize - 0x08);
-    hexdump(fntBuffer);
 
     return parseNitroFS(fatBuffer, fntBuffer, imgBuffer);
 }

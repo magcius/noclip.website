@@ -53,7 +53,11 @@ import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
+<<<<<<< HEAD
 import * as Scenes_PokemonPL from './nns_g3d/pkmnpl_scenes';
+=======
+import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
+>>>>>>> upstream/master
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -131,6 +135,7 @@ const sceneGroups = [
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_MetroidPrimeHunters.sceneGroup,
+    Scenes_PokemonPlatinum.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,

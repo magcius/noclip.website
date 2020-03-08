@@ -145,7 +145,7 @@ class MaterialInstance {
 
         if (this.pat0Animator !== null) {
             const fullTextureName = this.pat0Animator.calcFullTextureName();
-            let textureIndex = this.textureNames.indexOf(fullTextureName);
+            const textureIndex = this.textureNames.indexOf(fullTextureName);
             if (textureIndex >= 0)
                 this.textureMappings[0].gfxTexture = this.gfxTextures[textureIndex];
         }
