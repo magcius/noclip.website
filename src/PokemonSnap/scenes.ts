@@ -7,13 +7,13 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { SnapPass, ModelRenderer, LevelGlobals } from './render';
-import { LevelArchive, parseLevel, InteractionType } from './room';
+import { SnapPass, ModelRenderer } from './render';
+import { LevelArchive, parseLevel } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { createActor } from './actor';
+import { createActor, LevelGlobals } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -23,14 +23,14 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0, allActors: []};
+    public globals = new LevelGlobals();
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
     public createCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(32/60);
+        c.setSceneMoveSpeedMult(32 / 60);
         return c;
     }
 
@@ -74,20 +74,12 @@ class SnapRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.globals.update(viewerInput);
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
-        // update song - maybe put somewhere better
-        if (viewerInput.time > this.globals.songStart + 10000) {
-            const r = (Math.random()*5) >>> 0;
-            if (r > 2)
-                this.globals.currentSong = 0;
-            else
-                this.globals.currentSong = InteractionType.PokefluteA + r;
-            this.globals.songStart = viewerInput.time;
-        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {

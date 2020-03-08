@@ -1,25 +1,119 @@
-import { ModelRenderer, buildTransform, LevelGlobals } from "./render";
-import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux } from "./room";
+import { ModelRenderer, buildTransform } from "./render";
+import { ObjectSpawn, ObjectDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
-import { assertExists, assert, hexzero } from "../util";
+import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle } from "./motion";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target } from "./motion";
 import { Vec3One, lerp, MathConstants } from "../MathHelpers";
 import { getPathPoint } from "./animation";
+import { randomRange } from "../BanjoKazooie/particles";
 
-function sendGlobalSignal(source: Actor, signal: number, globals: LevelGlobals): void {
-    for (let i = 0; i < globals.allActors.length; i++) {
-        globals.allActors[i].receiveSignal(source, signal, globals);
-    }
+interface Apple {
+    translation: vec3;
+    free: boolean;
+    thrown: number;
 }
 
-function sendSignalToID(source: Actor, signal: number, targetID: number, globals: LevelGlobals): void {
-    for (let i = 0; i < globals.allActors.length; i++) {
-        if (globals.allActors[i].def.id !== targetID)
-            continue;
-        globals.allActors[i].receiveSignal(source, signal, globals);
-        break;
+const appleScratch = vec3.create();
+export class LevelGlobals {
+    public collision: CollisionTree | null = null;
+    public currentSong = 0;
+    public songStart = 0;
+    public lastPesterBall = 0;
+    public lastApple = 0;
+    public allActors: Actor[] = [];
+    public translation = vec3.create(); // camera position
+    public apples: Apple[] = nArray(5, () => <Apple>{ translation: vec3.create(), free: true, thrown: 0 });
+
+    public update(viewerInput: ViewerRenderInput): void {
+        mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
+
+        if (viewerInput.time > this.songStart + 10000) {
+            const r = (Math.random() * 6) >>> 0;
+            if (r > 2)
+                this.currentSong = 0;
+            else
+                this.currentSong = InteractionType.PokefluteA + r;
+            this.songStart = viewerInput.time;
+        }
+
+        if (viewerInput.time > this.lastApple + 2500) {
+            let freeApple: Apple | null = null;
+            for (let i = 0; i < this.apples.length; i++) {
+                if (!this.apples[i].free && viewerInput.time > this.apples[i].thrown + 10000) {
+                    this.apples[i].free = true;
+                    this.sendGlobalSignal(this.apples[i], InteractionType.AppleRemoved);
+                }
+                if (this.apples[i].free)
+                    freeApple = this.apples[i];
+            }
+
+            if (freeApple === null)
+                this.lastApple += 500; // wait a bit, then try again
+            else {
+                // choose a randomized landing point roughly in front of the camera
+                // maybe replace with actual physics later?
+                vec3.set(freeApple.translation, 0, 0, -1200);
+                vec3.transformMat4(freeApple.translation, freeApple.translation, viewerInput.camera.worldMatrix);
+                freeApple.translation[0] += randomRange(250);
+                freeApple.translation[2] += randomRange(250);
+                if (this.throwApple(freeApple)) {
+                    freeApple.free = false;
+                    freeApple.thrown = viewerInput.time;
+                    this.lastApple = viewerInput.time;
+                } else
+                    this.lastApple += 500;
+            }
+        }
+    }
+
+    // send signals based on the ground type
+    // each level actually has its own function
+    private throwApple(apple: Apple): boolean {
+        const ground = findGroundPlane(this.collision, apple.translation[0], apple.translation[2]);
+        if (ground === null)
+            return false;
+        const groundHeight = computePlaneHeight(ground, apple.translation[0], apple.translation[2]);
+        if (groundHeight < this.translation[1] - 1500)
+            return false;
+        switch (ground.type) {
+            case 0x19FF: // valley whirlpool
+                this.sendTargetedSignal(null, 0x2B, 0x802D3B34);
+                return false;
+            case 0xFF0000:
+                return false;
+            case 0xFF00:
+            case 0xFF4C19:
+                return false; // lava splash
+            case 0x337FB2:
+            // spawn random fish
+            case 0x19FF:
+            case 0x7F66:
+            case 0x4CCCCC:
+                return false; // water splash
+        }
+        vec3.normalize(appleScratch, ground.normal);
+        if (appleScratch[1] < Math.sqrt(3) / 2)
+            return false;
+        apple.translation[1] = groundHeight;
+        this.sendGlobalSignal(apple, InteractionType.AppleLanded);
+        return true;
+    }
+
+    public sendGlobalSignal(source: Target | null, signal: number): void {
+        for (let i = 0; i < this.allActors.length; i++) {
+            this.allActors[i].receiveSignal(source, signal, this);
+        }
+    }
+
+    public sendTargetedSignal(source: Target | null, signal: number, targetPointer: number): void {
+        for (let i = 0; i < this.allActors.length; i++) {
+            if (this.allActors[i].def.globalPointer !== targetPointer)
+                continue;
+            this.allActors[i].receiveSignal(source, signal, this);
+            break;
+        }
     }
 }
 
@@ -33,11 +127,11 @@ export class Actor extends ModelRenderer {
     private blockEnd = 0;
     private loopTarget = 1;
     private photoTimer = 0;
-    private target: Actor | null = null;
+    private target: Target | null = null;
 
-    protected translation = vec3.create();
-    protected euler = vec3.create();
-    protected scale = vec3.clone(Vec3One);
+    public translation = vec3.create();
+    public euler = vec3.create();
+    public scale = vec3.clone(Vec3One);
 
     constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ObjectDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
@@ -131,8 +225,12 @@ export class Actor extends ModelRenderer {
             this.loopTarget = currLoops + (block.wait !== null && block.wait.loopTarget > 0 ? block.wait.loopTarget : 1);
         }
 
-        if (block.signal > 0)
-            sendGlobalSignal(this, block.signal, globals);
+        for (let i = 0; i < block.signals.length; i++) {
+            if (block.signals[i].target === 0)
+                globals.sendGlobalSignal(this, block.signals[i].value);
+            else
+                globals.sendTargetedSignal(this, block.signals[i].value, block.signals[i].target);
+            }
 
         if (block.auxAddress >= 0) {
             this.currAux = block.auxAddress;
@@ -161,6 +259,16 @@ export class Actor extends ModelRenderer {
         if (block.ignoreGround !== undefined)
             this.motionData.ignoreGround = block.ignoreGround;
 
+        if (block.eatApple && this.target !== null) {
+            const apple = this.target as Apple;
+            if (apple.free === undefined)
+                console.warn("eating non apple")
+            else {
+                apple.free = true;
+                globals.sendGlobalSignal(this.target, InteractionType.AppleRemoved);
+            }
+        }
+
         if (block.motion !== null) {
             this.motionData.currMotion = block.motion;
             this.motionData.currBlock = 0;
@@ -172,45 +280,49 @@ export class Actor extends ModelRenderer {
             this.blockEnd = this.animationController.getTimeInSeconds() + block.wait.duration + block.wait.durationRange * Math.random();
     }
 
-    public receiveSignal(source: Actor, signal: number, globals: LevelGlobals): void {
+    public receiveSignal(source: Target | null, signal: number, globals: LevelGlobals): boolean {
         if (this.currState === -1)
-            return;
+            return false;
         const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
         if (block.wait === null)
-            return;
+            return false;
+        // these are handled even if there's no corresponding edge
+        if (signal === InteractionType.AppleRemoved || signal === InteractionType.TargetRemoved) {
+            if (source !== this.target)
+                return false;
+            this.target = null;
+        }
         for (let i = 0; i < block.wait.interactions.length; i++) {
             if (block.wait.interactions[i].type !== signal)
                 continue;
-            const distToSource = vec3.dist(this.renderers[0].translation, source.renderers[0].translation);
+            const distToSource = source !== null ? vec3.dist(this.translation, source.translation) : Infinity;
             switch (signal) {
-                case 0x0A: {
+                case InteractionType.PesterLanded: {
                     if (distToSource >= 150)
-                        return;
+                        return false;
                     this.target = source;
-                    // set apple
                 } break;
-                case 0x0E:
-                case 0x14: {
+                case InteractionType.AppleLanded:
+                case InteractionType.GravelerLanded: {
                     if (distToSource >= 600)
-                        return;
-                    this.target = source;
-                    // 0E sets apple
-                } break;
-                case 0x12: {
-                    // player distance < 400?
+                        return false;
                     this.target = source;
                 } break;
-                case 0x15: // only allowed from apple?
-                case 0x16: {
-                    if (source !== this.target)
-                        return;
+                case InteractionType.PhotoTaken: {
+                    if (vec3.dist(this.translation, globals.translation) >= 400)
+                        return false;
+                    this.target = source;
                 } break;
+                case InteractionType.AppleRemoved:
+                case InteractionType.TargetRemoved:
+                    break; // just avoid setting the target
                 default:
-                    this.target = source;
+                    if (source !== null)
+                        this.target = source;
             }
-            this.followEdge(block.wait.interactions[i], globals);
-            break;
+            return this.followEdge(block.wait.interactions[i], globals);
         }
+        return false;
     }
 
     private followEdge(edge: StateEdge, globals: LevelGlobals): boolean {
@@ -254,7 +366,7 @@ export class Actor extends ModelRenderer {
     }
 
     protected metEndCondition(flags: number, globals: LevelGlobals): boolean {
-        return (!!(flags & EndCondition.Dance) && globals.currentSong === 0) ||
+        return (!!(flags & EndCondition.Dance) && canHearSong(this.translation, globals)) ||
             (!!(flags & EndCondition.Timer) && this.animationController.getTimeInSeconds() >= this.blockEnd) ||
             (!!(flags & EndCondition.Animation) && this.renderers[this.headAnimationIndex].animator.loopCount >= this.loopTarget) ||
             ((flags & this.motionData.stateFlags) !== 0);
@@ -269,17 +381,18 @@ export class Actor extends ModelRenderer {
                 case InteractionType.PokefluteA:
                 case InteractionType.PokefluteB:
                 case InteractionType.PokefluteC: {
-                    // game radius is 1400 for song effects
-                    if (playerDist < 3000 && block.interactions[i].type === globals.currentSong) {
+                    if (canHearSong(this.translation, globals) && block.interactions[i].type === globals.currentSong) {
+                        this.target = globals;
                         return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
                 case InteractionType.NearPlayer: {
                     if (playerDist < block.interactions[i].param) {
+                        this.target = globals;
                         return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
-                case InteractionType.PesterBall:
+                case InteractionType.PesterHit:
                 case InteractionType.AppleHit: {
                     // hit at most every 10 seconds, and only if we're likely visible
                     if (viewerInput.time < globals.lastPesterBall + 10000 && playerDist > 400)
@@ -289,7 +402,8 @@ export class Actor extends ModelRenderer {
                         return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
-                case InteractionType.Photo: {
+                case InteractionType.PhotoSubject: {
+                    // trigger if the object is on screen long enough
                     if (onScreen && !this.hidden && playerDist < 4000)
                         this.photoTimer += viewerInput.deltaTime;
                     else
@@ -298,7 +412,24 @@ export class Actor extends ModelRenderer {
                         this.photoTimer = 0;
                         return this.followEdge(block.interactions[i], globals);
                     }
-                }
+                } break;
+                case InteractionType.FindApple: {
+                    let nearest: Apple | null = null;
+                    let dist = 600;
+                    for (let i = 0; i < globals.apples.length; i++) {
+                        if (!globals.apples[i].free)
+                            continue;
+                        const newDist = vec3.dist(this.translation, globals.apples[i].translation);
+                        if (newDist < dist) {
+                            dist = newDist;
+                            nearest = globals.apples[i];
+                        }
+                    }
+                    if (nearest !== null) {
+                        this.target = nearest;
+                        return this.followEdge(block.interactions[i], globals);
+                    }
+                } break;
             }
         }
         return false;
@@ -311,13 +442,20 @@ export class Actor extends ModelRenderer {
         let result = MotionResult.None;
         let updated = false;
         while (this.motionData.currBlock < this.motionData.currMotion.length) {
-            if (this.motionData.start < 0)
-                motionBlockInit(this.motionData, this.translation, this.euler, viewerInput);
+            if (this.motionData.start < 0) {
+                result = motionBlockInit(this.motionData, this.translation, this.euler, viewerInput, this.target);
+                if (result === MotionResult.Done) {
+                    this.motionData.currBlock++;
+                    this.motionData.start = -1;
+                    continue;
+                }
+            }
             const block: Motion = this.motionData.currMotion[this.motionData.currBlock];
             switch (block.kind) {
                 case "animation": {
                     if (block.index !== this.currAnimation || block.force)
                         this.setAnimation(block.index);
+                    result = MotionResult.Done;
                 } break;
                 case "path":
                     result = followPath(this.translation, this.euler, this.motionData, block, dt, globals); break;
@@ -327,6 +465,12 @@ export class Actor extends ModelRenderer {
                     result = vertical(this.translation, this.euler, this.motionData, block, dt); break;
                 case "random":
                     result = randomCircle(this.translation, this.euler, this.motionData, block, dt, globals); break;
+                case "linear":
+                    result = linear(this.translation, this.euler, this.motionData, block, dt, viewerInput.time); break;
+                case "walkToTarget":
+                    result = walkToTarget(this.translation, this.euler, this.motionData, block, this.target, dt, globals); break;
+                case "faceTarget":
+                    result = faceTarget(this.translation, this.euler, this.motionData, block, this.target, dt, globals); break;
                 case "basic": {
                     switch (block.subtype) {
                         case BasicMotionKind.Placeholder:
@@ -335,6 +479,12 @@ export class Actor extends ModelRenderer {
                                 result = MotionResult.Done;
                             else
                                 result = MotionResult.None;
+                        } break;
+                        case BasicMotionKind.Song: {
+                            if (canHearSong(this.translation, globals))
+                                result = MotionResult.None;
+                            else
+                                result = MotionResult.Done;
                         } break;
                     }
                 } break;
@@ -473,7 +623,7 @@ class Porygon extends Actor {
             } break;
             case 0x802DD398: {
                 if (this.currBlock === 2 && this.spawn.behavior === 2)
-                    sendSignalToID(this, 0x2B, 1019, globals);
+                    globals.sendGlobalSignal(this, 0x2B);
             } break;
         }
 

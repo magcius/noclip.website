@@ -50,6 +50,7 @@ export interface ObjectDef {
     flags: number;
     spawn: SpawnType;
     stateGraph: StateGraph;
+    globalPointer: number;
 }
 
 export interface LevelArchive {
@@ -237,7 +238,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             offs += 0x10;
 
             const initView = dataMap.getView(initFunc);
-            assert(dataFinder.parseFromView(initView), `bad parse for init function ${hexzero(initFunc, 8)}`);
+            assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
             const objectView = dataMap.getView(dataFinder.dataAddress);
 
             const graphStart = objectView.getUint32(0x00);
@@ -254,7 +255,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
                 const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph });
+                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
             } catch (e) {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
@@ -274,18 +275,24 @@ export function parseLevel(archives: LevelArchive[]): Level {
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
     public spawnFunc = 0;
     public dataAddress = 0;
+    public globalRef = 0
 
     public reset(): void {
         super.reset();
         this.spawnFunc = 0;
         this.dataAddress = 0;
+        this.globalRef = 0;
     }
 
     protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
         this.spawnFunc = func;
         this.dataAddress = assertExists(stackArgs[1]).value; // stack+0x14
-        this.done = true;
         return 0;
+    }
+
+    handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+        if (op === MIPS.Opcode.SW && value.lastOp === MIPS.Opcode.JAL)
+            this.globalRef = target.value;
     }
 }
 
@@ -1111,18 +1118,31 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
 }
 
 export const enum InteractionType {
-    PokefluteA  = 0x05,
-    PokefluteB  = 0x06,
-    PokefluteC  = 0x07,
-    // might have these wrong, there are other "hit" ones, too
-    PesterBall  = 0x09,
-    AppleHit    = 0x0D,
-    // there seem to be a few apple interactions
-    Apple       = 0x0F,
-    NearPlayer  = 0x10,
-    Photo       = 0x18,
+    PokefluteA      = 0x05,
+    PokefluteB      = 0x06,
+    PokefluteC      = 0x07,
+    // sent if a pester ball would have hit if another object hadn't been closer
+    PesterAlmost    = 0x08,
+    PesterHit       = 0x09,
+    PesterLanded    = 0x0A,
+    // Unused         0x0B
 
-    EndMarker   = 0x3A,
+    // the apple signals are analogous to the pester ball ones
+    AppleAlmost     = 0x0C,
+    AppleHit        = 0x0D,
+    AppleLanded     = 0x0E,
+    FindApple       = 0x0F,
+    NearPlayer      = 0x10,
+    Collision       = 0x11,
+    PhotoTaken      = 0x12, // sent to every object when a photo is taken
+    EnterRoom       = 0x13,
+    GravelerLanded  = 0x14,
+    AppleRemoved    = 0x15,
+    TargetRemoved   = 0x16,
+
+    PhotoSubject    = 0x18,
+
+    EndMarker       = 0x3A,
     // not used by game
     Basic,
     Random,
@@ -1144,16 +1164,22 @@ export interface StateEdge {
     auxFunc: number;
 }
 
+interface Signal {
+    value: number;
+    target: number;
+}
+
 export interface StateBlock {
     animation: number;
     motion: Motion[] | null;
     auxAddress: number;
     force: boolean;
-    signal: number;
+    signals: Signal[];
     wait: WaitParams | null;
     flagSet: number;
     flagClear: number;
     ignoreGround?: boolean;
+    eatApple?: boolean;
     edges: StateEdge[];
 }
 
@@ -1196,9 +1222,11 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
 }
 
 export const enum GeneralFuncs {
-    EndProcess  = 0x08F2C,
-    SendSignal  = 0x0B830,
+    Signal      = 0x0B774,
+    SignalAll   = 0x0B830,
     Yield       = 0x0BCA8,
+    EndProcess  = 0x08F2C,
+
     ArcTan      = 0x19ABC,
     Random      = 0x19DB0,
     RandomInt   = 0x19E14,
@@ -1217,7 +1245,7 @@ export const enum StateFuncs {
     EndAux          = 0x35EDC8,
 
     Cleanup         = 0x35FD70,
-    ClaimApple      = 0x36010C,
+    EatApple        = 0x36010C,
 
     // only in cave
     DanceInteract   = 0x2C1440,
@@ -1226,6 +1254,11 @@ export const enum StateFuncs {
 
 export const enum ObjectField {
     SomeBool        = 0x10,
+    // on the root node
+    TranslationX    = 0x1C,
+    TranslationY    = 0x20,
+    TranslationZ    = 0x24,
+
     MiscFlags       = 0x50, // actually on the parent object
 
     Apple           = 0x64,
@@ -1262,7 +1295,7 @@ export const enum EndCondition {
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signal === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1;
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined;
 }
 
 const motionParser = new MotionParser();
@@ -1312,7 +1345,7 @@ class StateParser extends MIPS.NaiveInterpreter {
             force: false,
             motion: null,
             auxAddress: -1,
-            signal: 0,
+            signals: [],
             flagSet: 0,
             flagClear: 0,
             wait: null,
@@ -1456,7 +1489,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     force: false,
                     motion: null,
                     auxAddress: -1,
-                    signal: 0,
+                    signals: [],
                     flagSet: 0,
                     flagClear: 0,
                     wait: null,
@@ -1500,17 +1533,20 @@ class StateParser extends MIPS.NaiveInterpreter {
                         force: false,
                         motion: null,
                         auxAddress: -1,
-                        signal: 0,
+                        signals: [],
                         flagSet: 0,
                         flagClear: 0,
                         wait: null,
                     };
                 }
             } break;
-            case GeneralFuncs.SendSignal: {
+            case GeneralFuncs.SignalAll: {
                 // only fails because we aren't actually handling conditionals
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
-                this.currBlock.signal = a1.value;
+                this.currBlock.signals.push({value: a1.value, target: 0});
+            } break;
+            case GeneralFuncs.Signal: {
+                this.currBlock.signals.push({value: a1.value, target: a0.value});
             } break;
             case StateFuncs.RunAux: {
                 if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
@@ -1531,9 +1567,9 @@ class StateParser extends MIPS.NaiveInterpreter {
             case StateFuncs.Cleanup: {
                 this.state.doCleanup = true;
             } break;
-            // TODO: figure out apples
-            case StateFuncs.ClaimApple:
-                break;
+            case StateFuncs.EatApple: {
+                this.currBlock.eatApple = true;
+            } break;
             default:
                 this.valid = false;
         }
@@ -1643,7 +1679,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                 force: false,
                 motion: null,
                 auxAddress: -1,
-                signal: 0,
+                signals: [],
                 flagSet: 0,
                 flagClear: 0,
                 wait: null,
@@ -1711,9 +1747,26 @@ function fixupState(state: State): void {
         // add fake handling for lapras photo interaction
         case 0x802C7F74: {
             state.blocks[0].wait!.allowInteraction = true;
-            state.blocks[0].wait!.interactions.push({type: InteractionType.Photo, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[0].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
             state.blocks[1].wait!.allowInteraction = true;
-            state.blocks[1].wait!.interactions.push({type: InteractionType.Photo, param: 0, index: -1, auxFunc: fakeAux});
-        }
+            state.blocks[1].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+        } break;
+        // these use doubles for the increment, easier to just fix by hand
+        case 0x802CB9BC: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -60;
+        } break;
+        case 0x802CBC74: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -15;
+        } break;
+        case 0x802DFCD0: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -150;
+        } break;
+        case 0x802DFA5C: {
+            assert(state.blocks[3].motion![0].kind === "linear");
+            state.blocks[3].motion![0].velocity[1] = -150;
+        } break;
     }
 }
