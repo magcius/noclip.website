@@ -128,16 +128,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
 }
 
 class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
-    public id: string;
-    constructor(public mapID: string, public name: string) {}
-
-    private fetchNARC(path: string, dataFetcher: DataFetcher): Promise<NARC.NitroFS | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            if (buffer.byteLength === 0)
-                return null;
-            return NARC.parse(buffer);
-        });
-    }
+    constructor(public id: string, public name: string) {}
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
