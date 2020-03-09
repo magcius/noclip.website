@@ -721,7 +721,7 @@ export class OrthoCameraController implements CameraController {
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
     private farPlane = 100000;
-    private nearPlane = 0;
+    private nearPlane = -this.farPlane;
 
     constructor() {
     }
