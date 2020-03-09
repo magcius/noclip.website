@@ -5,7 +5,7 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists, nArray, hexdump } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist';
 import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material';
@@ -143,6 +143,71 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
     }
 
     return entries;
+}
+
+export const enum ResUserDataItemValueType {
+    S32, F32, STRING,
+}
+
+interface ResUserDataItemBase {
+    userDataType: ResUserDataItemValueType;
+    name: string;
+    id: number;
+}
+
+interface ResUserDataItemNumber extends ResUserDataItemBase {
+    value: number[];
+}
+
+interface ResUserDataItemString extends ResUserDataItemBase {
+    value: string[];
+}
+
+export type ResUserDataItem = ResUserDataItemNumber | ResUserDataItemString;
+
+interface ResUserData {
+    entries: ResUserDataItem[];
+}
+
+function parseUserData(buffer: ArrayBufferSlice, offs: number): ResUserData | null {
+    if (offs === 0)
+        return null;
+
+    const view = buffer.createDataView();
+    const size = view.getUint32(offs + 0x00);
+    const resDic = parseResDic(buffer, offs + 0x04);
+    const entries: ResUserDataItem[] = [];
+
+    for (let i = 0; i < resDic.length; i++) {
+        const itemOffs = resDic[i].offs;
+        const size = view.getUint32(itemOffs + 0x00);
+        const toData = view.getUint32(itemOffs + 0x04);
+        const arraySize = view.getUint32(itemOffs + 0x08);
+        const userDataType = view.getUint32(itemOffs + 0x0C);
+        const nameOffs = view.getUint32(itemOffs + 0x10);
+        const name = readString(buffer, itemOffs + nameOffs);
+        assert(name === resDic[i].name);
+        const id = view.getUint32(0x14);
+
+        if (userDataType === ResUserDataItemValueType.S32) {
+            const value: number[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(view.getInt32(itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        } else if (userDataType === ResUserDataItemValueType.F32) {
+            const value: number[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(view.getFloat32(itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        } else if (userDataType === ResUserDataItemValueType.STRING) {
+            const value: string[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(readString(buffer, itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        }
+    }
+
+    return { entries };
 }
 //#endregion
 //#region PLT0
@@ -802,6 +867,7 @@ export interface MDL0_NodeEntry {
     parentNodeId: number;
     forwardBindPose: mat4;
     inverseBindPose: mat4;
+    userData: ResUserData | null;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOffs: number): MDL0_NodeEntry {
@@ -845,6 +911,8 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const toNextSibling = view.getInt32(0x64);
     const toPrevSibling = view.getInt32(0x68);
     const toResUserData = view.getInt32(0x6C);
+
+    const userData = parseUserData(buffer, toResUserData);
 
     let parentNodeId: number = -1;
     if (toParentNode !== 0) {
@@ -898,7 +966,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
 
     const visible = !!(flags & NodeFlags.VISIBLE);
 
-    return { name, id, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
+    return { name, id, userData, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
 }
 
 export const enum ByteCodeOp {

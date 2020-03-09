@@ -8,6 +8,7 @@ import AnimationController from "../AnimationController";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { IS_DEVELOPMENT } from "../BuildVersion";
 
 class BgStage {
     private modelData: MDL0Model;
@@ -38,6 +39,7 @@ class BgStage {
         this.scn0AnimationController.quantizeTimeToFPS();
 
         if (this.isStarting) {
+            this.modelAnimationController.setPhaseToCurrent();
             this.scn0AnimationController.setPhaseToCurrent();
             this.isStarting = false;
         }
@@ -147,7 +149,8 @@ class WiiUTransferToolSceneDesc implements SceneDesc {
         const modelWii    = BRRES.parse(await dataFetcher.fetchData(`${dataPath}/ModelWii/map.brres`));
         const modelWiiU   = BRRES.parse(await dataFetcher.fetchData(`${dataPath}/ModelWiiU/map.brres`));
 
-        const music = await loadYouTubeMusic(context.uiContainer, `XLtMQuZbecA`);
+        if (!IS_DEVELOPMENT)
+            await loadYouTubeMusic(context.uiContainer, `XLtMQuZbecA`);
 
         return new WiiUTransferToolRenderer(device, modelCommon, modelWii, modelWiiU);
     }
@@ -160,4 +163,4 @@ const sceneDescs = [
     new WiiUTransferToolSceneDesc("WiiUTransferTool", "Wii U Transfer Tool"),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT };
