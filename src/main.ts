@@ -412,6 +412,7 @@ class Main {
         if (shouldTakeScreenshot)
             this._takeScreenshot();
 
+        this.ui.af2(this.viewer.viewerRenderInput);
         this.ui.update();
     };
 
@@ -476,6 +477,7 @@ class Main {
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
+        this.ui.af1(this.viewer.viewerRenderInput);
 
         return true;
     }
@@ -494,6 +496,7 @@ class Main {
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
+        this.ui.af1(this.viewer.viewerRenderInput);
 
         return true;
     }
@@ -639,6 +642,7 @@ class Main {
             mat4.getTranslation(this.viewer.xrCameraController.offset, camera.worldMatrix);
         }
 
+        this.ui.af1(this.viewer.viewerRenderInput);
         this.ui.sceneChanged();
     }
 
