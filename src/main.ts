@@ -206,11 +206,11 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
-    public sceneTimeScale = 1.0;
-
     private postAnimFrameCanvas = new PostAnimationFrame();
     private postAnimFrameWebXR = new PostAnimationFrame();
     private webXRContext: WebXRContext;
+
+    public sceneTimeScale = 1.0;
 
     constructor() {
         this.init();
