@@ -142,14 +142,29 @@ function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, no
         }
     }
 
-    const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
-    const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
-    const flags: FormatFlags = fmt & 0xFF;
+    const typeFlags = getFormatTypeFlags(fmt);
+    const compFlags = getFormatCompFlags(fmt);
+    const flags = getFormatFlags(fmt);
 
     const type = translateType(typeFlags);
     const size = translateSize(compFlags);
     const normalized = !!(flags & FormatFlags.NORMALIZED);
     return { size, type, normalized };
+}
+
+function isFormatSizedInteger(fmt: GfxFormat): boolean {
+    const flags = getFormatFlags(fmt);
+    if (!!(flags & FormatFlags.NORMALIZED))
+        return false;
+
+    const typeFlags = getFormatTypeFlags(fmt);
+    // Check for integer types.
+    if (typeFlags === FormatTypeFlags.S8 || typeFlags === FormatTypeFlags.S16 || typeFlags === FormatTypeFlags.S32)
+        return true;
+    if (typeFlags === FormatTypeFlags.U8 || typeFlags === FormatTypeFlags.U16 || typeFlags === FormatTypeFlags.U32)
+        return true;
+
+    return false;
 }
 
 function translateIndexFormat(format: GfxFormat): GLenum {
@@ -1101,6 +1116,13 @@ void main() {
 
         for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
             const attr = inputLayout.vertexAttributeDescriptors[i];
+
+            if (isFormatSizedInteger(attr.format)) {
+                // See https://groups.google.com/d/msg/angleproject/yQb5DaCzcWg/Ova0E3wcAQAJ for more info.
+                console.warn("Vertex format uses sized integer types; this will cause a shader recompile on ANGLE platforms");
+                debugger;
+            }
+
             const { size, type, normalized } = translateVertexFormat(attr.format);
             const vertexBuffer = vertexBuffers[attr.bufferIndex];
             if (vertexBuffer === null)

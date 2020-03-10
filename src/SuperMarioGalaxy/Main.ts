@@ -562,9 +562,9 @@ function patchBMD(bmd: BMD): void {
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 
