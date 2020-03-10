@@ -175,6 +175,9 @@ class PostAnimationFrame implements ViewerUpdateInfo {
 
     public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
 
+    // This is turned off now, because it breaks WebXR.
+    private usePostRequestAnimationFrame = false;
+
     private _timeoutCallback = (): void => {
         this.onupdate(this);
     };
@@ -182,7 +185,10 @@ class PostAnimationFrame implements ViewerUpdateInfo {
     // Call this from within your requestAnimationFrame handler.
     public requestPostAnimationFrame = (time: number): void => {
         this.time = time;
-        setTimeout(this._timeoutCallback, 0);
+        if (this.usePostRequestAnimationFrame)
+            setTimeout(this._timeoutCallback, 0);
+        else
+            this.onupdate(this);
     };
 }
 
