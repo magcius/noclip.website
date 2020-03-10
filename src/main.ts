@@ -180,10 +180,10 @@ class PostAnimationFrame implements ViewerUpdateInfo {
     };
 
     // Call this from within your requestAnimationFrame handler.
-    public requestPostAnimationFrame(time: number): void {
+    public requestPostAnimationFrame = (time: number): void => {
         this.time = time;
         setTimeout(this._timeoutCallback, 0);
-    }
+    };
 }
 
 class Main {
@@ -229,7 +229,7 @@ class Main {
         }
 
         this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = () => this.postAnimFrameWebXR;
+        this.webXRContext.onframe = () => this.postAnimFrameWebXR.requestPostAnimationFrame;
 
         this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
         this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
