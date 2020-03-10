@@ -3,33 +3,33 @@ import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, co
 import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero } from "../MathHelpers";
 import { vec3, mat4 } from "gl-matrix";
 import { getPathPoint, getPathTangent } from "./animation";
-import { hexzero, assert, nArray } from "../util";
+import { hexzero, assert, nArray, assertExists } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { LevelGlobals } from "./actor";
 
 const enum MotionFuncs {
-    PathPoint       = 0x01FCA4,
-    NodePos         = 0x0A5E98,
-    FindGround      = 0x0E41D8,
+    PathPoint = 0x01FCA4,
+    NodePos = 0x0A5E98,
+    FindGround = 0x0E41D8,
 
-    RiseBy          = 0x360300,
-    RiseTo          = 0x36044C,
-    FallBy          = 0x360590,
-    FallTo          = 0x3606E8,
-    Projectile      = 0x360AB8,
-    MoveForward     = 0x360F1C,
-    RandomCircle    = 0x361110,
-    GetSong         = 0x361440,
-    FaceTarget      = 0x36148C,
-    WalkToTarget    = 0x361748,
-    WalkToTarget2   = 0x36194C,     // functionally identical
-    SetTarget       = 0x361B50,
-    StepToPoint     = 0x361B68,
-    ApproachPoint   = 0x361E58,
-    ResetPos        = 0x362050,
-    Path            = 0x3620C8,
-    WaterSplash     = 0x35E174,
-    SplashOnImpact  = 0x35E298,
+    RiseBy = 0x360300,
+    RiseTo = 0x36044C,
+    FallBy = 0x360590,
+    FallTo = 0x3606E8,
+    Projectile = 0x360AB8,
+    MoveForward = 0x360F1C,
+    RandomCircle = 0x361110,
+    GetSong = 0x361440,
+    FaceTarget = 0x36148C,
+    WalkToTarget = 0x361748,
+    WalkToTarget2 = 0x36194C,     // functionally identical
+    SetTarget = 0x361B50,
+    StepToPoint = 0x361B68,
+    ApproachPoint = 0x361E58,
+    ResetPos = 0x362050,
+    Path = 0x3620C8,
+    WaterSplash = 0x35E174,
+    SplashOnImpact = 0x35E298,
 }
 
 export class MotionData {
@@ -45,9 +45,10 @@ export class MotionData {
     public startPos = vec3.create();
     public movingYaw: number;
     public ySpeed: number;
+    public forwardSpeed: number;
 
     public refPosition = vec3.create();
-    public storedPos = vec3.create();
+    public destination = vec3.create();
     public ignoreGround: boolean;
     public groundType = 0;
     public groundHeight = 0;
@@ -70,9 +71,10 @@ export class MotionData {
         vec3.copy(this.startPos, Vec3Zero);
         this.movingYaw = 0;
         this.ySpeed = 0;
+        this.forwardSpeed = 0;
         this.ignoreGround = false;
         vec3.copy(this.refPosition, Vec3Zero);
-        vec3.copy(this.storedPos, Vec3Zero);
+        vec3.copy(this.destination, Vec3Zero);
     }
 }
 
@@ -115,7 +117,6 @@ interface FaceTarget {
 
 interface WalkToTarget {
     kind: "walkToTarget";
-    forwardSpeed: number;
     radius: number;
     maxTurn: number;
     flags: number;
@@ -125,7 +126,6 @@ interface Vertical {
     kind: "vertical";
     target: ObjParam;
     asDelta: boolean;
-    forwardSpeed: number;
     startSpeed: number;
     g: number;
     minVel: number;
@@ -135,7 +135,6 @@ interface Vertical {
 
 interface RandomCircle {
     kind: "random";
-    forwardSpeed: number;
     radius: number;
     maxTurn: number;
 }
@@ -150,7 +149,6 @@ const enum Direction {
 interface Projectile {
     kind: "projectile";
     ySpeed: number;
-    forwardSpeed: number;
     direction: Direction;
     yaw: number; // only used if direction is constant
     g: number;
@@ -170,10 +168,30 @@ interface Linear {
     turnSpeed: number;
 }
 
+const enum ApproachGoal {
+    AtPoint,
+    GoodGround,
+}
+
+const enum Destination {
+    Custom,
+    PathStart,
+    Target,
+}
+
+interface ApproachPoint {
+    kind: "point";
+    goal: ApproachGoal;
+    maxTurn: number;
+    destination: Destination;
+    flags: number;
+}
+
 export const enum BasicMotionKind {
     Placeholder,
     Wait,
     Song,
+    SetSpeed,
 }
 
 interface BasicMotion {
@@ -182,14 +200,15 @@ interface BasicMotion {
     param: number;
 }
 
-export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear;
+export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear | ApproachPoint;
 
 export class MotionParser extends MIPS.NaiveInterpreter {
     public blocks: Motion[] = [];
     private dataMap: DataMap;
     private animations: number[];
+    private startAddress = 0;
+
     private timer = 0;
-    private forwardSpeed = 0;
     private ySpeed = 0;
     private yawDirection = Direction.Forward;
     private movingYaw = 0;
@@ -200,7 +219,6 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         super.reset();
         this.blocks = [];
         this.timer = 0;
-        this.forwardSpeed = 0;
         this.ySpeed = 0;
         this.movingYaw = 0;
         vec3.copy(this.positionOffset, Vec3Zero);
@@ -210,6 +228,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
     public parse(dataMap: DataMap, startAddress: number, animations: number[]): boolean {
         this.dataMap = dataMap;
         this.animations = animations;
+        this.startAddress = startAddress;
         return super.parseFromView(dataMap.getView(startAddress));
     }
 
@@ -290,7 +309,6 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     g: this.getFloatValue(a1),
                     moveForward: a2.value === 1,
                     ySpeed: this.ySpeed,
-                    forwardSpeed: this.forwardSpeed,
                     direction: this.yawDirection,
                     yaw: this.movingYaw,
                 });
@@ -305,7 +323,6 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     kind: "vertical",
                     asDelta,
                     startSpeed: this.ySpeed,
-                    forwardSpeed: this.forwardSpeed,
                     target: this.getFloatParam(a1),
                     g: this.getFloatValue(a2),
                     minVel: this.getFloatValue(a3),
@@ -316,7 +333,6 @@ export class MotionParser extends MIPS.NaiveInterpreter {
             case MotionFuncs.RandomCircle: {
                 this.blocks.push({
                     kind: "random",
-                    forwardSpeed: this.forwardSpeed,
                     radius: this.getFloatValue(a1),
                     maxTurn: this.getFloatValue(a2),
                 });
@@ -325,7 +341,6 @@ export class MotionParser extends MIPS.NaiveInterpreter {
             case MotionFuncs.WalkToTarget2: {
                 this.blocks.push({
                     kind: "walkToTarget",
-                    forwardSpeed: this.forwardSpeed,
                     radius: this.getFloatValue(a1),
                     maxTurn: this.getFloatValue(a2),
                     flags: a3.value | MoveFlags.Ground,
@@ -343,6 +358,27 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     kind: "basic",
                     subtype: BasicMotionKind.Song,
                     param: 0,
+                });
+            } break;
+            case MotionFuncs.StepToPoint: {
+                // these often appear in pairs, one before a loop, one inside
+                if (this.blocks.length > 0 && this.blocks[this.blocks.length - 1].kind === "point")
+                    break;
+                this.blocks.push({
+                    kind: "point",
+                    goal: ApproachGoal.AtPoint,
+                    maxTurn: this.getFloatValue(a1),
+                    destination: Destination.Custom,
+                    flags: a2.value,
+                });
+            } break;
+            case MotionFuncs.ApproachPoint: {
+                this.blocks.push({
+                    kind: "point",
+                    goal: ApproachGoal.AtPoint,
+                    maxTurn: this.getFloatValue(a1),
+                    destination: Destination.Custom,
+                    flags: MoveFlags.Ground,
                 });
             } break;
             case StateFuncs.InteractWait: {
@@ -390,7 +426,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                 case ObjectField.TranslationX:
                 case ObjectField.TranslationY:
                 case ObjectField.TranslationZ: {
-                    if (op !== MIPS.Opcode.SWC1 || target.lastOp !== MIPS.Opcode.LW || target.value !== 0x48 )
+                    if (op !== MIPS.Opcode.SWC1 || target.lastOp !== MIPS.Opcode.LW || target.value !== 0x48)
                         break;
                     if (!(value.lastOp === MIPS.Opcode.ADDS || value.lastOp === MIPS.Opcode.SUBS) || value.value < 0x100)
                         break;
@@ -405,7 +441,11 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                 } break;
                 case ObjectField.ForwardSpeed: {
                     assert(op === MIPS.Opcode.SWC1);
-                    this.forwardSpeed = this.getFloatValue(value);
+                    this.blocks.push({
+                        kind: "basic",
+                        subtype: BasicMotionKind.SetSpeed,
+                        param: this.getFloatValue(value),
+                    });
                 } break;
                 case ObjectField.VerticalSpeed: {
                     assert(op === MIPS.Opcode.SWC1);
@@ -454,13 +494,53 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                 subtype: BasicMotionKind.Placeholder,
                 param: 5,
             });
+        fixupMotion(this.startAddress, this.blocks);
+    }
+}
+
+function fixupMotion(addr: number, blocks: Motion[]): void {
+    switch (addr) {
+        // for some reason follows the ground in an aux process
+        // do it the easy way instead
+        case 0x802CC1E0: {
+            assert(blocks[0].kind === "path");
+            blocks[0].flags = 0x3;
+        } break;
+        // these use doubles for the increment, easier to just fix by hand
+        case 0x802CBBDC: {
+            assert(blocks[0].kind === "linear");
+            blocks[0].velocity[1] = -60;
+        } break;
+        case 0x802CBCDC: {
+            assert(blocks[0].kind === "linear");
+            blocks[0].velocity[1] = -15;
+        } break;
+        case 0x802DFC38: {
+            assert(blocks[0].kind === "linear");
+            blocks[0].velocity[1] = -150;
+        } break;
+        // special goals aren't worth parsing
+        case 0x802D9A80: {
+            assert(blocks[0].kind === "point");
+            blocks[0].goal = ApproachGoal.GoodGround;
+            blocks[0].destination = Destination.Target;
+        } break;
+        case 0x802E9288: {
+            assert(blocks[0].kind === "point");
+            blocks[0].destination = Destination.PathStart;
+        } break;
     }
 }
 
 const enum MoveFlags {
     Ground      = 0x01,
     SnapTurn    = 0x02,
+    Update      = 0x02,
+    DuringSong  = 0x04,
+    Continuous  = 0x08,
     ConstHeight = 0x10,
+    FacePlayer  = 0x20,
+    FaceAway    = 0x40,
     SmoothTurn  = 0x80,
 }
 
@@ -522,12 +602,18 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
             vec3.copy(data.refPosition, target.translation);
         } break;
         case "faceTarget": {
-            if (block.flags & 0x20)
+            if (block.flags & MoveFlags.FacePlayer)
                 mat4.getTranslation(data.refPosition, viewerInput.camera.worldMatrix);
             else if (target !== null)
                 vec3.copy(data.refPosition, target.translation);
             else
                 return MotionResult.Done;
+        } break;
+        case "point": {
+            if (block.destination === Destination.Target)
+                vec3.copy(data.destination, assertExists(target).translation);
+            else if (block.destination === Destination.PathStart)
+                getPathPoint(data.destination, assertExists(data.path), 0);
         } break;
     }
     return MotionResult.None;
@@ -613,7 +699,6 @@ export function followPath(pos: vec3, euler: vec3, data: MotionData, block: Foll
     data.pathParam = data.pathParam % 1;
     const oldY = pos[1];
     getPathPoint(pos, data.path, data.pathParam);
-    vec3.scale(pos, pos, 100);
     if (block.flags & MoveFlags.ConstHeight)
         pos[1] = oldY;
     else if (block.flags & MoveFlags.Ground)
@@ -632,9 +717,9 @@ export function followPath(pos: vec3, euler: vec3, data: MotionData, block: Foll
 export function projectile(pos: vec3, data: MotionData, block: Projectile, t: number, globals: LevelGlobals): MotionResult {
     t = (t - data.start) / 1000;
     vec3.set(tangentScratch,
-        Math.sin(data.movingYaw) * block.forwardSpeed,
+        Math.sin(data.movingYaw) * data.forwardSpeed,
         block.ySpeed,
-        Math.cos(data.movingYaw) * block.forwardSpeed,
+        Math.cos(data.movingYaw) * data.forwardSpeed,
     );
     vec3.scaleAndAdd(posScratch, data.startPos, tangentScratch, t);
     posScratch[1] += block.g * t * t * 15; // g is actually given in m/s/frame
@@ -651,9 +736,9 @@ export function projectile(pos: vec3, data: MotionData, block: Projectile, t: nu
 export function vertical(pos: vec3, euler: vec3, data: MotionData, block: Vertical, dt: number): MotionResult {
     if (data.stateFlags & EndCondition.Pause)
         return MotionResult.None;
-    pos[0] += Math.sin(euler[1]) * block.forwardSpeed * dt;
+    pos[0] += Math.sin(euler[1]) * data.forwardSpeed * dt;
     pos[1] += data.ySpeed * dt * block.direction;
-    pos[2] += Math.cos(euler[1]) * block.forwardSpeed * dt;
+    pos[2] += Math.cos(euler[1]) * data.forwardSpeed * dt;
     if (block.g !== 0) {
         data.ySpeed += 30 * block.g * dt; // always increase, this is speed
         data.ySpeed = clamp(data.ySpeed, block.minVel, block.maxVel);
@@ -667,7 +752,7 @@ export function vertical(pos: vec3, euler: vec3, data: MotionData, block: Vertic
 }
 
 export function randomCircle(pos: vec3, euler: vec3, data: MotionData, block: RandomCircle, dt: number, globals: LevelGlobals): MotionResult {
-    data.movingYaw += dt * block.forwardSpeed / block.radius;
+    data.movingYaw += dt * data.forwardSpeed / block.radius;
     posScratch[0] = data.refPosition[0] + block.radius * Math.sin(data.movingYaw);
     posScratch[2] = data.refPosition[2] + block.radius * Math.cos(data.movingYaw);
     if (attemptMove(pos, posScratch, data, globals, MoveFlags.Ground))
@@ -685,15 +770,15 @@ export function linear(pos: vec3, euler: vec3, data: MotionData, block: Linear, 
 }
 
 export function walkToTarget(pos: vec3, euler: vec3, data: MotionData, block: WalkToTarget, target: Target | null, dt: number, globals: LevelGlobals): MotionResult {
-    if (block.flags & 2) {
+    if (block.flags & MoveFlags.Update) {
         if (target === null)
             return MotionResult.Done;
         vec3.copy(data.refPosition, target.translation);
     }
     const yawToTarget = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
     vec3.copy(posScratch, pos);
-    posScratch[0] += block.forwardSpeed * dt * Math.sin(yawToTarget);
-    posScratch[2] += block.forwardSpeed * dt * Math.cos(yawToTarget);
+    posScratch[0] += data.forwardSpeed * dt * Math.sin(yawToTarget);
+    posScratch[2] += data.forwardSpeed * dt * Math.cos(yawToTarget);
     if (attemptMove(pos, posScratch, data, globals, block.flags))
         return MotionResult.Done;
     stepYawTowards(euler, yawToTarget, block.maxTurn, dt);
@@ -705,20 +790,48 @@ export function walkToTarget(pos: vec3, euler: vec3, data: MotionData, block: Wa
 }
 
 export function faceTarget(pos: vec3, euler: vec3, data: MotionData, block: FaceTarget, target: Target | null, dt: number, globals: LevelGlobals): MotionResult {
-    if (block.flags & 2) {
-        if (block.flags & 0x20)
+    if (block.flags & MoveFlags.Update) {
+        if (block.flags & MoveFlags.FacePlayer)
             vec3.copy(data.refPosition, globals.translation);
         else if (target === null)
             return MotionResult.Done;
         else
             vec3.copy(data.refPosition, target.translation);
     }
-    if ((block.flags & 4) && !canHearSong(pos, globals))
+    if ((block.flags & MoveFlags.DuringSong) && !canHearSong(pos, globals))
         return MotionResult.Done;
     let targetYaw = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
-    if (block.flags & 0x40)
+    if (block.flags & MoveFlags.FaceAway)
         targetYaw += Math.PI;
-    if (stepYawTowards(euler, targetYaw, block.maxTurn, dt) && !(block.flags & 8))
+    if (stepYawTowards(euler, targetYaw, block.maxTurn, dt) && !(block.flags & MoveFlags.Continuous))
         return MotionResult.Done;
+    return MotionResult.Update;
+}
+
+const approachScratch = vec3.create();
+export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals: LevelGlobals, block: ApproachPoint, dt: number): MotionResult {
+    const atPoint = Math.hypot(pos[0] - data.destination[0], pos[2] - data.destination[2]) < data.forwardSpeed / 30;
+    // target flag is set independent of end condition
+    if (atPoint)
+        data.stateFlags |= EndCondition.Target;
+    let done = false;
+    switch (block.goal) {
+        case ApproachGoal.AtPoint:
+            done = atPoint; break;
+        case ApproachGoal.GoodGround:
+            done = data.groundType !== 0x7F6633; break;
+    }
+    if (done)
+        return MotionResult.Done;
+
+    vec3.sub(approachScratch, data.destination, pos);
+    const targetYaw = Math.atan2(approachScratch[0], approachScratch[2]);
+
+    vec3.normalize(approachScratch, approachScratch);
+    vec3.scale(approachScratch, approachScratch, dt * data.forwardSpeed);
+    vec3.add(approachScratch, approachScratch, pos);
+    if (attemptMove(pos, approachScratch, data, globals, block.flags))
+        return MotionResult.None;
+    stepYawTowards(euler, targetYaw, block.maxTurn, dt);
     return MotionResult.Update;
 }

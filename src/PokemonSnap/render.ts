@@ -269,7 +269,7 @@ export class NodeRenderer {
                     case ModelField.Roll: this.euler[2] = value; break;
                     case ModelField.Path: {
                         const path = assertExists(this.animator.interpolators[i].path);
-                        getPathPoint(this.translation, path, clamp(value, 0, 1));
+                        getPathPoint(this.translation, path, clamp(value, 0, 1), true /* use raw path */);
                     } break;
                     case ModelField.X: this.translation[0] = value; break;
                     case ModelField.Y: this.translation[1] = value; break;

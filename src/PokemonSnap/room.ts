@@ -9,8 +9,8 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
-import {MotionParser, Motion, FollowPath} from "./motion";
-import { Vec3UnitY, Vec3One } from "../MathHelpers";
+import {MotionParser, Motion} from "./motion";
+import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -309,6 +309,27 @@ export function parseLevel(archives: LevelArchive[]): Level {
         }
     }
 
+    {
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800edab0, 0x800Edb90, 0x80359534, sharedOutput);
+        const tracks: (AnimationTrack | null)[] = [];
+        const trackView = dataMap.getView(0x800ed5b0);
+        for (let i = 0; i < nodes.length; i++) {
+            const trackStart = trackView.getUint32(4 * i);
+            tracks.push(parseAnimationTrack(dataMap, trackStart));
+        }
+        const materialTracks = parseMaterialAnimation(dataMap, 0x800ed6b0, nodes);
+        objectInfo.push({
+            id: 1234,
+            nodes,
+            sharedOutput,
+            scale: Vec3One,
+            flags: 0,
+            spawn: SpawnType.FLYING,
+            stateGraph: {states:[], animations: [{fps: 30, frames: 1, tracks, materialTracks}]},
+            globalPointer: 0,
+        })
+    }
     const zeroOne = buildZeroOne(dataMap, level.Name);
 
     let collision: CollisionTree | null = null;
@@ -1203,7 +1224,7 @@ export const enum InteractionType {
     GravelerLanded  = 0x14,
     AppleRemoved    = 0x15,
     TargetRemoved   = 0x16,
-
+    PhotoFocus      = 0x17, // checks if the camera is focused at the same pokemon for a long time
     PhotoSubject    = 0x18,
 
     EndMarker       = 0x3A,
@@ -1217,7 +1238,7 @@ export const enum InteractionType {
     NoTarget,
     HasTarget,
     HasApple,
-    OverWater,
+    OverSurface,
     Unknown,
 }
 
@@ -1231,6 +1252,8 @@ export interface StateEdge {
 interface Signal {
     value: number;
     target: number;
+    condition: InteractionType;
+    conditionParam: number;
 }
 
 export interface StateBlock {
@@ -1244,6 +1267,7 @@ export interface StateBlock {
     flagClear: number;
     ignoreGround?: boolean;
     eatApple?: boolean;
+    forwardSpeed?: number;
     edges: StateEdge[];
 }
 
@@ -1351,6 +1375,7 @@ export const enum EndCondition {
     Aux         = 0x08,
     Target      = 0x10,
     Pause       = 0x20, // used to pause motion, not as a condition
+    Misc        = 0x1000,
 
     Dance       = 0x100000, // special dance-related behavior in cave
     // actually from a different set of flags
@@ -1359,7 +1384,8 @@ export const enum EndCondition {
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined;
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 &&
+    block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined && block.forwardSpeed === undefined;
 }
 
 const motionParser = new MotionParser();
@@ -1451,7 +1477,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                             type = InteractionType.NotFlag;
                         param = branch.comparator.value;
                     } else if (branch.comparator.lastOp === MIPS.Opcode.ADDIU) {
-                        type = InteractionType.Behavior;
+                        type = branch.comparator.value < 10 ? InteractionType.Behavior : InteractionType.OverSurface;
                     } else if (branch.comparator.lastOp === MIPS.Opcode.LW) {
                         // see if we are testing an object member against 0
                         switch (branch.comparator.value) {
@@ -1474,7 +1500,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         }
                     } else if (branch.comparator.lastOp === MIPS.Opcode.ORI) {
                         // this is admittedly a bit of a stretch, but it's a very rare condition
-                        type = InteractionType.OverWater;
+                        type = InteractionType.OverSurface;
                     } else {
                         this.valid = false;
                         type = InteractionType.Unknown;
@@ -1607,10 +1633,11 @@ class StateParser extends MIPS.NaiveInterpreter {
             case GeneralFuncs.SignalAll: {
                 // only fails because we aren't actually handling conditionals
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
-                this.currBlock.signals.push({value: a1.value, target: 0});
+                this.currBlock.signals.push({value: a1.value, target: 0, condition: InteractionType.Basic, conditionParam: 0});
             } break;
             case GeneralFuncs.Signal: {
-                this.currBlock.signals.push({value: a1.value, target: a0.value});
+                const target = a0.value > 0x80000000 ? a0.value : 0;
+                this.currBlock.signals.push({value: a1.value, target, condition: InteractionType.Basic, conditionParam: 0});
             } break;
             case StateFuncs.RunAux: {
                 if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
@@ -1659,13 +1686,12 @@ class StateParser extends MIPS.NaiveInterpreter {
                         if (type === InteractionType.EndMarker)
                             break;
                         const stateAddr = tView.getUint32(offs + 0x04);
-                        const radius = tView.getFloat32(offs + 0x08);
+                        const param = tView.getFloat32(offs + 0x08);
                         const auxFunc = tView.getUint32(offs + 0x0C);
                         offs += 0x10;
-
                         this.currWait.interactions.push({
                             type,
-                            param: radius,
+                            param,
                             index: stateAddr > 0 ? parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses) : -1,
                             auxFunc,
                         });
@@ -1716,6 +1742,8 @@ class StateParser extends MIPS.NaiveInterpreter {
                 default:
                     this.valid = false;
             }
+        } else if (op === MIPS.Opcode.SWC1 && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP) && offset === ObjectField.ForwardSpeed) {
+            this.currBlock.forwardSpeed = bitsAsFloat32(value.value);
         } else {
             if (op === MIPS.Opcode.SW && value.value > 0x80000000 && this.loadAddress === 0)
                 this.loadAddress = value.value;
@@ -1802,12 +1830,6 @@ function fixupState(state: State): void {
         case 0x802CBD74: {
             state.blocks[0].auxAddress = 0;
         } break;
-        // for some reason follows the ground in an aux process
-        // do it the easy way instead
-        case 0x802CC104: {
-            (state.blocks[1].motion![0] as FollowPath).flags = 0x3;
-            state.blocks[1].auxAddress = 0;
-        } break;
         // add fake handling for lapras photo interaction
         case 0x802C7F74: {
             state.blocks[0].wait!.allowInteraction = true;
@@ -1815,22 +1837,32 @@ function fixupState(state: State): void {
             state.blocks[1].wait!.allowInteraction = true;
             state.blocks[1].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
         } break;
-        // these use doubles for the increment, easier to just fix by hand
-        case 0x802CB9BC: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -60;
+        // fix second signal value (conditionals again)
+        case 0x802D97B8: {
+            state.blocks[1].signals[0].condition = InteractionType.Behavior;
+            state.blocks[1].signals[0].conditionParam = 1;
+            state.blocks[1].signals[1].condition = InteractionType.Behavior;
+            state.blocks[1].signals[1].conditionParam = 2;
+            state.blocks[1].signals[1].value = 0x28;
         } break;
-        case 0x802CBC74: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -15;
+        // restrict weepinbell pool signal
+        case 0x802BF894: {
+            state.blocks[2].signals[0].condition = InteractionType.OverSurface;
         } break;
-        case 0x802DFCD0: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -150;
+        // ignore victreebel distance check
+        case 0x802BFE34: {
+            assert(state.blocks.length === 3)
+            state.blocks.splice(0, 1);
         } break;
-        case 0x802DFA5C: {
-            assert(state.blocks[3].motion![0].kind === "linear");
-            state.blocks[3].motion![0].velocity[1] = -150;
+        // send signal from motion
+        case 0x802DC4F0:
+        case 0x802DC590: {
+            state.blocks[1].signals.push({
+                target: 0,
+                value: 0x1C,
+                condition: InteractionType.OverSurface,
+                conditionParam: 0,
+            });
         } break;
     }
 }
