@@ -29,9 +29,8 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(32 / 60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {

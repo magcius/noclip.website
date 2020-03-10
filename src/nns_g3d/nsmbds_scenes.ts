@@ -35,9 +35,8 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

@@ -15,9 +15,8 @@ import { colorFromRGBA } from '../Color';
 import { CameraController } from '../Camera';
 
 class DKCRSceneRenderer extends RetroSceneRenderer {
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(4/60 * 0.1);
-        return c;
     }
 }
 

@@ -39,9 +39,8 @@ class BKRenderer implements Viewer.SceneGfx {
         this.sceneEmitters = new SceneEmitterHolder(device, objectData);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(30/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {

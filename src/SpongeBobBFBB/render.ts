@@ -1011,9 +1011,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.025);
-        return c;
     }
 
     public update(renderState: RenderState) {

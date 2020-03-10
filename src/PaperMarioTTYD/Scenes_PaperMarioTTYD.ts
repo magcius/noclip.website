@@ -12,9 +12,8 @@ import { CameraController } from '../Camera';
 const pathBase = `PaperMarioTTYD`;
 
 class TTYDRenderer extends WorldRenderer {
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(58/60);
-        return c;
     }
 }
 

@@ -99,9 +99,8 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(36/60);
-        return c;
     }
 
     private setMirrored(mirror: boolean): void {

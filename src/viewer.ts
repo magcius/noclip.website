@@ -41,7 +41,8 @@ export interface ViewerRenderInput {
 export interface SceneGfx {
     textureHolder?: TextureHolder<any>;
     createPanels?(): UI.Panel[];
-    createCameraController?(c: CameraController): CameraController;
+    createCameraController?(): CameraController;
+    adjustCameraController?(c: CameraController): void;
     isInteractive?: boolean;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
@@ -258,8 +259,8 @@ export class Viewer {
     public setCameraController(cameraController: CameraController) {
         this.cameraController = cameraController;
 
-        if (this.scene !== null && this.scene.createCameraController !== undefined)
-            this.cameraController = this.scene.createCameraController(cameraController);
+        if (this.scene !== null && this.scene.adjustCameraController !== undefined)
+            this.scene.adjustCameraController(cameraController);
 
         this.cameraController.camera = this.camera;
         this.cameraController.forceUpdate = true;

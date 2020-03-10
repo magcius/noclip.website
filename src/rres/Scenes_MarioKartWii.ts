@@ -80,9 +80,8 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
         }
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(24/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {
