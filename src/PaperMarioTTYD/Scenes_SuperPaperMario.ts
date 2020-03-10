@@ -14,9 +14,8 @@ import { assertExists } from '../util';
 import { CameraController } from '../Camera';
 
 class SuperPaperMarioRenderer extends WorldRenderer {
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(24/60);
-        return c;
     }
 }
 

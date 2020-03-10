@@ -37,9 +37,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(12/60);
-        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -64,7 +63,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -1748,6 +1746,11 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_owl.zar`);
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Ms) {
+            const zar = await fetchArchive(`zelda_ms.zar`);
+            const b = buildModel(zar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ms_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Okuta) {
             const zar = await fetchArchive(`zelda_oc2.zar`);

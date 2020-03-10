@@ -8,7 +8,7 @@ import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
 
 function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): void {
-    sceneObjHolder.create(SceneObj.SensorHitChecked);
+    sceneObjHolder.create(SceneObj.SensorHitChecker);
     sceneObjHolder.sensorHitChecker!.initGroup(sensor);
 }
 

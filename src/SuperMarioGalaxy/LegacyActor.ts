@@ -10,6 +10,7 @@ import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
+import { isFirstStep } from "./Spine";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -61,10 +62,14 @@ interface AnimOptions {
 
 const enum RotateAxis { X, Y, Z };
 
-export class NoclipLegacyActor extends LiveActor {
+const enum NoclipLegacyActorNrv { Wait }
+
+export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
     private rotateSpeed = 0;
     private rotatePhase = 0;
     private rotateAxis: RotateAxis = RotateAxis.Y;
+
+    public firstStepCallback: (() => void) | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, arcName: string, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, tag: SceneGraphTag, public objinfo: ObjInfo) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -96,6 +101,7 @@ export class NoclipLegacyActor extends LiveActor {
         }
 
         this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(NoclipLegacyActorNrv.Wait);
     }
 
     public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
@@ -116,10 +122,19 @@ export class NoclipLegacyActor extends LiveActor {
         }
     }
 
-    public calcAndSetBaseMtx(viewerInput: ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const time = viewerInput.time / 1000;
-        super.calcAndSetBaseMtx(viewerInput);
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (isFirstStep(this)) {
+            if (this.firstStepCallback !== null)
+                this.firstStepCallback();
+        }
     }
 }
 
@@ -205,7 +220,9 @@ export class NoclipLegacyActorSpawner {
                 return null;
 
             const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
-            applyAnimations(actor, animOptions);
+            actor.firstStepCallback = () => {
+                applyAnimations(actor, animOptions);
+            };
 
             actor.scenarioChanged(this.sceneObjHolder);
 

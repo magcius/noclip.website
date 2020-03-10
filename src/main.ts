@@ -53,6 +53,8 @@ import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
+import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
+import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -75,7 +77,7 @@ import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
-import { WebXRContext, IsWebXRSupported } from './WebXR';
+import { WebXRContext } from './WebXR';
 
 const sceneGroups = [
     "Wii",
@@ -130,11 +132,13 @@ const sceneGroups = [
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_MetroidPrimeHunters.sceneGroup,
+    Scenes_PokemonPlatinum.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
+    Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
@@ -162,6 +166,26 @@ const enum SaveStatesAction {
     Delete
 };
 
+// https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
+// https://github.com/WICG/requestPostAnimationFrame
+// https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
+class PostAnimationFrame implements ViewerUpdateInfo {
+    public time: number = 0;
+    public webXRContext: WebXRContext | null = null;
+
+    public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
+
+    private _timeoutCallback = (): void => {
+        this.onupdate(this);
+    };
+
+    // Call this from within your requestAnimationFrame handler.
+    public requestPostAnimationFrame(time: number): void {
+        this.time = time;
+        setTimeout(this._timeoutCallback, 0);
+    }
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -182,12 +206,11 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
+    private postAnimFrameCanvas = new PostAnimationFrame();
+    private postAnimFrameWebXR = new PostAnimationFrame();
+    private webXRContext: WebXRContext;
+
     public sceneTimeScale = 1.0;
-
-    private updateInfo: ViewerUpdateInfo;
-    private webXRContext: WebXRContext | null = null;
-
-    private hashpotatoes: HTMLTextAreaElement;
 
     constructor() {
         this.init();
@@ -205,10 +228,12 @@ class Main {
             return;
         }
 
-        if (IsWebXRSupported()) {
-            this.webXRContext = new WebXRContext(this.viewer.gfxDevice);
-            this.webXRContext.onFrame = this._onWebXRFrame.bind(this);
-        }
+        this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
+        this.webXRContext.onframe = () => this.postAnimFrameWebXR;
+
+        this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
+        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
+        this.postAnimFrameWebXR.webXRContext = this.webXRContext;
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -269,11 +294,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this.updateInfo = {
-            time: 0,
-            isWebXR: false
-        };
-        this._updateLoop(window.performance.now());
+        this._onRequestAnimationFrame(window.performance.now());
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -355,7 +376,7 @@ class Main {
                 this.webXRContext.xrSession.addEventListener('end', () => {
                     this.ui.toggleWebXRCheckbox(false);
                 });
-            } catch {
+            } catch(e) {
                 console.error("Failed to start XR");
                 this.ui.toggleWebXRCheckbox(false);
             }
@@ -364,30 +385,16 @@ class Main {
         }
     }
 
-    private _onWebXRFrame(time: number) {
-        if (!this.paused) {
-            this.updateInfo.time = time;
-            this.updateInfo.isWebXR = true;
-            this.updateInfo.webXRContext = this.webXRContext;
-            this._runUpdate(this.updateInfo);
-        }
-    }
-
     public setPaused(v: boolean): void {
-        if (this.paused === v)
-            return;
-
-        this.paused = true;
-        if (!this.paused)
-            window.requestAnimationFrame(this._updateLoop);
+        this.paused = v;
     }
 
-    private _runUpdate(updateInfo: ViewerUpdateInfo) {
+    private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
-        // Needs to be called before this.viewer.update
+        // Needs to be called before this.viewer.update()
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
@@ -398,17 +405,11 @@ class Main {
             this._takeScreenshot();
 
         this.ui.update();
-    }
+    };
 
-    private _updateLoop = (time: number) => {
-        if (this.paused)
-            return;
-        
-        this.updateInfo.time = time;
-        this.updateInfo.isWebXR = false;
-        this._runUpdate(this.updateInfo);
-        
-        window.requestAnimationFrame(this._updateLoop);
+    private _onRequestAnimationFrame = (time: number): void => {
+        this.postAnimFrameCanvas.requestPostAnimationFrame(time);
+        window.requestAnimationFrame(this._onRequestAnimationFrame);
     };
 
     private async _onDrop(e: DragEvent) {
@@ -608,6 +609,8 @@ class Main {
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
 
+        if (scene.createCameraController !== undefined)
+            this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
@@ -743,6 +746,15 @@ class Main {
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
+
+        this.webXRContext.onsupportedchanged = () => {
+            this._syncWebXRSettingsVisible();
+        };
+        this._syncWebXRSettingsVisible();
+    }
+
+    private _syncWebXRSettingsVisible(): void {
+        this.ui.xrSettings.setVisible(this.webXRContext.isSupported);
     }
 
     private _toggleUI(visible?: boolean) {

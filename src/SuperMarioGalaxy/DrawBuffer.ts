@@ -99,9 +99,10 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 //     this->mDrawBuffer->drawOpa();
 
 // DrawBufferHolder is effectively a singleton. It holds DrawBufferGroups, of which there is one per DrawBufferType.
-// DrawBufferExecuter's are roughly 1:1 with an actor, and each contains a single DrawBuffer. The DrawBuffer is
-// created at actor load time (?), and each one contains a number of DrawBufferShapeDrawer, which is roughly equivalent
-// to our *MaterialInstance*. Each DrawBufferShapeDrawer contains multiple J3DShapePackets.
+// DrawBufferGroups contain DrawBufferExecuter's, which are 1:1 with a model. Each instance of a model is recorded
+// in the DrawBufferExecuter, and the shared model data goes in a DrawBuffer. Each DrawBuffer contains a number
+// of DrawBufferShapeDrawers, which is roughly equivalent to our *MaterialInstance*. Each DrawBufferShapeDrawer
+// contains multiple J3DShapePackets.
 
 // The entry-point to this is GameScene::draw3D, which will ""execute"" some number of draw lists, and then
 // call drawOpa/drawXlu on hardcoded buffer types in a certain order. The current system of "execution" is a bit unknown.

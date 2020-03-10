@@ -807,9 +807,8 @@ export class MSBRenderer {
         }
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(20/60);
-        return c;
     }
 
     private lodModels: string[] = [];

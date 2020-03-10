@@ -9,6 +9,8 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
+import {MotionParser, Motion, FollowPath} from "./motion";
+import { Vec3UnitY, Vec3One } from "../MathHelpers";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -40,7 +42,7 @@ export interface ObjectSpawn {
     path?: Path;
 }
 
-export interface ObjectDef {
+export interface ActorDef {
     id: number;
     nodes: GFXNode[];
     sharedOutput: RSPSharedOutput;
@@ -48,6 +50,19 @@ export interface ObjectDef {
     flags: number;
     spawn: SpawnType;
     stateGraph: StateGraph;
+    globalPointer: number;
+}
+
+export interface StaticDef {
+    id: number;
+    node: GFXNode;
+    sharedOutput: RSPSharedOutput;
+}
+
+type ObjectDef = ActorDef | StaticDef;
+
+export function isActor(def: ObjectDef): def is ActorDef {
+    return !!(def as any).stateGraph;
 }
 
 export interface LevelArchive {
@@ -56,7 +71,7 @@ export interface LevelArchive {
     Code: ArrayBufferSlice;
     StartAddress: number;
     CodeStartAddress: number;
-    Rooms: number;
+    Header: number;
     Objects: number;
     Collision: number;
 };
@@ -131,17 +146,6 @@ function getCartAnimationAddresses(id: number): number[] {
 
 export function parseLevel(archives: LevelArchive[]): Level {
     const level = archives[0];
-    const view = level.Data.createDataView();
-
-    const rooms: Room[] = [];
-    let offs = level.Rooms - level.StartAddress;
-    const pathRooms = view.getUint32(offs + 0x00);
-    const nonPathRooms = view.getUint32(offs + 0x04);
-    const skyboxDescriptor = view.getUint32(offs + 0x08);
-
-    const sharedCache = new RDP.TextureCache();
-
-    let skybox: Room | null = null;
 
     const dataMap = new DataMap([
         { data: level.Data, start: level.StartAddress },
@@ -153,6 +157,18 @@ export function parseLevel(archives: LevelArchive[]): Level {
             { data: archives[i].Code, start: archives[i].CodeStartAddress },
         );
     }
+
+    const rooms: Room[] = [];
+    const roomHeader = dataMap.deref(level.Header);
+
+    const view = dataMap.getView(roomHeader);
+    const pathRooms = view.getUint32(0x00);
+    const nonPathRooms = view.getUint32(0x04);
+    const skyboxDescriptor = view.getUint32(0x08);
+
+    const sharedCache = new RDP.TextureCache();
+
+    let skybox: Room | null = null;
 
     if (skyboxDescriptor > 0) {
         const skyboxView = dataMap.getView(skyboxDescriptor);
@@ -169,7 +185,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             model: skyboxModel,
             translation: vec3.create(),
             euler: vec3.create(),
-            scale: vec3.fromValues(1, 1, 1),
+            scale: vec3.clone(Vec3One),
             parent: -1,
             materials,
         };
@@ -193,16 +209,18 @@ export function parseLevel(archives: LevelArchive[]): Level {
         };
     }
 
-    offs = pathRooms - level.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+    const pathView = dataMap.getView(pathRooms);
+    let offs = 0;
+    while (pathView.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, pathView.getUint32(offs), sharedCache));
         offs += 4;
     }
 
     // also different material handling?
-    offs = nonPathRooms - level.StartAddress;
-    while (view.getUint32(offs) !== 0) {
-        rooms.push(parseRoom(dataMap, view.getUint32(offs), sharedCache));
+    const nonPathView = dataMap.getView(nonPathRooms);
+    offs = 0;
+    while (nonPathView.getUint32(offs) !== 0) {
+        rooms.push(parseRoom(dataMap, nonPathView.getUint32(offs), sharedCache));
         offs += 4;
     }
 
@@ -214,14 +232,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
                 behavior: 1,
                 pos: vec3.fromValues(0, 100, 500),
                 euler: vec3.create(),
-                scale: vec3.fromValues(1, 1, 1)
+                scale: vec3.clone(Vec3One),
             },
             {
                 id: 0x3e9,
                 behavior: 0,
                 pos: vec3.fromValues(0, 0, 10000),
                 euler: vec3.fromValues(0, Math.PI, 0),
-                scale: vec3.fromValues(1, 1, 1)
+                scale: vec3.clone(Vec3One),
             },
         );
 
@@ -235,7 +253,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             offs += 0x10;
 
             const initView = dataMap.getView(initFunc);
-            assert(dataFinder.parseFromView(initView), `bad parse for init function ${hexzero(initFunc, 8)}`);
+            assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
             const objectView = dataMap.getView(dataFinder.dataAddress);
 
             const graphStart = objectView.getUint32(0x00);
@@ -252,11 +270,42 @@ export function parseLevel(archives: LevelArchive[]): Level {
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
                 const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph });
+                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
             } catch (e) {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
 
+        }
+    }
+
+    const statics = dataMap.deref(level.Header + 0x04);
+    if (statics !== 0) {
+        const staticView = dataMap.getView(statics);
+        offs = 0;
+        while (true) {
+            const id = staticView.getInt32(offs + 0x00);
+            if (id === -1)
+                break;
+            const func = staticView.getUint32(offs + 0x04);
+            const dlStart = staticView.getUint32(offs + 0x08);
+            assert(func === 0x800e30b0, hexzero(func, 8));
+
+            const sharedOutput = new RSPSharedOutput();
+            const states = [new F3DEX2.RSPState(sharedOutput, dataMap)];
+            initDL(states[0], true);
+
+            const model = runRoomDL(dataMap, dlStart, states);
+            const node: GFXNode = {
+                model,
+                billboard: 0,
+                parent: -1,
+                translation: vec3.create(),
+                euler: vec3.create(),
+                scale: vec3.clone(Vec3One),
+                materials: [],
+            };
+            objectInfo.push({ id, node, sharedOutput });
+            offs += 0x0C;
         }
     }
 
@@ -272,18 +321,24 @@ export function parseLevel(archives: LevelArchive[]): Level {
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
     public spawnFunc = 0;
     public dataAddress = 0;
+    public globalRef = 0
 
     public reset(): void {
         super.reset();
         this.spawnFunc = 0;
         this.dataAddress = 0;
+        this.globalRef = 0;
     }
 
     protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
         this.spawnFunc = func;
         this.dataAddress = assertExists(stackArgs[1]).value; // stack+0x14
-        this.done = true;
         return 0;
+    }
+
+    handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+        if (op === MIPS.Opcode.SW && value.lastOp === MIPS.Opcode.JAL)
+            this.globalRef = target.value;
     }
 }
 
@@ -485,10 +540,7 @@ function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, 
     const states = nArray(2, () => new F3DEX2.RSPState(output, dataMap));
 
     const renderer = selectRenderer(renderFunc);
-    if (renderer === moltresDL)
-        initDL(states[0], false);
-    else
-        initDL(states[0], true);
+    initDL(states[0], true);
     initDL(states[1], false);
 
     let currIndex = 0;
@@ -527,7 +579,9 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     const pos = getVec3(view, 0x04);
     const yaw = view.getFloat32(0x10);
     assert(yaw === 0);
-    const objectSpawns = view.getUint32(0x1C); // other lists before and after
+    const staticSpawns = view.getUint32(0x18);
+    const objectSpawns = view.getUint32(0x1C);
+    // one more list here
 
     vec3.scale(pos, pos, 100);
     const roomView = dataMap.getView(roomGeoStart);
@@ -552,7 +606,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
         parent: -1,
         translation: pos,
         euler: vec3.create(),
-        scale: vec3.fromValues(1, 1, 1),
+        scale: vec3.clone(Vec3One),
         materials,
     };
 
@@ -562,6 +616,22 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     }
 
     const objects: ObjectSpawn[] = [];
+    if (staticSpawns > 0) {
+        const objView = dataMap.getView(staticSpawns);
+        let offs = 0;
+        while (true) {
+            const id = objView.getInt32(offs + 0x00);
+            if (id === -1)
+                break;
+            const objPos = getVec3(objView, offs + 0x04);
+            vec3.scale(objPos, objPos, 100);
+            vec3.add(objPos, objPos, pos);
+            const euler = getVec3(objView, offs + 0x10);
+            const scale = getVec3(objView, offs + 0x1C);
+            objects.push({ id, behavior: 0, pos: objPos, euler, scale });
+            offs += 0x28;
+        }
+    }
     if (objectSpawns > 0) {
         const objView = dataMap.getView(objectSpawns);
         let offs = 0;
@@ -767,7 +837,7 @@ export const enum PathKind {
 export interface Path {
     kind: PathKind,
     length: number,
-    speed: number,
+    duration: number,
     segmentRate: number,
     times: Float32Array,
     points: Float32Array,
@@ -795,18 +865,18 @@ function parsePath(dataMap: DataMap, addr: number): Path {
     const length = view.getUint16(0x02);
     const segmentRate = view.getFloat32(0x04);
     const pointList = view.getUint32(0x08);
-    const speed = view.getFloat32(0x0C);
+    const duration = view.getFloat32(0x0C);
     const timeList = view.getUint32(0x10);
     const quarticList = view.getUint32(0x14);
 
     const timeData = dataMap.getRange(timeList);
     const times = timeData.data.createTypedArray(Float32Array, timeList - timeData.start, length, Endianness.BIG_ENDIAN);
 
-    let pointCount = length * 3;
+    let pointCount = (length + 2) * 3;
     if (kind === PathKind.Bezier)
         pointCount = length * 9;
-    if (kind === PathKind.Hermite)
-        pointCount = (length + 2) * 3;
+    if (kind === PathKind.Linear)
+        pointCount = length * 3;
 
     const pointData = dataMap.getRange(pointList);
     const points = pointData.data.createTypedArray(Float32Array, pointList - pointData.start, pointCount, Endianness.BIG_ENDIAN);
@@ -818,7 +888,7 @@ function parsePath(dataMap: DataMap, addr: number): Path {
     } else
         quartics = new Float32Array(0);
 
-    return { kind, length, segmentRate, speed, times, points, quartics };
+    return { kind, length, segmentRate, duration, times, points, quartics };
 }
 
 export interface AnimationTrack {
@@ -1010,7 +1080,7 @@ function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
     return {nodes, sharedOutput, animations}
 }
 
-interface GroundPlane {
+export interface GroundPlane {
     normal: vec3; // not actually normalized, really the equation coefficients
     offset: number;
     type: number;
@@ -1025,7 +1095,10 @@ export interface CollisionTree {
 }
 
 export function findGroundHeight(tree: CollisionTree | null, x: number, z: number): number {
-    const plane = findGroundPlane(tree, x / 100, z / 100);
+    return computePlaneHeight(findGroundPlane(tree, x, z), x, z);
+}
+
+export function computePlaneHeight(plane: GroundPlane | null, x: number, z: number): number {
     if (plane === null)
         return 0;
     if (plane.normal[1] === 0)
@@ -1033,9 +1106,17 @@ export function findGroundHeight(tree: CollisionTree | null, x: number, z: numbe
     return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
+const defaultPlane: GroundPlane = {
+    normal: vec3.clone(Vec3UnitY),
+    type: -1,
+    offset: 0,
+};
+
 export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+    x/= 100;
+    z/= 100;
     if (tree === null)
-        return null;
+        return defaultPlane;
     while (true) {
         const test = x * tree.line[0] + z * tree.line[1] + tree.line[2];
         if (test > 0) {
@@ -1086,7 +1167,7 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
             planeList.push({
                 normal: vec3.fromValues(x, z, y), // the plane equation uses z up
                 offset: planeView.getFloat32(start + 0x0C),
-                type: planeView.getUint32(start + 0x10),
+                type: planeView.getUint32(start + 0x10) >>> 8,
             });
         }
         return planeList[index];
@@ -1101,18 +1182,32 @@ function parseCollisionSubtree(treeView: DataView, planeView: DataView, planeLis
 }
 
 export const enum InteractionType {
-    PokefluteA  = 0x05,
-    PokefluteB  = 0x06,
-    PokefluteC  = 0x07,
-    // might have these wrong, there are other "hit" ones, too
-    PesterBall  = 0x09,
-    Hit         = 0x0D,
-    // there seem to be a few apple interactions
-    Apple       = 0x0F,
-    NearPlayer  = 0x10,
+    PokefluteA      = 0x05,
+    PokefluteB      = 0x06,
+    PokefluteC      = 0x07,
+    // sent if a pester ball would have hit if another object hadn't been closer
+    PesterAlmost    = 0x08,
+    PesterHit       = 0x09,
+    PesterLanded    = 0x0A,
+    // Unused         0x0B
 
-    EndMarker   = 0x3A,
-    // not assigned by game
+    // the apple signals are analogous to the pester ball ones
+    AppleAlmost     = 0x0C,
+    AppleHit        = 0x0D,
+    AppleLanded     = 0x0E,
+    FindApple       = 0x0F,
+    NearPlayer      = 0x10,
+    Collision       = 0x11,
+    PhotoTaken      = 0x12, // sent to every object when a photo is taken
+    EnterRoom       = 0x13,
+    GravelerLanded  = 0x14,
+    AppleRemoved    = 0x15,
+    TargetRemoved   = 0x16,
+
+    PhotoSubject    = 0x18,
+
+    EndMarker       = 0x3A,
+    // not used by game
     Basic,
     Random,
     Flag,
@@ -1128,16 +1223,27 @@ export const enum InteractionType {
 
 export interface StateEdge {
     type: InteractionType;
-    index: number;
     param: number;
+    index: number;
+    auxFunc: number;
+}
+
+interface Signal {
+    value: number;
+    target: number;
 }
 
 export interface StateBlock {
     animation: number;
-    motionAddress: number;
+    motion: Motion[] | null;
+    auxAddress: number;
     force: boolean;
-    signal: number;
+    signals: Signal[];
     wait: WaitParams | null;
+    flagSet: number;
+    flagClear: number;
+    ignoreGround?: boolean;
+    eatApple?: boolean;
     edges: StateEdge[];
 }
 
@@ -1155,7 +1261,7 @@ export interface WaitParams {
 interface State {
     startAddress: number;
     blocks: StateBlock[];
-    justRemove: boolean;
+    doCleanup: boolean;
 }
 
 interface StateGraph {
@@ -1179,13 +1285,19 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
     return {states, animations};
 }
 
-const enum GeneralFuncs {
-    SendSignal  = 0x0B830,
+export const enum GeneralFuncs {
+    Signal      = 0x0B774,
+    SignalAll   = 0x0B830,
     Yield       = 0x0BCA8,
+    EndProcess  = 0x08F2C,
+
+    ArcTan      = 0x19ABC,
+    Random      = 0x19DB0,
     RandomInt   = 0x19E14,
+    GetRoom     = 0xE2184,
 }
 
-const enum StateFuncs {
+export const enum StateFuncs {
     SetAnimation    = 0x35F138,
     ForceAnimation  = 0x35F15C,
     SetMotion       = 0x35EDF8,
@@ -1193,17 +1305,24 @@ const enum StateFuncs {
     InteractWait    = 0x35FBF0,
     Wait            = 0x35FC54,
     Random          = 0x35ECAC,
+    RunAux          = 0x35ED90,
+    EndAux          = 0x35EDC8,
 
-    Remove          = 0x35FD70,
-    ClaimApple      = 0x36010C,
+    Cleanup         = 0x35FD70,
+    EatApple        = 0x36010C,
 
     // only in cave
     DanceInteract   = 0x2C1440,
     DanceInteract2  = 0x2C0140,
 }
 
-const enum ObjectField {
+export const enum ObjectField {
     SomeBool        = 0x10,
+    // on the root node
+    TranslationX    = 0x1C,
+    TranslationY    = 0x20,
+    TranslationZ    = 0x24,
+
     MiscFlags       = 0x50, // actually on the parent object
 
     Apple           = 0x64,
@@ -1211,28 +1330,39 @@ const enum ObjectField {
     Behavior        = 0x88,
     StateFlags      = 0x8C,
     Timer           = 0x90,
+    ForwardSpeed    = 0x98,
+    VerticalSpeed   = 0x9C,
+    MovingYaw       = 0xA0,
     LoopTarget      = 0xA4,
     FrameTarget     = 0xA8,
     Transitions     = 0xAC,
 
-    Reference       = 0xB0,
+    StoredValues    = 0xB0,
     Mystery         = 0xC0,
-    BadGround       = 0xCC,
+    GroundList      = 0xCC,
+
+    PathParam       = 0xEC,
 }
 
 export const enum EndCondition {
     Animation   = 0x01,
-    Path        = 0x02,
+    Motion      = 0x02,
     Timer       = 0x04,
-    Motion      = 0x20,
+    Aux         = 0x08,
+    Target      = 0x10,
+    Pause       = 0x20, // used to pause motion, not as a condition
 
-    // handling custom behavior in cave
-    Dance       = 0x100000,
+    Dance       = 0x100000, // special dance-related behavior in cave
+    // actually from a different set of flags
+    Hidden      = 0x200000,
+    PauseAnim   = 0x400000,
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motionAddress === 0 && block.signal === 0;
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined;
 }
+
+const motionParser = new MotionParser();
 
 const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
@@ -1249,7 +1379,7 @@ class StateParser extends MIPS.NaiveInterpreter {
         this.state = {
             startAddress,
             blocks: [],
-            justRemove: false,
+            doCleanup: false,
         };
         this.trivial = true;
         this.stateIndex = -1;
@@ -1277,8 +1407,11 @@ class StateParser extends MIPS.NaiveInterpreter {
             edges: [],
             animation: -1,
             force: false,
-            motionAddress: 0,
-            signal: 0,
+            motion: null,
+            auxAddress: -1,
+            signals: [],
+            flagSet: 0,
+            flagClear: 0,
             wait: null,
         };
     }
@@ -1347,7 +1480,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         type = InteractionType.Unknown;
                     }
                 }
-                this.addEdge({type, param, index});
+                this.addEdge({type, param, index, auxFunc: 0});
             } break;
             case StateFuncs.Random: {
                 let randomStart = a1.value;
@@ -1371,7 +1504,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         break;
                     const stateAddr = randomView.getUint32(offs + 0x04);
                     const state = parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses);
-                    this.addEdge({ type: InteractionType.Random, index: state, param: weight / total });
+                    this.addEdge({ type: InteractionType.Random, index: state, param: weight / total, auxFunc: 0 });
                     offs += 8;
                 }
                 this.done = true;
@@ -1391,7 +1524,13 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.animation = index;
             } break;
             case StateFuncs.SetMotion: {
-                this.currBlock.motionAddress = a1.value;
+                if (a1.value === 0x802D6B14 && this.state.startAddress === 0x802DB4A8)
+                    break; // this function chooses motion based on the behavior param, fix later
+                if (a1.value !== 0) {
+                    motionParser.parse(this.dataMap, a1.value, this.animationAddresses);
+                    this.currBlock.motion = motionParser.blocks;
+                } else
+                    this.currBlock.motion = [];
             } break;
             case StateFuncs.Wait:
                 this.currWait.allowInteraction = false;
@@ -1412,8 +1551,11 @@ class StateParser extends MIPS.NaiveInterpreter {
                     edges: [],
                     animation: -1,
                     force: false,
-                    motionAddress: 0,
-                    signal: 0,
+                    motion: null,
+                    auxAddress: -1,
+                    signals: [],
+                    flagSet: 0,
+                    flagClear: 0,
                     wait: null,
                 };
             } break;
@@ -1436,24 +1578,62 @@ class StateParser extends MIPS.NaiveInterpreter {
                 dummyRegs[0].value = EndCondition.Dance;
                 this.handleFunction(StateFuncs.InteractWait, a0, dummyRegs[0], a2, a3, stackArgs, branch);
             } break;
-
-            case GeneralFuncs.SendSignal: {
+            case GeneralFuncs.Yield: {
+                // this is usually used to yield until the next frame, but can also serve as an interactionless wait
+                // so add a new wait condition to the current block, preserving any data for the next wait
+                if (a0.value > 1) {
+                    this.currBlock.wait = {
+                        allowInteraction: false,
+                        interactions: [],
+                        duration: a0.value / 30,
+                        durationRange: 0,
+                        loopTarget: 0,
+                        endCondition: EndCondition.Timer,
+                    };
+                    this.state.blocks.push(this.currBlock);
+                    this.currBlock = {
+                        edges: [],
+                        animation: -1,
+                        force: false,
+                        motion: null,
+                        auxAddress: -1,
+                        signals: [],
+                        flagSet: 0,
+                        flagClear: 0,
+                        wait: null,
+                    };
+                }
+            } break;
+            case GeneralFuncs.SignalAll: {
                 // only fails because we aren't actually handling conditionals
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
-                this.currBlock.signal = a1.value;
+                this.currBlock.signals.push({value: a1.value, target: 0});
             } break;
+            case GeneralFuncs.Signal: {
+                this.currBlock.signals.push({value: a1.value, target: a0.value});
+            } break;
+            case StateFuncs.RunAux: {
+                if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
+                    this.handleFunction(StateFuncs.SetState, a0, a1, a2, a3, stackArgs, null);
+                    this.done = true;
+                } else
+                    this.currBlock.auxAddress = a1.value;
+            } break;
+            case StateFuncs.EndAux: {
+                assert(this.currBlock.auxAddress === -1);
+                this.currBlock.auxAddress = 0;
+            }
 
             case GeneralFuncs.RandomInt: {
                 this.recentRandom = a0.value;
                 return a0.value;
             }
-            case StateFuncs.Remove: {
-                if (this.state.blocks.length === 0)
-                    this.state.justRemove = true;
+            case StateFuncs.Cleanup: {
+                this.state.doCleanup = true;
             } break;
-            // TODO: figure out apples
-            case StateFuncs.ClaimApple:
-                break;
+            case StateFuncs.EatApple: {
+                this.currBlock.eatApple = true;
+            } break;
             default:
                 this.valid = false;
         }
@@ -1480,17 +1660,15 @@ class StateParser extends MIPS.NaiveInterpreter {
                             break;
                         const stateAddr = tView.getUint32(offs + 0x04);
                         const radius = tView.getFloat32(offs + 0x08);
-                        const otherFunc = tView.getUint32(offs + 0x0C);
+                        const auxFunc = tView.getUint32(offs + 0x0C);
                         offs += 0x10;
 
-                        // TODO: handle the other function
-                        if (stateAddr !== 0) {
-                            this.currWait.interactions.push({
-                                type,
-                                param: radius,
-                                index: parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses),
-                            });
-                        }
+                        this.currWait.interactions.push({
+                            type,
+                            param: radius,
+                            index: stateAddr > 0 ? parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses) : -1,
+                            auxFunc,
+                        });
                     }
                 } break;
                 case ObjectField.Timer: {
@@ -1509,14 +1687,30 @@ class StateParser extends MIPS.NaiveInterpreter {
                     this.currWait.loopTarget = value.value;
                 } break;
 
+                case ObjectField.StateFlags: {
+                    if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
+                        this.currBlock.flagSet |= (value.value >>> 0);
+                    else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
+                        this.currBlock.flagClear |= ~(value.value >>> 0);
+                    else
+                        console.warn('unknown flag op', value.lastOp, hexzero(value.value, 8))
+                } break;
+                case ObjectField.MiscFlags: {
+                    if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
+                        this.currBlock.flagSet |= value.value * EndCondition.Hidden;
+                    else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
+                        this.currBlock.flagClear |= (~value.value) * EndCondition.Hidden;
+                    else if (value.lastOp === MIPS.Opcode.NOP && value.value === 0)
+                        this.currBlock.flagClear |= EndCondition.Hidden | EndCondition.PauseAnim;
+                } break;
+                case ObjectField.GroundList: {
+                    this.currBlock.ignoreGround = value.value !== 0;
+                } break;
                 case ObjectField.SomeBool:
-                case ObjectField.MiscFlags:
                 case ObjectField.FrameTarget:
-                case ObjectField.StateFlags:
                 case ObjectField.Apple:
-                case ObjectField.Reference:
+                case ObjectField.StoredValues:
                 case ObjectField.Mystery:
-                case ObjectField.BadGround:
                     break;
 
                 default:
@@ -1534,10 +1728,6 @@ class StateParser extends MIPS.NaiveInterpreter {
             this.state.blocks.push(this.currBlock);
     }
 
-    protected handleUnknown(op: MIPS.Opcode) {
-        this.valid = false; // keep going for state discovery, we'll fix the details later
-    }
-
     private addEdge(edge: StateEdge): void {
         if (emptyStateBlock(this.currBlock) && this.state.blocks.length > 0) {
             // we haven't done anything since the last block, so append it there
@@ -1551,8 +1741,11 @@ class StateParser extends MIPS.NaiveInterpreter {
                 edges: [],
                 animation: -1,
                 force: false,
-                motionAddress: 0,
-                signal: 0,
+                motion: null,
+                auxAddress: -1,
+                signals: [],
+                flagSet: 0,
+                flagClear: 0,
                 wait: null,
             };
         }
@@ -1573,6 +1766,8 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
     return parser.stateIndex;
 }
 
+export const fakeAux = 0x123456;
+
 // make minor changes to specific states
 function fixupState(state: State): void {
     switch (state.startAddress) {
@@ -1591,6 +1786,51 @@ function fixupState(state: State): void {
             state.blocks[0].edges[0].param = 3;
             state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[1].param = 4;
+        } break;
+        // does one of two options based on distance - we just take the first
+        case 0x802DDB60: {
+            state.blocks[0].edges.push(state.blocks[1].edges[1]);
+            state.blocks.splice(1);
+        } break;
+        // ignore porygon camera shot loop
+        case 0x802DD398: {
+            state.blocks[0].edges = [];
+        } break;
+        // squirtle clears its bobbing behavior in an odd way
+        case 0x802CB9BC:
+        case 0x802CBC74:
+        case 0x802CBD74: {
+            state.blocks[0].auxAddress = 0;
+        } break;
+        // for some reason follows the ground in an aux process
+        // do it the easy way instead
+        case 0x802CC104: {
+            (state.blocks[1].motion![0] as FollowPath).flags = 0x3;
+            state.blocks[1].auxAddress = 0;
+        } break;
+        // add fake handling for lapras photo interaction
+        case 0x802C7F74: {
+            state.blocks[0].wait!.allowInteraction = true;
+            state.blocks[0].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[1].wait!.allowInteraction = true;
+            state.blocks[1].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+        } break;
+        // these use doubles for the increment, easier to just fix by hand
+        case 0x802CB9BC: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -60;
+        } break;
+        case 0x802CBC74: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -15;
+        } break;
+        case 0x802DFCD0: {
+            assert(state.blocks[0].motion![0].kind === "linear");
+            state.blocks[0].motion![0].velocity[1] = -150;
+        } break;
+        case 0x802DFA5C: {
+            assert(state.blocks[3].motion![0].kind === "linear");
+            state.blocks[3].motion![0].velocity[1] = -150;
         } break;
     }
 }

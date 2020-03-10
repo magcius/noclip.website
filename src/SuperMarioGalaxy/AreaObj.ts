@@ -1,12 +1,12 @@
 
 import { vec3, mat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
-import { SceneObjHolder, getObjectName } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
 import { computeModelMatrixR } from "../MathHelpers";
 import { AABB } from "../Geometry";
-import { vecKillElement } from "./MiscActor";
 import { NameObj } from "./NameObj";
+import { vecKillElement } from "./ActorUtil";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx
@@ -178,7 +178,7 @@ class AreaFormBowl implements AreaFormBase {
     }
 }
 
-export class AreaObj extends NameObj {
+export abstract class AreaObj extends NameObj {
     private form: AreaFormBase;
     private aliveScenario: boolean = true;
 
@@ -196,7 +196,9 @@ export class AreaObj extends NameObj {
         else if (formType === AreaFormType.Bowl)
             this.form = new AreaFormBowl(sceneObjHolder, infoIter);
 
-        // TODO(jstpierre): Push to AreaObjMgr?
+        sceneObjHolder.create(SceneObj.AreaObjContainer);
+        const areaObjMgr = sceneObjHolder.areaObjContainer!.getManager(this.getManagerName());
+        areaObjMgr.entry(this);
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
@@ -206,6 +208,8 @@ export class AreaObj extends NameObj {
     public isInVolume(v: vec3): boolean {
         return this.aliveScenario && this.form.isInVolume(v);
     }
+
+    public abstract getManagerName(): string;
 }
 
 export class AreaObjMgr<T extends AreaObj> extends NameObj {

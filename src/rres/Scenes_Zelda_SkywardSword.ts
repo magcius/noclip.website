@@ -335,7 +335,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, ZSSPass.SKYBOX);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
@@ -343,7 +342,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         let lastPassRenderer: GfxRenderPass;
         if (hasAnyVisible(this.renderHelper.renderInstManager, ZSSPass.INDIRECT)) {
-            opaquePassRenderer.endPass();
             device.submitPass(opaquePassRenderer);
 
             // IndTex.

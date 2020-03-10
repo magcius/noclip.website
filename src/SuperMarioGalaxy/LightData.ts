@@ -6,7 +6,7 @@ import { Light } from "../gx/gx_material";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { SceneObjHolder } from "./Main";
+import { SceneObjHolder, SceneObj } from "./Main";
 import { ColorKind, MaterialParams } from "../gx/gx_render";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
@@ -202,7 +202,9 @@ export class ActorLightCtrl {
     public reset(sceneObjHolder: SceneObjHolder): void {
         this.zoneLightId.clear();
 
-        const found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
+        let found = false;
+        if (sceneObjHolder.lightDirector.lightAreaHolder !== null)
+            found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
 
         if (found) {
             this.resetCurrentLightInfo(sceneObjHolder);
@@ -246,7 +248,9 @@ export class ActorLightCtrl {
     }
 
     private tryFindNewAreaLight(sceneObjHolder: SceneObjHolder, immediate: boolean = false): void {
-        const found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
+        let found = false;
+        if (sceneObjHolder.lightDirector.lightAreaHolder !== null)
+            found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
 
         if (found) {
             if (this.currentAreaLight !== null) {
@@ -333,11 +337,11 @@ export class LightDataHolder {
     }
 }
 
-export class LightDirector {
-    public lightAreaHolder: LightAreaHolder;
+export class LightDirector extends NameObj {
+    public lightAreaHolder: LightAreaHolder | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, public lightDataHolder: LightDataHolder) {
-        this.lightAreaHolder = new LightAreaHolder(sceneObjHolder);
+        super(sceneObjHolder, 'LightDirector');
     }
 
     public findDefaultAreaLight(sceneObjHolder: SceneObjHolder): AreaLightInfo {
@@ -379,6 +383,7 @@ class ZoneLightId {
 export class LightAreaHolder extends AreaObjMgr<LightArea> {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, "LightArea");
+        sceneObjHolder.lightDirector.lightAreaHolder = this;
     }
 
     public initAfterPlacement(): void {
@@ -427,8 +432,10 @@ export class LightArea extends AreaObj {
         this.zoneId = zoneAndLayer.zoneId;
         this.lightId = fallback(getJMapInfoArg0(infoIter), -1);
         this.priority = fallback(getJMapInfoArg1(infoIter), -1);
+    }
 
-        sceneObjHolder.lightDirector.lightAreaHolder.entry(this);
+    public getManagerName(): string {
+        return 'LightArea';
     }
 }
 

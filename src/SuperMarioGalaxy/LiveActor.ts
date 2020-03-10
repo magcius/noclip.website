@@ -18,7 +18,7 @@ import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
-import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 
@@ -229,8 +229,8 @@ export class ModelManager {
     }
 
     public isBckStopped(): boolean {
-        // TODO(jstpierre): Play flags
-        return this.xanimePlayer!.frameCtrl.speedInFrames === 0.0;
+        const bckCtrl = this.xanimePlayer!.frameCtrl;
+        return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
     }
 
     public getBtkCtrl(): J3DFrameCtrl {
@@ -245,6 +245,10 @@ export class ModelManager {
         return this.btkPlayer!.isPlaying(name);
     }
 
+    public isBtkStopped(): boolean {
+        return this.btkPlayer!.isStop();
+    }
+
     public getBrkCtrl(): J3DFrameCtrl {
         return this.brkPlayer!.frameCtrl;
     }
@@ -255,6 +259,10 @@ export class ModelManager {
 
     public isBrkPlaying(name: string): boolean {
         return this.brkPlayer!.isPlaying(name);
+    }
+
+    public isBrkStopped(): boolean {
+        return this.brkPlayer!.isStop();
     }
 
     public getBtpCtrl(): J3DFrameCtrl {
@@ -269,6 +277,10 @@ export class ModelManager {
         return this.btpPlayer!.isPlaying(name);
     }
 
+    public isBtpStopped(): boolean {
+        return this.btpPlayer!.isStop();
+    }
+
     public getBpkCtrl(): J3DFrameCtrl {
         return this.bpkPlayer!.frameCtrl;
     }
@@ -281,6 +293,10 @@ export class ModelManager {
         return this.bpkPlayer!.isPlaying(name);
     }
 
+    public isBpkStopped(): boolean {
+        return this.bpkPlayer!.isStop();
+    }
+
     public getBvaCtrl(): J3DFrameCtrl {
         return this.bvaPlayer!.frameCtrl;
     }
@@ -291,6 +307,10 @@ export class ModelManager {
 
     public isBvaPlaying(name: string): boolean {
         return this.bvaPlayer!.isPlaying(name);
+    }
+
+    public isBvaStopped(): boolean {
+        return this.bvaPlayer!.isStop();
     }
 }
 
@@ -496,7 +516,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         this.calcAndSetBaseMtxBase();
     }
 
@@ -517,7 +537,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // calcAnmMtx
         vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(viewerInput);
+        this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.modelManager.calcAnim(viewerInput);
     }
 
@@ -562,39 +582,57 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.calcGravityFlag)
+            calcGravity(sceneObjHolder, this);
+
         if (this.hitSensorKeeper !== null)
             this.hitSensorKeeper.doObjCol();
 
-        if (this.visibleAlive) {
-            const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        if (!this.visibleAlive)
+            return;
 
-            if (this.calcGravityFlag)
-                calcGravity(sceneObjHolder, this);
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
-            if (this.modelManager !== null)
-                this.modelManager.update(deltaTimeFrames);
+        if (this.modelManager !== null)
+            this.modelManager.update(deltaTimeFrames);
 
-            // TODO(jstpierre): Split out updateSpine to a vfunc or something.
-            if (this.spine !== null)
-                this.spine.update(deltaTimeFrames);
-
-            // TODO(jstpierre): Add control vfunc here.
-
-            // updateBinder
-            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
-
-            if (this.effectKeeper !== null) {
-                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
-                this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-            }
-
-            if (this.actorLightCtrl !== null)
-                this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
-
-            if (this.hitSensorKeeper !== null)
-                this.hitSensorKeeper.update();
+        if (this.spine !== null) {
+            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
+            this.spine.update(deltaTimeFrames);
         }
+
+        if (!this.visibleAlive)
+            return;
+
+        this.control(sceneObjHolder, viewerInput);
+
+        if (!this.visibleAlive)
+            return;
+
+        // updateBinder()
+        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+
+        // EffectKeeper::update()
+        if (this.effectKeeper !== null) {
+            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
+            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
+        }
+
+        // ActorPadAndCameraCtrl::update()
+
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+
+        // tryUpdateHitSensorsAll()
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
     }
 }
 

@@ -162,6 +162,37 @@ export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean
     }
 }
 
+/**
+ * Transforms the vector {@param v} by the 4x3 matrix {@param m}, assuming that the implied W component is 1.
+ * This is similar to {@see vec3.transformMat4}, except a bit faster as it assumes an affine matrix.
+ *
+ * Note that this assumes an affine (4x3) matrix, the projective components are simply ignored.
+ * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
+ * matrices just fine, including the divide by W.
+ */
+export function transformVec3Mat4w1(dst: vec3, m: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] = m[0] * x + m[4] * y + m[8]  * z + m[12];
+    dst[1] = m[1] * x + m[5] * y + m[9]  * z + m[13];
+    dst[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+}
+
+/**
+ * Transforms the vector {@param v} by the 4x3 matrix {@param m}, assuming that the implied W component is 0.
+ * This is similar to {@see vec3.transformMat4}, except that translation is ignored, as a consequence of assuming
+ * the W component is 0.
+ *
+ * Note that this assumes an affine (4x3) matrix, the projective components are simply ignored.
+ * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
+ * matrices just fine, including the divide by W.
+ */
+export function transformVec3Mat4w0(dst: vec3, m: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] = m[0] * x + m[4] * y + m[8] * z;
+    dst[1] = m[1] * x + m[5] * y + m[9] * z;
+    dst[2] = m[2] * x + m[6] * y + m[10] * z;
+}
+
 const scratchVec3 = vec3.create();
 
 /**
@@ -473,3 +504,11 @@ export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitX = vec3.fromValues(1, 0, 0);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);
 export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
+
+const baseBuffer = new ArrayBuffer(4);
+const asFloat32 = new Float32Array(baseBuffer);
+const asUint32 = new Uint32Array(baseBuffer);
+export function bitsAsFloat32(x: number): number {
+    asUint32[0] = (x >>> 0) & 0xFFFFFFFF;
+    return asFloat32[0];
+}

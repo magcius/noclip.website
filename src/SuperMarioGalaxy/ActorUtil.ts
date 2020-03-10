@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -125,14 +125,16 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x2A, -1, -1, -1);
 }
 
+export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
 
 export function isBckStopped(actor: LiveActor): boolean {
-    const bckCtrl = actor.modelManager!.getBckCtrl();
-    // TODO(jstpierre): Add stopped flags?
-    return bckCtrl.speedInFrames === 0.0;
+    return actor.modelManager!.isBckStopped();
 }
 
 export function getBckFrameMax(actor: LiveActor): number {
@@ -333,6 +335,11 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function setBvaRate(actor: LiveActor, rate: number): void {
+    const ctrl = actor.modelManager!.getBvaCtrl();
+    ctrl.speedInFrames = rate;
+}
+
 export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
     // TODO(jstpierre): Support stopped flag?
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
@@ -364,6 +371,23 @@ export function isBpkPlaying(actor: LiveActor, name: string): boolean {
 
 export function isBvaPlaying(actor: LiveActor, name: string): boolean {
     return actor.modelManager!.isBvaPlaying(name);
+}
+
+export function isAnyAnimStopped(actor: LiveActor, name: string): boolean {
+    // TODO(jstpierre): I can't figure out what actually checks that the animation *was* playing. Weird.
+    if (!isBckExist(actor, name) || !actor.modelManager!.isBckStopped())
+        return false;
+    if (!isBtkExist(actor, name) || !actor.modelManager!.isBtkStopped())
+        return false;
+    if (!isBpkExist(actor, name) || !actor.modelManager!.isBpkStopped())
+        return false;
+    if (!isBtpExist(actor, name) || !actor.modelManager!.isBtpStopped())
+        return false;
+    if (!isBrkExist(actor, name) || !actor.modelManager!.isBrkStopped())
+        return false;
+    if (!isBvaExist(actor, name) || !actor.modelManager!.isBvaStopped())
+        return false;
+    return true;
 }
 
 export function isActionStart(actor: LiveActor, action: string): boolean {
@@ -488,6 +512,10 @@ export function adjustmentRailCoordSpeed(actor: LiveActor, target: number, maxSp
     actor.railRider!.setSpeed(target);
 }
 
+export function moveCoordToNearestPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(actor.translation);
+}
+
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     actor.railRider!.moveToNearestPos(actor.translation);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
@@ -510,6 +538,10 @@ export function moveCoord(actor: LiveActor, speed: number): void {
 
 export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
     moveCoord(actor, speed);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveTransToCurrentRailPos(actor: LiveActor): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
@@ -798,4 +830,30 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
+}
+
+export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+    const m = vec3.dot(a, b);
+    dst[0] = a[0] - b[0]*m;
+    dst[1] = a[1] - b[1]*m;
+    dst[2] = a[2] - b[2]*m;
+    return m;
+}
+
+function getMaxAbsElementIndex(v: vec3): number {
+    const x = Math.abs(v[0]);
+    const y = Math.abs(v[1]);
+    const z = Math.abs(v[2]);
+    if (x > z && y > z)
+        return 0;
+    else if (y > z)
+        return 1;
+    else
+        return 2;
+}
+
+export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
+    const max = getMaxAbsElementIndex(up);
+    const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
+    makeMtxUpFrontPos(dst, up, front, pos);
 }
