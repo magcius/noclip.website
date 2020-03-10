@@ -68,7 +68,7 @@ export class WebXRContext {
         const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
-        this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
+        this.xrSession.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 
     public end() {
@@ -77,9 +77,9 @@ export class WebXRContext {
         this.xrSession = null;
     }
 
-    private onXRFrame(time: number, frame: XRFrame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(this.xrLocalSpace);
+    private _onRequestAnimationFrame = (time: number, frame: XRFrame): void => {
+        const session = frame.session;
+        const pose = frame.getViewerPose(this.xrLocalSpace);
 
         this.currentFrame = frame;
 
@@ -89,6 +89,6 @@ export class WebXRContext {
         if (this.onframe !== null)
             this.onframe(time);
 
-        session.requestAnimationFrame(this.onXRFrame.bind(this));
+        session.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 }

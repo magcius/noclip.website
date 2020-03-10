@@ -17,8 +17,7 @@ import { MathConstants } from './MathHelpers';
 
 export interface ViewerUpdateInfo {
     time: number;
-    isWebXR: boolean;
-    webXRContext?: WebXRContext | null;
+    webXRContext: WebXRContext | null;
 }
 
 export interface Texture {
@@ -303,19 +302,11 @@ export class Viewer {
         this.viewerRenderInput.deltaTime += deltaTime;
         this.sceneTime += deltaTime;
 
-        this.render();
-
-        if (updateInfo.isWebXR && updateInfo.webXRContext) {
-            // Ensure the number of xr cameras matches the number of views
-            if (updateInfo.webXRContext.views.length != this.xrCameraController.cameras.length) {
-                for (let i = this.xrCameraController.cameras.length; i < updateInfo.webXRContext.views.length; i++) {
-                    this.xrCameraController.cameras.push(new Camera());
-                }
-                this.xrCameraController.cameras.splice(updateInfo.webXRContext.views.length);
-            }
-
+        if (updateInfo.webXRContext !== null) {
             this.xrCameraController.update(updateInfo.webXRContext);
             this.renderWebXR(updateInfo.webXRContext);
+        } else {
+            this.render();
         }
 
         // Reset the delta for next frame.

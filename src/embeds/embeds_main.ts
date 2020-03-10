@@ -111,7 +111,7 @@ class Main {
 
         this.updateInfo = {
             time: 0,
-            isWebXR: false
+            webXRContext: null,
         };
         this._updateLoop(0);
     }

@@ -166,6 +166,26 @@ const enum SaveStatesAction {
     Delete
 };
 
+// https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
+// https://github.com/WICG/requestPostAnimationFrame
+// https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
+class PostAnimationFrame implements ViewerUpdateInfo {
+    public time: number = 0;
+    public webXRContext: WebXRContext | null = null;
+
+    public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
+
+    private _timeoutCallback = (): void => {
+        this.onupdate(this);
+    };
+
+    // Call this from within your requestAnimationFrame handler.
+    public requestPostAnimationFrame(time: number): void {
+        this.time = time;
+        setTimeout(this._timeoutCallback, 0);
+    }
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -188,7 +208,8 @@ class Main {
 
     public sceneTimeScale = 1.0;
 
-    private updateInfo: ViewerUpdateInfo;
+    private postAnimFrameCanvas = new PostAnimationFrame();
+    private postAnimFrameWebXR = new PostAnimationFrame();
     private webXRContext: WebXRContext;
 
     constructor() {
@@ -208,7 +229,11 @@ class Main {
         }
 
         this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = this._onWebXRFrame.bind(this);
+        this.webXRContext.onframe = () => this.postAnimFrameWebXR;
+
+        this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
+        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
+        this.postAnimFrameWebXR.webXRContext = this.webXRContext;
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -269,11 +294,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this.updateInfo = {
-            time: 0,
-            isWebXR: false
-        };
-        this._updateLoop(window.performance.now());
+        this._onRequestAnimationFrame(window.performance.now());
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -364,30 +385,16 @@ class Main {
         }
     }
 
-    private _onWebXRFrame(time: number) {
-        if (!this.paused) {
-            this.updateInfo.time = time;
-            this.updateInfo.isWebXR = true;
-            this.updateInfo.webXRContext = this.webXRContext;
-            this._runUpdate(this.updateInfo);
-        }
-    }
-
     public setPaused(v: boolean): void {
-        if (this.paused === v)
-            return;
-
-        this.paused = true;
-        if (!this.paused)
-            window.requestAnimationFrame(this._updateLoop);
+        this.paused = v;
     }
 
-    private _runUpdate(updateInfo: ViewerUpdateInfo) {
+    private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
-        // Needs to be called before this.viewer.update
+        // Needs to be called before this.viewer.update()
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
@@ -398,17 +405,11 @@ class Main {
             this._takeScreenshot();
 
         this.ui.update();
-    }
+    };
 
-    private _updateLoop = (time: number) => {
-        if (this.paused)
-            return;
-        
-        this.updateInfo.time = time;
-        this.updateInfo.isWebXR = false;
-        this._runUpdate(this.updateInfo);
-        
-        window.requestAnimationFrame(this._updateLoop);
+    private _onRequestAnimationFrame = (time: number): void => {
+        this.postAnimFrameCanvas.requestPostAnimationFrame(time);
+        window.requestAnimationFrame(this._onRequestAnimationFrame);
     };
 
     private async _onDrop(e: DragEvent) {

@@ -464,12 +464,11 @@ export class XRCameraController {
 
     public update(webXRContext: WebXRContext): boolean {
         let updated = false;
-        
-        if (!webXRContext.xrSession) {
-            return false;
-        }
 
-        let inputSources = webXRContext.xrSession.inputSources;
+        if (!webXRContext.xrSession)
+            return false;
+
+        const inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
         const keyMovement = vec3.create();
@@ -483,7 +482,7 @@ export class XRCameraController {
                 }
             }
         }
-               
+
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {            
             const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
@@ -497,6 +496,13 @@ export class XRCameraController {
             }
 
             updated = true;
+        }
+
+        // Ensure the number of XR cameras matches the number of views
+        if (webXRContext.views.length !== this.cameras.length) {
+            for (let i = this.cameras.length; i < webXRContext.views.length; i++)
+                this.cameras.push(new Camera());
+            this.cameras.length = webXRContext.views.length;
         }
 
         assert(this.cameras.length === webXRContext.views.length);
@@ -553,7 +559,7 @@ export class XRCameraController {
             reverseDepthForPerspectiveProjectionMatrix(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
-        
+
             updated = true;
         }
 
