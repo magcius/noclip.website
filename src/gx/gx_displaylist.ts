@@ -572,10 +572,7 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
         }
 
         function compileOneAttribMtxIdx(viewName: string, attrOffs: string): string {
-            const dstComponentCount = getFormatComponentCount(dstAttribLayout!.format);
             const dstOffs = dstAttribLayout!.bufferOffset;
-            assert(dstComponentCount === 1);
-
             const value = `${viewName}.getUint8(${attrOffs})`;
             return compileWriteOneComponentU8(dstOffs, value);
         }
