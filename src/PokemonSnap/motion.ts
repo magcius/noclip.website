@@ -8,28 +8,28 @@ import { ViewerRenderInput } from "../viewer";
 import { LevelGlobals } from "./actor";
 
 const enum MotionFuncs {
-    PathPoint = 0x01FCA4,
-    NodePos = 0x0A5E98,
-    FindGround = 0x0E41D8,
+    PathPoint       = 0x01FCA4,
+    NodePos         = 0x0A5E98,
+    FindGround      = 0x0E41D8,
 
-    RiseBy = 0x360300,
-    RiseTo = 0x36044C,
-    FallBy = 0x360590,
-    FallTo = 0x3606E8,
-    Projectile = 0x360AB8,
-    MoveForward = 0x360F1C,
-    RandomCircle = 0x361110,
-    GetSong = 0x361440,
-    FaceTarget = 0x36148C,
-    WalkToTarget = 0x361748,
-    WalkToTarget2 = 0x36194C,     // functionally identical
-    SetTarget = 0x361B50,
-    StepToPoint = 0x361B68,
-    ApproachPoint = 0x361E58,
-    ResetPos = 0x362050,
-    Path = 0x3620C8,
-    WaterSplash = 0x35E174,
-    SplashOnImpact = 0x35E298,
+    RiseBy          = 0x360300,
+    RiseTo          = 0x36044C,
+    FallBy          = 0x360590,
+    FallTo          = 0x3606E8,
+    Projectile      = 0x360AB8,
+    MoveForward     = 0x360F1C,
+    RandomCircle    = 0x361110,
+    GetSong         = 0x361440,
+    FaceTarget      = 0x36148C,
+    WalkToTarget    = 0x361748,
+    WalkFromTarget  = 0x36194C,
+    SetTarget       = 0x361B50,
+    StepToPoint     = 0x361B68,
+    ApproachPoint   = 0x361E58,
+    ResetPos        = 0x362050,
+    Path            = 0x3620C8,
+    WaterSplash     = 0x35E174,
+    SplashOnImpact  = 0x35E298,
 }
 
 export class MotionData {
@@ -120,6 +120,7 @@ interface WalkToTarget {
     radius: number;
     maxTurn: number;
     flags: number;
+    away: boolean;
 }
 
 interface Vertical {
@@ -338,12 +339,13 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                 });
             } break;
             case MotionFuncs.WalkToTarget:
-            case MotionFuncs.WalkToTarget2: {
+            case MotionFuncs.WalkFromTarget: {
                 this.blocks.push({
                     kind: "walkToTarget",
                     radius: this.getFloatValue(a1),
                     maxTurn: this.getFloatValue(a2),
                     flags: a3.value | MoveFlags.Ground,
+                    away: func === MotionFuncs.WalkFromTarget,
                 });
             } break;
             case MotionFuncs.FaceTarget: {
@@ -775,14 +777,15 @@ export function walkToTarget(pos: vec3, euler: vec3, data: MotionData, block: Wa
             return MotionResult.Done;
         vec3.copy(data.refPosition, target.translation);
     }
-    const yawToTarget = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
+    const yawToTarget = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]) + (block.away ? Math.PI : 0);
     vec3.copy(posScratch, pos);
     posScratch[0] += data.forwardSpeed * dt * Math.sin(yawToTarget);
     posScratch[2] += data.forwardSpeed * dt * Math.cos(yawToTarget);
     if (attemptMove(pos, posScratch, data, globals, block.flags))
         return MotionResult.Done;
     stepYawTowards(euler, yawToTarget, block.maxTurn, dt);
-    if (vec3.dist(data.refPosition, pos) < block.radius) {
+    // if away, end on farther than radius, otherwise end on closer than radius
+    if (vec3.dist(data.refPosition, pos) < block.radius !== block.away) {
         data.stateFlags |= EndCondition.Target;
         return MotionResult.Done;
     }

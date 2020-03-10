@@ -1035,7 +1035,6 @@ function vtxLoaderDescEqual(a: VtxLoaderDesc, b: VtxLoaderDesc): boolean {
 }
 
 const cache = new HashMap<VtxLoaderDesc, VtxLoader>(vtxLoaderDescEqual, nullHashFunc);
-window.debug = cache;
 function compileVtxLoaderDesc(desc: VtxLoaderDesc): VtxLoader {
     let loader = cache.get(desc);
     if (loader === null) {
