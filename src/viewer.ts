@@ -227,13 +227,8 @@ export class Viewer {
 
         for (let i = 0; i < webXRContext.views.length; i++) {
             this.viewerRenderInput.camera = this.xrCameraController.cameras[i];
-<<<<<<< HEAD
-            let xrView: XRView = webXRContext.views[i];
-            let xrViewPort: XRViewport = baseLayer.getViewport(xrView);
-=======
             const xrView: XRView = webXRContext.views[i];
             const xrViewPort: XRViewport = baseLayer.getViewport(xrView);
->>>>>>> b325765de85c6a841d4d45906fca2aba9e749308
 
             if (!xrViewPort) {
                 continue;

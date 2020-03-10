@@ -229,7 +229,10 @@ class Main {
         }
 
         this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = () => this.postAnimFrameWebXR;
+        this.webXRContext.onframe = (time: number) => {
+            this.postAnimFrameWebXR.time = time;
+            this.postAnimFrameWebXR.onupdate(this.postAnimFrameWebXR);
+        }
 
         this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
         this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
