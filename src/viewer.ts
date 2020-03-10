@@ -168,6 +168,7 @@ export class Viewer {
             // Resolve.
             this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
             this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+            this.resolveRenderPassDescriptor.depthStencilAttachment = descriptor.depthStencilAttachment;
             const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
             this.gfxDevice.submitPass(resolvePass);
         }
