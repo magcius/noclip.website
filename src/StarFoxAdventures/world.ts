@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
@@ -48,6 +48,7 @@ function vecPitch(v: vec3): number {
 }
 
 interface ObjectSphere {
+    name: string;
     pos: vec3;
     radius: number;
 }
@@ -237,15 +238,19 @@ class WorldRenderer extends SFARenderer {
         //     this.copyToSceneTexture(device);
         // }
 
+        const ctx = getDebugOverlayCanvas2D();
+
         let objtemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);
         this.objddraw.beginDraw();
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < this.objectSpheres.length; i++) {
             const obj = this.objectSpheres[i];
 
             // TODO: draw sphere
-            // XXX: radius is too big to be workable. Or sometimes it's 0.
-            obj.radius = 64;
+            // XXX: radius is too big to be workable. Or sometimes it's 0. Set it to a default.
+            obj.radius = 8;
+
+            drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined, {font: '8pt sans-serif'});
             
             this.objddraw.begin(GX.Command.DRAW_QUADS);
             this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
@@ -320,15 +325,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 z: romlist.getFloat32(offs + 0x10),
             };
 
+            const obj = objectMan.loadObject(fields.objType);
+
             objectSpheres.push({
+                name: obj.name,
                 pos: vec3.fromValues(fields.x, fields.y, fields.z),
                 radius: fields.radius
             });
 
-            // console.log(`Object ${i}: ${JSON.stringify(fields, null, '\t')}`);
-
-            const obj = objectMan.loadObject(fields.objType);
-            // console.log(`${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+            console.log(`Object #${i}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
 
             offs += fields.entrySize * 4;
             i++;

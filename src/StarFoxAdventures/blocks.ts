@@ -81,7 +81,7 @@ export class BlockCollection implements IBlockCollection {
 }
 
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
-// in the the sequence.
+// in the sequence.
 class LowBitReader {
     dv: DataView
     offs: number

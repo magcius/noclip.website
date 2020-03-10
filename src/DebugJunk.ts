@@ -249,7 +249,11 @@ export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camer
     drawViewportSpacePoint(ctx, x, y, color, size);
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta): void {
+interface TextOptions {
+    font?: string;
+}
+
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);
@@ -261,7 +265,7 @@ export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'start';
-    ctx.font = '14pt monospace';
+    ctx.font = options.font ?? '14pt monospace';
     ctx.fillText(text, x, y + offsY);
 }
 
