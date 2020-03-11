@@ -20,7 +20,7 @@ import { assertExists } from "./util";
     // Scaling up and going close causes cross eye. Probably need to move the near plane out
 
 export class WebXRContext {
-    public xrSession: XRSession | null;
+    public xrSession: XRSession | null = null;
     public xrViewSpace: XRReferenceSpace;
     public xrLocalSpace: XRReferenceSpace;
 
