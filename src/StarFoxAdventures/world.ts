@@ -250,7 +250,8 @@ class WorldRenderer extends SFARenderer {
             // XXX: radius is too big to be workable. Or sometimes it's 0. Set it to a default.
             obj.radius = 8;
 
-            drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined, {font: '8pt sans-serif'});
+            drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined,
+                {font: '8pt sans-serif', outline: 2.0});
             
             this.objddraw.begin(GX.Command.DRAW_QUADS);
             this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
@@ -298,6 +299,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const mapSceneInfo = await loadMap(device, context, 7, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
+
+        // Translate map for SFA world coordinates
+        const mapMatrix = mat4.create();
+        mat4.fromTranslation(mapMatrix, vec3.fromValues(0, 0, -640));
+        mapInstance.setMatrix(mapMatrix);
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
