@@ -28,6 +28,8 @@ export class WebXRContext {
 
     public onframe: ((time: number) => void) | null = null;
     public onsupportedchanged: (() => void) | null = null;
+    public onstart: (() => void) | null = null;
+    public onend: (() => void) | null = null;
 
     public currentFrame: XRFrame;
 
@@ -68,6 +70,9 @@ export class WebXRContext {
         const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
+        if (this.onstart !== null)
+            this.onstart();
+
         this.xrSession.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 
@@ -75,6 +80,9 @@ export class WebXRContext {
         if (this.xrSession)
             this.xrSession.end();
         this.xrSession = null;
+
+        if (this.onend !== null)
+            this.onend();
     }
 
     private _onRequestAnimationFrame = (time: number, frame: XRFrame): void => {

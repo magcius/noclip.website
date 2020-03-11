@@ -166,26 +166,25 @@ const enum SaveStatesAction {
     Delete
 };
 
-// https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
-// https://github.com/WICG/requestPostAnimationFrame
-// https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
-class PostAnimationFrame implements ViewerUpdateInfo {
+class AnimationLoop implements ViewerUpdateInfo {
     public time: number = 0;
     public webXRContext: WebXRContext | null = null;
 
     public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
 
-    // This is turned off now, because it breaks WebXR.
-    private usePostRequestAnimationFrame = false;
+    // https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
+    // https://github.com/WICG/requestPostAnimationFrame
+    // https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
+    public useRequestPostAnimationFrame = true;
 
     private _timeoutCallback = (): void => {
         this.onupdate(this);
     };
 
     // Call this from within your requestAnimationFrame handler.
-    public requestPostAnimationFrame = (time: number): void => {
+    public requestPostAnimationFrame = (): void => {
         this.time = window.performance.now();
-        if (this.usePostRequestAnimationFrame)
+        if (this.useRequestPostAnimationFrame)
             setTimeout(this._timeoutCallback, 0);
         else
             this.onupdate(this);
@@ -212,8 +211,8 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
-    private postAnimFrameCanvas = new PostAnimationFrame();
-    private postAnimFrameWebXR = new PostAnimationFrame();
+    private postAnimFrameCanvas = new AnimationLoop();
+    private postAnimFrameWebXR = new AnimationLoop();
     private webXRContext: WebXRContext;
 
     public sceneTimeScale = 1.0;
@@ -238,8 +237,11 @@ class Main {
         this.webXRContext.onframe = this.postAnimFrameWebXR.requestPostAnimationFrame;
 
         this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
-        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
+
+        // requestPostAnimationFrame breaks WebXR. TODO(jstpierre): Try postMessage hack.
         this.postAnimFrameWebXR.webXRContext = this.webXRContext;
+        this.postAnimFrameWebXR.useRequestPostAnimationFrame = false;
+        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -300,7 +302,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this._onRequestAnimationFrame(window.performance.now());
+        this._onRequestAnimationFrameCanvas();
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -412,9 +414,14 @@ class Main {
         this.ui.update();
     };
 
-    private _onRequestAnimationFrame = (time: number): void => {
-        this.postAnimFrameCanvas.requestPostAnimationFrame(time);
-        window.requestAnimationFrame(this._onRequestAnimationFrame);
+    private _onRequestAnimationFrameCanvas = (): void => {
+        if (this.webXRContext.xrSession !== null) {
+            // Currently presenting to XR. Skip the canvas render.
+        } else {
+            this.postAnimFrameCanvas.requestPostAnimationFrame();
+        }
+
+        window.requestAnimationFrame(this._onRequestAnimationFrameCanvas);
     };
 
     private async _onDrop(e: DragEvent) {
