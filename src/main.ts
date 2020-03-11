@@ -184,7 +184,7 @@ class PostAnimationFrame implements ViewerUpdateInfo {
 
     // Call this from within your requestAnimationFrame handler.
     public requestPostAnimationFrame = (time: number): void => {
-        this.time = time;
+        this.time = window.performance.now();
         if (this.usePostRequestAnimationFrame)
             setTimeout(this._timeoutCallback, 0);
         else
@@ -368,10 +368,9 @@ class Main {
     }
 
     private async _onWebXRStateRequested(state: boolean) {
-        if (!this.webXRContext) {
+        if (!this.webXRContext)
             return;
-        }
-        
+
         if (state) {
             try {
                 await this.webXRContext.start();
