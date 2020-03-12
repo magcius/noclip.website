@@ -10,8 +10,10 @@ import { SaveManager, SaveStateLocation } from '../SaveManager';
 import { SceneGfx } from '../viewer';
 import { getDataURLForPath } from '../DataFetcher';
 
+const ProviderKey = 'SceneDescLocation' as const;
+
 export interface SceneDescLocation extends LocationBase {
-    loaderKey: 'SceneDescLocation';
+    loaderKey: typeof ProviderKey;
 
     sceneGroup: SceneGroup;
     sceneDesc: SceneDesc;
@@ -28,7 +30,7 @@ interface SceneGroupInfo {
 }
 
 export class SceneDescLocationLoader implements LocationLoader<SceneDescLocation> {
-    public providerKey = 'SceneDescLocation' as const;
+    public providerKey = ProviderKey;
 
     private setCurrentScene(context: LocationLoadContext, scene: SceneGfx, location: SceneDescLocation): void {
         // Set our new scene. This needs to happen *first*.
@@ -68,7 +70,7 @@ export class SceneDescLocationLoader implements LocationLoader<SceneDescLocation
 
     public loadLocation(context: LocationLoadContext, location: SceneDescLocation): boolean {
         // If we're just switching save states in the same SceneDesc, then we can simply do that.
-        if (context.oldLocation !== null && context.oldLocation.loaderKey === this.providerKey) {
+        if (context.oldLocation !== null && context.oldLocation.loaderKey === ProviderKey) {
             const oldLocation = context.oldLocation as SceneDescLocation;
             if (oldLocation.sceneGroup === location.sceneGroup && oldLocation.sceneDesc === location.sceneDesc) {
                 // Reuse the old scene, with the new location.
@@ -87,8 +89,6 @@ export class SceneDescLocationLoader implements LocationLoader<SceneDescLocation
 }
 
 export class SceneDescLocationCreator {
-    public providerKey = 'SceneDescLocation' as const;
-
     private sceneGroupInfo: { [k: string]: SceneGroupInfo } = {};
 
     constructor(private groups: (SceneGroup | string)[], private saveManager: SaveManager) {
@@ -140,7 +140,7 @@ export class SceneDescLocationCreator {
 
         const location: SceneDescLocation = {
             version: LocationVersion.V0,
-            loaderKey: this.providerKey,
+            loaderKey: ProviderKey,
             title: sceneDesc.name,
             fullTitle: `${sceneGroup.name} - ${sceneDesc.name}`,
             screenshotURL: this.getScreenshotURL(sceneGroup.id, sceneDesc.id, saveStateSlot),
@@ -215,7 +215,7 @@ export class SceneDescLocationCreator {
     }
 
     public getLocationFromSaveState(existingLocation: LocationBase, saveStateSlot: number, saveStateLocation: SaveStateLocation): SceneDescLocation | null {
-        if (existingLocation.loaderKey !== this.providerKey)
+        if (existingLocation.loaderKey !== ProviderKey)
             return null;
 
         const location = existingLocation as SceneDescLocation;
@@ -248,12 +248,12 @@ export class SceneDescLocationCreator {
     }
 
     public getSceneGroupFromLocation(location: LocationBase): SceneGroup {
-        assert(location.loaderKey === this.providerKey);
+        assert(location.loaderKey === ProviderKey);
         return (location as SceneDescLocation).sceneGroup;
     }
 
     public getSceneDescFromLocation(location: LocationBase): SceneDesc {
-        assert(location.loaderKey === this.providerKey);
+        assert(location.loaderKey === ProviderKey);
         return (location as SceneDescLocation).sceneDesc;
     }
 }
