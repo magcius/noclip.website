@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY, Vec3Zero } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
@@ -24,6 +24,9 @@ export class Camera {
 
     // Combined view/projection matrix, using our new naming convention.
     public clipFromWorldMatrix = mat4.create();
+
+    // Camera's linear (aka positional) velocity. Instantaneous for the frame.
+    public linearVelocity = vec3.create();
 
     public frustum = new Frustum();
     public fovY: number;
@@ -400,8 +403,11 @@ export class FPSCameraController implements CameraController {
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
             vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+            vec3.copy(camera.linearVelocity, finalMovement);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
+        } else {
+            vec3.copy(camera.linearVelocity, Vec3Zero);
         }
 
         const mouseMoveLowSpeedCap = 0.0001;
