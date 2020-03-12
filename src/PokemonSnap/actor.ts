@@ -19,7 +19,7 @@ export class LevelGlobals {
     public collision: CollisionTree | null = null;
     public currentSong = 0;
     public songStart = 0;
-    public lastThrow = 2500; // extra wait at the beginning
+    public lastThrow = -1;
     public allActors: Actor[] = [];
     public translation = vec3.create(); // camera position
     public apples: Projectile[] = [];
@@ -30,13 +30,15 @@ export class LevelGlobals {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
 
         if (viewerInput.time > this.songStart + 10000) {
-            const r = (Math.random() * 6) >>> 0;
-            if (r > 2)
+            if (this.currentSong !== 0)
                 this.currentSong = 0;
             else
-                this.currentSong = InteractionType.PokefluteA + r;
+                this.currentSong = InteractionType.PokefluteA + ((Math.random() * 3) >>> 0);
             this.songStart = viewerInput.time;
         }
+
+        if (this.lastThrow < 0)
+            this.lastThrow = viewerInput.time + 3000; // extra wait before the first throw
 
         if (viewerInput.time > this.lastThrow + 2500) {
             let didThrow = false;
