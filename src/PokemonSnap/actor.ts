@@ -1,13 +1,12 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint } from "./motion";
-import { Vec3One, lerp, MathConstants } from "../MathHelpers";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags } from "./motion";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength } from "../MathHelpers";
 import { getPathPoint } from "./animation";
-import { randomRange } from "../BanjoKazooie/particles";
 
 interface Apple {
     translation: vec3;
@@ -15,16 +14,17 @@ interface Apple {
     thrown: number;
 }
 
-const appleScratch = vec3.create();
+const throwScratch = vec3.create();
 export class LevelGlobals {
     public collision: CollisionTree | null = null;
     public currentSong = 0;
     public songStart = 0;
-    public lastPesterBall = 0;
-    public lastApple = 0;
+    public lastThrow = 2500; // extra wait at the beginning
     public allActors: Actor[] = [];
     public translation = vec3.create(); // camera position
-    public apples: Apple[] = nArray(5, () => <Apple>{ translation: vec3.create(), free: true, thrown: 0 });
+    public apples: Projectile[] = [];
+    public pesters: Projectile[] = [];
+    public appleNext = true;
 
     public update(viewerInput: ViewerRenderInput): void {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
@@ -38,69 +38,30 @@ export class LevelGlobals {
             this.songStart = viewerInput.time;
         }
 
-        if (viewerInput.time > this.lastApple + 2500) {
-            let freeApple: Apple | null = null;
-            for (let i = 0; i < this.apples.length; i++) {
-                if (!this.apples[i].free && viewerInput.time > this.apples[i].thrown + 10000) {
-                    this.apples[i].free = true;
-                    this.sendGlobalSignal(this.apples[i], InteractionType.AppleRemoved);
+        if (viewerInput.time > this.lastThrow + 2500) {
+            let didThrow = false;
+            // if we're above ground, throw the next type of projectile
+            if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
+                const projList = this.appleNext ? this.apples : this.pesters;
+                getMatrixAxisZ(throwScratch, viewerInput.camera.worldMatrix);
+                vec3.scale(throwScratch, throwScratch, -1);
+                for (let i = 0; i < projList.length; i++) {
+                    if (projList[i].tryThrow(this.translation, throwScratch)) {
+                        didThrow = true;
+                        break;
+                    }
                 }
-                if (this.apples[i].free)
-                    freeApple = this.apples[i];
             }
-
-            if (freeApple === null)
-                this.lastApple += 500; // wait a bit, then try again
-            else {
-                // choose a randomized landing point roughly in front of the camera
-                // maybe replace with actual physics later?
-                vec3.set(freeApple.translation, 0, 0, -1200);
-                vec3.transformMat4(freeApple.translation, freeApple.translation, viewerInput.camera.worldMatrix);
-                freeApple.translation[0] += randomRange(250);
-                freeApple.translation[2] += randomRange(250);
-                if (this.throwApple(freeApple)) {
-                    freeApple.free = false;
-                    freeApple.thrown = viewerInput.time;
-                    this.lastApple = viewerInput.time;
-                } else
-                    this.lastApple += 500;
-            }
+            if (didThrow) {
+                this.lastThrow = viewerInput.time;
+                this.appleNext = !this.appleNext; // alternate apple and pester ball
+            } else
+                this.lastThrow += 500; // wait a bit, then try again
         }
     }
 
-    // send signals based on the ground type
-    // each level actually has its own function
-    private throwApple(apple: Apple): boolean {
-        const ground = findGroundPlane(this.collision, apple.translation[0], apple.translation[2]);
-        if (ground === null)
-            return false;
-        const groundHeight = computePlaneHeight(ground, apple.translation[0], apple.translation[2]);
-        if (groundHeight < this.translation[1] - 1500)
-            return false;
-        switch (ground.type) {
-            case 0x19FF: // valley whirlpool
-                this.sendTargetedSignal(null, 0x2B, 0x802D3B34);
-                return false;
-            case 0xFF0000:
-                return false;
-            case 0xFF00:
-                this.sendGlobalSignal(null, 0x26);
-            case 0xFF4C19:
-                return false; // lava splash
-            case 0x337FB2:
-            // spawn random fish
-            case 0x19FF:
-            case 0x7F66:
-            case 0x4CCCCC:
-                return false; // water splash
-        }
-        vec3.normalize(appleScratch, ground.normal);
-        if (appleScratch[1] < Math.sqrt(3) / 2)
-            return false;
-        apple.translation[1] = groundHeight;
-        this.sendGlobalSignal(apple, InteractionType.AppleLanded);
-        return true;
-    }
+    // TODO: pick a fish based on level logic
+    public spawnFish(pos: vec3): void { }
 
     public sendGlobalSignal(source: Target | null, signal: number): void {
         for (let i = 0; i < this.allActors.length; i++) {
@@ -118,7 +79,208 @@ export class LevelGlobals {
     }
 }
 
+const projectileScale = vec3.fromValues(.1, .1, .1);
+const impactScratch = nArray(2, () => vec3.create());
+const groundScratch = vec3.create();
+export class Projectile extends ModelRenderer {
+    public translation = vec3.create();
+    public velocity = vec3.create();
+    public landedAt = 0;
+    public inWater = false;
+
+    public static maxSlope = Math.sqrt(3) / 2; // y normal for thirty degree slope
+    public static minSpeed = 390;
+
+    constructor(renderData: RenderData, public def: ProjectileData, private isPester: boolean) {
+        super(renderData, def.nodes, def.animations);
+        this.visible = false;
+    }
+
+    public distFrom(pos: vec3): number {
+        if (!this.visible && this.hidden)
+            return Infinity;
+        return vec3.dist(pos, this.translation);
+    }
+
+    public tryThrow(pos: vec3, dir: vec3): boolean {
+        if (this.visible)
+            return false;
+        this.visible = true;
+        this.landedAt = 0;
+        this.inWater = false;
+        this.animationPaused = false;
+        this.setAnimation(0);
+        vec3.normalize(this.velocity, dir);
+        vec3.scale(this.velocity, this.velocity, 1500);
+        vec3.scaleAndAdd(this.translation, pos, this.velocity, 1 / 10);
+        mat4.fromScaling(this.modelMatrix, projectileScale);
+        return true;
+    }
+
+    public eat(globals: LevelGlobals): void {
+        this.visible = false;
+        globals.sendGlobalSignal(this, InteractionType.AppleRemoved);
+    }
+
+    protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+        const dt = viewerInput.deltaTime / 1000;
+        if (this.landedAt > 0) {
+            const frames = 30 * (viewerInput.time - this.landedAt) / 1000;
+            if (this.inWater) {
+                if (frames > 60)
+                    this.eat(globals);
+                else
+                    this.translation[1] -= 60 * dt;
+            } else {
+                if (frames > 170)
+                    this.eat(globals);
+                else if (frames > 140) {
+                    const scale = .1 * Math.pow(.9, 2 * (frames - 140));
+                    this.modelMatrix[0] = scale;
+                    this.modelMatrix[5] = scale;
+                    this.modelMatrix[10] = scale;
+                    this.translation[1] -= scale * 360 * dt;
+                }
+            }
+        } else if (!this.hitGround(viewerInput, globals)) {
+            this.checkCollision(vec3.len(this.velocity), dt, globals);
+            this.velocity[1] -= 1080 * dt;
+        }
+        if (this.landedAt === 0)
+            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, dt);
+        this.modelMatrix[12] = this.translation[0];
+        this.modelMatrix[13] = this.translation[1];
+        this.modelMatrix[14] = this.translation[2];
+    }
+
+    private hitGround(viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
+        const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
+        const height = computePlaneHeight(ground, this.translation[0], this.translation[2]);
+        if (this.translation[1] > height)
+            return false;
+        // TODO: find intersection point? might not matter as much at a faster framerate
+        this.translation[1] = height + 12;
+        if (ground.type === 0x337FB2)
+            globals.spawnFish(this.translation);
+        if (this.isPester) {
+            globals.sendGlobalSignal(this, InteractionType.PesterLanded);
+            switch (ground.type) {
+                // volcano
+                case 0x00FF00: globals.sendGlobalSignal(this, 0x26); break;
+                // river
+                case 0xFF0000: globals.sendGlobalSignal(this, 0x2A); break;
+                case 0xFF7FB2: globals.sendGlobalSignal(this, 0x1D); break;
+                // valley whirlpool
+                case 0x0019FF: globals.sendTargetedSignal(this, 0x2B, 0x802D3B34); break;
+            }
+            this.visible = false; // TODO: smoke effect
+            return true;
+        }
+        globals.sendGlobalSignal(this, InteractionType.AppleLanded);
+        let slowdownFactor = 1;
+        switch (ground.type) {
+            case 0x0019FF:
+            case 0x007F66:
+            case 0x337FB2:
+            case 0x4CCCCC: {
+                // water splash
+                this.landedAt = viewerInput.time;
+                this.inWater = true;
+            } break;
+            case 0x00FF00:
+            case 0xFF4C19: {
+                // lava splash
+                this.landedAt = viewerInput.time;
+                this.inWater = true;
+            } break;
+            case 0xFF0000: {
+                this.visible = false;
+            } break;
+            // some of these play different sounds?
+            case 0x193333:
+            case 0x331919:
+            case 0x4C1900:
+            case 0x4C4C33:
+            case 0x7F4C00:
+            case 0x7F6633:
+            case 0x7F667F:
+            case 0x7F7F7F:
+            case 0xFF7FB2:
+                slowdownFactor = .3; break;
+            case 0x4C7F00:
+            case 0x996666:
+            case 0xB2997F:
+            case 0xFF9919:
+                slowdownFactor = .2; break;
+            default:
+                slowdownFactor = 0;
+        }
+        if (!this.visible || this.landedAt !== 0)
+            return true;
+        // adjust velocity based on ground type
+        vec3.normalize(groundScratch, ground?.normal);
+        reflectVec3(this.velocity, this.velocity, groundScratch);
+        const startSpeed = vec3.len(this.velocity);
+        if (startSpeed * slowdownFactor < Projectile.minSpeed) {
+            if (groundScratch[1] >= Projectile.maxSlope) {
+                this.landedAt = viewerInput.time;
+                this.animationPaused = true;
+            } else
+                vec3.scale(this.velocity, this.velocity, Projectile.minSpeed / startSpeed);
+        } else
+            vec3.scale(this.velocity, this.velocity, slowdownFactor);
+        return true;
+    }
+
+    private checkCollision(currSpeed: number, dt: number, globals: LevelGlobals): void {
+        vec3.normalize(impactScratch[0], this.velocity);
+        let furthestIncursion = currSpeed * dt;
+        let chosenCollider: Actor | null = null;
+        for (let i = 0; i < globals.allActors.length; i++) {
+            const collider = globals.allActors[i];
+            if (!collider.getImpact(impactScratch[1], this.translation))
+                continue;
+            const distUntilClosest = vec3.dot(impactScratch[0], impactScratch[1]);
+            if (distUntilClosest < 0)
+                continue; // we're moving away now
+            // compute as the other leg of the triangle
+            const minDist = collider.def.radius - Math.sqrt(vec3.sqrLen(impactScratch[1]) - distUntilClosest * distUntilClosest);
+            if (minDist < 0)
+                continue;
+            if (collider.def.flags & 2) {
+                if (this.isPester)
+                    collider.receiveSignal(this, InteractionType.PesterAlmost, globals);
+                else
+                    collider.receiveSignal(this, InteractionType.AppleAlmost, globals);
+            }
+            // find how far we've travelled into the collision sphere, assuming a linear trajectory
+            const insideDistance = Math.sqrt(collider.def.radius * collider.def.radius - minDist * minDist) - distUntilClosest;
+            if (insideDistance > furthestIncursion) {
+                furthestIncursion = insideDistance;
+                chosenCollider = collider;
+            }
+        }
+        if (chosenCollider !== null) {
+            vec3.copy(chosenCollider.motionData.lastImpact, impactScratch[0]);
+            if (this.isPester) {
+                chosenCollider.receiveSignal(this, InteractionType.PesterHit, globals);
+                this.visible = false;
+            } else {
+                chosenCollider.receiveSignal(this, InteractionType.AppleHit, globals);
+                // set position to the entry point of the collision sphere
+                vec3.scaleAndAdd(this.translation, this.translation, impactScratch[0], -furthestIncursion);
+                vec3.sub(impactScratch[1], this.translation, chosenCollider.center);
+                vec3.normalize(impactScratch[1], impactScratch[1]);
+                reflectVec3(this.velocity, this.velocity, impactScratch[1]);
+                normToLength(this.velocity, Math.max(currSpeed / 2, 300));
+            }
+        }
+    }
+}
+
+
 const cameraScratch = vec3.create();
+const collideScratch = nArray(2, () => vec3.create());
 export class Actor extends ModelRenderer {
     public motionData = new MotionData();
     protected currState = -1;
@@ -133,11 +295,21 @@ export class Actor extends ModelRenderer {
     public translation = vec3.create();
     public euler = vec3.create();
     public scale = vec3.clone(Vec3One);
+    public center = vec3.create();
+
+    public tangible = true;
 
     constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
         this.motionData.path = spawn.path;
         this.reset(globals);
+    }
+
+    public getImpact(dst: vec3, pos: vec3): boolean {
+        if (!this.visible || this.hidden || !this.tangible || this.def.radius === 0)
+            return false;
+        vec3.sub(dst, this.center, pos);
+        return true;
     }
 
     protected reset(globals: LevelGlobals): void {
@@ -149,15 +321,14 @@ export class Actor extends ModelRenderer {
         vec3.copy(this.euler, this.spawn.euler);
 
         vec3.mul(this.scale, this.def.scale, this.spawn.scale);
-        buildTransform(this.modelMatrix, this.translation, this.spawn.euler, this.scale);
+        this.updatePositions();
 
         this.motionData.reset();
 
+        this.tangible = true;
         const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
         this.motionData.groundHeight = computePlaneHeight(ground, this.translation[0], this.translation[2]);
-        this.motionData.groundType = 0;
-        if (ground !== null)
-            this.motionData.groundType = ground.type;
+        this.motionData.groundType = ground.type;
 
         this.currAux = 0;
         if (this.animations.length > 0)
@@ -167,12 +338,20 @@ export class Actor extends ModelRenderer {
             this.changeState(0, globals);
     }
 
+    protected updatePositions(): void {
+        buildTransform(this.modelMatrix, this.translation, this.euler, this.scale);
+        if (this.def.flags & 1) { // basically everything? include root node translation
+            // the raw center shouldn't be multiplied by the scale in the model matrix, so divide out
+            // it was predivided though, not sure what the raw value is supposed to mean...
+            vec3.div(this.center, this.def.center, this.scale);
+            vec3.add(this.center, this.center, this.renderers[0].translation);
+        } else
+            vec3.copy(this.center, this.def.center);
+        vec3.transformMat4(this.center, this.center, this.modelMatrix);
+    }
+
     protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
-        let updated = this.motionStep(viewerInput, globals);
-        if (this.auxStep(viewerInput, globals))
-            updated = true;
-        if (updated)
-            buildTransform(this.modelMatrix, this.translation, this.euler, this.scale);
+        this.motionStep(viewerInput, globals);
         while (this.currState >= 0) {
             const state = this.def.stateGraph.states[this.currState];
             const result = this.stateOverride(state.startAddress, viewerInput, globals);
@@ -187,6 +366,7 @@ export class Actor extends ModelRenderer {
                 if (!this.metEndCondition(block.wait.endCondition, globals))
                     break;
             }
+            this.endBlock(globals);
             if (!this.chooseEdge(block.edges, globals)) {
                 this.currBlock++;
                 this.startBlock(globals);
@@ -198,6 +378,8 @@ export class Actor extends ModelRenderer {
     protected stateOverride(stateAddr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         return MotionResult.None;
     }
+
+    protected endBlock(globals: LevelGlobals): void { }
 
     protected changeState(newIndex: number, globals: LevelGlobals): boolean {
         if (newIndex === -1)
@@ -239,6 +421,8 @@ export class Actor extends ModelRenderer {
             }
             if (block.signals[i].target === 0)
                 globals.sendGlobalSignal(this, block.signals[i].value);
+            else if (block.signals[i].target === ObjectField.Target && this.target instanceof Actor)
+                this.target.receiveSignal(this, block.signals[i].value, globals);
             else
                 globals.sendTargetedSignal(this, block.signals[i].value, block.signals[i].target);
         }
@@ -271,17 +455,18 @@ export class Actor extends ModelRenderer {
             this.motionData.ignoreGround = block.ignoreGround;
 
         if (block.eatApple && this.target !== null) {
-            const apple = this.target as Apple;
-            if (apple.free === undefined)
+            if (this.target instanceof Projectile)
+                this.target.eat(globals);
+            else
                 console.warn("eating non apple");
-            else {
-                apple.free = true;
-                globals.sendGlobalSignal(this.target, InteractionType.AppleRemoved);
-            }
+            this.target = null;
         }
 
         if (block.forwardSpeed !== undefined)
             this.motionData.forwardSpeed = block.forwardSpeed;
+
+        if (block.tangible !== undefined)
+            this.tangible = block.tangible;
 
         if (block.motion !== null) {
             this.motionData.currMotion = block.motion;
@@ -406,20 +591,10 @@ export class Actor extends ModelRenderer {
                         return this.followEdge(block.interactions[i], globals);
                     }
                 } break;
-                case InteractionType.PesterHit:
-                case InteractionType.AppleHit: {
-                    // hit at most every 10 seconds, and only if we're likely visible
-                    if (viewerInput.time < globals.lastPesterBall + 10000 && playerDist > 400)
-                        break;
-                    if (playerDist < 1500 && onScreen && playerDist * Math.random() < viewerInput.deltaTime / 20) {
-                        globals.lastPesterBall = viewerInput.time;
-                        return this.followEdge(block.interactions[i], globals);
-                    }
-                } break;
                 case InteractionType.PhotoFocus:
                 case InteractionType.PhotoSubject: {
                     // trigger if the object is on screen long enough
-                    if (onScreen && playerDist < 3000)
+                    if (onScreen && playerDist < 1500)
                         this.photoTimer += viewerInput.deltaTime;
                     else
                         this.photoTimer = 0;
@@ -431,12 +606,10 @@ export class Actor extends ModelRenderer {
                     }
                 } break;
                 case InteractionType.FindApple: {
-                    let nearest: Apple | null = null;
+                    let nearest: Projectile | null = null;
                     let dist = 600;
                     for (let i = 0; i < globals.apples.length; i++) {
-                        if (!globals.apples[i].free)
-                            continue;
-                        const newDist = vec3.dist(this.translation, globals.apples[i].translation);
+                        const newDist = globals.apples[i].distFrom(this.translation);
                         if (newDist < dist) {
                             dist = newDist;
                             nearest = globals.apples[i];
@@ -452,9 +625,7 @@ export class Actor extends ModelRenderer {
         return false;
     }
 
-    protected motionStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): boolean {
-        if (this.motionData.currMotion.length === 0)
-            return false;
+    protected motionStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
         const dt = viewerInput.deltaTime / 1000;
         let result = MotionResult.None;
         let updated = false;
@@ -520,7 +691,7 @@ export class Actor extends ModelRenderer {
             } else
                 break;
         }
-        if (this.motionData.currBlock >= this.motionData.currMotion.length)
+        if (this.motionData.currBlock >= this.motionData.currMotion.length && this.motionData.currMotion.length > 0)
             this.motionData.stateFlags |= EndCondition.Motion;
 
         result = this.auxStep(viewerInput, globals);
@@ -530,11 +701,50 @@ export class Actor extends ModelRenderer {
             this.currAux = 0;
             this.motionData.stateFlags |= EndCondition.Aux;
         }
-        return updated;
+        if (updated)
+            this.updatePositions();
+        if (this.motionData.stateFlags & EndCondition.Collide)
+            this.collide(globals);
     }
 
     protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         return MotionResult.None;
+    }
+
+    // TODO: figure out the proper order of operations, respect collision flags
+    // collision is run twice per frame in game, for all objects simultaneously
+    // this seems to work well enough for now
+    protected collide(globals: LevelGlobals): void {
+        for (let i = 0; i < globals.allActors.length; i++) {
+            const other = globals.allActors[i];
+            // collide with all the previous actors, which have finished their motion
+            if (!(other.motionData.stateFlags & EndCondition.Collide))
+                continue;
+            if (this === other)
+                break;
+            vec3.sub(collideScratch[0], other.center, this.center);
+            const separation = vec3.len(collideScratch[0]) - other.def.radius - this.def.radius;
+            if (separation > 0)
+                continue;
+            other.receiveSignal(this, InteractionType.Collided, globals);
+            this.receiveSignal(other, InteractionType.Collided, globals); // can this break anything?
+            // move them apart, though it won't affect the other one until next frame
+            collideScratch[0][1] = 0;
+            vec3.normalize(collideScratch[0], collideScratch[0]);
+
+            const moveBoth = (this.motionData.stateFlags & EndCondition.AllowBump) && (other.motionData.stateFlags & EndCondition.AllowBump);
+            const magnitude = separation * (moveBoth ? 1 / 2 : 1);
+            if (this.motionData.stateFlags & EndCondition.AllowBump) {
+                vec3.scaleAndAdd(collideScratch[1], this.translation, collideScratch[0], magnitude);
+                if (!attemptMove(this.translation, collideScratch[1], this.motionData, globals, MoveFlags.Ground))
+                    this.updatePositions();
+            }
+            if (other.motionData.stateFlags & EndCondition.AllowBump) {
+                vec3.scaleAndAdd(collideScratch[1], other.translation, collideScratch[0], -magnitude);
+                if (!attemptMove(other.translation, collideScratch[1], other.motionData, globals, MoveFlags.Ground))
+                    other.updatePositions();
+            }
+        }
     }
 }
 
@@ -587,6 +797,9 @@ class Kakuna extends Actor {
 
 const deltaScratch = vec3.create();
 class Pikachu extends Actor {
+    public static currDiglett = 0;
+    public static targetDiglett = 1;
+
     protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             case 0x802CB814: {
@@ -597,8 +810,38 @@ class Pikachu extends Actor {
                     return MotionResult.Done;
                 }
             } break;
+            case 0x802E7CA4: {
+                if (!canHearSong(this.translation, globals)) {
+                    this.motionData.stateFlags |= EndCondition.Misc;
+                    return MotionResult.Done;
+                }
+            } break;
         }
         return MotionResult.None;
+    }
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        switch (state.startAddress) {
+            case 0x802E8290: {
+                if (Pikachu.currDiglett & Pikachu.targetDiglett) {
+                    this.changeState(state.blocks[0].edges[0].index, globals);
+                    return;
+                }
+                Pikachu.targetDiglett <<= 1;
+                const pathStart = this.motionData.storedValues[0];
+                this.motionData.storedValues[1] = pathStart + (pathStart < 3 ? 1 : 2);
+            } break;
+        }
+        super.startBlock(globals);
+    }
+
+    protected endBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        switch (state.startAddress) {
+            case 0x802E8330:
+                this.motionData.storedValues[0] = this.motionData.storedValues[1]; break;
+        }
     }
 }
 
@@ -632,6 +875,16 @@ class Weepinbell extends Actor {
             case 0x802BFA3C: {
                 vec3.copy(this.motionData.destination, this.translation);
             } break;
+        }
+        super.startBlock(globals);
+    }
+}
+
+class Victreebel extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        if (this.def.stateGraph.states[this.currState].startAddress === 0x802BFEF0) {
+            this.translation[1] = assertExists(this.target).translation[1] - 100;
+            this.updatePositions();
         }
         super.startBlock(globals);
     }
@@ -710,8 +963,14 @@ class Porygon extends Actor {
 
     protected startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
-        if (state.startAddress === 0x802DD1D4)
-            this.currBlock = this.spawn.behavior - 1;
+        if (state.startAddress === 0x802DD1D4) {
+            if (this.target && vec3.dist(this.translation, this.target.translation) < 1000)
+                this.currBlock = this.spawn.behavior - 1;
+            else { // back to initial state
+                this.changeState(0, globals);
+                return;
+            }
+        }
         super.startBlock(globals);
         if (state.startAddress === 0x802DD0E0 && this.spawn.behavior === 1 && this.currAnimation !== 1)
             this.setAnimation(1);
@@ -747,6 +1006,7 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 25: return new Pikachu(renderData, spawn, def, globals);
         case 37: return new Vulpix(renderData, spawn, def, globals);
         case 70: return new Weepinbell(renderData, spawn, def, globals);
+        case 71: return new Victreebel(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);

@@ -49,6 +49,7 @@ export class MotionData {
 
     public refPosition = vec3.create();
     public destination = vec3.create();
+    public lastImpact = vec3.create();
     public ignoreGround: boolean;
     public groundType = 0;
     public groundHeight = 0;
@@ -75,6 +76,7 @@ export class MotionData {
         this.ignoreGround = false;
         vec3.copy(this.refPosition, Vec3Zero);
         vec3.copy(this.destination, Vec3Zero);
+        vec3.copy(this.lastImpact, Vec3Zero);
     }
 }
 
@@ -531,10 +533,15 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
             assert(blocks[0].kind === "point");
             blocks[0].destination = Destination.PathStart;
         } break;
+        // actually in a loop
+        case 0x802E7DDC: {
+            assert(blocks[0].kind === "faceTarget");
+            blocks[0].flags |= MoveFlags.Continuous;
+        } break;
     }
 }
 
-const enum MoveFlags {
+export const enum MoveFlags {
     Ground      = 0x01,
     SnapTurn    = 0x02,
     Update      = 0x02,
@@ -581,12 +588,8 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
                     data.movingYaw = block.yaw;
                     euler[1] = block.yaw;
                 } break;
-                case Direction.Impact: {
-                    // move directly away from camera position at time of impact
-                    mat4.getTranslation(blockScratch, viewerInput.camera.worldMatrix);
-                    vec3.sub(blockScratch, pos, blockScratch);
-                    data.movingYaw = Math.atan2(blockScratch[0], blockScratch[2]);
-                } break;
+                case Direction.Impact:
+                    data.movingYaw = Math.atan2(data.lastImpact[0], data.lastImpact[2]); break;
             }
         } break;
         case "vertical": {
@@ -623,20 +626,16 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
 
 const moveScratch = vec3.create();
 // attempt to apply the given displacement, returning whether motion was blocked
-function attemptMove(pos: vec3, end: vec3, data: MotionData, globals: LevelGlobals, flags: number): boolean {
+export function attemptMove(pos: vec3, end: vec3, data: MotionData, globals: LevelGlobals, flags: number): boolean {
     if (!data.ignoreGround && !groundOkay(globals.collision, end[0], end[2]))
         return true;
     vec3.sub(moveScratch, end, pos);
     vec3.normalize(moveScratch, moveScratch); // then multiplies by some scale factor?
-    // vec3.scale(moveScratch, moveScratch, 1)
     if (!data.ignoreGround && !groundOkay(globals.collision, pos[0] + moveScratch[0], pos[2] + moveScratch[2]))
         return true;
 
     const ground = findGroundPlane(globals.collision, end[0], end[2]);
-    if (ground !== null)
-        data.groundType = ground.type;
-    else
-        data.groundType = -1;
+    data.groundType = ground.type;
     data.groundHeight = computePlaneHeight(ground, end[0], end[2]);
 
     if (flags & MoveFlags.ConstHeight && pos[1] !== data.groundHeight)
@@ -650,8 +649,6 @@ function attemptMove(pos: vec3, end: vec3, data: MotionData, globals: LevelGloba
 
 function groundOkay(collision: CollisionTree | null, x: number, z: number): boolean {
     const ground = findGroundPlane(collision, x, z);
-    if (ground === null)
-        return true; // not being over ground is fine
     switch (ground.type) {
         case 0x7F66:
         case 0xFF00:

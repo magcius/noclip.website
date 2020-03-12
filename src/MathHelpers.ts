@@ -512,3 +512,9 @@ export function bitsAsFloat32(x: number): number {
     asUint32[0] = (x >>> 0) & 0xFFFFFFFF;
     return asFloat32[0];
 }
+
+// assumes normal is normalized
+export function reflectVec3(dst: vec3, source: vec3, normal: vec3): void {
+    const dot = -2*vec3.dot(source, normal);
+    vec3.scaleAndAdd(dst, source, normal, dot);
+}

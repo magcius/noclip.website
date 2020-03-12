@@ -13,7 +13,7 @@ import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { createActor, LevelGlobals } from './actor';
+import { createActor, LevelGlobals, Projectile } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -154,8 +154,20 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
             const zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
-            zeroOne.forceLoop();
             sceneRenderer.modelRenderers.push(zeroOne);
+
+            const appleData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[0].sharedOutput)
+            for (let i = 0; i < 5; i++) {
+                const apple = new Projectile(appleData, level.projectiles[0], false);
+                sceneRenderer.globals.apples.push(apple);
+                sceneRenderer.modelRenderers.push(apple);
+            }
+            const pesterData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[1].sharedOutput)
+            for (let i = 0; i < 5; i++) {
+                const pester = new Projectile(pesterData, level.projectiles[1], true);
+                sceneRenderer.globals.pesters.push(pester);
+                sceneRenderer.modelRenderers.push(pester);
+            }
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {

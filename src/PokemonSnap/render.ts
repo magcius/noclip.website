@@ -301,7 +301,7 @@ export class NodeRenderer {
 }
 
 export class ModelRenderer {
-    private visible = true;
+    protected visible = true;
 
     // run logic, but don't render
     public hidden = false;

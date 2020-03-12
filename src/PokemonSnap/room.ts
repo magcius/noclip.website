@@ -19,6 +19,7 @@ export interface Level {
     objectInfo: ObjectDef[];
     collision: CollisionTree | null;
     zeroOne: ZeroOne;
+    projectiles: ProjectileData[];
 }
 
 export interface Room {
@@ -47,6 +48,8 @@ export interface ActorDef {
     nodes: GFXNode[];
     sharedOutput: RSPSharedOutput;
     scale: vec3;
+    center: vec3;
+    radius: number;
     flags: number;
     spawn: SpawnType;
     stateGraph: StateGraph;
@@ -84,6 +87,12 @@ export interface DataRange {
 interface ZeroOne {
     animations: AnimationData[];
     nodes: GFXNode[];
+    sharedOutput: RSPSharedOutput;
+}
+
+export interface ProjectileData {
+    nodes: GFXNode[];
+    animations: AnimationData[];
     sharedOutput: RSPSharedOutput;
 }
 
@@ -261,16 +270,19 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const renderer = objectView.getUint32(0x08);
             const animationStart = objectView.getUint32(0x0C);
             const scale = getVec3(objectView, 0x10);
-            vec3.scale(scale, scale, 0.1);
-            // four floats
+            const center = getVec3(objectView, 0x1C);
+            const radius = objectView.getFloat32(0x28) * scale[1];
             const flags = objectView.getUint16(0x2C);
             const extraTransforms = objectView.getUint32(0x2E) >>> 8;
+
+            vec3.div(center, center, scale);
+            vec3.scale(scale, scale, 0.1);
 
             const sharedOutput = new RSPSharedOutput();
             try {
                 const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
                 const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
+                objectInfo.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
             } catch (e) {
                 console.warn("failed parse", hexzero(id, 3), e);
             }
@@ -309,34 +321,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
         }
     }
 
-    {
-        const sharedOutput = new RSPSharedOutput();
-        const nodes = parseGraph(dataMap, 0x800edab0, 0x800Edb90, 0x80359534, sharedOutput);
-        const tracks: (AnimationTrack | null)[] = [];
-        const trackView = dataMap.getView(0x800ed5b0);
-        for (let i = 0; i < nodes.length; i++) {
-            const trackStart = trackView.getUint32(4 * i);
-            tracks.push(parseAnimationTrack(dataMap, trackStart));
-        }
-        const materialTracks = parseMaterialAnimation(dataMap, 0x800ed6b0, nodes);
-        objectInfo.push({
-            id: 1234,
-            nodes,
-            sharedOutput,
-            scale: Vec3One,
-            flags: 0,
-            spawn: SpawnType.FLYING,
-            stateGraph: {states:[], animations: [{fps: 30, frames: 1, tracks, materialTracks}]},
-            globalPointer: 0,
-        })
-    }
     const zeroOne = buildZeroOne(dataMap, level.Name);
+    const projectiles = buildProjectiles(dataMap);
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne};
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles};
 }
 
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
@@ -1101,6 +1093,37 @@ function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
     return {nodes, sharedOutput, animations}
 }
 
+function buildProjectiles(dataMap: DataMap): ProjectileData[] {
+    const out: ProjectileData[] = [];
+    // apple
+    {
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EAED0, 0x800EAC58, 0x800A15D8, sharedOutput);
+        const animations: AnimationData[] = [{
+            fps: 12,
+            frames: 0,
+            tracks: [null, null],
+            materialTracks: parseMaterialAnimation(dataMap, 0x800EAF60, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+
+    // pester ball
+    {
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800E9138, 0x800E8EB8, 0x800A15D8, sharedOutput);
+        const animations: AnimationData[] = [{
+            fps: 12,
+            frames: 0,
+            tracks: [null, null],
+            materialTracks: parseMaterialAnimation(dataMap, 0x800E91C0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+
+    return out;
+}
+
 export interface GroundPlane {
     normal: vec3; // not actually normalized, really the equation coefficients
     offset: number;
@@ -1119,7 +1142,7 @@ export function findGroundHeight(tree: CollisionTree | null, x: number, z: numbe
     return computePlaneHeight(findGroundPlane(tree, x, z), x, z);
 }
 
-export function computePlaneHeight(plane: GroundPlane | null, x: number, z: number): number {
+export function computePlaneHeight(plane: GroundPlane, x: number, z: number): number {
     if (plane === null)
         return 0;
     if (plane.normal[1] === 0)
@@ -1127,13 +1150,22 @@ export function computePlaneHeight(plane: GroundPlane | null, x: number, z: numb
     return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
+// returned if there *is* ground collision data, but nothing is found
+// maybe never happens?
+const nullPlane: GroundPlane = {
+    normal: vec3.create(),
+    type: 0,
+    offset: 0,
+}
+
+// ground result for a level without ground collision data (rainbow cloud)
 const defaultPlane: GroundPlane = {
     normal: vec3.clone(Vec3UnitY),
     type: -1,
     offset: 0,
 };
 
-export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane {
     x/= 100;
     z/= 100;
     if (tree === null)
@@ -1144,13 +1176,13 @@ export function findGroundPlane(tree: CollisionTree | null, x: number, z: number
             if (tree.posPlane)
                 return tree.posPlane;
             if (tree.posSubtree === null)
-                return null;
+                return nullPlane;
             tree = tree.posSubtree;
         } else {
             if (tree.negPlane)
                 return tree.negPlane;
             if (tree.negSubtree === null)
-                return null;
+                return nullPlane;
             tree = tree.negSubtree;
         }
     }
@@ -1218,7 +1250,7 @@ export const enum InteractionType {
     AppleLanded     = 0x0E,
     FindApple       = 0x0F,
     NearPlayer      = 0x10,
-    Collision       = 0x11,
+    CheckCollision  = 0x11, // check for collision outside of normal process
     PhotoTaken      = 0x12, // sent to every object when a photo is taken
     EnterRoom       = 0x13,
     GravelerLanded  = 0x14,
@@ -1226,6 +1258,7 @@ export const enum InteractionType {
     TargetRemoved   = 0x16,
     PhotoFocus      = 0x17, // checks if the camera is focused at the same pokemon for a long time
     PhotoSubject    = 0x18,
+    Collided        = 0x1A, // collided with another object, at most once per collision round (in game)
 
     EndMarker       = 0x3A,
     // not used by game
@@ -1263,11 +1296,14 @@ export interface StateBlock {
     force: boolean;
     signals: Signal[];
     wait: WaitParams | null;
+
     flagSet: number;
     flagClear: number;
     ignoreGround?: boolean;
     eatApple?: boolean;
     forwardSpeed?: number;
+    tangible?: boolean;
+
     edges: StateEdge[];
 }
 
@@ -1341,13 +1377,14 @@ export const enum StateFuncs {
 }
 
 export const enum ObjectField {
-    SomeBool        = 0x10,
+    ObjectFlags     = 0x08,
+    Tangible        = 0x10,
     // on the root node
     TranslationX    = 0x1C,
     TranslationY    = 0x20,
     TranslationZ    = 0x24,
 
-    MiscFlags       = 0x50, // actually on the parent object
+    ParentFlags     = 0x50, // actually on the parent object
 
     Apple           = 0x64,
     Target          = 0x70,
@@ -1377,15 +1414,18 @@ export const enum EndCondition {
     Pause       = 0x20, // used to pause motion, not as a condition
     Misc        = 0x1000,
 
-    Dance       = 0x100000, // special dance-related behavior in cave
-    // actually from a different set of flags
-    Hidden      = 0x200000,
-    PauseAnim   = 0x400000,
+    Dance       = 0x010000, // special dance-related behavior in cave
+    // from flags on the parent object
+    Hidden      = 0x020000,
+    PauseAnim   = 0x040000,
+    // a separate set of object flags
+    Collide     = 0x080000,
+    AllowBump   = 0x200000,
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 &&
-    block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined && block.forwardSpeed === undefined;
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.auxAddress === -1 &&
+    block.flagSet === 0 && block.ignoreGround === undefined && block.eatApple === undefined && block.forwardSpeed === undefined && block.tangible === undefined;
 }
 
 const motionParser = new MotionParser();
@@ -1636,7 +1676,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                 this.currBlock.signals.push({value: a1.value, target: 0, condition: InteractionType.Basic, conditionParam: 0});
             } break;
             case GeneralFuncs.Signal: {
-                const target = a0.value > 0x80000000 ? a0.value : 0;
+                const target = (a0.value > 0x80000000 || a0.value === ObjectField.Target) ? a0.value : 0;
                 this.currBlock.signals.push({value: a1.value, target, condition: InteractionType.Basic, conditionParam: 0});
             } break;
             case StateFuncs.RunAux: {
@@ -1721,7 +1761,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     else
                         console.warn('unknown flag op', value.lastOp, hexzero(value.value, 8))
                 } break;
-                case ObjectField.MiscFlags: {
+                case ObjectField.ParentFlags: {
                     if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
                         this.currBlock.flagSet |= value.value * EndCondition.Hidden;
                     else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
@@ -1729,10 +1769,12 @@ class StateParser extends MIPS.NaiveInterpreter {
                     else if (value.lastOp === MIPS.Opcode.NOP && value.value === 0)
                         this.currBlock.flagClear |= EndCondition.Hidden | EndCondition.PauseAnim;
                 } break;
+                case ObjectField.Tangible: {
+                    this.currBlock.tangible = value.value === 1;
+                } break;
                 case ObjectField.GroundList: {
                     this.currBlock.ignoreGround = value.value !== 0;
                 } break;
-                case ObjectField.SomeBool:
                 case ObjectField.FrameTarget:
                 case ObjectField.Apple:
                 case ObjectField.StoredValues:
@@ -1744,6 +1786,14 @@ class StateParser extends MIPS.NaiveInterpreter {
             }
         } else if (op === MIPS.Opcode.SWC1 && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP) && offset === ObjectField.ForwardSpeed) {
             this.currBlock.forwardSpeed = bitsAsFloat32(value.value);
+        } else if (op === MIPS.Opcode.SH && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP)) {
+            if (offset === ObjectField.ObjectFlags) {
+                if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR){
+                    this.currBlock.flagSet |= (value.value >>> 9) * EndCondition.Collide;
+                } else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && (value.value >>> 0) > 0x8000){
+                    this.currBlock.flagClear |= (~value.value >>> 9) * EndCondition.Collide;
+                }
+            }
         } else {
             if (op === MIPS.Opcode.SW && value.value > 0x80000000 && this.loadAddress === 0)
                 this.loadAddress = value.value;
