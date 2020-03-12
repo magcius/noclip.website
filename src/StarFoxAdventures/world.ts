@@ -14,7 +14,7 @@ import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
 import { ObjectManager } from './objects';
 import { EnvfxManager } from './envfx';
@@ -309,10 +309,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const texColl = new SFATextureCollection(this.gameInfo);
         await texColl.create(dataFetcher, 'swaphol'); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo);
+        const objectMan = new ObjectManager(this.gameInfo, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const [_1, _2, romlistFile] = await Promise.all([
+        const [_1, _2, _3, romlistFile] = await Promise.all([
             objectMan.create(dataFetcher),
+            earlyObjectMan.create(dataFetcher),
             envfxMan.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
@@ -345,8 +347,13 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             i++;
         }
 
-        window.main.lookupObject = (objType: number) => {
-            const obj = objectMan.loadObject(objType);
+        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
+            const obj = objectMan.loadObject(objType, skipObjindex);
+            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+        };
+
+        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
+            const obj = earlyObjectMan.loadObject(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 

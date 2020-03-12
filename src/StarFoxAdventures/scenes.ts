@@ -256,7 +256,7 @@ class AncientBlockFetcher implements BlockFetcher {
     }
 }
 
-const SFADEMO_GAME_INFO: GameInfo = {
+export const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
