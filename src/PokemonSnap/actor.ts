@@ -5,7 +5,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags } from "./motion";
-import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength } from "../MathHelpers";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0 } from "../MathHelpers";
 import { getPathPoint } from "./animation";
 
 interface Apple {
@@ -14,7 +14,7 @@ interface Apple {
     thrown: number;
 }
 
-const throwScratch = vec3.create();
+const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
     public collision: CollisionTree | null = null;
     public currentSong = 0;
@@ -45,10 +45,16 @@ export class LevelGlobals {
             // if we're above ground, throw the next type of projectile
             if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
                 const projList = this.appleNext ? this.apples : this.pesters;
-                getMatrixAxisZ(throwScratch, viewerInput.camera.worldMatrix);
-                vec3.scale(throwScratch, throwScratch, -1);
+                getMatrixAxisZ(throwScratch[0], viewerInput.camera.worldMatrix);
+                vec3.scale(throwScratch[0], throwScratch[0], -1);
+                if (viewerInput.deltaTime > 0) {
+                    vec3.scale(throwScratch[1], viewerInput.camera.linearVelocity, 1000 / viewerInput.deltaTime);
+                    transformVec3Mat4w0(throwScratch[1], viewerInput.camera.worldMatrix, throwScratch[1]);
+                } else
+                    vec3.copy(throwScratch[1], Vec3Zero);
+
                 for (let i = 0; i < projList.length; i++) {
-                    if (projList[i].tryThrow(this.translation, throwScratch)) {
+                    if (projList[i].tryThrow(this.translation, throwScratch[0], throwScratch[1])) {
                         didThrow = true;
                         break;
                     }
@@ -104,7 +110,7 @@ export class Projectile extends ModelRenderer {
         return vec3.dist(pos, this.translation);
     }
 
-    public tryThrow(pos: vec3, dir: vec3): boolean {
+    public tryThrow(pos: vec3, dir: vec3, cameraVel: vec3): boolean {
         if (this.visible)
             return false;
         this.visible = true;
@@ -115,6 +121,7 @@ export class Projectile extends ModelRenderer {
         vec3.normalize(this.velocity, dir);
         vec3.scale(this.velocity, this.velocity, 1500);
         vec3.scaleAndAdd(this.translation, pos, this.velocity, 1 / 10);
+        vec3.add(this.velocity, this.velocity, cameraVel);
         mat4.fromScaling(this.modelMatrix, projectileScale);
         return true;
     }
