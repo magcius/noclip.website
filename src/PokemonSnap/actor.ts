@@ -1,5 +1,5 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
@@ -7,24 +7,24 @@ import { ViewerRenderInput } from "../viewer";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags } from "./motion";
 import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0 } from "../MathHelpers";
 import { getPathPoint } from "./animation";
-
-interface Apple {
-    translation: vec3;
-    free: boolean;
-    thrown: number;
-}
+import { ObjectDef } from "./room";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
     public collision: CollisionTree | null = null;
     public currentSong = 0;
     public songStart = 0;
-    public lastThrow = -1;
     public allActors: Actor[] = [];
     public translation = vec3.create(); // camera position
-    public apples: Projectile[] = [];
-    public pesters: Projectile[] = [];
-    public appleNext = true;
+
+    public lastThrow = -1;
+    public projectiles: Projectile[] = [];
+    public pesterNext = false;
+
+    public splashes: Splash[] = [];
+    public zeroOne: ModelRenderer;
+
+    constructor(public id: string) { }
 
     public update(viewerInput: ViewerRenderInput): void {
         mat4.getTranslation(this.translation, viewerInput.camera.worldMatrix);
@@ -44,7 +44,6 @@ export class LevelGlobals {
             let didThrow = false;
             // if we're above ground, throw the next type of projectile
             if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
-                const projList = this.appleNext ? this.apples : this.pesters;
                 getMatrixAxisZ(throwScratch[0], viewerInput.camera.worldMatrix);
                 vec3.scale(throwScratch[0], throwScratch[0], -1);
                 if (viewerInput.deltaTime > 0) {
@@ -53,8 +52,8 @@ export class LevelGlobals {
                 } else
                     vec3.copy(throwScratch[1], Vec3Zero);
 
-                for (let i = 0; i < projList.length; i++) {
-                    if (projList[i].tryThrow(this.translation, throwScratch[0], throwScratch[1])) {
+                for (let i = 0; i < this.projectiles.length; i++) {
+                    if (this.projectiles[i].isPester === this.pesterNext && this.projectiles[i].tryThrow(this.translation, throwScratch[0], throwScratch[1])) {
                         didThrow = true;
                         break;
                     }
@@ -62,7 +61,7 @@ export class LevelGlobals {
             }
             if (didThrow) {
                 this.lastThrow = viewerInput.time;
-                this.appleNext = !this.appleNext; // alternate apple and pester ball
+                this.pesterNext = !this.pesterNext; // alternate apple and pester ball
             } else
                 this.lastThrow += 500; // wait a bit, then try again
         }
@@ -70,6 +69,13 @@ export class LevelGlobals {
 
     // TODO: pick a fish based on level logic
     public spawnFish(pos: vec3): void { }
+
+    public createSplash(type: SplashType, pos: vec3, scale = Vec3One): void {
+        for (let i = 0; i < this.splashes.length; i++) {
+            if (this.splashes[i].type === type && this.splashes[i].tryStart(pos, scale, this))
+                break;
+        }
+    }
 
     public sendGlobalSignal(source: Target | null, signal: number): void {
         for (let i = 0; i < this.allActors.length; i++) {
@@ -85,6 +91,44 @@ export class LevelGlobals {
             break;
         }
     }
+
+    public buildTempObjects(defs: ObjectDef[], data: RenderData[], zeroOneData: RenderData, projData: RenderData[], level: Level): ModelRenderer[] {
+        const out: ModelRenderer[] = [];
+
+        this.zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
+        out.push(this.zeroOne);
+
+        // projectiles
+        for (let t = 0; t < 2; t++) {
+            for (let i = 0; i < 5; i++) {
+                const proj = new Projectile(projData[t], level.projectiles[t], t === 1);
+                this.projectiles.push(proj);
+                out.push(proj);
+            }
+        }
+
+        // projectile splashes
+        for (let t = 2; t < 4; t++) {
+            const type = t === 2 ? SplashType.AppleWater : SplashType.AppleLava;
+            for (let i = 0; i < 3; i++) {
+                const splash = new Splash(projData[t], level.projectiles[t].nodes, level.projectiles[t].animations, type, projectileScale);
+                this.splashes.push(splash);
+                out.push(splash);
+            }
+        }
+
+        const splashIndex = defs.findIndex((d) => d.id === 1003);
+        if (splashIndex >= 0) {
+            const splashDef = defs[splashIndex] as ActorDef;
+            for (let i = 0; i < 5; i++) {
+                const splash = new Splash(data[splashIndex], splashDef.nodes, splashDef.stateGraph.animations, SplashType.Water, splashDef.scale);
+                this.splashes.push(splash);
+                out.push(splash);
+            }
+        }
+
+        return out;
+    }
 }
 
 const projectileScale = vec3.fromValues(.1, .1, .1);
@@ -99,13 +143,13 @@ export class Projectile extends ModelRenderer {
     public static maxSlope = Math.sqrt(3) / 2; // y normal for thirty degree slope
     public static minSpeed = 390;
 
-    constructor(renderData: RenderData, public def: ProjectileData, private isPester: boolean) {
+    constructor(renderData: RenderData, public def: ProjectileData, public isPester: boolean) {
         super(renderData, def.nodes, def.animations);
         this.visible = false;
     }
 
     public distFrom(pos: vec3): number {
-        if (!this.visible && this.hidden)
+        if (!this.visible || this.hidden || this.landedAt === 0)
             return Infinity;
         return vec3.dist(pos, this.translation);
     }
@@ -192,13 +236,13 @@ export class Projectile extends ModelRenderer {
             case 0x007F66:
             case 0x337FB2:
             case 0x4CCCCC: {
-                // water splash
+                globals.createSplash(SplashType.AppleWater, this.translation);
                 this.landedAt = viewerInput.time;
                 this.inWater = true;
             } break;
             case 0x00FF00:
             case 0xFF4C19: {
-                // lava splash
+                globals.createSplash(SplashType.AppleLava, this.translation);
                 this.landedAt = viewerInput.time;
                 this.inWater = true;
             } break;
@@ -287,9 +331,43 @@ export class Projectile extends ModelRenderer {
     }
 }
 
+const enum SplashType {
+    Water,
+    Lava,
+    AppleWater,
+    AppleLava,
+}
+
+const scaleScratch = vec3.create();
+class Splash extends ModelRenderer {
+    constructor(renderData: RenderData, nodes: GFXNode[], animations: AnimationData[], public type: SplashType, private baseScale: vec3) {
+        super(renderData, nodes, animations);
+        this.visible = false;
+    }
+
+    public tryStart(pos: vec3, scale: vec3, globals: LevelGlobals): boolean {
+        if (this.visible)
+            return false;
+        this.visible = true;
+        vec3.mul(scaleScratch, this.baseScale, scale);
+        mat4.fromScaling(this.modelMatrix, scaleScratch);
+        this.modelMatrix[12] = pos[0];
+        this.modelMatrix[13] = findGroundHeight(globals.collision, pos[0], pos[2]);
+        this.modelMatrix[14] = pos[2];
+        this.setAnimation(0);
+        this.renderers[this.headAnimationIndex].animator.loopCount = 0;
+        return true;
+    }
+
+    public motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+        if (this.renderers[this.headAnimationIndex].animator.loopCount >= 1)
+            this.visible = false;
+    }
+}
 
 const cameraScratch = vec3.create();
 const collideScratch = nArray(2, () => vec3.create());
+const splashScratch = vec3.create();
 export class Actor extends ModelRenderer {
     public motionData = new MotionData();
     protected currState = -1;
@@ -477,6 +555,14 @@ export class Actor extends ModelRenderer {
         if (block.tangible !== undefined)
             this.tangible = block.tangible;
 
+        if (block.splash !== undefined) {
+            if (block.splash.index === -1)
+                vec3.copy(splashScratch, this.translation);
+            else
+                mat4.getTranslation(splashScratch, this.renderers[block.splash.index].modelMatrix); // use last frame model matrix, hopefully okay
+            globals.createSplash(SplashType.Water, splashScratch, block.splash.scale);
+        }
+
         if (block.motion !== null) {
             this.motionData.currMotion = block.motion;
             this.motionData.currBlock = 0;
@@ -617,11 +703,13 @@ export class Actor extends ModelRenderer {
                 case InteractionType.FindApple: {
                     let nearest: Projectile | null = null;
                     let dist = 600;
-                    for (let i = 0; i < globals.apples.length; i++) {
-                        const newDist = globals.apples[i].distFrom(this.translation);
+                    for (let i = 0; i < globals.projectiles.length; i++) {
+                        if (globals.projectiles[i].isPester)
+                            continue;
+                        const newDist = globals.projectiles[i].distFrom(this.translation);
                         if (newDist < dist) {
                             dist = newDist;
-                            nearest = globals.apples[i];
+                            nearest = globals.projectiles[i];
                         }
                     }
                     if (nearest !== null) {
@@ -670,6 +758,21 @@ export class Actor extends ModelRenderer {
                     result = faceTarget(this.translation, this.euler, this.motionData, block, this.target, dt, globals); break;
                 case "point":
                     result = approachPoint(this.translation, this.euler, this.motionData, globals, block, dt); break;
+                case "splash": {
+                    if (block.index === -1)
+                        vec3.copy(splashScratch, this.translation);
+                    else
+                        mat4.getTranslation(splashScratch, this.renderers[block.index].modelMatrix); // use last frame model matrix, hopefully okay
+                    if (block.onImpact) {
+                        const height = findGroundHeight(globals.collision, splashScratch[0], splashScratch[2]);
+                        if (splashScratch[1] > height) {
+                            result = MotionResult.None;
+                            break;
+                        }
+                    }
+                    globals.createSplash(SplashType.Water, splashScratch, block.scale);
+                    result = MotionResult.Done;
+                } break;
                 case "basic": {
                     switch (block.subtype) {
                         case BasicMotionKind.Placeholder:

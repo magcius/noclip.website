@@ -889,6 +889,8 @@ export class AdjustableAnimationController {
     }
 
     public getTimeInFrames(): number {
+        if (!this.initialized)
+            return this.phaseFrames;
         return this.time*this.fps + this.phaseFrames;
     }
 

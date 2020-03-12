@@ -1,6 +1,6 @@
 import * as MIPS from "./mips";
 import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room";
-import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero } from "../MathHelpers";
+import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One } from "../MathHelpers";
 import { vec3, mat4 } from "gl-matrix";
 import { getPathPoint, getPathTangent } from "./animation";
 import { hexzero, assert, nArray, assertExists } from "../util";
@@ -28,8 +28,6 @@ const enum MotionFuncs {
     ApproachPoint   = 0x361E58,
     ResetPos        = 0x362050,
     Path            = 0x3620C8,
-    WaterSplash     = 0x35E174,
-    SplashOnImpact  = 0x35E298,
 }
 
 export class MotionData {
@@ -190,6 +188,13 @@ interface ApproachPoint {
     flags: number;
 }
 
+export interface Splash {
+    kind: "splash";
+    onImpact: boolean;
+    index: number;
+    scale: vec3;
+}
+
 export const enum BasicMotionKind {
     Placeholder,
     Wait,
@@ -203,7 +208,7 @@ interface BasicMotion {
     param: number;
 }
 
-export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear | ApproachPoint;
+export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear | ApproachPoint | Splash;
 
 export class MotionParser extends MIPS.NaiveInterpreter {
     public blocks: Motion[] = [];
@@ -385,6 +390,23 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     flags: MoveFlags.Ground,
                 });
             } break;
+            case StateFuncs.SplashAt:
+            case StateFuncs.SplashBelow: {
+                this.blocks.push({
+                    kind: "splash",
+                    onImpact: false,
+                    index: -1,
+                    scale: Vec3One,
+                });
+            } break;
+            case StateFuncs.SplashOnImpact: {
+                this.blocks.push({
+                    kind: "splash",
+                    onImpact: true,
+                    index: 8,
+                    scale: Vec3One,
+                });
+            } break;
             case StateFuncs.InteractWait: {
                 assert(a1.value === EndCondition.Timer && this.timer > 0);
                 this.blocks.push({
@@ -538,6 +560,24 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
             assert(blocks[0].kind === "faceTarget");
             blocks[0].flags |= MoveFlags.Continuous;
         } break;
+        // set splash params
+        case 0x802BFF74: {
+            assert(blocks[1].kind === "splash");
+            blocks[1].scale = vec3.fromValues(2, 2, 2);
+        } break;
+        case 0x802CA434:
+        case 0x802D2428:
+        case 0x802DB270: {
+            assert(blocks[1].kind === "splash");
+            blocks[1].onImpact = true;
+            blocks[1].index = 13;
+        } break;
+        case 0x802DBDB0: {
+            assert(blocks[1].kind === "splash");
+            blocks[1].onImpact = true;
+            blocks[1].index = 4;
+        } break;
+        // a few more complicated ones
     }
 }
 

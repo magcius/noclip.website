@@ -9,7 +9,7 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
-import {MotionParser, Motion} from "./motion";
+import {MotionParser, Motion, Splash} from "./motion";
 import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
 
 export interface Level {
@@ -62,7 +62,7 @@ export interface StaticDef {
     sharedOutput: RSPSharedOutput;
 }
 
-type ObjectDef = ActorDef | StaticDef;
+export type ObjectDef = ActorDef | StaticDef;
 
 export function isActor(def: ObjectDef): def is ActorDef {
     return !!(def as any).stateGraph;
@@ -284,7 +284,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
                 const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
                 objectInfo.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
             } catch (e) {
-                console.warn("failed parse", hexzero(id, 3), e);
+                console.warn("failed parse", id, e);
             }
 
         }
@@ -1095,8 +1095,7 @@ function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
 
 function buildProjectiles(dataMap: DataMap): ProjectileData[] {
     const out: ProjectileData[] = [];
-    // apple
-    {
+    { // apple
         const sharedOutput = new RSPSharedOutput();
         const nodes = parseGraph(dataMap, 0x800EAED0, 0x800EAC58, 0x800A15D8, sharedOutput);
         const animations: AnimationData[] = [{
@@ -1107,9 +1106,7 @@ function buildProjectiles(dataMap: DataMap): ProjectileData[] {
         }];
         out.push({ nodes, sharedOutput, animations });
     }
-
-    // pester ball
-    {
+    { // pester ball
         const sharedOutput = new RSPSharedOutput();
         const nodes = parseGraph(dataMap, 0x800E9138, 0x800E8EB8, 0x800A15D8, sharedOutput);
         const animations: AnimationData[] = [{
@@ -1117,6 +1114,34 @@ function buildProjectiles(dataMap: DataMap): ProjectileData[] {
             frames: 0,
             tracks: [null, null],
             materialTracks: parseMaterialAnimation(dataMap, 0x800E91C0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+    { // water splash
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EB430, 0x800EB510, 0x800A1608, sharedOutput);
+        const tracks: (AnimationTrack | null)[] = [];
+        for (let i = 0; i < nodes.length; i++)
+            tracks.push(parseAnimationTrack(dataMap, dataMap.deref(0x800EAFB0 + 4 * i)));
+        const animations: AnimationData[] = [{
+            fps: 27,
+            frames: 0,
+            tracks,
+            materialTracks: parseMaterialAnimation(dataMap, 0x800EB0C0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+    { // lava splash
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EDAB0, 0x800EDB90, 0x800A1608, sharedOutput);
+        const tracks: (AnimationTrack | null)[] = [];
+        for (let i = 0; i < nodes.length; i++)
+            tracks.push(parseAnimationTrack(dataMap, dataMap.deref(0x800ED5B0 + 4 * i)));
+        const animations: AnimationData[] = [{
+            fps: 27,
+            frames: 0,
+            tracks,
+            materialTracks: parseMaterialAnimation(dataMap, 0x800ED6B0, nodes),
         }];
         out.push({ nodes, sharedOutput, animations });
     }
@@ -1303,6 +1328,7 @@ export interface StateBlock {
     eatApple?: boolean;
     forwardSpeed?: number;
     tangible?: boolean;
+    splash?: Splash;
 
     edges: StateEdge[];
 }
@@ -1374,6 +1400,11 @@ export const enum StateFuncs {
     // only in cave
     DanceInteract   = 0x2C1440,
     DanceInteract2  = 0x2C0140,
+
+    SplashAt        = 0x35E174,
+    SplashBelow     = 0x35E1D4,
+    DratiniSplash   = 0x35E238,
+    SplashOnImpact  = 0x35E298,
 }
 
 export const enum ObjectField {
@@ -1425,7 +1456,7 @@ export const enum EndCondition {
 
 function emptyStateBlock(block: StateBlock): boolean {
     return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.auxAddress === -1 &&
-    block.flagSet === 0 && block.ignoreGround === undefined && block.eatApple === undefined && block.forwardSpeed === undefined && block.tangible === undefined;
+    block.flagSet === 0 && block.ignoreGround === undefined && block.eatApple === undefined && block.forwardSpeed === undefined && block.tangible === undefined && block.splash === undefined;
 }
 
 const motionParser = new MotionParser();
@@ -1701,6 +1732,17 @@ class StateParser extends MIPS.NaiveInterpreter {
             case StateFuncs.EatApple: {
                 this.currBlock.eatApple = true;
             } break;
+            case StateFuncs.SplashAt:
+            case StateFuncs.SplashBelow:
+            case StateFuncs.DratiniSplash: {
+                assert(this.currBlock.splash === undefined)
+                this.currBlock.splash = {
+                    kind: "splash",
+                    onImpact: false,
+                    index: -1,
+                    scale: Vec3One,
+                };
+            } break;
             default:
                 this.valid = false;
         }
@@ -1913,6 +1955,10 @@ function fixupState(state: State): void {
                 condition: InteractionType.OverSurface,
                 conditionParam: 0,
             });
+        } break;
+        // set splash scale
+        case 0x802CA020: {
+            assertExists(state.blocks[0].splash).scale = vec3.fromValues(15, 15, 10);
         } break;
     }
 }

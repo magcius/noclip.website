@@ -23,10 +23,11 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals = new LevelGlobals();
+    public globals: LevelGlobals;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.globals = new LevelGlobals(id);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -133,7 +134,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const viewerTextures: Viewer.Texture[] = [];
             const holder = new FakeTextureHolder(viewerTextures);
 
-            const sceneRenderer = new SnapRenderer(device, holder);
+            const sceneRenderer = new SnapRenderer(device, holder, this.id);
             const level = parseLevel(archives);
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
@@ -153,21 +154,12 @@ class SceneDesc implements Viewer.SceneDesc {
             }
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
-            const zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
-            sceneRenderer.modelRenderers.push(zeroOne);
+            sceneRenderer.renderData.push(zeroOneData);
 
-            const appleData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[0].sharedOutput)
-            for (let i = 0; i < 5; i++) {
-                const apple = new Projectile(appleData, level.projectiles[0], false);
-                sceneRenderer.globals.apples.push(apple);
-                sceneRenderer.modelRenderers.push(apple);
-            }
-            const pesterData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[1].sharedOutput)
-            for (let i = 0; i < 5; i++) {
-                const pester = new Projectile(pesterData, level.projectiles[1], true);
-                sceneRenderer.globals.pesters.push(pester);
-                sceneRenderer.modelRenderers.push(pester);
-            }
+            const projData: RenderData[] = [];
+            for (let i = 0; i < level.projectiles.length; i++)
+                projData.push(new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[i].sharedOutput));
+            sceneRenderer.renderData.push(...projData);
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
@@ -177,6 +169,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
             }
+
+            sceneRenderer.modelRenderers.push(
+                ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
+            );
 
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);

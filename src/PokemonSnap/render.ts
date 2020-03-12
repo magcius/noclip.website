@@ -367,7 +367,7 @@ export class ModelRenderer {
 
     public setAnimation(index: number): void {
         this.currAnimation = index;
-        this.animationController.adjust(this.animations[index].fps);
+        this.animationController.init(this.animations[index].fps);
         const newAnim = this.animations[index];
         this.headAnimationIndex = newAnim.tracks.findIndex((t) => t !== null);
         for (let i = 0; i < this.renderers.length; i++) {
