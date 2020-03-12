@@ -12,12 +12,13 @@ import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
 import { DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { OoT3DRenderer, ModelCache, maybeDecompress } from './oot3d_scenes';
+import { OoT3DRenderer, ModelCache } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { SceneContext } from '../SceneBase';
 import { MathConstants } from "../MathHelpers";
+import { maybeDecompress } from '../Common/Compression/LzS';
 
 const pathBase = `mm3d`;
 
