@@ -34,7 +34,7 @@ export class SceneDescLocationLoader implements LocationLoader<SceneDescLocation
         // Set our new scene. This needs to happen *first*.
         context.setScene(scene);
 
-        // Check if we need extra camera settings.
+        // Check for special camera settings.
         if (location.cameraSettings === undefined && scene.createCameraController !== undefined) {
             location.cameraSettings = {
                 kind: 'Custom',
@@ -42,9 +42,10 @@ export class SceneDescLocationLoader implements LocationLoader<SceneDescLocation
             };
         }
 
-        // TODO(jstpierre): adjustCameraController
-
         context.setViewerLocation(location);
+
+        if (scene.adjustCameraController)
+            scene.adjustCameraController(context.legacyUI.viewer.cameraController!);
 
         if (scene.createPanels)
             context.legacyUI.setScenePanels(scene.createPanels());
