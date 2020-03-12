@@ -219,6 +219,12 @@ export function startBckWithInterpole(actor: LiveActor, name: string, interpole:
         actor.effectKeeper.changeBck();
 }
 
+export function startBckNoInterpole(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBckWithInterpole(name, 0.0);
+    if (actor.effectKeeper !== null)
+        actor.effectKeeper.changeBck();
+}
+
 export function startBtk(actor: LiveActor, name: string): void {
     actor.modelManager!.startBtk(name);
 }
@@ -547,6 +553,10 @@ export function moveTransToCurrentRailPos(actor: LiveActor): void {
 
 export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
+}
+
+export function getNextRailPointNo(actor: LiveActor): number {
+    return actor.railRider!.getNextPointNo();
 }
 
 export function getRailPartLength(actor: LiveActor, partIdx: number): number {

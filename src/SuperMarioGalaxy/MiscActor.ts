@@ -18,7 +18,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -755,6 +755,19 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        calcGravity(sceneObjHolder, this);
+        if (this.waitAction !== null) {
+            startAction(this, this.waitAction);
+            if (isBckExist(this, this.waitAction))
+                startBckNoInterpole(this, this.waitAction);
+            setBckFrameAtRandom(this);
+            // calcAnimDirect
+        }
+    }
+
     protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem | null, isIndirect: boolean = false): void {
         if (itemGoods !== null) {
             if (isIndirect) {
@@ -1108,7 +1121,9 @@ export class HatchWaterPlanet extends LiveActor {
     }
 }
 
-export class Kinopio extends NPCActor {
+const enum KinopioNrv { Wait }
+
+export class Kinopio extends NPCActor<KinopioNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
@@ -1118,6 +1133,10 @@ export class Kinopio extends NPCActor {
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(KinopioNrv.Wait);
+
+        if (isConnectedWithRail(infoIter))
+            this.initRailRider(sceneObjHolder, infoIter);
 
         this.boundingSphereRadius = 100;
 
@@ -1125,44 +1144,54 @@ export class Kinopio extends NPCActor {
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
+        this.waitAction = 'Wait';
+        this.walkAction = 'Walk';
+        this.railGrounded = true;
+        this.desiredRailSpeed = 0.83;
+
         const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
         if (arg2 === 0) {
-            startAction(this, `SpinWait1`);
+            this.waitAction = `SpinWait1`;
         } else if (arg2 === 1) {
-            startAction(this, `SpinWait2`);
+            this.waitAction = `SpinWait2`;
         } else if (arg2 === 2) {
-            startAction(this, `SpinWait3`);
+            this.waitAction = `SpinWait3`;
         } else if (arg2 === 3) {
-            startAction(this, `Wait`);
+            // setDistanceToTalk
         } else if (arg2 === 4) {
-            startAction(this, `Wait`);
+            // MapObjConnector
+            // setNerve(Mount);
         } else if (arg2 === 5) {
-            startAction(this, `SwimWait`);
+            this.waitAction = `SwimWait`;
+            this.walkAction = `SwimWait`;
         } else if (arg2 === 6) {
-            startAction(this, `Pickel`);
+            this.waitAction = `Pickel`;
         } else if (arg2 === 7) {
-            startAction(this, `Sleep`);
+            this.waitAction = `Sleep`;
         } else if (arg2 === 8) {
-            startAction(this, `Wait`);
+            // this.hasTakeOutStar = true;
         } else if (arg2 === 9) {
-            startAction(this, `KinopioGoodsWeapon`);
+            this.waitAction = `KinopioGoodsWeapon`;
+            this.walkAction = `KinopioGoodsWeaponWalk`;
         } else if (arg2 === 10) {
-            startAction(this, `Joy`);
+            this.waitAction = `Joy`;
+            this.walkAction = `Joy`;
         } else if (arg2 === 11) {
-            startAction(this, `Rightened`);
+            this.waitAction = `Rightened`;
         } else if (arg2 === 12) {
-            startAction(this, `StarPieceWait`);
+            this.waitAction = `StarPieceWait`;
+            this.walkAction = `KinopioGoodsStarPieceWalk`;
         } else if (arg2 === 13) {
-            startAction(this, `Getaway`);
+            this.walkAction = `Getaway`;
+            this.desiredRailSpeed = 3.32;
         } else if (arg2 === -1) {
             if (itemGoodsIdx === 2) {
-                startAction(this, `WaitPickel`);
+                this.waitAction = `WaitPickel`;
+                this.walkAction = `WalkPickel`;
             } else {
-                startAction(this, `Wait`);
+                // this.setNerve(KinopioNrv.Far);
             }
         }
-
-        setBckFrameAtRandom(this);
 
         // Bind the color change animation.
         startBrk(this, 'ColorChange');
@@ -1171,6 +1200,23 @@ export class Kinopio extends NPCActor {
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (fallback(infoIter.getValueNumber('SW_APPEAR'), -1) !== -1)
             this.makeActorDead();
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KinopioNrv.Wait) {
+            const nextRailPoint = isExistRail(this) ? getNextRailPointNo(this) : 0;
+
+            // if (!tryStartReactionAndPushNerve(this))
+            tryTalkNearPlayerAndStartMoveTalkAction(this, deltaTimeFrames);
+            if (isExistRail(this) && getNextRailPointNo(this) !== nextRailPoint)
+                this.tryStartArgs();
+        }
+    }
+
+    private tryStartArgs(): void {
+        // TODO(jstpierre): Rail point arg0.
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
