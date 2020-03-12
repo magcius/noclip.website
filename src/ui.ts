@@ -259,11 +259,15 @@ export abstract class ScrollSelect implements Widget {
 
         this.scrollContainer = document.createElement('div');
         this.setHeight(`200px`);
+        this.setTextSelectable(false);
         this.scrollContainer.style.overflow = 'auto';
-        this.scrollContainer.style.userSelect = 'none';
         this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
+    }
+
+    public setTextSelectable(v: boolean): void {
+        this.scrollContainer.style.userSelect = v ? '' : 'none'
     }
 
     public setHeight(height: string): void {

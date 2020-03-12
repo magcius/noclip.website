@@ -129,13 +129,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
     }
 }
 
-export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
-    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
-        return LzS.decompress(buffer.createDataView());
-    else
-        return buffer;
-}
-
 export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
@@ -187,7 +180,7 @@ export class ModelCache {
             p = this.fetchFileData(archivePath).then((data) => {
                 return data;
             }).then((data) => {
-                const arc = ZAR.parse(maybeDecompress(data));
+                const arc = ZAR.parse(LzS.maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
