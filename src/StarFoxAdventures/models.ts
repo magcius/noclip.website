@@ -310,6 +310,15 @@ export class Model implements BlockRenderer {
                 offs += 0x1c;
             }
 
+            // Compute total translations for each joint
+            for (let i = 0; i < jointCount; i++) {
+                const joint = this.joints[i];
+                if (joint.parent != 0xff) {
+                    const parent = this.joints[joint.parent];
+                    vec3.add(joint.translation, joint.translation, parent.translation);
+                }
+            }
+
             const weightOffset = blockDv.getUint32(fields.weightOffset);
             const weightCount = blockDv.getUint8(fields.weightCount);
 
