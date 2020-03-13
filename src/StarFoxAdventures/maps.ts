@@ -1,16 +1,14 @@
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
-import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
+import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { ModelInstance } from './models';
-import { BlockCollection, IBlockCollection, ModelHolder } from './blocks';
+import { BlockCollection, BlockRenderer, IBlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 
 export interface BlockInfo {
@@ -69,19 +67,10 @@ interface MapSceneInfo {
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
 }
 
-class MapModelHolder {
-    public models: ModelInstance[] = [];
-    public modelMatrices: mat4[] = [];
-
-    public addModel(model: ModelInstance, modelMatrix: mat4) {
-        this.models.push(model);
-        this.modelMatrices.push(modelMatrix);
-    }
-}
-
 export class MapInstance {
     private matrix: mat4 = mat4.create();
-    private modelHolders: MapModelHolder[] = [];
+    private models: BlockRenderer[] = [];
+    private modelMatrices: mat4[] = [];
     private numRows: number;
     private numCols: number;
     private blockTable: (BlockInfo | null)[][] = [];
@@ -102,7 +91,8 @@ export class MapInstance {
     }
     
     public clearModels() {
-        this.modelHolders = nArray(3, () => new MapModelHolder());
+        this.models = [];
+        this.modelMatrices = [];
     }
 
     // Caution: Matrix will be referenced, not copied.
@@ -111,17 +101,17 @@ export class MapInstance {
     }
 
     public getNumDrawSteps(): number {
-        return this.modelHolders.length;
+        return 3;
+        // return this.modelHolders.length;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, drawStep: number, sceneTexture: ColorTexture) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        const modelMtx = mat4.create();
-        const modelHolder = this.modelHolders[drawStep];
-        for (let i = 0; i < modelHolder.models.length; i++) {
-            mat4.mul(modelMtx, this.matrix, modelHolder.modelMatrices[i]);
-            modelHolder.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx, sceneTexture);
+        for (let i = 0; i < this.models.length; i++) {
+            const matrix = mat4.create();
+            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
+            this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -144,10 +134,8 @@ export class MapInstance {
                     if (blockRenderer) {
                         const modelMatrix: mat4 = mat4.create();
                         mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                        for (let drawStep = 0; drawStep < blockRenderer.getNumDrawSteps(); drawStep++) {
-                            const modelHolder = this.modelHolders[drawStep];
-                            blockRenderer.addToModelHolder(modelHolder, modelMatrix, drawStep);
-                        }
+                        this.models.push(blockRenderer);
+                        this.modelMatrices.push(modelMatrix);
                     }
                 } catch (e) {
                     console.warn(`Skipping block at ${x},${y} due to exception:`);
@@ -316,13 +304,13 @@ class MapSceneRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        for (let i = 0; i < this.map.getNumDrawSteps(); i++) {
+        for (let drawStep = 0; drawStep < this.map.getNumDrawSteps(); drawStep++) {
             // Prolog
             const template = this.renderHelper.pushTemplateRenderInst();
             fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
             // Body
-            this.map.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+            this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
 
             // Epilog
             renderInstManager.popTemplateRenderInst();

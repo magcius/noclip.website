@@ -6,13 +6,12 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
-import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
+import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { getDebugOverlayCanvas2D, drawWorldSpaceText } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
@@ -22,8 +21,7 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { ModelHolder } from './blocks';
-import { ModelInstance, Model } from './models';
+import { Model } from './models';
 import { hexdump } from '../util';
 
 const materialParams = new MaterialParams();
@@ -51,16 +49,6 @@ interface ObjectSphere {
     name: string;
     pos: vec3;
     radius: number;
-}
-
-class MyModelHolder implements ModelHolder {
-    public models: ModelInstance[] = [];
-    public modelMatrices: mat4[] = [];
-    
-    public addModel(model: ModelInstance, modelMatrix: mat4) {
-        this.models.push(model);
-        this.modelMatrices.push(modelMatrix);
-    }
 }
 
 function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
@@ -99,10 +87,10 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
         aEl.click();
     };
 
-    const modelRenderer = new Model(device, modelData, texColl);
-    const modelHolder = new MyModelHolder();
-    modelRenderer.addToModelHolder(modelHolder, mat4.create(), 0);
-    return modelHolder;
+    const model = new Model(device, modelData, texColl);
+    // const modelHolder = new MyModelHolder();
+    // modelRenderer.addToModelHolder(modelHolder, mat4.create(), 0);
+    return model;
 }
 
 class WorldRenderer extends SFARenderer {
@@ -111,7 +99,7 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private materialHelperObjectSphere: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private aModel: MyModelHolder) {
+    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private aModel: Model) {
         super(device);
 
         packetParams.clear();
@@ -231,7 +219,7 @@ class WorldRenderer extends SFARenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
         // Body
-        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, 0, this.sceneTexture);
+        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
         this.copyToSceneTexture(device);
         // for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
         //     this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
@@ -271,9 +259,10 @@ class WorldRenderer extends SFARenderer {
         
         let modeltemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
-        for (let i = 0; i < this.aModel.models.length; i++) {
-            this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i], this.sceneTexture);
-        }
+        this.aModel.prepareToRender(device, renderInstManager, viewerInput, mat4.create(), this.sceneTexture, 0);
+        // for (let i = 0; i < this.aModel.models.length; i++) {
+        //     this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i], this.sceneTexture);
+        // }
         renderInstManager.popTemplateRenderInst();
         
         // Epilog

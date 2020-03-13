@@ -1,16 +1,9 @@
 import * as Viewer from '../viewer';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParams, GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array } from '../gx/gx_displaylist';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { mat4 } from 'gl-matrix';
-import { Camera, computeViewMatrix } from '../Camera';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GXMaterial } from '../gx/gx_material';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
-
-import { SFATexture } from './textures';
 
 // Adapted from BasicGXRendererHelper
 export abstract class SFARendererHelper implements Viewer.SceneGfx {

@@ -1,4 +1,6 @@
-import { GfxDevice} from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import * as Viewer from '../viewer';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -6,12 +8,12 @@ import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { nArray } from '../util';
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { SFARenderer } from './render';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, SFAMaterial, makeMaterialTexture } from './shaders';
+import { SFAMaterial, makeMaterialTexture } from './shaders';
 import { ModelInstance, Model } from './models';
 import { LowBitReader } from './util';
 
@@ -19,13 +21,9 @@ export abstract class BlockFetcher {
     public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
 }
 
-export abstract class ModelHolder {
-    public abstract addModel(model: ModelInstance, modelMatrix: mat4): void;
-}
-
 export abstract class BlockRenderer {
     public abstract getNumDrawSteps(): number;
-    public abstract addToModelHolder(holder: ModelHolder, modelMatrix: mat4, drawStep: number): void;
+    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
 }
 
 export interface IBlockCollection {
@@ -386,13 +384,23 @@ export class AncientBlockRenderer implements BlockRenderer {
         return 1;
     }
 
-    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
+        if (drawStep != 0) {
+            return;
+        }
+
         for (let i = 0; i < this.models.length; i++) {
-            const trans = mat4.create();
-            mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
-            const matrix = mat4.create();
-            mat4.mul(matrix, modelMatrix, trans);
-            holder.addModel(this.models[i], matrix);
+            this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
     }
+
+    // public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
+    //     for (let i = 0; i < this.models.length; i++) {
+    //         const trans = mat4.create();
+    //         mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
+    //         const matrix = mat4.create();
+    //         mat4.mul(matrix, modelMatrix, trans);
+    //         holder.addModel(this.models[i], matrix);
+    //     }
+    // }
 }

@@ -1,27 +1,20 @@
 import * as Viewer from '../viewer';
 import { nArray } from '../util';
-import { mat4 } from 'gl-matrix';
-import { GfxDevice, GfxSampler, GfxHostAccessPass, GfxTexture, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
+import { mat4, vec3 } from 'gl-matrix';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array } from '../gx/gx_displaylist';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParams } from '../gx/gx_render';
-import { GXMaterial } from '../gx/gx_material';
+import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
+import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { SFATexture } from './textures';
 import { SFAMaterial } from './shaders';
 import * as GX from '../gx/gx_enum';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-
-import { SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
-import { getSubdir } from './resource';
-import { GameInfo } from './scenes';
+import { TextureCollection } from './textures';
 import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader } from './util';
-import { BlockRenderer, ModelHolder } from './blocks';
+import { BlockRenderer } from './blocks';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -106,9 +99,24 @@ export class ModelInstance {
     }
 }
 
+interface Joint {
+    parent: number;
+    translation: vec3;
+    worldTranslation: vec3;
+}
+
+function readVec3(data: DataView, byteOffset: number = 0): vec3 {
+    return vec3.fromValues(
+        data.getFloat32(byteOffset + 0),
+        data.getFloat32(byteOffset + 4),
+        data.getFloat32(byteOffset + 8)
+        );
+}
+
 export class Model implements BlockRenderer {
     // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
     public models: ModelInstance[][] = [];
+    public joints: Joint[] = [];
     public yTranslate: number = 0;
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
@@ -265,6 +273,17 @@ export class Model implements BlockRenderer {
         if (fields.hasJoints) {
             const jointOffset = blockDv.getUint32(fields.jointOffset);
             jointCount = blockDv.getUint8(fields.jointCount);
+
+            this.joints = [];
+            let offs = jointOffset;
+            for (let i = 0; i < jointCount; i++) {
+                this.joints.push({
+                    parent: blockDv.getUint8(offs),
+                    translation: readVec3(blockDv, offs + 0x4),
+                    worldTranslation: readVec3(blockDv, offs + 0x10),
+                });
+                offs += 0x1c;
+            }
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
@@ -498,14 +517,18 @@ export class Model implements BlockRenderer {
         return this.models.length;
     }
 
-    public addToModelHolder(holder: ModelHolder, modelMatrix: mat4, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
+        if (drawStep < 0 || drawStep >= this.models.length) {
+            return;
+        }
+
         const models = this.models[drawStep];
         for (let i = 0; i < models.length; i++) {
             const trans = mat4.create();
             mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
-            const matrix = mat4.create();
-            mat4.mul(matrix, modelMatrix, trans);
-            holder.addModel(models[i], matrix);
+            const matrix_ = mat4.create();
+            mat4.mul(matrix_, matrix, trans);
+            models[i].prepareToRender(device, renderInstManager, viewerInput, matrix_, sceneTexture);
         }
     }
 }
