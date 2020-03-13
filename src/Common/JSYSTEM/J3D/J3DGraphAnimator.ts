@@ -59,12 +59,12 @@ export class J3DFrameCtrl {
                 this.currentTimeInFrames = this.startFrame;
             }
         } else if (this.loopMode === LoopMode.REPEAT) {
-            while (this.currentTimeInFrames > this.endFrame) {
+            while (this.currentTimeInFrames >= this.endFrame) {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasRepeated;
                 this.currentTimeInFrames -= (this.endFrame - this.repeatStartFrame);
             }
         } else if (this.loopMode === LoopMode.MIRRORED_ONCE) {
-            if (this.currentTimeInFrames > this.endFrame) {
+            if (this.currentTimeInFrames >= this.endFrame) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
             }
@@ -75,7 +75,7 @@ export class J3DFrameCtrl {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasStopped;
             }
         } else if (this.loopMode === LoopMode.MIRRORED_REPEAT) {
-            if (this.currentTimeInFrames > this.endFrame) {
+            if (this.currentTimeInFrames >= this.endFrame - 1.0) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
             }
