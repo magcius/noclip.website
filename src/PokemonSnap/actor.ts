@@ -224,6 +224,7 @@ export class Projectile extends ModelRenderer {
         this.inWater = false;
         this.animationPaused = false;
         this.setAnimation(0);
+        vec3.copy(this.prevPos, pos);
         vec3.normalize(this.velocity, dir);
         vec3.scale(this.velocity, this.velocity, 1500);
         vec3.scaleAndAdd(this.translation, pos, this.velocity, 1 / 10);
@@ -274,9 +275,11 @@ export class Projectile extends ModelRenderer {
         const height = computePlaneHeight(ground, this.translation[0], this.translation[2]);
         if (this.translation[1] > height)
             return false;
-        let lo = 0, hi = 1, delta = this.translation[1] - height;
+        let lo = 0, hi = 1;
+        let delta = this.translation[1] - height;
+        let stepCount = 15;
         vec3.copy(groundScratch, this.translation);
-        while (Math.abs(delta) > .375) {
+        while (Math.abs(delta) > .375 && stepCount-- > 0) {
             const t = (lo + hi) / 2;
             vec3.lerp(groundScratch, this.prevPos, this.translation, t);
             const midHeight = computePlaneHeight(ground, groundScratch[0], groundScratch[2]);
