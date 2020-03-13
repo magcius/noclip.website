@@ -22,8 +22,8 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { ModelHolder, SFABlockRenderer } from './blocks';
-import { ModelInstance } from './models';
+import { ModelHolder } from './blocks';
+import { ModelInstance, Model } from './models';
 import { hexdump } from '../util';
 
 const materialParams = new MaterialParams();
@@ -99,7 +99,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
         aEl.click();
     };
 
-    const modelRenderer = new SFABlockRenderer(device, modelData, texColl);
+    const modelRenderer = new Model(device, modelData, texColl);
     const modelHolder = new MyModelHolder();
     modelRenderer.addToModelHolder(modelHolder, mat4.create(), 0);
     return modelHolder;
