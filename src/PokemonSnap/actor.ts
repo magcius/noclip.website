@@ -5,7 +5,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags } from "./motion";
-import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0 } from "../MathHelpers";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY } from "../MathHelpers";
 import { getPathPoint } from "./animation";
 import { ObjectDef } from "./room";
 
@@ -197,6 +197,7 @@ const impactScratch = nArray(2, () => vec3.create());
 const groundScratch = vec3.create();
 export class Projectile extends ModelRenderer {
     public translation = vec3.create();
+    private prevPos = vec3.create();
     public velocity = vec3.create();
     public landedAt = 0;
     public inWater = false;
@@ -260,6 +261,7 @@ export class Projectile extends ModelRenderer {
             this.checkCollision(vec3.len(this.velocity), dt, globals);
             this.velocity[1] -= 1080 * dt;
         }
+        vec3.copy(this.prevPos, this.translation);
         if (this.landedAt === 0)
             vec3.scaleAndAdd(this.translation, this.translation, this.velocity, dt);
         this.modelMatrix[12] = this.translation[0];
@@ -272,8 +274,19 @@ export class Projectile extends ModelRenderer {
         const height = computePlaneHeight(ground, this.translation[0], this.translation[2]);
         if (this.translation[1] > height)
             return false;
-        // TODO: find intersection point? might not matter as much at a faster framerate
-        this.translation[1] = height + 12;
+        let lo = 0, hi = 1, delta = this.translation[1] - height;
+        vec3.copy(groundScratch, this.translation);
+        while (Math.abs(delta) > .375) {
+            const t = (lo + hi) / 2;
+            vec3.lerp(groundScratch, this.prevPos, this.translation, t);
+            const midHeight = computePlaneHeight(ground, groundScratch[0], groundScratch[2]);
+            delta = groundScratch[1] - midHeight;
+            if (delta > 0)
+                lo = t;
+            else
+                hi = t;
+        }
+        vec3.scaleAndAdd(this.translation, groundScratch, Vec3UnitY, 12);
         if (ground.type === 0x337FB2)
             globals.spawnFish(this.translation);
         if (this.isPester) {
