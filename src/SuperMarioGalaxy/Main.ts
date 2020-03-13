@@ -38,8 +38,8 @@ import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
-import { GravityExplainer } from './GravityExplainer';
 import { AreaObjMgr, AreaObj } from './AreaObj';
+import { CollisionDirector } from './Collision';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -825,6 +825,7 @@ class AreaObjContainer extends NameObj {
 
 export const enum SceneObj {
     SensorHitChecker     = 0x00,
+    CollisionDirector    = 0x01,
     LightDirector        = 0x06,
     AreaObjContainer     = 0x0D,
     PlanetGravityManager = 0x32,
@@ -851,6 +852,7 @@ export class SceneObjHolder {
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
 
+    public collisionDirector: CollisionDirector | null = null;
     public sensorHitChecker: SensorHitChecker | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
@@ -878,6 +880,8 @@ export class SceneObjHolder {
     public getObj(sceneObj: SceneObj): NameObj | null {
         if (sceneObj === SceneObj.SensorHitChecker)
             return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.CollisionDirector)
+            return this.collisionDirector;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -904,6 +908,8 @@ export class SceneObjHolder {
     private newEachObj(sceneObj: SceneObj): void {
         if (sceneObj === SceneObj.SensorHitChecker)
             this.sensorHitChecker = new SensorHitChecker(this);
+        else if (sceneObj === SceneObj.CollisionDirector)
+            this.collisionDirector = new CollisionDirector(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)

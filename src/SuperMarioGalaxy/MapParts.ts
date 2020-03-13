@@ -275,9 +275,9 @@ interface ActorHost {
     actor: LiveActor;
 }
 
-function sendMsgToHost(actorHost: ActorHost, messageType: MessageType): boolean {
+function sendMsgToHost(sceneObjHolder: SceneObjHolder, actorHost: ActorHost, messageType: MessageType): boolean {
     const bodySensor = actorHost.actor.getSensor('body');
-    return actorHost.actor.receiveMessage(messageType, bodySensor, bodySensor);
+    return actorHost.actor.receiveMessage(sceneObjHolder, messageType, bodySensor, bodySensor);
 }
 
 export class MapPartsRailMover extends NameObj {
@@ -413,7 +413,7 @@ export class MapPartsRailMover extends NameObj {
         const currentNerve = this.spine.getCurrentNerve();
 
         if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
-            this.tryPassPoint();
+            this.tryPassPoint(sceneObjHolder);
         } else {
             this.tryRestartAtEnd();
         }
@@ -426,7 +426,7 @@ export class MapPartsRailMover extends NameObj {
             if (isFirstStep(this)) {
                 this.updateAccel();
                 this.moveSpeed = this.calcMoveSpeed();
-                sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotateBetweenPoints);
+                sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotateBetweenPoints);
             }
 
             if (!isNearZero(this.accel, 0.0001) && getStep(this) < this.accelTime)
@@ -456,7 +456,7 @@ export class MapPartsRailMover extends NameObj {
 
             if (isGreaterStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate) {
-                    if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate))
+                    if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
                     else
                         this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointAfterRotate);
@@ -467,7 +467,7 @@ export class MapPartsRailMover extends NameObj {
         } else if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtEndAfterRotate) {
             if (!this.tryRestartAtEnd() && isGreaterStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate) {
-                    if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate))
+                    if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
                     else
                         this.spine.setNerve(MapPartsRailMoverNrv.StopAtEndAfterRotate);
@@ -477,7 +477,7 @@ export class MapPartsRailMover extends NameObj {
             }
         } else if (currentNerve === MapPartsRailMoverNrv.Vanish) {
             if (isFirstStep(this))
-                sendMsgToHost(this, MessageType.MapPartsRailMover_Vanish);
+                sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_Vanish);
         }
 
         super.movement(sceneObjHolder, viewerInput);
@@ -487,13 +487,13 @@ export class MapPartsRailMover extends NameObj {
         // This should never happen -- it would require the player to be on, and we don't have a player!
     }
 
-    private setStateStopAtEndBeforeRotate(): void {
+    private setStateStopAtEndBeforeRotate(sceneObjHolder: SceneObjHolder): void {
         this.moveSpeed = 0;
         this.accel = 0;
         setRailCoordSpeed(this.actor, 0);
         this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
         if (this.stopTime < 1) {
-            if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate)) {
+            if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate)) {
                 this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
             } else {
                 this.restartAtEnd();
@@ -503,28 +503,28 @@ export class MapPartsRailMover extends NameObj {
         }
     }
 
-    private reachedEnd(): void {
+    private reachedEnd(sceneObjHolder: SceneObjHolder): void {
         if (this.moveStopType === MoveStopType.Mirror)
             reverseRailDirection(this.actor);
 
         if (this.moveConditionType === 1)
             this.reachedEndPlayerOn();
         else
-            this.setStateStopAtEndBeforeRotate();
+            this.setStateStopAtEndBeforeRotate(sceneObjHolder);
     }
 
-    private tryPassPoint(): boolean {
+    private tryPassPoint(sceneObjHolder: SceneObjHolder): boolean {
         if (this.passChecker.isReachedEnd()) {
             if (this.moveStopType === MoveStopType.OnceAndWait) {
                 this.spine.setNerve(MapPartsRailMoverNrv.Wait);
                 return true;
             } else {
-                this.reachedEnd();
+                this.reachedEnd(sceneObjHolder);
                 return true;
             }
         } else {
             if (this.passChecker.isPassed()) {
-                this.passPoint();
+                this.passPoint(sceneObjHolder);
                 return true;
             }
         }
@@ -532,12 +532,12 @@ export class MapPartsRailMover extends NameObj {
         return false;
     }
 
-    private passPoint(): void {
+    private passPoint(sceneObjHolder: SceneObjHolder): void {
         this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
 
         if (this.stopTime < 1) {
-            if (!sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotateBetweenPoints)) {
-                if (sendMsgToHost(this, MessageType.MapPartsRailMover_TryRotate)) {
+            if (!sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotateBetweenPoints)) {
+                if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate)) {
                     this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
                 } else {
                     this.spine.setNerve(MapPartsRailMoverNrv.Move);

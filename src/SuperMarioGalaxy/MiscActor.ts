@@ -5,7 +5,8 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0 } from '../MathHelpers';import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta } from '../Color';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0 } from '../MathHelpers';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -18,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -32,6 +33,7 @@ import { getVertexAttribLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from './MiscMap';
+import { getFirstPolyOnLineToMap } from './Collision';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -357,6 +359,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public rotator: boolean = false;
     public railMover: boolean = false;
     public initNerve: TNerve | null = null;
+    public initHitSensor: boolean = false;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -412,6 +415,21 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
         if (initInfo.initNerve !== null)
             this.initNerve(initInfo.initNerve as TNerve);
+
+        if (isExistCollisionResource(this, this.name)) {
+            if (!initInfo.initHitSensor) {
+                this.initHitSensor();
+                addBodyMessageSensorMapObj(sceneObjHolder, this);
+            }
+
+            let hostMtx: mat4 | null = null;
+            // TODO(jstpierre): Follow joint
+
+            const bodySensor = this.getSensor('body')!;
+            initCollisionParts(sceneObjHolder, this, this.name, bodySensor, hostMtx);
+            // TODO(jstpierre): MoveLimit
+        }
+
         const connectedWithRail = isConnectedWithRail(infoIter);
         if (connectedWithRail)
             this.initRailRider(sceneObjHolder, infoIter);
@@ -442,6 +460,8 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
             this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance!.modelMatrix);
         }
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
@@ -602,13 +622,13 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
             startBck(this, `Move`);
     }
 
-    public receiveMessage(msgType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, msgType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
         if (msgType === MessageType.MapPartsRailMover_Vanish && this.getCurrentNerve() === RailMoveObjNrv.Move) {
-            this.makeActorDead();
+            this.makeActorDead(sceneObjHolder);
             return true;
         }
 
-        return super.receiveMessage(msgType, thisSensor, otherSensor);
+        return super.receiveMessage(sceneObjHolder, msgType, thisSensor, otherSensor);
     }
 
     protected move(): void {
@@ -661,8 +681,19 @@ export class PlanetMap extends LiveActor {
         this.initModel(sceneObjHolder, this.name, infoIter);
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+        const bodySensor = this.getSensor('body')!;
+        console.log(this, this.name, this.resourceHolder.arc);
+        if (isExistCollisionResource(this, this.name)) {
+            let hostMtx: mat4 | null = null;
+            // TODO(jstpierre): FollowJoint
+            initCollisionParts(sceneObjHolder, this, this.name, bodySensor, hostMtx);
+        }
         tryStartAllAnim(this, this.name);
         this.tryStartMyEffect(sceneObjHolder);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
@@ -783,21 +814,21 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             }
         }
     }
-    
-    public makeActorDead(): void {
-        super.makeActorDead();
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
         if (this.goods0 !== null)
-            this.goods0.makeActorDead();
+            this.goods0.makeActorAppeared(sceneObjHolder);
         if (this.goods1 !== null)
-            this.goods1.makeActorDead();
+            this.goods1.makeActorAppeared(sceneObjHolder);
     }
 
-    public makeActorAppeared(): void {
-        super.makeActorAppeared();
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
         if (this.goods0 !== null)
-            this.goods0.makeActorAppeared();
+            this.goods0.makeActorDead(sceneObjHolder);
         if (this.goods1 !== null)
-            this.goods1.makeActorAppeared();
+            this.goods1.makeActorDead(sceneObjHolder);
     }
 }
 
@@ -1199,7 +1230,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
 
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (fallback(infoIter.getValueNumber('SW_APPEAR'), -1) !== -1)
-            this.makeActorDead();
+            this.makeActorDead(sceneObjHolder);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
@@ -1209,7 +1240,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
             const nextRailPoint = isExistRail(this) ? getNextRailPointNo(this) : 0;
 
             // if (!tryStartReactionAndPushNerve(this))
-            tryTalkNearPlayerAndStartMoveTalkAction(this, deltaTimeFrames);
+            tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
             if (isExistRail(this) && getNextRailPointNo(this) !== nextRailPoint)
                 this.tryStartArgs();
         }
@@ -1275,20 +1306,25 @@ function followRailPose(actor: NPCActor, rotationSpeed: number, translationSpeed
     decidePose(actor, scratchVec3c, scratchVec3b, scratchVec3a, 1.0, rotationSpeed, translationSpeed);
 }
 
-function followRailPoseOnGround(actor: NPCActor, railActor: LiveActor, speed: number): void {
-    // TODO(jstpierre): Figure this out.
-    followRailPose(actor, speed, speed);
+function followRailPoseOnGround(sceneObjHolder: SceneObjHolder, actor: NPCActor, railActor: LiveActor, speed: number): void {
+    getRailPos(scratchVec3a, railActor);
+    vec3.scaleAndAdd(scratchVec3b, scratchVec3a, actor.gravityVector, -10.0);
+    vec3.scale(scratchVec3c, actor.gravityVector, 1000.0);
+    getFirstPolyOnLineToMap(sceneObjHolder, scratchVec3a, null, scratchVec3b, scratchVec3c);
+    getRailDirection(scratchVec3b, actor);
+    vec3.negate(scratchVec3c, actor.gravityVector);
+    decidePose(actor, scratchVec3c, scratchVec3b, scratchVec3a, 1.0, speed, 1.0);
 }
 
-function startMoveAction(actor: NPCActor, deltaTimeFrames: number): void {
+function startMoveAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaTimeFrames: number): void {
     if (!isExistRail(actor))
         return;
 
-    adjustmentRailCoordSpeed(actor, actor.desiredRailSpeed, actor.maxChangeRailSpeed * deltaTimeFrames);
+    adjustmentRailCoordSpeed(actor, actor.desiredRailSpeed * deltaTimeFrames, actor.maxChangeRailSpeed);
     moveRailRider(actor);
 
     if (actor.railGrounded) {
-        followRailPoseOnGround(actor, actor, actor.railTurnSpeed * deltaTimeFrames);
+        followRailPoseOnGround(sceneObjHolder, actor, actor, actor.railTurnSpeed * deltaTimeFrames);
     } else {
         followRailPose(actor, actor.railTurnSpeed * deltaTimeFrames, actor.railTurnSpeed * deltaTimeFrames);
     }
@@ -1297,36 +1333,36 @@ function startMoveAction(actor: NPCActor, deltaTimeFrames: number): void {
         reverseRailDirection(actor);
 }
 
-function tryStartTurnAction(actor: NPCActor): void {
+function tryStartTurnAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
     if (actor.waitAction !== null)
         tryStartAction(actor, actor.waitAction);
 }
 
-function tryStartTalkAction(actor: NPCActor): void {
-    tryStartTurnAction(actor);
+function tryStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
+    tryStartTurnAction(sceneObjHolder, actor);
 }
 
-function tryStartMoveTalkAction(actor: NPCActor, deltaTimeFrames: number): void {
+function tryStartMoveTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaTimeFrames: number): void {
     if (!isExistRail(actor)) {
-        tryStartTalkAction(actor);
+        tryStartTalkAction(sceneObjHolder, actor);
         return;
     }
 
     if (isNearZero(actor.desiredRailSpeed, 0.001) && isNearZero(getRailCoordSpeed(actor), 0.001)) {
-        tryStartTalkAction(actor);
+        tryStartTalkAction(sceneObjHolder, actor);
         return;
     }
 
     // Some stuff related to talking...
-    startMoveAction(actor, deltaTimeFrames);
+    startMoveAction(sceneObjHolder, actor, deltaTimeFrames);
     let action = actor.walkAction;
 
     if (action !== null)
         tryStartAction(actor, action);
 }
 
-function tryTalkNearPlayerAndStartMoveTalkAction(actor: NPCActor, deltaTimeFrames: number): void {
-    tryStartMoveTalkAction(actor, deltaTimeFrames);
+function tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaTimeFrames: number): void {
+    tryStartMoveTalkAction(sceneObjHolder, actor, deltaTimeFrames);
     // tryTalkNearPlayer(actor);
 }
 
@@ -1399,7 +1435,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
             if (isFirstStep(this))
                 this.diveCounter = getRandomInt(120, 300);
 
-            tryTalkNearPlayerAndStartMoveTalkAction(this, deltaTimeFrames);
+            tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
 
             if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
                 this.setNerve(PenguinNrv.Dive);
@@ -1634,7 +1670,7 @@ abstract class CoinGroup extends LiveActor {
         this.placementCoin();
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
-        this.makeActorDead();
+        this.makeActorDead(sceneObjHolder);
     }
 
     protected abstract initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
@@ -3250,9 +3286,9 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         startBck(this, 'Move');
     }
 
-    public appearMove(pos: vec3, lifetime: number): void {
+    public appearMove(sceneObjHolder: SceneObjHolder, pos: vec3, lifetime: number): void {
         vec3.copy(this.translation, pos);
-        this.makeActorAppeared();
+        this.makeActorAppeared(sceneObjHolder);
         showModel(this);
         this.setNerve(AirBubbleNrv.Move);
 
@@ -3294,7 +3330,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
             }
         } else if (currentNerve === AirBubbleNrv.KillWait) {
             if (isGreaterStep(this, 90))
-                this.makeActorDead();
+                this.makeActorDead(sceneObjHolder);
         }
     }
 }
@@ -3305,15 +3341,15 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
 
         for (let i = 0; i < 0x20; i++) {
             const bubble = new AirBubble(dynamicSpawnZoneAndLayer, sceneObjHolder, null);
-            bubble.makeActorDead();
+            bubble.makeActorDead(sceneObjHolder);
             this.registerActor(bubble);
         }
     }
 
-    public appearAirBubble(pos: vec3, lifetime: number): void {
+    public appearAirBubble(sceneObjHolder: SceneObjHolder, pos: vec3, lifetime: number): void {
         const bubble = this.getDeadActor();
         if (bubble !== null)
-            bubble.appearMove(pos, lifetime);
+            bubble.appearMove(sceneObjHolder, pos, lifetime);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -3357,7 +3393,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
             if (isGreaterStep(this, 6)) {
                 calcActorAxis(null, scratchVec3, null, this);
                 vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3, 120);
-                sceneObjHolder.airBubbleHolder!.appearAirBubble(scratchVec3, this.lifetime);
+                sceneObjHolder.airBubbleHolder!.appearAirBubble(sceneObjHolder, scratchVec3, this.lifetime);
                 this.setNerve(AirBubbleGeneratorNrv.Wait);
             }
         }
@@ -3474,13 +3510,13 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             this.initNerve(TicoRailNrv.Move);
     }
 
-    public attackSensor(thisSensor: HitSensor, otherSensor: HitSensor): void {
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         if (isSensorPlayer(otherSensor)) {
             // sendMsgPush
         } else if (isSensorNpc(otherSensor)) {
             const currentNerve = this.getCurrentNerve();
             if (currentNerve !== TicoRailNrv.TalkStart && currentNerve !== TicoRailNrv.Talk && currentNerve !== TicoRailNrv.TalkCancel && currentNerve !== TicoRailNrv.GoodBye) {
-                if (sendArbitraryMsg(MessageType.TicoRail_StartTalk, otherSensor, thisSensor)) {
+                if (sendArbitraryMsg(sceneObjHolder, MessageType.TicoRail_StartTalk, otherSensor, thisSensor)) {
                     this.talkingActor = otherSensor.actor;
                     this.setNerve(TicoRailNrv.TalkStart);
                 } else {
@@ -3501,7 +3537,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return vec3.equals(getRailPointPosStart(this), getRailPointPosStart(other)) && vec3.equals(getRailPointPosEnd(this), getRailPointPosEnd(other));
     }
 
-    public receiveMessage(messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
         if (messageType === MessageType.TicoRail_StartTalk) {
             const currentNerve = this.getCurrentNerve();
 
@@ -3521,7 +3557,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
             return false;
         } else {
-            return super.receiveMessage(messageType, thisSensor, otherSensor);
+            return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
         }
     }
 

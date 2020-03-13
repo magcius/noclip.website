@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, readString } from '../../util';
 import * as Yay0 from '../Compression/Yay0';
 import * as Yaz0 from '../Compression/Yaz0';
+import { NamedArrayBufferSlice } from '../../DataFetcher';
 
 export const enum JKRFileAttr {
     Normal          = 0x01,
@@ -166,6 +167,7 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
                     fileBuffer = rawFileBuffer;
                 }
 
+                (fileBuffer as NamedArrayBufferSlice).name = name;
                 const file: RARCFile = { index, id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);

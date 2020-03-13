@@ -19,8 +19,9 @@ import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity } from "./ActorUtil";
+import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor } from "./Collision";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -339,6 +340,24 @@ export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {
         actor.translation[0], actor.translation[1], actor.translation[2]);
 }
 
+export function makeMtxTRSFromActor(dst: mat4, actor: LiveActor): void {
+    computeModelMatrixSRT(dst,
+        actor.scale[0], actor.scale[1], actor.scale[2],
+        actor.rotation[0], actor.rotation[1], actor.rotation[2],
+        actor.translation[0], actor.translation[1], actor.translation[2]);
+}
+
+export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    if (actor.hitSensorKeeper !== null)
+        actor.hitSensorKeeper.clear();
+    if (actor.calcGravityFlag)
+        calcGravity(sceneObjHolder, actor);
+    // calcAnimDirect
+    if (actor.collisionParts !== null)
+        resetAllCollisionMtx(actor);
+    // requestCalcActorShadowAppear
+}
+
 export const enum LayerId {
     COMMON = -1,
     LAYER_A = 0,
@@ -387,6 +406,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public railRider: RailRider | null = null;
     public modelManager: ModelManager | null = null;
     public hitSensorKeeper: HitSensorKeeper | null = null;
+    public collisionParts: CollisionParts | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -409,7 +429,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
 
-    public attackSensor(thisSensor: HitSensor, otherSensor: HitSensor): void {
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         // Do nothing by default.
     }
 
@@ -420,15 +440,32 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return null;
     }
 
-    public receiveMessage(messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
         return false;
     }
 
-    public makeActorAppeared(): void {
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.validateBySystem();
+        // endClipped
         this.visibleAlive = true;
+        if (this.collisionParts !== null)
+            validateCollisionPartsForActor(sceneObjHolder, this);
+        resetPosition(sceneObjHolder, this);
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.reset(sceneObjHolder);
+
+        // tryUpdateHitSensorsAll
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
+
+        // addToClippingTarget
+
+        // connectToSceneTemporarily
+        // connectToDrawTemporarily
     }
 
-    public makeActorDead(): void {
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
         this.visibleAlive = false;
     }
 
@@ -469,11 +506,23 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // Compute the joint matrices an initial time in case anything wants to rely on them...
         this.modelManager.modelInstance.calcJointToWorld();
 
-        // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
-        // Seems like it's possible to have a secondary file for BCK animations?
+        // TODO(jstpierre): Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
     }
 
+    public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
+        if (resourceHolder === null) {
+            this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType);
+        } else {
+            // TODO(jstpierre)
+            // makeMtxTRSFromActor(scratchMatrix, this);
+            // this.collisionParts = createCollisionPartsFromResourceHolder();
+            throw "whoops";
+        }
+
+        invalidateCollisionPartsForActor(sceneObjHolder, this);
+    }
+    
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
         this.actorLightCtrl.init(sceneObjHolder);
@@ -593,7 +642,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             calcGravity(sceneObjHolder, this);
 
         if (this.hitSensorKeeper !== null)
-            this.hitSensorKeeper.doObjCol();
+            this.hitSensorKeeper.doObjCol(sceneObjHolder);
 
         if (!this.visibleAlive)
             return;
@@ -641,15 +690,15 @@ export function isDead(actor: LiveActor): boolean {
 }
 
 export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
-    public appearAll(): void {
+    public appearAll(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.objArray.length; i++)
             if (isDead(this.objArray[i]))
-                this.objArray[i].makeActorAppeared();
+                this.objArray[i].makeActorAppeared(sceneObjHolder);
     }
 
-    public killAll(): void {
+    public killAll(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.objArray.length; i++)
-            this.objArray[i].makeActorAppeared();
+            this.objArray[i].makeActorDead(sceneObjHolder);
     }
 
     public getLivingActorNum(): number {

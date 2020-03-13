@@ -11,12 +11,13 @@ import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
-import { HitSensor } from "./HitSensor";
+import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
 import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
+import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -435,16 +436,52 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
+export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
+}
+
 export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, 0x05, pairwiseCapacity, radius, actor, offset);
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
-export function receiveMessage(thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
-    return thisSensor.actor.receiveMessage(messageType, thisSensor, otherSensor);
+export function receiveMessage(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
+    return thisSensor.actor.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
 }
 
-export function sendArbitraryMsg(messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
-    return receiveMessage(otherSensor, messageType, thisSensor);
+export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+    return receiveMessage(sceneObjHolder, otherSensor, messageType, thisSensor);
+}
+
+function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
+    mat4.copy(dst, assertExists(actor.getBaseMtx()));
+    const scaleX = actor.scale[0];
+    mat4.multiplyScalar(dst, dst, scaleX);
+}
+
+export function resetAllCollisionMtx(actor: LiveActor): void {
+    const parts = actor.collisionParts!;
+    if (parts.hostMtx !== null) {
+        parts.resetAllMtxFromHost();
+    } else {
+        calcCollisionMtx(scratchMatrix, actor);
+        parts.resetAllMtx(scratchMatrix);
+    }
+}
+
+export function validateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    validateCollisionParts(sceneObjHolder, parts);
+    // parts.updateBoundingSphereRange();
+    resetAllCollisionMtx(actor);
+}
+
+export function invalidateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    invalidateCollisionParts(sceneObjHolder, parts);
+}
+
+export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, null, hostMtx, CollisionScaleType.AutoScale);
 }
 
 export function getRailTotalLength(actor: LiveActor): number {
@@ -866,4 +903,21 @@ export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
     const max = getMaxAbsElementIndex(up);
     const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
     makeMtxUpFrontPos(dst, up, front, pos);
+}
+
+export function preScaleMtx(dst: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] *= x;
+    dst[1] *= x;
+    dst[2] *= x;
+    dst[4] *= y;
+    dst[5] *= y;
+    dst[6] *= y;
+    dst[8] *= z;
+    dst[9] *= z;
+    dst[10] *= z;
+}
+
+export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
+    return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
 }
