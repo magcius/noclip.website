@@ -7,9 +7,10 @@ import { HitSensor } from "./HitSensor";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor } from "./LiveActor";
 import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero } from "../MathHelpers";
+import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3 } from "../MathHelpers";
 import { preScaleMtx, connectToScene } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
+import { JMapInfoIter } from "./JMapInfo";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
@@ -19,7 +20,20 @@ export class Triangle {
     public pos1: vec3 = vec3.create();
     public pos2: vec3 = vec3.create();
 
+    public getAttributes(): JMapInfoIter | null {
+        if (this.prismIdx !== null)
+            return this.collisionParts!.collisionServer.getAttributes(this.prismIdx);
+        else
+            return null;
+    }
+
     public copy(other: Triangle): void {
+        this.collisionParts = other.collisionParts;
+        this.prismIdx = other.prismIdx;
+        this.hitSensor = other.hitSensor;
+        vec3.copy(this.pos0, other.pos0);
+        vec3.copy(this.pos1, other.pos1);
+        vec3.copy(this.pos2, other.pos2);
     }
 
     public fillData(collisionParts: CollisionParts, prismIdx: number, hitSensor: HitSensor): void {
@@ -74,7 +88,7 @@ export class CollisionParts {
     private checkArrowResult = new CheckArrowResult();
 
     constructor(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, initialHostMtx: mat4, public hitSensor: HitSensor, kclData: ArrayBufferSlice, paData: ArrayBufferSlice | null, public keeperIdx: number, private scaleType: CollisionScaleType) {
-        this.collisionServer = new KCollisionServer(kclData);
+        this.collisionServer = new KCollisionServer(kclData, paData);
 
         sceneObjHolder.create(SceneObj.CollisionDirector);
         const director = assertExists(sceneObjHolder.collisionDirector);
@@ -306,6 +320,29 @@ export class CollisionDirector extends NameObj {
 
         for (let i = 0; i < this.keepers.length; i++)
             this.keepers[i].movement(sceneObjHolder);
+    }
+}
+
+function isFloorPolygonAngle(v: number): boolean {
+    // 70 degrees -- Math.cos(70*Math.PI/180)
+    return Math.abs(v) < 0.3420201433256688;
+}
+
+function isFloorPolygon(normal: vec3, gravityVector: vec3): boolean {
+    return isNearZeroVec3(normal, 0.001) && isFloorPolygonAngle(vec3.dot(normal, gravityVector));
+}
+
+export class Binder {
+    public triangleFilter: TriangleFilterBase | null = null;
+
+    public bind(dst: vec3, velocity: vec3): void {
+    }
+
+    public clear(): void {
+    }
+
+    public setTriangleFilter(filter: TriangleFilterBase): void {
+        this.triangleFilter = filter;
     }
 }
 

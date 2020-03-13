@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
 import { assertExists, nArray } from "../util";
 import { isNearZero } from "../MathHelpers";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 
 export class KC_PrismData {
     public length: number = 0.0;
@@ -11,6 +12,7 @@ export class KC_PrismData {
     public edge0NrmIdx: number = 0;
     public edge1NrmIdx: number = 0;
     public edge2NrmIdx: number = 0;
+    public attrib: number = 0;
 }
 
 class KC_PrismHit {
@@ -67,7 +69,9 @@ export class KCollisionServer {
     private shiftLY: number;
     private shiftLZ: number;
 
-    constructor(private buffer: ArrayBufferSlice) {
+    private params: JMapInfoIter | null = null;
+
+    constructor(buffer: ArrayBufferSlice, paramsData: ArrayBufferSlice | null) {
         this.view = buffer.createDataView();
 
         this.positionsOffs = this.view.getUint32(0x00);
@@ -85,6 +89,7 @@ export class KCollisionServer {
             prism.edge0NrmIdx = this.view.getUint16(offs + 0x08);
             prism.edge1NrmIdx = this.view.getUint16(offs + 0x0A);
             prism.edge2NrmIdx = this.view.getUint16(offs + 0x0C);
+            prism.attrib = this.view.getUint16(offs + 0x0E);
             this.prisms.push(prism);
         }
 
@@ -100,6 +105,18 @@ export class KCollisionServer {
         this.shiftR = this.view.getInt32(0x2C);
         this.shiftLY = this.view.getInt32(0x30);
         this.shiftLZ = this.view.getInt32(0x34);
+
+        if (paramsData !== null)
+            this.params = createCsvParser(paramsData);
+    }
+
+    public getAttributes(idx: number): JMapInfoIter | null {
+        if (this.params !== null) {
+            this.params.setRecord(this.prisms[idx].attrib);
+            return this.params;
+        } else {
+            return null;
+        }
     }
 
     public toIndex(prism: KC_PrismData): number {

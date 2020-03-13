@@ -4,7 +4,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder } from "./Main";
+import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder, SceneObj } from "./Main";
 import { GfxTexture } from "../gfx/platform/GfxPlatform";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
@@ -21,7 +21,7 @@ import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } fro
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor } from "./Collision";
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder } from "./Collision";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -393,10 +393,14 @@ export const enum MessageType {
     MapPartsRailMover_Vanish = 0xCF,
 }
 
+const scratchVec3a = vec3.create();
 export class LiveActor<TNerve extends number = number> extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
+    // calcGravity is off by default until we can feel comfortable turning it on...
+    public calcGravityFlag: boolean = false;
+    public calcBinderFlag: boolean = false;
     public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
@@ -407,14 +411,13 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public modelManager: ModelManager | null = null;
     public hitSensorKeeper: HitSensorKeeper | null = null;
     public collisionParts: CollisionParts | null = null;
+    public binder: Binder | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
-    // calcGravity is off by default until we can feel comfortable turning it on...
-    public calcGravityFlag: boolean = false;
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
@@ -637,6 +640,20 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
     }
 
+    private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        if (this.binder !== null) {
+            if (this.calcBinderFlag) {
+                this.binder.bind(scratchVec3a, this.velocity);
+                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+            } else {
+                vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+                this.binder.clear();
+            }
+        } else {
+            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+        }
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.calcGravityFlag)
             calcGravity(sceneObjHolder, this);
@@ -666,7 +683,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return;
 
         // updateBinder()
-        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+        this.updateBinder(sceneObjHolder, deltaTimeFrames);
 
         // EffectKeeper::update()
         if (this.effectKeeper !== null) {
