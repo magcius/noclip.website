@@ -25,6 +25,7 @@ export class ModelInstance {
     private packetParams = new PacketParams();
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
+    private pnMatrices: mat4[] = [];
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -39,6 +40,13 @@ export class ModelInstance {
         this.materialHelper = new GXMaterialHelperGfx(material.material);
     }
 
+    public setPnMatrices(mats: mat4[]) {
+        this.pnMatrices = [];
+        for (let i = 0; i < mats.length; i++) {
+            this.pnMatrices.push(mat4.clone(mats[i]));
+        }
+    }
+
     private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
         computeViewMatrix(dst, camera);
         mat4.mul(dst, dst, modelMatrix);
@@ -51,6 +59,9 @@ export class ModelInstance {
         }
         
         this.packetParams.clear();
+        for (let i = 0; i < this.pnMatrices.length; i++) {
+            this.packetParams.u_PosMtx[i] = mat4.clone(this.pnMatrices[i]);
+        }
 
         const renderInst = renderInstManager.newRenderInst();
         this.shapeHelper.setOnRenderInst(renderInst);
@@ -91,7 +102,9 @@ export class ModelInstance {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, modelMatrix);
+            const mat = mat4.create();
+            mat4.mul(mat, modelMatrix, this.pnMatrices[i]);
+            this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, mat);
         }
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
 
@@ -174,6 +187,7 @@ export class Model implements BlockRenderer {
             case 0:
                 // Used in character and object models
                 fields = {
+                    isMapBlock: false,
                     alwaysUseTex1: false,
                     texOffset: 0x20,
                     texCount: 0xf2,
@@ -209,6 +223,7 @@ export class Model implements BlockRenderer {
             case 264:
                 // Used in map blocks
                 fields = {
+                    isMapBlock: true,
                     alwaysUseTex1: true,
                     texOffset: 0x54,
                     texCount: 0xa0,
@@ -414,6 +429,8 @@ export class Model implements BlockRenderer {
             this.yTranslate = 0;
         }
 
+        const pnMatrices = nArray(0x10, () => mat4.create());
+
         const self = this;
         function runBitstream(bitsOffset: number, drawStep: number) {
             const models: ModelInstance[] = [];
@@ -455,8 +472,9 @@ export class Model implements BlockRenderer {
     
                     try {
                         const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                        const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1);
+                        const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
                         newModel.setMaterial(material);
+                        newModel.setPnMatrices(pnMatrices);
                         models.push(newModel);
                     } catch (e) {
                         console.warn(`Failed to create model and shader instance due to exception:`);
@@ -524,8 +542,27 @@ export class Model implements BlockRenderer {
                     break;
                 case 4: // Set weights (skipped by SFA block renderer)
                     const numWeights = bits.get(4);
-                    for (let i = 0; i < numWeights; i++) {
-                        bits.get(8);
+                    if (numWeights > self.weights.length) {
+                        // Skip
+                        for (let i = 0; i < numWeights; i++) {
+                            bits.get(8);
+                        }
+                    } else {
+                        for (let i = 0; i < numWeights; i++) {
+                            const wt = bits.get(8);
+                            const weight = self.weights[wt];
+                            const j0 = self.joints[weight.joint0];
+                            const j1 = self.joints[weight.joint1];
+                            const mat0 = mat4.create();
+                            mat4.fromTranslation(mat0, j0.translation);
+                            const mat1 = mat4.create();
+                            mat4.fromTranslation(mat1, j1.translation);
+                            const blendedMat = mat4.create();
+                            mat4.multiplyScalar(mat0, mat0, weight.influence0);
+                            mat4.multiplyScalar(mat1, mat1, weight.influence1);
+                            mat4.add(blendedMat, mat0, mat1);
+                            pnMatrices[i] = blendedMat;
+                        }
                     }
                     break;
                 case 5: // End

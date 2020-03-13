@@ -223,7 +223,7 @@ function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
     return { gfxTexture, gfxSampler, width, height }
 }
 
-export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean): SFAMaterial {
+export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
     const textures = [] as SFAMaterialTexture[];
     let tevStage = 0;
@@ -502,43 +502,52 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         tevStage++;
     }
 
-    if ((shader.flags & 0x80) != 0) {
-        console.log(`Found some lava!`);
-        addTevStagesForLava();
-    } else if ((shader.flags & 0x40) != 0) {
-        console.log(`Found some water!`);
-        addTevStagesForWater();
+    if (!isMapBlock) {
+        // Not a map block. Just do basic texturing.
+        mb.setUsePnMtxIdx(true);
+        addTevStageForTextureWithWhiteKonst(0);
+        for (let i = 0; i < shader.layers.length; i++) {
+            textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+        }
     } else {
-        if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
-            addTevStageForTextureWithWhiteKonst(0);
-            if (shader.flags & 0x100) {
-                console.log(`Found some reflective surfaces (special case)!`);
-                blendWithTinyFramebufferTexture();
-            }
-            addTevStagesForTextureWithMode(9);
-            addTevStageForMultVtxColor();
-
-            for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
-            }
+        if ((shader.flags & 0x80) != 0) {
+            console.log(`Found some lava!`);
+            addTevStagesForLava();
+        } else if ((shader.flags & 0x40) != 0) {
+            console.log(`Found some water!`);
+            addTevStagesForWater();
         } else {
-            for (let i = 0; i < shader.layers.length; i++) {
-                const layer = shader.layers[i];
-                if (shader.flags & 0x40000) {
-                    addTevStagesForTextureWithSkyAmbient();
-                } else {
-                    addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+            if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
+                addTevStageForTextureWithWhiteKonst(0);
+                if (shader.flags & 0x100) {
+                    console.log(`Found some reflective surfaces (special case)!`);
+                    blendWithTinyFramebufferTexture();
                 }
-            }
-
-            for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
-            }
-
-            if (shader.flags & 0x100) {
-                // Occurs in Krazoa Palace's reflective floors
-                console.log(`Found some reflective surfaces (normal case)!`);
-                blendWithTinyFramebufferTexture();
+                addTevStagesForTextureWithMode(9);
+                addTevStageForMultVtxColor();
+    
+                for (let i = 0; i < shader.layers.length; i++) {
+                    textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+                }
+            } else {
+                for (let i = 0; i < shader.layers.length; i++) {
+                    const layer = shader.layers[i];
+                    if (shader.flags & 0x40000) {
+                        addTevStagesForTextureWithSkyAmbient();
+                    } else {
+                        addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                    }
+                }
+    
+                for (let i = 0; i < shader.layers.length; i++) {
+                    textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+                }
+    
+                if (shader.flags & 0x100) {
+                    // Occurs in Krazoa Palace's reflective floors
+                    console.log(`Found some reflective surfaces (normal case)!`);
+                    blendWithTinyFramebufferTexture();
+                }
             }
         }
     }
