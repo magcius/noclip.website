@@ -20,6 +20,7 @@ export interface Level {
     collision: CollisionTree | null;
     zeroOne: ZeroOne;
     projectiles: ProjectileData[];
+    fishTable: FishEntry[];
 }
 
 export interface Room {
@@ -252,6 +253,8 @@ export function parseLevel(archives: LevelArchive[]): Level {
             },
         );
 
+    const fishTable = parseFishTable(dataMap, level.Name);
+
     const objectInfo: ObjectDef[] = [];
     if (level.Objects !== 0) {
         const objFunctionView = dataMap.getView(level.Objects);
@@ -328,7 +331,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles};
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable };
 }
 
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
@@ -1961,4 +1964,64 @@ function fixupState(state: State): void {
             assertExists(state.blocks[0].splash).scale = vec3.fromValues(15, 15, 10);
         } break;
     }
+}
+
+class SpawnParser extends MIPS.NaiveInterpreter {
+    public id = 0;
+
+    public reset(): void {
+        super.reset();
+        this.id = 0;
+    }
+
+    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+        if (op === MIPS.Opcode.SW && offset === 0 && target.lastOp === MIPS.Opcode.ADDIU) {
+            this.id = value.value;
+            this.done = true;
+        }
+    }
+}
+
+const spawnParser = new SpawnParser();
+
+export interface FishEntry {
+    probability: number;
+    id: number;
+}
+
+function parseFishTable(dataMap: DataMap, id: number): FishEntry[] {
+    let fishStart = 0;
+    switch (id) {
+        case 16: fishStart = 0x802CC004; break;
+        case 18: fishStart = 0x802EE120; break;
+        case 20: fishStart = 0x802C6368; break;
+        case 22: fishStart = 0x802E2908; break;
+        case 24: fishStart = 0x802E0EA4; break;
+        case 26: fishStart = 0x802D29B4; break;
+    }
+    if (fishStart === 0)
+        return [];
+    const fish: FishEntry[] = [];
+    const view = dataMap.getView(fishStart);
+    let offs = 0;
+    let total = 0;
+    while (true) {
+        const probability = view.getInt8(offs + 0x00);
+        const spawner = view.getUint32(offs + 0x04);
+        offs += 8;
+
+        if (probability < 0)
+            break; // table ended
+        total += probability;
+        if (spawner === 0) {
+            fish.push({ probability, id: 0 });
+            break;
+        }
+        spawnParser.parseFromView(dataMap.getView(spawner));
+        assert(spawnParser.id !== 0);
+        fish.push({ probability, id: dataMap.deref(spawnParser.id) });
+    }
+    for (let i = 0; i < fish.length; i++)
+        fish[i].probability /= total;
+    return fish;
 }

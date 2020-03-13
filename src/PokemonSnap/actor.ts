@@ -1,5 +1,5 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
@@ -21,7 +21,12 @@ export class LevelGlobals {
     public projectiles: Projectile[] = [];
     public pesterNext = false;
 
+    public fishTable: FishEntry[] = [];
+    public fishCount = 0;
+    public activeFish: Actor | null = null;
+
     public splashes: Splash[] = [];
+    public tempActors: Actor[] = [];
     public zeroOne: ModelRenderer;
 
     constructor(public id: string) { }
@@ -32,13 +37,13 @@ export class LevelGlobals {
         if (viewerInput.time > this.songStart + 10000) {
             if (this.currentSong !== 0)
                 this.currentSong = 0;
-            else
+            else if (Math.random() < .5)
                 this.currentSong = InteractionType.PokefluteA + ((Math.random() * 3) >>> 0);
             this.songStart = viewerInput.time;
         }
 
         if (this.lastThrow < 0)
-            this.lastThrow = viewerInput.time + 3000; // extra wait before the first throw
+            this.lastThrow = viewerInput.time + 2000; // extra wait before the first throw
 
         if (viewerInput.time > this.lastThrow + 2500) {
             let didThrow = false;
@@ -67,8 +72,45 @@ export class LevelGlobals {
         }
     }
 
-    // TODO: pick a fish based on level logic
-    public spawnFish(pos: vec3): void { }
+    public spawnFish(pos: vec3): void {
+        // check active fish, and clear if it's done
+        if (this.activeFish !== null)
+            if (this.activeFish.visible)
+                return;
+            else
+                this.activeFish = null;
+        let id = 0;
+        if (this.id === '16') { // river has special logic
+            const entry = this.fishTable[this.fishCount % this.fishTable.length];
+            if (Math.random() < entry.probability)
+                id = entry.id;
+        } else { // make a weighted random choice from the table
+            let p = Math.random();
+            for (let i = 0; i < this.fishTable.length; i++) {
+                if (p < this.fishTable[i].probability) {
+                    id = this.fishTable[i].id;
+                    break;
+                } else
+                    p -= this.fishTable[i].probability;
+            }
+        }
+        if (id === 0)
+            return;
+        // random yaw isn't explicit in the fish code, but seems to always be in the state logic
+        this.activeFish = this.activateObject(id, pos, MathConstants.TAU * Math.random());
+        this.fishCount++;
+    }
+
+    public activateObject(id: number, pos: vec3, yaw: number, behavior = 0): Actor | null {
+        const chosen = this.tempActors.find((a) => a.def.id === id && !a.visible);
+        if (chosen === undefined)
+            return null;
+        // overwrite spawn data
+        chosen.spawn.behavior = behavior;
+        vec3.copy(chosen.spawn.pos, pos);
+        chosen.reset(this);
+        return chosen;
+    }
 
     public createSplash(type: SplashType, pos: vec3, scale = Vec3One): void {
         for (let i = 0; i < this.splashes.length; i++) {
@@ -125,6 +167,25 @@ export class LevelGlobals {
                 this.splashes.push(splash);
                 out.push(splash);
             }
+        }
+
+        this.fishTable = level.fishTable;
+        for (let i = 0; i < level.fishTable.length; i++) {
+            if (level.fishTable[i].id === 0)
+                continue;
+            const fishIndex = defs.findIndex((d) => d.id === level.fishTable[i].id);
+            assert(fishIndex >= 0);
+            const fakeSpawn: ObjectSpawn = {
+                id: level.fishTable[i].id,
+                behavior: 0,
+                pos: vec3.create(),
+                euler: vec3.create(),
+                scale: vec3.clone(Vec3One),
+            };
+            const fish = new Actor(data[fishIndex], fakeSpawn, defs[fishIndex] as ActorDef, this);
+            fish.visible = false;
+            this.tempActors.push(fish);
+            out.push(fish);
         }
 
         return out;
@@ -399,7 +460,7 @@ export class Actor extends ModelRenderer {
         return true;
     }
 
-    protected reset(globals: LevelGlobals): void {
+    public reset(globals: LevelGlobals): void {
         // set transform components
         vec3.copy(this.translation, this.spawn.pos);
         if (this.def.spawn === SpawnType.GROUND)
@@ -412,6 +473,8 @@ export class Actor extends ModelRenderer {
 
         this.motionData.reset();
 
+        this.visible = true;
+        this.hidden = false;
         this.tangible = true;
         const ground = findGroundPlane(globals.collision, this.translation[0], this.translation[2]);
         this.motionData.groundHeight = computePlaneHeight(ground, this.translation[0], this.translation[2]);
@@ -483,7 +546,7 @@ export class Actor extends ModelRenderer {
         const state = this.def.stateGraph.states[this.currState];
         if (this.currBlock >= state.blocks.length) {
             if (state.doCleanup)
-                this.hidden = true;
+                this.visible = false;
             this.currState = -1;
             return;
         }
@@ -900,7 +963,7 @@ class Squirtle extends Actor {
 }
 
 class Kakuna extends Actor {
-    protected reset(globals: LevelGlobals): void {
+    public reset(globals: LevelGlobals): void {
         super.reset(globals);
         this.motionData.storedValues[0] = this.translation[1];
         this.motionData.storedValues[1] = this.motionData.groundHeight + 25;

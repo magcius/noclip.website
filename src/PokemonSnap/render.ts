@@ -301,7 +301,7 @@ export class NodeRenderer {
 }
 
 export class ModelRenderer {
-    protected visible = true;
+    public visible = true;
 
     // run logic, but don't render
     public hidden = false;
@@ -381,6 +381,9 @@ export class ModelRenderer {
             else
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
                     this.renderers[i].materials[j].setTrack(newAnim.materialTracks[i][j]);
+            // force matrix update
+            this.renderers[i].animate(0);
+            mat4.mul(this.renderers[i].modelMatrix, this.renderers[i].parent, this.renderers[i].transform);
         }
     }
 
