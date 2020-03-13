@@ -9,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
 import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpaceText } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
@@ -23,6 +23,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { Model } from './models';
 import { hexdump } from '../util';
+import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -86,11 +87,8 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
         const aEl = createDownloadLink(modelData, 'model.bin');
         aEl.click();
     };
-
-    const model = new Model(device, modelData, texColl);
-    // const modelHolder = new MyModelHolder();
-    // modelRenderer.addToModelHolder(modelHolder, mat4.create(), 0);
-    return model;
+    
+    return new Model(device, modelData, texColl);
 }
 
 class WorldRenderer extends SFARenderer {
@@ -213,6 +211,28 @@ class WorldRenderer extends SFARenderer {
         device.submitPass(this.renderPass);
     }
 
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        let modeltemplate = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
+        this.aModel.prepareToRender(device, renderInstManager, viewerInput, mat4.create(), this.sceneTexture, 0);
+        renderInstManager.popTemplateRenderInst();
+
+        // Draw bones
+        const ctx = getDebugOverlayCanvas2D();
+        for (let i = 1; i < this.aModel.joints.length; i++) {
+            const joint = this.aModel.joints[i];
+            if (joint.parent != 0xff) {
+                const parentJoint = this.aModel.joints[joint.parent];
+                drawWorldSpaceLine(ctx, viewerInput.camera, parentJoint.translation, joint.translation);
+            } else {
+                drawWorldSpacePoint(ctx, viewerInput.camera, joint.translation);
+            }
+            // const weight = this.aModel.weights[i];
+            // drawWorldSpacePoint(ctx, viewerInput.camera, joint.translation);
+            // drawWorldSpaceLine(ctx, viewerInput.camera, this.aModel.joints[weight.joint0].translation, this.aModel.joints[weight.joint1].translation);
+        }
+    }
+
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         // Prolog
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -257,13 +277,7 @@ class WorldRenderer extends SFARenderer {
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
         
-        let modeltemplate = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
-        this.aModel.prepareToRender(device, renderInstManager, viewerInput, mat4.create(), this.sceneTexture, 0);
-        // for (let i = 0; i < this.aModel.models.length; i++) {
-        //     this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i], this.sceneTexture);
-        // }
-        renderInstManager.popTemplateRenderInst();
+        this.renderTestModel(device, renderInstManager, viewerInput);
         
         // Epilog
         renderInstManager.popTemplateRenderInst();

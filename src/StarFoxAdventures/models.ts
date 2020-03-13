@@ -105,6 +105,13 @@ interface Joint {
     worldTranslation: vec3;
 }
 
+interface Weight {
+    joint0: number;
+    influence0: number;
+    joint1: number;
+    influence1: number;
+}
+
 function readVec3(data: DataView, byteOffset: number = 0): vec3 {
     return vec3.fromValues(
         data.getFloat32(byteOffset + 0),
@@ -117,6 +124,7 @@ export class Model implements BlockRenderer {
     // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
     public models: ModelInstance[][] = [];
     public joints: Joint[] = [];
+    public weights: Weight[] = [];
     public yTranslate: number = 0;
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
@@ -181,6 +189,8 @@ export class Model implements BlockRenderer {
                     hasJoints: true,
                     jointOffset: 0x3c,
                     jointCount: 0xf3,
+                    weightOffset: 0x54,
+                    weightCount: 0xf4,
                     shaderOffset: 0x38,
                     shaderCount: 0xf8,
                     shaderFields: SFA_SHADER_FIELDS,
@@ -284,11 +294,32 @@ export class Model implements BlockRenderer {
                 });
                 offs += 0x1c;
             }
+
+            const weightOffset = blockDv.getUint32(fields.weightOffset);
+            const weightCount = blockDv.getUint8(fields.weightCount);
+
+            this.weights = [];
+            for (let i = 0; i < jointCount; i++) {
+                this.weights.push({
+                    joint0: i, influence0: 1, joint1: 0, influence1: 0
+                });
+            }
+            offs = weightOffset;
+            for (let i = 0; i < weightCount; i++) {
+                const split = blockDv.getUint8(offs + 0x3);
+                const influence0 = 0.25 * split;
+                this.weights.push({
+                    joint0: blockDv.getUint8(offs),
+                    joint1: blockDv.getUint8(offs + 0x1),
+                    influence0,
+                    influence1: 1 - influence0,
+                });
+                offs += 0x4;
+            }
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
-        // console.log(`Loading ${polyCount} polytypes from 0x${polyOffset.toString(16)}`);
 
         const shaders: Shader[] = [];
         offs = shaderOffset;
