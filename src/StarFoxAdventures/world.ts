@@ -77,13 +77,13 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo);
     const [modelsTabData, modelsBin, _] = await Promise.all([
-        dataFetcher.fetchData(`${pathBase}/crfort/MODELS.tab`),
-        dataFetcher.fetchData(`${pathBase}/crfort/MODELS.bin`),
-        texColl.create(dataFetcher, 'crfort'),
+        dataFetcher.fetchData(`${pathBase}/swaphol/MODELS.tab`),
+        dataFetcher.fetchData(`${pathBase}/swaphol/MODELS.bin`),
+        texColl.create(dataFetcher, 'swaphol'),
     ]);
     const modelsTab = modelsTabData.createDataView();
 
-    const MODEL_NUM = 0x24 / 4
+    const MODEL_NUM = 0x4 / 4
 
     const modelTabValue = modelsTab.getUint32(MODEL_NUM * 4);
     if (modelTabValue === 0) {

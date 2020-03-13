@@ -171,29 +171,29 @@ export class SFABlockRenderer implements BlockRenderer {
                 // Used in character and object models
                 fields = {
                     alwaysUseTex1: false,
-                    texOffset: 32,
-                    texCount: 242,
-                    posOffset: 40,
-                    posCount: 228,
+                    texOffset: 0x20,
+                    texCount: 0xf2,
+                    posOffset: 0x28,
+                    posCount: 0xe4,
                     hasNormals: true,
-                    nrmOffset: 44,
-                    nrmCount: 230,
-                    clrOffset: 48,
-                    clrCount: 232,
-                    texcoordOffset: 52,
-                    texcoordCount: 234,
+                    nrmOffset: 0x2c,
+                    nrmCount: 0xe6,
+                    clrOffset: 0x30,
+                    clrCount: 0xe8,
+                    texcoordOffset: 0x34,
+                    texcoordCount: 0xea,
                     hasJoints: true,
-                    jointOffset: 60,
-                    jointCount: 243,
-                    shaderOffset: 56,
-                    shaderCount: 248,
+                    jointOffset: 0x3c,
+                    jointCount: 0xf3,
+                    shaderOffset: 0x38,
+                    shaderCount: 0xf8,
                     shaderFields: SFA_SHADER_FIELDS,
-                    listOffset: 208,
-                    listCount: 245,
+                    listOffset: 0xd0,
+                    listCount: 0xf5,
                     listSize: 0x1c,
                     numListBits: 8,
-                    bitsOffsets: [212],
-                    bitsByteCounts: [216],
+                    bitsOffsets: [0xd4],
+                    bitsByteCounts: [0xd8],
                     oldVat: false,
                     hasYTranslate: false,
                     oldShaders: false,
@@ -274,11 +274,9 @@ export class SFABlockRenderer implements BlockRenderer {
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         let jointCount = 0;
-        let matrixIdxThing = 0;
         if (fields.hasJoints) {
             const jointOffset = blockDv.getUint32(fields.jointOffset);
             jointCount = blockDv.getUint8(fields.jointCount);
-            matrixIdxThing = blockDv.getUint8(0xf3);
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
@@ -393,12 +391,11 @@ export class SFABlockRenderer implements BlockRenderer {
             while (!done) {
                 const opcode = bits.get(4);
                 switch (opcode) {
-                case 1: // Set polygon type
+                case 1: // Set shader
                     curShader = shaders[bits.get(6)];
                     break;
-                case 2: // Geometry
+                case 2: // Call display list
                     const listNum = bits.get(fields.numListBits);
-                    // console.log(`Drawing display list #${chunkNum}`);
                     if (listNum >= listCount) {
                         console.warn(`Can't draw display list #${listNum} (out of range)`);
                         continue;
@@ -434,7 +431,7 @@ export class SFABlockRenderer implements BlockRenderer {
                         vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
                     }
     
-                    if (fields.hasJoints && matrixIdxThing >= 2) {
+                    if (fields.hasJoints && jointCount >= 2) {
                         vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
                         let texmtxNum = 0;
                         // FIXME: what is this?
