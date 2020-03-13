@@ -188,7 +188,8 @@ export class Model implements BlockRenderer {
                 // Used in character and object models
                 fields = {
                     isMapBlock: false,
-                    alwaysUseTex1: false,
+                    //alwaysUseTex1: false,
+                    alwaysUseTex1: true, // FIXME: wtf?
                     texOffset: 0x20,
                     texCount: 0xf2,
                     posOffset: 0x28,
@@ -314,6 +315,9 @@ export class Model implements BlockRenderer {
             for (let i = 0; i < jointCount; i++) {
                 const joint = this.joints[i];
                 if (joint.parent != 0xff) {
+                    if (joint.parent >= i) {
+                        console.warn(`Bad parent translation reference!`);
+                    }
                     const parent = this.joints[joint.parent];
                     vec3.add(joint.translation, joint.translation, parent.translation);
                 }
@@ -558,18 +562,25 @@ export class Model implements BlockRenderer {
                         }
                     } else {
                         for (let i = 0; i < numWeights; i++) {
-                            const wt = bits.get(8);
-                            const weight = self.weights[wt];
+                            const weight = self.weights[bits.get(8)];
+
                             const j0 = self.joints[weight.joint0];
+                            const j0Trans = vec3.clone(j0.translation);
+                            // vec3.add(j0Trans, j0.translation, j0.worldTranslation);
+
                             const j1 = self.joints[weight.joint1];
+                            const j1Trans = vec3.clone(j1.translation);
+                            // vec3.add(j1Trans, j1.translation, j1.worldTranslation);
+
                             const mat0 = mat4.create();
-                            mat4.fromTranslation(mat0, j0.translation);
+                            mat4.fromTranslation(mat0, j0Trans);
                             const mat1 = mat4.create();
-                            mat4.fromTranslation(mat1, j1.translation);
-                            const blendedMat = mat4.create();
+                            mat4.fromTranslation(mat1, j1Trans);
                             mat4.multiplyScalar(mat0, mat0, weight.influence0);
                             mat4.multiplyScalar(mat1, mat1, weight.influence1);
+                            const blendedMat = mat4.create();
                             mat4.add(blendedMat, mat0, mat1);
+
                             pnMatrices[i] = blendedMat;
                         }
                     }
