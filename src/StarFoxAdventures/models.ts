@@ -140,6 +140,18 @@ export class Model implements BlockRenderer {
     public weights: Weight[] = [];
     public yTranslate: number = 0;
 
+    public getJointPosition(num: number): vec3 {
+        let joint = this.joints[num];
+        const result = vec3.clone(joint.translation);
+        
+        while (joint.parent != 0xff) {
+            joint = this.joints[joint.parent];
+            vec3.add(result, result, joint.translation);
+        }
+
+        return result;
+    }
+
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
         let offs = 0;
         const blockDv = blockData.createDataView();
@@ -311,25 +323,13 @@ export class Model implements BlockRenderer {
                 offs += 0x1c;
             }
 
-            // Compute total translations for each joint
-            for (let i = 0; i < jointCount; i++) {
-                const joint = this.joints[i];
-                if (joint.parent != 0xff) {
-                    if (joint.parent >= i) {
-                        console.warn(`Bad parent translation reference!`);
-                    }
-                    const parent = this.joints[joint.parent];
-                    vec3.add(joint.translation, joint.translation, parent.translation);
-                }
-            }
-
             const weightOffset = blockDv.getUint32(fields.weightOffset);
             const weightCount = blockDv.getUint8(fields.weightCount);
 
             this.weights = [];
             for (let i = 0; i < jointCount; i++) {
                 this.weights.push({
-                    joint0: i, influence0: 1, joint1: 0, influence1: 0
+                    joint0: i, influence0: 1, joint1: i, influence1: 0
                 });
             }
             offs = weightOffset;
@@ -564,13 +564,11 @@ export class Model implements BlockRenderer {
                         for (let i = 0; i < numWeights; i++) {
                             const weight = self.weights[bits.get(8)];
 
-                            const j0 = self.joints[weight.joint0];
-                            const j0Trans = vec3.clone(j0.translation);
-                            // vec3.add(j0Trans, j0.translation, j0.worldTranslation);
+                            const j0Trans = self.getJointPosition(weight.joint0);
+                            // vec3.sub(j0Trans, j0.translation, j0.worldTranslation);
 
-                            const j1 = self.joints[weight.joint1];
-                            const j1Trans = vec3.clone(j1.translation);
-                            // vec3.add(j1Trans, j1.translation, j1.worldTranslation);
+                            const j1Trans = self.getJointPosition(weight.joint1);
+                            // vec3.sub(j1Trans, j1.translation, j1.worldTranslation);
 
                             const mat0 = mat4.create();
                             mat4.fromTranslation(mat0, j0Trans);
