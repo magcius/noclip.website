@@ -111,11 +111,6 @@ export class CollisionParts {
         sceneObjHolder.collisionDirector!.keepers[this.keeperIdx].removeFromZone(this, this.collisionZone.zoneId);
     }
 
-    private resetAllMtxPrivate(hostMtx: mat4): void {
-        mat4.copy(this.worldMtx, hostMtx);
-        mat4.invert(this.invWorldMtx, hostMtx);
-    }
-
     private makeEqualScale(mtx: mat4): void {
         if (this.scaleType === CollisionScaleType.AutoScale) {
             // Nothing to do; leave alone.
@@ -145,7 +140,13 @@ export class CollisionParts {
         preScaleMtx(mtx, scratchVec3a);
     }
 
+    private resetAllMtxPrivate(hostMtx: mat4): void {
+        mat4.copy(this.worldMtx, hostMtx);
+        mat4.invert(this.invWorldMtx, hostMtx);
+    }
+
     public resetAllMtx(hostMtx: mat4): void {
+        this.resetAllMtxPrivate(hostMtx);
     }
 
     public resetAllMtxFromHost(): void {
@@ -380,6 +381,12 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
 
 export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
+}
+
+const scratchVec3c = vec3.create();
+export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
+    vec3.set(scratchVec3c, 0.0, -height, 0.0);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, Category.Map);
 }
 
 export const enum CollisionScaleType {

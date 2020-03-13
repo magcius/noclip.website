@@ -33,7 +33,7 @@ import { getVertexAttribLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from './MiscMap';
-import { getFirstPolyOnLineToMap } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround } from './Collision';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -684,7 +684,6 @@ export class PlanetMap extends LiveActor {
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
         const bodySensor = this.getSensor('body')!;
-        console.log(this, this.name, this.resourceHolder.arc);
         if (isExistCollisionResource(this, this.name)) {
             let hostMtx: mat4 | null = null;
             // TODO(jstpierre): FollowJoint
@@ -4186,12 +4185,13 @@ export class WaterPlant extends LiveActor {
         for (let i = 0; i < this.plantCount; i++) {
             const plantData = new WaterPlantData();
 
-            // TODO(jstpierre): Search for ground. For now, just scatter them around on XZ plane.
-            const x = getRandomFloat(-this.radius, this.radius);
-            const z = getRandomFloat(-this.radius, this.radius);
-            vec3.copy(plantData.position, this.translation);
-            plantData.position[0] += x;
-            plantData.position[2] += z;
+            for (let j = 0; j < 10; j++) {
+                const x = getRandomFloat(-this.radius, this.radius);
+                const z = getRandomFloat(-this.radius, this.radius);
+                vec3.set(plantData.position, this.translation[0] + x, this.translation[1] + 500.0, this.translation[2] + z);
+                if (calcMapGround(sceneObjHolder, plantData.position, plantData.position, 1000.0))
+                    break;
+            }
 
             vec3.copy(plantData.axisZ, axisZ);
 
