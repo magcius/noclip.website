@@ -157,9 +157,11 @@ export class Model implements BlockRenderer {
             } else {
                 parentMtx = mat4.create();
             }
+
+            const jTrans = vec3.clone(joint.translation);
             
             const mtx = mat4.create();
-            mat4.fromTranslation(mtx, joint.translation);
+            mat4.fromTranslation(mtx, jTrans);
             mat4.mul(mtx, mtx, parentMtx);
             this.boneMatrices.push(mtx);
         }
@@ -602,6 +604,7 @@ export class Model implements BlockRenderer {
                         for (let i = 0; i < numWeights; i++) {
                             const weightNum = bits.get(8);
                             pnMatrices[i] = self.boneMatrices[weightNum];
+                            // pnMatrices[i] = mat4.create();
                         }
                     }
                     break;

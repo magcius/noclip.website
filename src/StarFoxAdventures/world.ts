@@ -72,7 +72,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     ]);
     const modelsTab = modelsTabData.createDataView();
 
-    const MODEL_NUM = 0x4 / 4
+    const MODEL_NUM = 0x5c / 4
 
     const modelTabValue = modelsTab.getUint32(MODEL_NUM * 4);
     if (modelTabValue === 0) {
