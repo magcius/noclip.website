@@ -138,18 +138,42 @@ export class Model implements BlockRenderer {
     public models: ModelInstance[][] = [];
     public joints: Joint[] = [];
     public weights: Weight[] = [];
+    public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
     public yTranslate: number = 0;
 
-    public getJointPosition(num: number): vec3 {
-        let joint = this.joints[num];
-        const result = vec3.clone(joint.translation);
-        
-        while (joint.parent != 0xff) {
-            joint = this.joints[joint.parent];
-            vec3.add(result, result, joint.translation);
+    public computeBoneMatrices() {
+        this.boneMatrices = [];
+
+        // Compute joint matrices
+        for (let i = 0; i < this.joints.length; i++) {
+            const joint = this.joints[i];
+            let parentMtx = mat4.create();
+            if (joint.parent != 0xff) {
+                if (joint.parent >= i) {
+                    throw Error(`Bad joint hierarchy in model`);
+                }
+
+                parentMtx = this.boneMatrices[joint.parent];
+            } else {
+                parentMtx = mat4.create();
+            }
+            
+            const mtx = mat4.create();
+            mat4.fromTranslation(mtx, joint.translation);
+            mat4.mul(mtx, mtx, parentMtx);
+            this.boneMatrices.push(mtx);
         }
 
-        return result;
+        // Compute blended matrices
+        for (let i = 0; i < this.weights.length; i++) {
+            const weight = this.weights[i];
+            const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
+            const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
+            mat4.multiplyScalar(mat0, mat0, weight.influence0);
+            mat4.multiplyScalar(mat1, mat1, weight.influence1);
+            mat4.add(mat0, mat0, mat1);
+            this.boneMatrices.push(mat0);
+        }
     }
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
@@ -170,7 +194,7 @@ export class Model implements BlockRenderer {
                 clrCount: 0x94,
                 texcoordOffset: 0x60,
                 texcoordCount: 0x96,
-                hasJoints: false,
+                hasBones: false,
                 jointOffset: 0,
                 jointCount: 0,
                 shaderOffset: 0x64,
@@ -213,7 +237,7 @@ export class Model implements BlockRenderer {
                     clrCount: 0xe8,
                     texcoordOffset: 0x34,
                     texcoordCount: 0xea,
-                    hasJoints: true,
+                    hasBones: true,
                     jointOffset: 0x3c,
                     jointCount: 0xf3,
                     weightOffset: 0x54,
@@ -249,7 +273,7 @@ export class Model implements BlockRenderer {
                     clrCount: 0x94,
                     texcoordOffset: 0x60,
                     texcoordCount: 0x96,
-                    hasJoints: false,
+                    hasBones: false,
                     jointOffset: 0,
                     jointCount: 0,
                     shaderOffset: 0x64,
@@ -308,7 +332,7 @@ export class Model implements BlockRenderer {
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         let jointCount = 0;
-        if (fields.hasJoints) {
+        if (fields.hasBones) {
             const jointOffset = blockDv.getUint32(fields.jointOffset);
             jointCount = blockDv.getUint8(fields.jointCount);
 
@@ -327,14 +351,9 @@ export class Model implements BlockRenderer {
             const weightCount = blockDv.getUint8(fields.weightCount);
 
             this.weights = [];
-            for (let i = 0; i < jointCount; i++) {
-                this.weights.push({
-                    joint0: i, influence0: 1, joint1: i, influence1: 0
-                });
-            }
             offs = weightOffset;
             for (let i = 0; i < weightCount; i++) {
-                const split = blockDv.getUint8(offs + 0x3);
+                const split = blockDv.getUint8(offs + 0x2);
                 const influence0 = 0.25 * split;
                 this.weights.push({
                     joint0: blockDv.getUint8(offs),
@@ -344,6 +363,8 @@ export class Model implements BlockRenderer {
                 });
                 offs += 0x4;
             }
+
+            this.computeBoneMatrices();
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
@@ -432,7 +453,7 @@ export class Model implements BlockRenderer {
         }
 
         let texMtxCount = 0;
-        if (fields.hasJoints) {
+        if (fields.hasBones) {
             texMtxCount = blockDv.getUint8(0xfa);
         }
 
@@ -500,7 +521,7 @@ export class Model implements BlockRenderer {
                         vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
                     }
     
-                    if (fields.hasJoints && jointCount >= 2) {
+                    if (fields.hasBones && jointCount >= 2) {
                         vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
                         let texmtxNum = 0;
                         // FIXME: what is this?
@@ -561,25 +582,10 @@ export class Model implements BlockRenderer {
                             bits.get(8);
                         }
                     } else {
+                        self.computeBoneMatrices();
                         for (let i = 0; i < numWeights; i++) {
-                            const weight = self.weights[bits.get(8)];
-
-                            const j0Trans = self.getJointPosition(weight.joint0);
-                            // vec3.sub(j0Trans, j0.translation, j0.worldTranslation);
-
-                            const j1Trans = self.getJointPosition(weight.joint1);
-                            // vec3.sub(j1Trans, j1.translation, j1.worldTranslation);
-
-                            const mat0 = mat4.create();
-                            mat4.fromTranslation(mat0, j0Trans);
-                            const mat1 = mat4.create();
-                            mat4.fromTranslation(mat1, j1Trans);
-                            mat4.multiplyScalar(mat0, mat0, weight.influence0);
-                            mat4.multiplyScalar(mat1, mat1, weight.influence1);
-                            const blendedMat = mat4.create();
-                            mat4.add(blendedMat, mat0, mat1);
-
-                            pnMatrices[i] = blendedMat;
+                            const weightNum = bits.get(8);
+                            pnMatrices[i] = self.boneMatrices[weightNum];
                         }
                     }
                     break;
