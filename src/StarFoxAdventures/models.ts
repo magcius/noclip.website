@@ -167,8 +167,24 @@ export class Model implements BlockRenderer {
         // Compute blended matrices
         for (let i = 0; i < this.weights.length; i++) {
             const weight = this.weights[i];
+
+            const j0 = this.joints[weight.joint0];
+            const j0WorldTrans = vec3.clone(j0.worldTranslation);
+            vec3.negate(j0WorldTrans, j0WorldTrans);
+            const j0WorldTransMat = mat4.create();
+            mat4.fromTranslation(j0WorldTransMat, j0WorldTrans);
+
+            const j1 = this.joints[weight.joint1];
+            const j1WorldTrans = vec3.clone(j1.worldTranslation);
+            vec3.negate(j1WorldTrans, j1WorldTrans);
+            const j1WorldTransMat = mat4.create();
+            mat4.fromTranslation(j1WorldTransMat, j1WorldTrans);
+
             const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
+            mat4.mul(mat0, mat0, j0WorldTransMat);
             const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
+            mat4.mul(mat1, mat1, j1WorldTransMat);
+
             mat4.multiplyScalar(mat0, mat0, weight.influence0);
             mat4.multiplyScalar(mat1, mat1, weight.influence1);
             mat4.add(mat0, mat0, mat1);
