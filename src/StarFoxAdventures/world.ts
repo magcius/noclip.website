@@ -221,11 +221,12 @@ class WorldRenderer extends SFARenderer {
         const ctx = getDebugOverlayCanvas2D();
         for (let i = 1; i < this.aModel.joints.length; i++) {
             const joint = this.aModel.joints[i];
+            const jointPt = this.aModel.getJointPosition(i);
             if (joint.parent != 0xff) {
-                const parentJoint = this.aModel.joints[joint.parent];
-                drawWorldSpaceLine(ctx, viewerInput.camera, parentJoint.translation, joint.translation);
+                const parentPt = this.aModel.getJointPosition(joint.parent);
+                drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
             } else {
-                drawWorldSpacePoint(ctx, viewerInput.camera, joint.translation);
+                drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
             }
             // const weight = this.aModel.weights[i];
             // drawWorldSpacePoint(ctx, viewerInput.camera, joint.translation);
