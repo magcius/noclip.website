@@ -670,8 +670,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.modelManager.update(deltaTimeFrames);
 
         if (this.spine !== null) {
-            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
             this.spine.update(deltaTimeFrames);
+            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
         }
 
         if (!this.visibleAlive)

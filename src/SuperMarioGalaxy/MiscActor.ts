@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0 } from '../MathHelpers';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -6744,5 +6744,235 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
                     this.setNerve(TsukidashikunNrv.MoveBack);
             }
         }
+    }
+}
+
+const enum PlantMemberNrv { Wait, Hint }
+
+class PlantMember extends LiveActor<PlantMemberNrv> {
+    public hasItem: boolean = false;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, modelName: string, useLightCtrl: boolean) {
+        // CutBushModelObj::CutBushModelObj()
+        super(zoneAndLayer, sceneObjHolder, modelName);
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder, this);
+
+        if (useLightCtrl)
+            this.initLightCtrl(sceneObjHolder);
+
+        // initSound
+
+        // PlantMember::init()
+        this.initNerve(PlantMemberNrv.Wait);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PlantMemberNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === PlantMemberNrv.Hint) {
+            if (isFirstStep(this))
+                startBck(this, 'HintShake');
+            if (isBckStopped(this))
+                this.setNerve(PlantMemberNrv.Wait);
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        // TODO(jstpierre): updateLightCtrlDirect
+    }
+
+    public initPosture(sceneObjHolder: SceneObjHolder): void {
+        calcGravity(sceneObjHolder, this);
+
+        if (!isSameDirection(this.gravityVector, Vec3UnitX, 0.01))
+            vec3.copy(scratchVec3a, Vec3UnitX);
+        else
+            vec3.copy(scratchVec3a, Vec3UnitY);
+
+        calcMtxFromGravityAndZAxis(scratchMatrix, this, this.gravityVector, scratchVec3a);
+
+        // Rotate randomly around the gravity vector.
+        const angle = getRandomFloat(-Math.PI, Math.PI);
+        mat4.rotate(scratchMatrix, scratchMatrix, angle, this.gravityVector);
+
+        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+    }
+
+    public tryEmitHint(): boolean {
+        if (this.getCurrentNerve() === PlantMemberNrv.Wait) {
+            this.setNerve(PlantMemberNrv.Hint);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public animControl(sceneObjHolder: SceneObjHolder): void {
+        // TODO(jstpierre)
+    }
+}
+
+export class PlantGroup extends LiveActor {
+    private modelName: string;
+    private count: number;
+    private whichItem: number;
+    private effectTranslation = vec3.create();
+    private effectRotation = vec3.create();
+    private members: PlantMember[] = [];
+    private hintTimer: number;
+    private lastHintPlant: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+
+        if (this.name === 'FlowerGroup') {
+            this.modelName = 'Flower';
+        } else if (this.name === 'FlowerBlueGroup') {
+            this.modelName = 'FlowerBlue';
+        } else {
+            this.modelName = 'CutBush';
+        }
+
+        this.count = fallback(getJMapInfoArg0(infoIter), 7);
+        const itemCount = fallback(getJMapInfoArg1(infoIter), 0);
+        this.whichItem = fallback(getJMapInfoArg2(infoIter), 0);
+
+        this.initMember(sceneObjHolder, itemCount, infoIter);
+        // initSound
+        this.initEffectKeeper(sceneObjHolder, 'Bush');
+        setEffectHostSRT(this, 'HintShakeLeaf', this.effectTranslation, this.effectRotation, null);
+        // initStarPointerTarget
+        // switches
+        this.hintTimer = getRandomInt(3, 10) * 10;
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        for (let i = 0; i < this.members.length; i++) {
+            const member = this.members[i];
+            member.animControl(sceneObjHolder);
+            member.movement(sceneObjHolder, viewerInput);
+        }
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        this.emitHintEffect(sceneObjHolder, deltaTimeFrames);
+    }
+
+    private emitHintEffect(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        this.hintTimer -= deltaTimeFrames;
+
+        if (this.hintTimer <= 0) {
+            this.hintTimer = 300;
+
+            let i = this.lastHintPlant;
+            while (true) {
+                i = (i + 1) % this.members.length;
+                const member = this.members[i];
+
+                if (member.hasItem && member.tryEmitHint()) {
+                    this.lastHintPlant = i;
+                    vec3.copy(this.effectTranslation, member.translation);
+                    vec3.copy(this.effectRotation, member.rotation);
+                    emitEffect(sceneObjHolder, this, 'HintShakeLeaf');
+                }
+
+                if (i === this.lastHintPlant)
+                    break;
+            }
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        calcGravityVector(sceneObjHolder, this, this.translation, scratchVec3);
+        this.placeOnCollisionFormCircle(sceneObjHolder, scratchVec3c, scratchVec3);
+        // calcBoundingSphereRadius
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        for (let i = 0; i < this.members.length; i++)
+            this.members[i].makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        for (let i = 0; i < this.members.length; i++)
+            this.members[i].makeActorDead(sceneObjHolder);
+    }
+
+    private initMember(sceneObjHolder: SceneObjHolder, itemCount: number, infoIter: JMapInfoIter): void {
+        const useLightCtrl = this.modelName === 'CutBush';
+
+        for (let i = 0; i < this.count; i++) {
+            const member = new PlantMember(this.zoneAndLayer, sceneObjHolder, this.modelName, useLightCtrl);
+            this.members.push(member);
+
+            if (i < itemCount)
+                member.hasItem = true;
+        }
+
+        // Shuffle around items.
+        for (let i = 0; i < this.count; i++) {
+            const j = getRandomInt(0, i + 1);
+            const hasItem = this.members[j].hasItem;
+            this.members[j].hasItem = this.members[i].hasItem;
+            this.members[i].hasItem = hasItem;
+        }
+
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'Plant', 16, 100.0, Vec3Zero);
+    }
+
+    private placeOnCollisionFormCircle(sceneObjHolder: SceneObjHolder, center: vec3, gravity: vec3): void {
+        vec3.set(center, 0, 0, 0);
+
+        let angle = MathConstants.TAU;
+        let plantsPerRing = 0;
+        let numRings = 0;
+        let radius = 0.0;
+        for (let i = 0; i < this.members.length; i++) {
+            const member = this.members[i];
+
+            // Build circular pattern.
+            vec3.copy(scratchVec3a, Vec3UnitX);
+            vec3.copy(scratchVec3b, Vec3UnitY);
+            makeAxisCrossPlane(scratchVec3a, scratchVec3b, gravity);
+
+            // Right
+            vec3.scaleAndAdd(scratchVec3a, this.translation, scratchVec3a, Math.cos(angle) * radius);
+            // Up
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, Math.sin(angle) * radius);
+
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, gravity, -100.0);
+            vec3.scale(scratchVec3b, gravity, 1000.0);
+
+            getFirstPolyOnLineToMap(sceneObjHolder, member.translation, null, scratchVec3a, scratchVec3b);
+            vec3.add(center, center, member.translation);
+
+            member.initPosture(sceneObjHolder);
+
+            if (angle >= MathConstants.TAU) {
+                // This one filled up, go to the next ring out.
+                plantsPerRing += 6;
+                numRings++;
+                radius = 160.0 * numRings;
+                angle = 0;
+            } else {
+                angle += MathConstants.TAU / plantsPerRing;
+            }
+        }
+
+        vec3.scale(center, center, 1 / this.members.length);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
     }
 }
