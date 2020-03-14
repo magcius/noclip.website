@@ -261,7 +261,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
     public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
         this.startIndex = this.currentIndex;

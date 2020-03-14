@@ -167,6 +167,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
     mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
     fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+    renderInstManager.submitRenderInst(renderInst);
 }
 
 export class dKankyo__CommonTextures {

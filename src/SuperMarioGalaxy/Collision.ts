@@ -333,13 +333,46 @@ function isFloorPolygon(normal: vec3, gravityVector: vec3): boolean {
     return isNearZeroVec3(normal, 0.001) && isFloorPolygonAngle(vec3.dot(normal, gravityVector));
 }
 
+const scratchVec3c = vec3.create();
+const hitInfoScratch = nArray(0x20, () => new HitInfo());
 export class Binder {
     public triangleFilter: TriangleFilterBase | null = null;
+    private hitInfos: HitInfo[];
+    private hitInfoCount: number;
+    private floorHitDist: number;
+    private wallHitDist: number;
+    private roofHitDist: number;
+
+    public offsetVec: vec3 | null = null;
+
+    constructor(private baseMtxRef: mat4 | null, private translationRef: vec3, private gravityRef: vec3, private centerY: number, private radius: number, private hitInfoCapacity: number) {
+        this.hitInfos = nArray(hitInfoCapacity, () => new HitInfo());
+        this.clear();
+    }
 
     public bind(dst: vec3, velocity: vec3): void {
+        vec3.copy(scratchVec3c, this.translationRef);
+
+        if (this.offsetVec === null) {
+            if (this.baseMtxRef !== null) {
+                scratchVec3c[0] += this.baseMtxRef[4] * this.centerY;
+                scratchVec3c[1] += this.baseMtxRef[5] * this.centerY;
+                scratchVec3c[2] += this.baseMtxRef[6] * this.centerY;
+            } else {
+                scratchVec3c[1] += this.centerY;
+            }
+        } else {
+            throw "whoops";
+        }
+
+        // this.findBindedPos()
     }
 
     public clear(): void {
+        this.hitInfoCount = 0;
+        this.floorHitDist = -99999.0;
+        this.wallHitDist = -99999.0;
+        this.roofHitDist = -99999.0;
     }
 
     public setTriangleFilter(filter: TriangleFilterBase): void {
@@ -383,7 +416,6 @@ export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
 }
 
-const scratchVec3c = vec3.create();
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
     vec3.set(scratchVec3c, 0.0, -height, 0.0);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, Category.Map);

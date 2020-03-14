@@ -1850,16 +1850,18 @@ export class JPABaseEmitter {
 
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
 
-        const renderInst1 = renderInstManager.pushRenderInst();
+        const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);
+        renderInstManager.submitRenderInst(renderInst1);
 
         if (isCross) {
             // Since we use a tristrip, that means that if we have 5 particles, we'll have 10 vertices (0-9), with the index
             // buffer doing something like this at the end: 6 7 8,  8 7 9,  8 9 10,  10 9 11,  10 11 12
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
-            const renderInst2 = renderInstManager.pushRenderInst();
+            const renderInst2 = renderInstManager.newRenderInst();
             renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
+            renderInstManager.submitRenderInst(renderInst2);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -3036,13 +3038,15 @@ export class JPABaseParticle {
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = esp1 !== null && esp1.isEnableRotate;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = workData.particleSortKey;
 
         if (SORT_PARTICLES) {
             const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
+
+        renderInstManager.submitRenderInst(renderInst);
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;

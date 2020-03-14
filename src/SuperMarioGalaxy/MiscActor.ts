@@ -3875,7 +3875,8 @@ class WarpPodPathDrawer {
 
         this.ddraw.beginDraw();
         this.drawPath(viewerInput.camera);
-        this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -4260,6 +4261,8 @@ export class WaterPlant extends LiveActor {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -4694,6 +4697,8 @@ export class SwingRope extends LiveActor {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -4931,6 +4936,8 @@ export class Trapeze extends LiveActor {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     private updateStickMtx(): void {
@@ -5120,6 +5127,8 @@ class OceanRingDrawer {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -5183,7 +5192,7 @@ class OceanRingPipeOutside extends LiveActor {
 
         const device = sceneObjHolder.modelCache.device;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.pipe.inputLayout, this.pipe.inputState);
         renderInst.drawIndexes(this.pipe.indexCount);
 
@@ -5216,6 +5225,8 @@ class OceanRingPipeOutside extends LiveActor {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -5820,6 +5831,8 @@ export class Flag extends LiveActor {
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     private updateFlag(camera: Camera): void {

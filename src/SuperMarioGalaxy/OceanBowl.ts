@@ -334,7 +334,7 @@ export class OceanBowl extends LiveActor {
         materialParams.u_TexMtx[4][13] = (-normPosX * scale4) + 0.5;
 
         // Now create our draw instance.
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
 
@@ -349,6 +349,8 @@ export class OceanBowl extends LiveActor {
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
