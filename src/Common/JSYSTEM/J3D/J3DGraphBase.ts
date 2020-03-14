@@ -1246,7 +1246,7 @@ export class J3DModelInstance {
         throw "could not find joint";
     }
 
-    protected isAnyShapeVisible(): boolean {
+    public isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.shapeInstanceState.drawViewMatrixVisibility.length; i++)
             if (this.shapeInstanceState.drawViewMatrixVisibility[i])
                 return true;
@@ -1302,7 +1302,6 @@ export class J3DModelInstance {
         return depth;
     }
 
-    // TODO(jstpierre): Sort shapeInstances based on translucent material?
     private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, translucent: boolean): void {
         if (!this.isAnyShapeVisible())
             return;
