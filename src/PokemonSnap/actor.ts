@@ -1,10 +1,10 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags } from "./motion";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction } from "./motion";
 import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY } from "../MathHelpers";
 import { getPathPoint } from "./animation";
 import { ObjectDef } from "./room";
@@ -101,13 +101,15 @@ export class LevelGlobals {
         this.fishCount++;
     }
 
-    public activateObject(id: number, pos: vec3, yaw: number, behavior = 0): Actor | null {
+    public activateObject(id: number, pos: vec3, yaw: number, behavior = 0, scale = Vec3One): Actor | null {
         const chosen = this.tempActors.find((a) => a.def.id === id && !a.visible);
         if (chosen === undefined)
             return null;
         // overwrite spawn data
         chosen.spawn.behavior = behavior;
         vec3.copy(chosen.spawn.pos, pos);
+        vec3.copy(chosen.spawn.scale, scale);
+        chosen.spawn.euler[1] = yaw;
         chosen.reset(this);
         return chosen;
     }
@@ -186,6 +188,41 @@ export class LevelGlobals {
             fish.visible = false;
             this.tempActors.push(fish);
             out.push(fish);
+        }
+
+        const tempIDs = new Set<number>();
+
+        // other temp objects
+        for (let def of level.objectInfo) {
+            if (!isActor(def))
+                continue;
+            for (let state of def.stateGraph.states)
+                for (let block of state.blocks)
+                    if (block.spawn)
+                        tempIDs.add(block.spawn!.id);
+        }
+
+        for (let id of tempIDs) {
+            let count = 1; // assume just one by default
+            switch (id) {
+                case 132: count = 4; break; // ditto
+                case 1030: count = 10; break; // lava splash
+            }
+            const tempIndex = defs.findIndex((d) => d.id === id);
+            assert(tempIndex >= 0);
+            for (let i = 0; i < count; i++) {
+                const fakeSpawn: ObjectSpawn = {
+                    id,
+                    behavior: 0,
+                    pos: vec3.create(),
+                    euler: vec3.create(),
+                    scale: vec3.clone(Vec3One),
+                };
+                const actor = new Actor(data[tempIndex], fakeSpawn, defs[tempIndex] as ActorDef, this);
+                actor.visible = false;
+                this.tempActors.push(actor);
+                out.push(actor);
+            }
         }
 
         return out;
@@ -642,6 +679,23 @@ export class Actor extends ModelRenderer {
             globals.createSplash(SplashType.Water, splashScratch, block.splash.scale);
         }
 
+        if (block.spawn !== undefined) {
+            let yaw = 0;
+            if (block.spawn.yaw === Direction.Forward)
+                yaw = this.euler[1];
+            else if (block.spawn.yaw === Direction.Backward)
+                yaw = this.euler[1] + Math.PI;
+            const spawned = globals.activateObject(
+                block.spawn.id,
+                this.translation,
+                yaw,
+                block.spawn.behavior >= 0 ? block.spawn.behavior : this.spawn.behavior,
+                block.spawn.scale,
+            );
+            if (spawned !== null)
+                spawned.motionData.path = this.motionData.path;
+        }
+
         if (block.motion !== null) {
             this.motionData.currMotion = block.motion;
             this.motionData.currBlock = 0;
@@ -830,7 +884,7 @@ export class Actor extends ModelRenderer {
                 case "random":
                     result = randomCircle(this.translation, this.euler, this.motionData, block, dt, globals); break;
                 case "linear":
-                    result = linear(this.translation, this.euler, this.motionData, block, dt, viewerInput.time); break;
+                    result = linear(this.translation, this.euler, this.motionData, block, this.target, dt, viewerInput.time); break;
                 case "walkToTarget":
                     result = walkToTarget(this.translation, this.euler, this.motionData, block, this.target, dt, globals); break;
                 case "faceTarget":
@@ -986,6 +1040,21 @@ class Kakuna extends Actor {
     }
 }
 
+class Pidgey extends Actor {
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802C8BC4) {
+            if (this.motionData.auxStart < 0)
+                this.motionData.auxStart = viewerInput.time;
+            if (viewerInput.time > this.motionData.auxStart + 0x80 * 1000 / 30) {
+                if (this.motionData.storedValues[0] === 0)
+                    globals.sendGlobalSignal(this, 0x1D);
+                return MotionResult.Done;
+            }
+        }
+        return MotionResult.None;
+    }
+}
+
 const deltaScratch = vec3.create();
 class Pikachu extends Actor {
     public static currDiglett = 0;
@@ -1113,6 +1182,19 @@ class Grimer extends Actor {
     }
 }
 
+class Jynx extends Actor {
+    private static flags = 0;
+
+    protected startBlock(globals: LevelGlobals): void {
+        switch (this.def.stateGraph.states[this.currState].startAddress) {
+            case 0x802C4EF4: {
+                this.translation[1] = findGroundHeight(globals.collision, this.translation[0], this.translation[2]) - 53.25;
+                this.updatePositions();
+            } break;
+        }
+        super.startBlock(globals);
+    }
+}
 // effectively the same extra logic as Grimer, but done in a more confusing way
 class Lapras extends Actor {
     private static flags = 0;
@@ -1194,11 +1276,13 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 4: return new Charmander(renderData, spawn, def, globals);
         case 7: return new Squirtle(renderData, spawn, def, globals);
         case 14: return new Kakuna(renderData, spawn, def, globals);
+        case 16: return new Pidgey(renderData, spawn, def, globals);
         case 25: return new Pikachu(renderData, spawn, def, globals);
         case 37: return new Vulpix(renderData, spawn, def, globals);
         case 70: return new Weepinbell(renderData, spawn, def, globals);
         case 71: return new Victreebel(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
+        case 124: return new Jynx(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
     }

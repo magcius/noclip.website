@@ -9,7 +9,7 @@ import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
-import {MotionParser, Motion, Splash} from "./motion";
+import { MotionParser, Motion, Splash, Direction } from "./motion";
 import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
 
 export interface Level {
@@ -253,6 +253,7 @@ export function parseLevel(archives: LevelArchive[]): Level {
             },
         );
 
+    spawnParser.dataMap = dataMap;
     const fishTable = parseFishTable(dataMap, level.Name);
 
     const objectInfo: ObjectDef[] = [];
@@ -263,35 +264,12 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const id = objFunctionView.getInt32(offs + 0x00);
             const initFunc = objFunctionView.getUint32(offs + 0x04);
             offs += 0x10;
-
-            const initView = dataMap.getView(initFunc);
-            assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
-            const objectView = dataMap.getView(dataFinder.dataAddress);
-
-            const graphStart = objectView.getUint32(0x00);
-            const materials = objectView.getUint32(0x04);
-            const renderer = objectView.getUint32(0x08);
-            const animationStart = objectView.getUint32(0x0C);
-            const scale = getVec3(objectView, 0x10);
-            const center = getVec3(objectView, 0x1C);
-            const radius = objectView.getFloat32(0x28) * scale[1];
-            const flags = objectView.getUint16(0x2C);
-            const extraTransforms = objectView.getUint32(0x2E) >>> 8;
-
-            vec3.div(center, center, scale);
-            vec3.scale(scale, scale, 0.1);
-
-            const sharedOutput = new RSPSharedOutput();
-            try {
-                const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
-                const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
-                objectInfo.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
-            } catch (e) {
-                console.warn("failed parse", id, e);
-            }
-
+            parseObject(dataMap, id, initFunc, objectInfo);
         }
     }
+
+    if (level.Name === 16)
+        parseObject(dataMap, 1006, 0x802CBDA0, objectInfo);
 
     const statics = dataMap.deref(level.Header + 0x04);
     if (statics !== 0) {
@@ -332,6 +310,34 @@ export function parseLevel(archives: LevelArchive[]): Level {
         collision = parseCollisionTree(dataMap, level.Collision);
 
     return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable };
+}
+
+function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: ObjectDef[]): void {
+    const initView = dataMap.getView(initFunc);
+    assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
+    const objectView = dataMap.getView(dataFinder.dataAddress);
+
+    const graphStart = objectView.getUint32(0x00);
+    const materials = objectView.getUint32(0x04);
+    const renderer = objectView.getUint32(0x08);
+    const animationStart = objectView.getUint32(0x0C);
+    const scale = getVec3(objectView, 0x10);
+    const center = getVec3(objectView, 0x1C);
+    const radius = objectView.getFloat32(0x28) * scale[1];
+    const flags = objectView.getUint16(0x2C);
+    const extraTransforms = objectView.getUint32(0x2E) >>> 8;
+
+    vec3.div(center, center, scale);
+    vec3.scale(scale, scale, 0.1);
+
+    const sharedOutput = new RSPSharedOutput();
+    try {
+        const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
+        const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
+        defs.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
+    } catch (e) {
+        console.warn("failed parse", id, e);
+    }
 }
 
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
@@ -1332,6 +1338,7 @@ export interface StateBlock {
     forwardSpeed?: number;
     tangible?: boolean;
     splash?: Splash;
+    spawn?: SpawnData;
 
     edges: StateEdge[];
 }
@@ -1375,10 +1382,14 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
 }
 
 export const enum GeneralFuncs {
+    RunProcess  = 0x08C28,
+    EndProcess  = 0x08F2C,
+
     Signal      = 0x0B774,
     SignalAll   = 0x0B830,
     Yield       = 0x0BCA8,
-    EndProcess  = 0x08F2C,
+
+    AnimateNode = 0x11090,
 
     ArcTan      = 0x19ABC,
     Random      = 0x19DB0,
@@ -1396,18 +1407,20 @@ export const enum StateFuncs {
     Random          = 0x35ECAC,
     RunAux          = 0x35ED90,
     EndAux          = 0x35EDC8,
-
     Cleanup         = 0x35FD70,
     EatApple        = 0x36010C,
 
-    // only in cave
-    DanceInteract   = 0x2C1440,
-    DanceInteract2  = 0x2C0140,
+    SpawnActorHere  = 0x35FE24,
+    SpawnActor      = 0x363C48,
 
     SplashAt        = 0x35E174,
     SplashBelow     = 0x35E1D4,
     DratiniSplash   = 0x35E238,
     SplashOnImpact  = 0x35E298,
+
+    // only in cave
+    DanceInteract   = 0x2C1440,
+    DanceInteract2  = 0x2C0140,
 }
 
 export const enum ObjectField {
@@ -1417,7 +1430,15 @@ export const enum ObjectField {
     TranslationX    = 0x1C,
     TranslationY    = 0x20,
     TranslationZ    = 0x24,
+    // on the root node transform
+    Pitch           = 0x1C,
+    Yaw             = 0x20,
+    Roll            = 0x24,
+    ScaleX          = 0x2C,
+    ScaleY          = 0x30,
+    ScaleZ          = 0x34,
 
+    Transform       = 0x4C,
     ParentFlags     = 0x50, // actually on the parent object
 
     Apple           = 0x64,
@@ -1436,6 +1457,7 @@ export const enum ObjectField {
     Mystery         = 0xC0,
     GroundList      = 0xCC,
 
+    Path            = 0xE8,
     PathParam       = 0xEC,
 }
 
@@ -1458,7 +1480,7 @@ export const enum EndCondition {
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.auxAddress === -1 &&
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.auxAddress === -1 && block.spawn === undefined &&
     block.flagSet === 0 && block.ignoreGround === undefined && block.eatApple === undefined && block.forwardSpeed === undefined && block.tangible === undefined && block.splash === undefined;
 }
 
@@ -1713,6 +1735,15 @@ class StateParser extends MIPS.NaiveInterpreter {
                 const target = (a0.value > 0x80000000 || a0.value === ObjectField.Target) ? a0.value : 0;
                 this.currBlock.signals.push({value: a1.value, target, condition: InteractionType.Basic, conditionParam: 0});
             } break;
+            case GeneralFuncs.RunProcess: {
+                if (a1.value === 0x80000000 + GeneralFuncs.AnimateNode)
+                    break;
+                spawnParser.parseFromView(this.dataMap.getView(a1.value));
+                if (spawnParser.foundSpawn) {
+                    assert(spawnParser.data.id !== 0 && this.currBlock.spawn === undefined);
+                    this.currBlock.spawn = spawnParser.data;
+                }
+            } break;
             case StateFuncs.RunAux: {
                 if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
                     this.handleFunction(StateFuncs.SetState, a0, a1, a2, a3, stackArgs, null);
@@ -1747,6 +1778,14 @@ class StateParser extends MIPS.NaiveInterpreter {
                 };
             } break;
             default:
+                if (func > 0x200000 && func < 0x350200) {
+                    // see if level-specific functions are spawning something
+                    spawnParser.parseFromView(this.dataMap.getView(0x80000000 + func));
+                    if (spawnParser.foundSpawn) {
+                        assert(spawnParser.data.id !== 0 && this.currBlock.spawn === undefined);
+                        this.currBlock.spawn = spawnParser.data;
+                    }
+                }
                 this.valid = false;
         }
         return 0;
@@ -1963,21 +2002,90 @@ function fixupState(state: State): void {
         case 0x802CA020: {
             assertExists(state.blocks[0].splash).scale = vec3.fromValues(15, 15, 10);
         } break;
+        // state transition after cleanup - maybe fix this automatically?
+        case 0x802BEB24: {
+            assert(state.doCleanup);
+            state.blocks[0].edges = [];
+        } break;
     }
 }
 
+interface SpawnData {
+    id: number;
+    behavior: number;
+    scale: vec3;
+    yaw: Direction;
+}
+
 class SpawnParser extends MIPS.NaiveInterpreter {
-    public id = 0;
+    public dataMap: DataMap;
+    public data: SpawnData;
+    public foundSpawn = false;
 
     public reset(): void {
         super.reset();
-        this.id = 0;
+        this.data = {
+            id: 0,
+            behavior: -1,
+            scale: vec3.clone(Vec3One),
+            yaw: Direction.Constant,
+        };
+        this.foundSpawn = false;
+    }
+
+    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
+        if (func === StateFuncs.SpawnActor) {
+            assert(this.data.id !== 0);
+            this.data.behavior = 0;
+            this.foundSpawn = true;
+        } else if (func === StateFuncs.SpawnActorHere) {
+            this.data.id = a1.value;
+            this.foundSpawn = true;
+        }
+        return 0;
     }
 
     protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
-        if (op === MIPS.Opcode.SW && offset === 0 && target.lastOp === MIPS.Opcode.ADDIU) {
-            this.id = value.value;
-            this.done = true;
+        if (op === MIPS.Opcode.SW && offset === 0 && target.lastOp === MIPS.Opcode.ADDIU && this.data.id === 0)
+            this.data.id = value.value;
+        if (!this.foundSpawn)
+            return; // can't modify parameters until we have a pointer
+        if (op === MIPS.Opcode.SW && target.lastOp === MIPS.Opcode.LW && offset === ObjectField.Behavior)
+            this.data.behavior = value.value;
+        else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.MULS) {
+            switch (offset) {
+                case ObjectField.ScaleX:
+                case ObjectField.ScaleY:
+                case ObjectField.ScaleZ:
+                    this.data.scale[(offset - ObjectField.ScaleX) >>> 2] = value.value; break;
+            }
+        } else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.ADDS) {
+            switch (offset) {
+                case ObjectField.ScaleX:
+                case ObjectField.ScaleY:
+                case ObjectField.ScaleZ:
+                    this.data.scale[(offset - ObjectField.ScaleX) >>> 2] = 2; break;
+                case ObjectField.Yaw:
+                    this.data.yaw = Direction.Backward; break;
+            }
+        } else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.LWC1) {
+            if (offset === ObjectField.Yaw && value.value === ObjectField.Yaw)
+                this.data.yaw = Direction.Forward;
+        }
+    }
+
+    protected finish(): void {
+        if (!this.foundSpawn)
+            return;
+        if (this.data.id > 0x80000000)
+            this.data.id = this.dataMap.deref(this.data.id);
+        for (let i = 0; i < 3; i++) {
+            let value = this.data.scale[i];
+            if (value === 1)
+                continue;
+            if (value > 0x80000000)
+                value = this.dataMap.deref(value);
+            this.data.scale[i] = bitsAsFloat32(value);
         }
     }
 }
@@ -2018,9 +2126,11 @@ function parseFishTable(dataMap: DataMap, id: number): FishEntry[] {
             break;
         }
         spawnParser.parseFromView(dataMap.getView(spawner));
-        assert(spawnParser.id !== 0);
-        fish.push({ probability, id: dataMap.deref(spawnParser.id) });
+        assert(spawnParser.data.id !== 0);
+        fish.push({ probability, id: spawnParser.data.id });
     }
+    if (id === 22)
+        total = 100;
     for (let i = 0; i < fish.length; i++)
         fish[i].probability /= total;
     return fish;

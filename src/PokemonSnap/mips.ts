@@ -47,6 +47,7 @@ export const enum Opcode {
     FLOATOP = 0x300,
     ADDS    = 0x300,
     SUBS    = 0x301,
+    MULS    = 0x302,
     MOVS    = 0x306,
 }
 
@@ -293,7 +294,8 @@ export class NaiveInterpreter {
                     this.fregs[rd].value = this.regs[rt].value;
                 } break;
                 case Opcode.SUBS:
-                case Opcode.ADDS: {
+                case Opcode.ADDS:
+                case Opcode.MULS: {
                     this.fregs[frd].lastOp = op;
                     this.fregs[frd].value = this.fregs[rd].value;
                     if (this.fregs[rd].value === 0 || (this.fregs[rd].lastOp === Opcode.LWC1 && this.fregs[rd].value < 0x80000000))

@@ -140,11 +140,13 @@ interface RandomCircle {
     maxTurn: number;
 }
 
-const enum Direction {
+export const enum Direction {
     Forward,
     Backward,
     Constant,
     Impact,
+    PathEnd,
+    PathStart,
 }
 
 interface Projectile {
@@ -167,6 +169,7 @@ interface Linear {
     duration: number;
     velocity: vec3;
     turnSpeed: number;
+    matchTarget: boolean;
 }
 
 const enum ApproachGoal {
@@ -509,6 +512,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
             duration: frames / 30,
             velocity,
             turnSpeed: this.yawOffset * 30,
+            matchTarget: false,
         });
     }
 
@@ -577,7 +581,21 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
             blocks[1].onImpact = true;
             blocks[1].index = 4;
         } break;
-        // a few more complicated ones
+        // make linear motion match target position
+        case 0x802DCA28:
+        case 0x802BFC84: {
+            assert(blocks[0].kind === "linear");
+            blocks[0].matchTarget = true;
+        } break;
+        // special projectile directions
+        case 0x802D1D4C: {
+            assert(blocks[1].kind === "projectile");
+            blocks[1].direction = Direction.PathStart;
+        } break;
+        case 0x802D1FC0: {
+            assert(blocks[1].kind === "projectile");
+            blocks[1].direction = Direction.PathEnd;
+        } break;
     }
 }
 
@@ -630,6 +648,16 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
                 } break;
                 case Direction.Impact:
                     data.movingYaw = Math.atan2(data.lastImpact[0], data.lastImpact[2]); break;
+                case Direction.PathStart:
+                case Direction.PathEnd: {
+                    getPathPoint(blockScratch, assertExists(data.path), block.direction === Direction.PathStart ? 0 : 1);
+                    if (block.direction === Direction.PathEnd)
+                        data.movingYaw = Math.atan2(blockScratch[0] - pos[0], blockScratch[2] - pos[2]);
+                    else { // only used in one place
+                        vec3.copy(pos, blockScratch);
+                        vec3.copy(data.startPos, blockScratch);
+                    }
+                } break;
             }
         } break;
         case "vertical": {
@@ -800,8 +828,14 @@ export function randomCircle(pos: vec3, euler: vec3, data: MotionData, block: Ra
     return MotionResult.Update;
 }
 
-export function linear(pos: vec3, euler: vec3, data: MotionData, block: Linear, dt: number, t: number): MotionResult {
+const linearScratch = vec3.create();
+export function linear(pos: vec3, euler: vec3, data: MotionData, block: Linear, target: Target | null, dt: number, t: number): MotionResult {
     vec3.scaleAndAdd(pos, pos, block.velocity, dt);
+    if (block.matchTarget && target) {
+        vec3.lerp(linearScratch, data.startPos, target.translation, (t - data.start) / 1000 / block.duration);
+        pos[0] = linearScratch[0];
+        pos[2] = linearScratch[2];
+    }
     euler[1] += block.turnSpeed * dt;
     if ((t - data.start) / 1000 >= block.duration)
         return MotionResult.Done;
