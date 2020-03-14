@@ -31,7 +31,7 @@ import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferT
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
-import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
@@ -973,17 +973,25 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
 
     private legacySpawner: NoclipLegacyActorSpawner;
+    private gameBit: GameBits;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
+
+        if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy')
+            this.gameBit = GameBits.SMG1;
+        else if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2')
+            this.gameBit = GameBits.SMG2;
+        else
+            throw "whoops";
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const actorTableEntry = getNameObjFactoryTableEntry(objName);
+        const actorTableEntry = getNameObjFactoryTableEntry(objName, this.gameBit);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
-        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName);
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, this.gameBit);
         if (planetTableEntry !== null)
             return planetTableEntry;
 

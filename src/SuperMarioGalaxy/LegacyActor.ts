@@ -6,8 +6,6 @@ import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
-import AnimationController from "../AnimationController";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
 import { isFirstStep } from "./Spine";
@@ -260,7 +258,6 @@ export class NoclipLegacyActorSpawner {
             case 'CoinAppearSpot':
             case 'LuigiIntrusively':
             case 'MameMuimuiAttackMan':
-            case 'CutBushGroup':
             case 'SuperDreamer':
             case 'PetitPorterWarpPoint':
             case 'TimerCoinBlock':
@@ -273,7 +270,6 @@ export class NoclipLegacyActorSpawner {
             case 'JumpBeamer':
             case 'WaterFortressRain':
             case 'BringEnemy':
-            case 'IceLayerBreak':
             case 'HeadLight':
             case 'TereboGroup':
             case 'NoteFairy':
@@ -310,8 +306,6 @@ export class NoclipLegacyActorSpawner {
             // models with bloom variants explicitly.
             case 'AssemblyBlockPartsTimerA':
             case 'AstroDomeComet':
-            case 'FlipPanel':
-            case 'FlipPanelReverse':
             case 'HeavensDoorInsidePlanetPartsA':
             case 'LavaProminence':
             case 'LavaProminenceEnvironment':
@@ -389,16 +383,6 @@ export class NoclipLegacyActorSpawner {
             case 'JetTurtle':
                 // spawnGraph(`Koura`);
                 break;
-
-            // TODO(jstpierre): Group spawn logic?
-            case 'FlowerGroup':
-                if (this.isSMG1)
-                    spawnGraph(`Flower`);
-                return;
-            case 'FlowerBlueGroup':
-                if (this.isSMG1)
-                    spawnGraph(`FlowerBlue`);
-                return;
 
             case 'HeavensDoorAppearStepA':
                 // This is the transition effect version of the steps that appear after you chase the bunnies in Gateway Galaxy.

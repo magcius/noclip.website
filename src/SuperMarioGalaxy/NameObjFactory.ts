@@ -18,10 +18,17 @@ export interface NameObjFactory {
 export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => NameObj;
 export type NameObjRequestArchivesFunc = (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => void;
 
+export const enum GameBits {
+    SMG1 = 0b01,
+    SMG2 = 0b10,
+    Both = SMG1 | SMG2,
+}
+
 export interface NameObjFactoryTableEntry {
     objName: string;
     factoryFunc: NameObjFactoryFunc | null;
     requestArchivesFunc: NameObjRequestArchivesFunc | null;
+    gameBits: GameBits;
 }
 
 function makeRequestArchivesFunc(extraArchives: string[]): NameObjRequestArchivesFunc {
@@ -31,17 +38,17 @@ function makeRequestArchivesFunc(extraArchives: string[]): NameObjRequestArchive
     };
 }
 
-function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc | null = null): NameObjFactoryTableEntry {
-    return { objName, factoryFunc, requestArchivesFunc };
+function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc | null = null, gameBits = GameBits.Both): NameObjFactoryTableEntry {
+    return { objName, factoryFunc, requestArchivesFunc, gameBits };
 }
 
-function N(objName: string): NameObjFactoryTableEntry {
+function N(objName: string, gameBits = GameBits.Both): NameObjFactoryTableEntry {
     const factoryFunc = null;
     const requestArchivesFunc = null;
-    return { objName, factoryFunc, requestArchivesFunc };
+    return { objName, factoryFunc, requestArchivesFunc, gameBits };
 }
 
-function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): NameObjFactoryTableEntry {
+function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null, gameBits = GameBits.Both): NameObjFactoryTableEntry {
     // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
     const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
         return new factory(zoneAndLayer, sceneObjHolder, infoIter);
@@ -57,7 +64,7 @@ function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: N
         requestArchivesFunc = factory.requestArchives;
     }
 
-    return { objName, factoryFunc, requestArchivesFunc };
+    return { objName, factoryFunc, requestArchivesFunc, gameBits };
 }
 
 const ActorTable: NameObjFactoryTableEntry[] = [
@@ -142,9 +149,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("FlagPeachCastleB",               Flag),
     _("FlagPeachCastleC",               Flag),
     _("FlagRaceA",                      Flag),
-    _("FlowerGroup",                    PlantGroup,                  makeRequestArchivesFunc(["Flower"])),
-    _("FlowerBlueGroup",                PlantGroup,                  makeRequestArchivesFunc(["FlowerBlue"])),
-    _("CutBushGroup",                   PlantGroup,                  makeRequestArchivesFunc(["CutBush"])),
     _("FluffWind",                      FluffWind),
     _("Fountain",                       Fountain),
     _("FountainBig",                    FountainBig),
@@ -189,6 +193,15 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("WaterPlant",                     WaterPlant),
     _("WoodBox",                        WoodBox),
     _("YellowChip",                     YellowChip),
+
+    // Flowers only appear to be in SMG1, not SMG2.
+    _("FlowerGroup",                    PlantGroup, makeRequestArchivesFunc(["Flower"]),     GameBits.SMG1),
+    _("FlowerBlueGroup",                PlantGroup, makeRequestArchivesFunc(["FlowerBlue"]), GameBits.SMG1),
+    _("CutBushGroup",                   PlantGroup, makeRequestArchivesFunc(["CutBush"]),    GameBits.SMG1),
+
+    N("FlowerGroup",                    GameBits.SMG2),
+    N("FlowerBlueGroup",                GameBits.SMG2),
+    N("CutBushGroup",                   GameBits.SMG2),
 
     // Sky/Air
     _("AstroDomeSky",                   Sky),
@@ -545,6 +558,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("FireworksA",                     RandomEffectObj),
     _("ForestWaterfallL",               EffectObjR1000F50),
     _("ForestWaterfallS",               EffectObjR1000F50),
+    _("IceLayerBreak",                  EffectObjR500F50),
     _("IcePlanetLight",                 EffectObjR100F50SyncClipping),
     _("IcicleRockLight",                EffectObjR100F50SyncClipping),
     _("LavaSparksS",                    EffectObj20x20x10SyncClipping),
@@ -552,6 +566,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("LavaSteam",                      LavaSteam),
     _("SandBreezeS",                    EffectObj10x10x10SyncClipping),
     _("SandBreezeL",                    EffectObj50x50x10SyncClipping),
+    _("ShootingStarArea",               RandomEffectObj),
     _("SnowS",                          EffectObj10x10x10SyncClipping),
     _("SpaceDustS",                     EffectObj20x20x10SyncClipping),
     _("SpaceDustL",                     EffectObj50x50x10SyncClipping),
@@ -712,8 +727,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("IronCannonLauncherPoint"),
 ];
 
-export function getNameObjFactoryTableEntry(objName: string, table: NameObjFactoryTableEntry[] = ActorTable): NameObjFactoryTableEntry | null {
-    const entry = table.find((entry) => entry.objName === objName);
+export function getNameObjFactoryTableEntry(objName: string, gameFlag: GameBits, table: NameObjFactoryTableEntry[] = ActorTable): NameObjFactoryTableEntry | null {
+    const entry = table.find((entry) => entry.objName === objName && !!(entry.gameBits & gameFlag));
     if (entry !== undefined)
         return entry;
     return null;
@@ -757,8 +772,8 @@ export class PlanetMapCreator {
         return this.setPlanetRecordFromName(objName);
     }
 
-    public getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const specialPlanetEntry = getNameObjFactoryTableEntry(objName, SpecialPlanetTable);
+    public getActorTableEntry(objName: string, gameFlag: GameBits): NameObjFactoryTableEntry | null {
+        const specialPlanetEntry = getNameObjFactoryTableEntry(objName, gameFlag, SpecialPlanetTable);
         if (specialPlanetEntry !== null)
             return specialPlanetEntry;
 
