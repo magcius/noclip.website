@@ -139,12 +139,15 @@ export class Model implements BlockRenderer {
     public joints: Joint[] = [];
     public weights: Weight[] = [];
     public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
+    public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
 
     public computeBoneMatrices() {
         this.boneMatrices = [];
+        this.invBindMatrices = [];
 
         // Compute joint matrices
+        console.log(`there are ${this.joints.length} joint matrices`);
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             let parentMtx = mat4.create();
@@ -158,34 +161,30 @@ export class Model implements BlockRenderer {
                 parentMtx = mat4.create();
             }
 
-            const jTrans = vec3.clone(joint.translation);
+            const bindMtx = mat4.create();
+            mat4.fromTranslation(bindMtx, joint.worldTranslation);
+            const invBind = mat4.create();
+            mat4.invert(invBind, bindMtx);
+            this.invBindMatrices.push(invBind);
             
             const mtx = mat4.create();
-            mat4.fromTranslation(mtx, jTrans);
+            mat4.fromTranslation(mtx, joint.translation);
             mat4.mul(mtx, mtx, parentMtx);
             this.boneMatrices.push(mtx);
         }
 
         // Compute blended matrices
+        console.log(`there are ${this.weights.length} blended matrices`);
         for (let i = 0; i < this.weights.length; i++) {
             const weight = this.weights[i];
 
-            const j0 = this.joints[weight.joint0];
-            const j0WorldTrans = vec3.clone(j0.worldTranslation);
-            vec3.negate(j0WorldTrans, j0WorldTrans);
-            const j0WorldTransMat = mat4.create();
-            mat4.fromTranslation(j0WorldTransMat, j0WorldTrans);
-
-            const j1 = this.joints[weight.joint1];
-            const j1WorldTrans = vec3.clone(j1.worldTranslation);
-            vec3.negate(j1WorldTrans, j1WorldTrans);
-            const j1WorldTransMat = mat4.create();
-            mat4.fromTranslation(j1WorldTransMat, j1WorldTrans);
+            const invBind0 = this.invBindMatrices[weight.joint0];
+            const invBind1 = this.invBindMatrices[weight.joint1];
 
             const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
-            mat4.mul(mat0, mat0, j0WorldTransMat);
+            mat4.mul(mat0, mat0, invBind0);
             const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
-            mat4.mul(mat1, mat1, j1WorldTransMat);
+            mat4.mul(mat1, mat1, invBind1);
 
             mat4.multiplyScalar(mat0, mat0, weight.influence0);
             mat4.multiplyScalar(mat1, mat1, weight.influence1);
@@ -483,6 +482,16 @@ export class Model implements BlockRenderer {
 
         const pnMatrices = nArray(0x10, () => mat4.create());
 
+        // Initialize PN matrices
+        this.computeBoneMatrices();
+        for (let i = 0; i < 0x10; i++) {
+            if (i >= this.boneMatrices.length) {
+                break;
+            }
+
+            pnMatrices[i] = this.boneMatrices[i];
+        }
+
         const self = this;
         function runBitstream(bitsOffset: number, drawStep: number) {
             const models: ModelInstance[] = [];
@@ -604,7 +613,6 @@ export class Model implements BlockRenderer {
                         for (let i = 0; i < numWeights; i++) {
                             const weightNum = bits.get(8);
                             pnMatrices[i] = self.boneMatrices[weightNum];
-                            // pnMatrices[i] = mat4.create();
                         }
                     }
                     break;
