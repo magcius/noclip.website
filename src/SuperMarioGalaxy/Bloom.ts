@@ -299,7 +299,7 @@ export class BloomPostFXRenderer {
         downsampleColorTarget.setParameters(device, targetWidth, targetHeight, 1);
         downsampleColorTexture.setParameters(device, targetWidth, targetHeight);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setFromTemplate(template);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
