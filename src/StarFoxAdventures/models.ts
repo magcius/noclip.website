@@ -55,6 +55,8 @@ export class ModelInstance {
         mat4.mul(dst, dst, modelMatrix);
     }
 
+    private scratchMtx = mat4.create();
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
@@ -62,8 +64,8 @@ export class ModelInstance {
         }
         
         this.packetParams.clear();
-        for (let i = 0; i < this.pnMatrices.length; i++) {
-            this.packetParams.u_PosMtx[i] = mat4.clone(this.pnMatrices[i]);
+        for (let i = 0; i < this.pnMatrices.length && i < this.packetParams.u_PosMtx.length; i++) {
+            mat4.copy(this.packetParams.u_PosMtx[i], this.pnMatrices[i]);
         }
 
         const renderInst = renderInstManager.newRenderInst();
@@ -105,9 +107,8 @@ export class ModelInstance {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            const mat = mat4.create();
-            mat4.mul(mat, modelMatrix, this.pnMatrices[i]);
-            this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, mat);
+            mat4.mul(this.scratchMtx, modelMatrix, this.pnMatrices[i]);
+            this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, this.scratchMtx);
         }
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
 
@@ -642,6 +643,8 @@ export class Model implements BlockRenderer {
         return this.models.length;
     }
 
+    private scratchMtx = mat4.create();
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
         if (drawStep < 0 || drawStep >= this.models.length) {
             return;
@@ -649,11 +652,9 @@ export class Model implements BlockRenderer {
 
         const models = this.models[drawStep];
         for (let i = 0; i < models.length; i++) {
-            const trans = mat4.create();
-            mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
-            const matrix_ = mat4.create();
-            mat4.mul(matrix_, matrix, trans);
-            models[i].prepareToRender(device, renderInstManager, viewerInput, matrix_, sceneTexture);
+            mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
+            mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
+            models[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
         }
     }
 }

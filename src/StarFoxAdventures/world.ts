@@ -269,11 +269,11 @@ class WorldRenderer extends SFARenderer {
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
 
+        const mtx = mat4.create();
         for (let i = 0; i < this.objectSpheres.length; i++) {
             const obj = this.objectSpheres[i];
             if (obj.model) {
-                const mtx = mat4.create();
-                mat4.translate(mtx, mtx, obj.pos);
+                mat4.fromTranslation(mtx, obj.pos);
                 mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
                 mat4.rotateX(mtx, mtx, obj.obj.pitch);
                 mat4.rotateY(mtx, mtx, obj.obj.yaw);
@@ -283,9 +283,8 @@ class WorldRenderer extends SFARenderer {
         }
         
         for (let i = 0; i < this.models.length; i++) {
-            const matrix = mat4.create();
-            mat4.fromTranslation(matrix, [i * 30, 0, 0]);
-            this.renderTestModel(device, renderInstManager, viewerInput, matrix, this.models[i]);
+            mat4.fromTranslation(mtx, [i * 30, 0, 0]);
+            this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]);
         }
         
         // Epilog
