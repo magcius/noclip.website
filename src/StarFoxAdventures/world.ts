@@ -53,13 +53,13 @@ interface ObjectSphere {
     model?: Model;
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, modelNum: number) {
+async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number) {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo);
     const [modelsTabData, modelsBin, _] = await Promise.all([
-        dataFetcher.fetchData(`${pathBase}/swaphol/MODELS.tab`),
-        dataFetcher.fetchData(`${pathBase}/swaphol/MODELS.bin`),
-        texColl.create(dataFetcher, 'swaphol'),
+        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
+        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
+        texColl.create(dataFetcher, subdir),
     ]);
     const modelsTab = modelsTabData.createDataView();
 
@@ -301,13 +301,13 @@ class WorldRenderer extends SFARenderer {
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, private subdir: string, private mapNum: number, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
-        const mapSceneInfo = await loadMap(device, context, 7, this.gameInfo);
+        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
 
@@ -319,13 +319,13 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const texColl = new SFATextureCollection(this.gameInfo);
-        await texColl.create(dataFetcher, 'swaphol'); // TODO: subdirectory depends on map
+        await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
         const objectMan = new ObjectManager(this.gameInfo, texColl, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
         const [_1, _2, _3, romlistFile] = await Promise.all([
-            objectMan.create(dataFetcher, 'swaphol'),
-            earlyObjectMan.create(dataFetcher, 'swaphol'),
+            objectMan.create(dataFetcher, this.subdir),
+            earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
@@ -355,7 +355,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 // e.g. ThornTail
                 obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
                 obj.scale *= objParams.getUint16(0x1c) / 1000;
-            } else if (obj.objClass === 685 || obj.objClass === 688) {
+            } else if (obj.objClass === 683) {
+                // e.g. LGTProjecte
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 302 || obj.objClass === 685 || obj.objClass === 688) {
                 // e.g. Boulder, LongGrassCl
                 obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -364,6 +369,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 if (scaleParam !== 0) {
                     obj.scale *= scaleParam / 255;
                 }
+            } else {
+                console.log(`Don't know how to setup object class ${obj.objClass}`);
             }
 
             objectSpheres.push({
@@ -394,8 +401,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
 
         const testModels = [];
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 1)); // Fox
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 23)); // Sharpclaw
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;
