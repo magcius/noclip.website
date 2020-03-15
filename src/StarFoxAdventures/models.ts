@@ -609,15 +609,15 @@ export class Model implements BlockRenderer {
                     }
                     break;
                 case 4: // Set weights (skipped by SFA block renderer)
-                    const numWeights = bits.get(4);
-                    if (numWeights > self.weights.length) {
+                    const numBones = bits.get(4);
+                    if (numBones > self.boneMatrices.length) {
                         // Skip
-                        for (let i = 0; i < numWeights; i++) {
+                        for (let i = 0; i < numBones; i++) {
                             bits.get(8);
                         }
                     } else {
                         self.computeBoneMatrices();
-                        for (let i = 0; i < numWeights; i++) {
+                        for (let i = 0; i < numBones; i++) {
                             const weightNum = bits.get(8);
                             pnMatrices[i] = self.boneMatrices[weightNum];
                         }
