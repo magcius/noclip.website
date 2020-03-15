@@ -142,6 +142,18 @@ export class Model implements BlockRenderer {
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
 
+    public getJointPosition(num: number): vec3 {
+        let joint = this.joints[num];
+        const result = vec3.clone(joint.translation);
+
+        while (joint.parent != 0xff) {
+            joint = this.joints[joint.parent];
+            vec3.add(result, result, joint.translation);
+        }
+
+        return result;
+    }
+
     public computeBoneMatrices() {
         this.boneMatrices = [];
         this.invBindMatrices = [];
@@ -167,9 +179,12 @@ export class Model implements BlockRenderer {
             mat4.invert(invBind, bindMtx);
             this.invBindMatrices.push(invBind);
             
+            const jointPos = this.getJointPosition(i);
+            // const jointPos = vec3.clone(joint.translation);
+            // vec3.sub(jointPos, jointPos, joint.worldTranslation);
             const mtx = mat4.create();
-            mat4.fromTranslation(mtx, joint.translation);
-            mat4.mul(mtx, mtx, parentMtx);
+            mat4.fromTranslation(mtx, jointPos);
+            // mat4.mul(mtx, mtx, parentMtx);
             this.boneMatrices.push(mtx);
         }
 
@@ -480,17 +495,9 @@ export class Model implements BlockRenderer {
             this.yTranslate = 0;
         }
 
-        const pnMatrices = nArray(0x10, () => mat4.create());
-
-        // Initialize PN matrices
         this.computeBoneMatrices();
-        for (let i = 0; i < 0x10; i++) {
-            if (i >= this.boneMatrices.length) {
-                break;
-            }
 
-            pnMatrices[i] = this.boneMatrices[i];
-        }
+        const pnMatrices = nArray(0x10, () => mat4.create());
 
         const self = this;
         function runBitstream(bitsOffset: number, drawStep: number) {
