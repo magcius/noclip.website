@@ -62,7 +62,7 @@ function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: str
     return aEl
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo) {
+async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, modelNum: number) {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo);
     const [modelsTabData, modelsBin, _] = await Promise.all([
@@ -72,11 +72,9 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     ]);
     const modelsTab = modelsTabData.createDataView();
 
-    const MODEL_NUM = 0x5c / 4
-
-    const modelTabValue = modelsTab.getUint32(MODEL_NUM * 4);
+    const modelTabValue = modelsTab.getUint32(modelNum * 4);
     if (modelTabValue === 0) {
-        throw Error(`Model #${MODEL_NUM} not found`);
+        throw Error(`Model #${modelNum} not found`);
     }
 
     const modelOffs = modelTabValue & 0xffffff;
@@ -97,7 +95,7 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private materialHelperObjectSphere: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private aModel: Model) {
+    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private models: Model[]) {
         super(device);
 
         packetParams.clear();
@@ -211,30 +209,29 @@ class WorldRenderer extends SFARenderer {
         device.submitPass(this.renderPass);
     }
 
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
         let modeltemplate = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
-        this.aModel.prepareToRender(device, renderInstManager, viewerInput, mat4.create(), this.sceneTexture, 0);
+        model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
         renderInstManager.popTemplateRenderInst();
 
         // Draw bones
         const ctx = getDebugOverlayCanvas2D();
-        for (let i = 1; i < this.aModel.joints.length; i++) {
-            const joint = this.aModel.joints[i];
-            const jointMtx = this.aModel.boneMatrices[i];
+        for (let i = 1; i < model.joints.length; i++) {
+            const joint = model.joints[i];
+            const jointMtx = mat4.clone(model.boneMatrices[i]);
+            mat4.mul(jointMtx, jointMtx, matrix);
             const jointPt = vec3.create();
             mat4.getTranslation(jointPt, jointMtx);
             if (joint.parent != 0xff) {
-                const parentMtx = this.aModel.boneMatrices[joint.parent];
+                const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
+                mat4.mul(parentMtx, parentMtx, matrix);
                 const parentPt = vec3.create();
                 mat4.getTranslation(parentPt, parentMtx);
                 drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
             } else {
                 drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
             }
-            // const weight = this.aModel.weights[i];
-            // drawWorldSpacePoint(ctx, viewerInput.camera, joint.translation);
-            // drawWorldSpaceLine(ctx, viewerInput.camera, this.aModel.joints[weight.joint0].translation, this.aModel.joints[weight.joint1].translation);
         }
     }
 
@@ -282,7 +279,11 @@ class WorldRenderer extends SFARenderer {
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
         
-        this.renderTestModel(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.models.length; i++) {
+            const matrix = mat4.create();
+            mat4.fromTranslation(matrix, [i * 30, 0, 0]);
+            this.renderTestModel(device, renderInstManager, viewerInput, matrix, this.models[i]);
+        }
         
         // Epilog
         renderInstManager.popTemplateRenderInst();
@@ -368,9 +369,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const envfx = envfxMan.loadEnvfx(device, 60);
         console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
 
-        const aModel = await testLoadingAModel(device, dataFetcher, this.gameInfo);
+        const testModels = [];
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 1)); // Fox
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 23)); // Sharpclaw
 
-        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, aModel);
+        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;
     }
 }
