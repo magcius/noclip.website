@@ -15,7 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
-import { ObjectManager } from './objects';
+import { ObjectManager, SFAObject } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
@@ -23,8 +23,6 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { createDownloadLink } from './util';
 import { Model } from './models';
-import { hexdump } from '../util';
-import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -49,6 +47,7 @@ function vecPitch(v: vec3): number {
 
 interface ObjectSphere {
     name: string;
+    obj: SFAObject;
     pos: vec3;
     radius: number;
     model?: Model;
@@ -274,7 +273,8 @@ class WorldRenderer extends SFARenderer {
             const obj = this.objectSpheres[i];
             if (obj.model) {
                 const mtx = mat4.create();
-                mat4.fromTranslation(mtx, obj.pos);
+                mat4.translate(mtx, mtx, obj.pos);
+                mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
                 this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
             }
         }
@@ -346,6 +346,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             objectSpheres.push({
                 name: obj.name,
+                obj: obj,
                 pos: vec3.fromValues(fields.x, fields.y, fields.z),
                 radius: fields.radius,
                 model: obj.models[0],

@@ -383,6 +383,13 @@ export class Model implements BlockRenderer {
             }
 
             this.computeBoneMatrices();
+
+            const transIsPresent = blockDv.getUint32(0xa4);
+            if (transIsPresent != 0) {
+                console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
+                const trans = readVec3(blockDv, 0x44);
+                console.log(`trans: ${trans}`);
+            }
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);

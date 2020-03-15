@@ -12,14 +12,18 @@ function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): 
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
 }
 
-class SFAObject {
+export class SFAObject {
     public name: string;
     public objClass: number;
+    public scale: number = 1.0;
     public models: Model[] = [];
 
     constructor(public objType: number, private data: DataView, private isEarlyObject: boolean) {
+        // FIXME: where are these fields for early objects?
+        this.scale = data.getFloat32(0x4);
+        this.objClass = data.getInt16(0x50);
+
         this.name = '';
-        this.objClass = data.getInt16(0x50); // FIXME: where is this field for early objects?
         let offs = isEarlyObject ? 0x58 : 0x91;
         let c;
         while ((c = data.getUint8(offs)) != 0) {
