@@ -351,7 +351,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             if (obj.objClass === 201) {
                 // e.g. sharpclawGr
                 obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 424 || obj.objClass === 666) {
+            } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 313 || obj.objClass === 424 || obj.objClass === 666) {
                 // e.g. setuppoint
                 // Do nothing
             } else if (obj.objClass === 249) {
@@ -368,9 +368,18 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             } else if (obj.objClass === 256) {
                 // e.g. TrickyWarp
                 obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 261) {
-                // e.g. LargeCrate
+            } else if (obj.objClass === 240 || obj.objClass === 260 || obj.objClass === 261) {
+                // e.g. WarpPoint, SmallBasket, LargeCrate
                 obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 272) {
+                // e.g. SH_Portcull
+                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
+                const objScale = objParams.getUint8(0x21) / 64;
+                if (objScale === 0) {
+                    obj.scale = 1.0;
+                } else {
+                    obj.scale *= objScale;
+                }
             } else if (obj.objClass === 275) {
                 // e.g. SH_newseqob
                 obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
