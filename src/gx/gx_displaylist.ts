@@ -277,7 +277,7 @@ function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number
 
     // Normals *always* use either 6 or 14 for their shift values.
     // The value in the VAT is ignored.
-    if (vtxAttrib === GX.Attr.NRM || vtxAttrib === GX.Attr.NBT) {
+    if (vtxAttrib === GX.Attr.NRM) {
         if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
             return 6;
         else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
