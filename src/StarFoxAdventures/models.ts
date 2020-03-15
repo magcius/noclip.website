@@ -423,7 +423,7 @@ export class Model implements BlockRenderer {
         vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
 
         vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[3][GX.Attr.NBT] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_NBT };
+        vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
         vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
@@ -535,7 +535,7 @@ export class Model implements BlockRenderer {
                         console.error(e);
                     }
                     break;
-                case 3: // Set vertex attributes
+                case 3: // Set descriptor
                     vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
                     for (let i = 0; i < 8; i++) {
                         vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
@@ -543,19 +543,24 @@ export class Model implements BlockRenderer {
     
                     if (fields.hasBones && jointCount >= 2) {
                         vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
+
                         let texmtxNum = 0;
-                        // FIXME: what is this?
-                        // if (shaders[curShader].hasTexmtx01) {
-                        //     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT; 
-                        //     texmtxNum++;
-                        //     vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                        //     texmtxNum++;
-                        // }
-                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                        texmtxNum++;
-                        for (let i = 0; i < texMtxCount; i++) {
+                        if (curShader.hasAuxTex0 || curShader.hasAuxTex1) {
+                            if (curShader.auxTexNum != 0xffffffff) {
+                                vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                                texmtxNum++;
+                                vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                                texmtxNum++;
+                            }
+                            
                             vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                             texmtxNum++;
+                        }
+
+                        texmtxNum = 7;
+                        for (let i = 0; i < texMtxCount; i++) {
+                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                            texmtxNum--;
                         }
                     }
     
@@ -565,10 +570,11 @@ export class Model implements BlockRenderer {
                     if (fields.hasNormals && (curShader.attrFlags & 1) != 0) {
                         const nrmDesc = bits.get(1);
                         if ((nrmTypeFlags & 8) != 0) {
-                            vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                            vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                            // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                            // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                         } else {
-                            vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
+                            // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
                             vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                         }
                     } else {

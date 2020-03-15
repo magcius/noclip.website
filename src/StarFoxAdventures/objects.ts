@@ -35,8 +35,13 @@ class SFAObject {
         const modelListOffs = data.getUint32(0x8);
         for (let i = 0; i < numModels; i++) {
             const modelNum = data.getUint32(modelListOffs + i * 4);
-            const model = modelColl.loadModel(device, modelNum);
-            this.models.push(model);
+            try {
+                const model = modelColl.loadModel(device, modelNum);
+                this.models.push(model);
+            } catch (e) {
+                console.warn(`Failed to load model ${modelNum} due to exception:`);
+                console.error(e);
+            }
         }
     }
 }

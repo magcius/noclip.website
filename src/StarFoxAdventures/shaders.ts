@@ -19,8 +19,10 @@ export interface Shader {
     layers: ShaderLayer[],
     enableCull: boolean;
     flags: number;
-    hasTexmtx01: boolean;
-    hasTexmtx2: boolean;
+    hasAuxTex0: boolean;
+    hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
+                         // It is possibly related to projected lighting.
+    auxTexNum: number;
     attrFlags: number;
 }
 
@@ -58,8 +60,9 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
         layers: [],
         enableCull: false,
         flags: 0,
-        hasTexmtx01: false,
-        hasTexmtx2: false,
+        hasAuxTex0: false,
+        hasAuxTex1: false,
+        auxTexNum: -1,
         attrFlags: 0,
     };
 
@@ -73,15 +76,13 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
         shader.layers.push(layer);
     }
 
+    shader.hasAuxTex0 = data.getUint32(0x8) != 0;
+    shader.hasAuxTex1 = data.getUint32(0x14) != 0;
+    shader.auxTexNum = data.getUint32(0x34);
+
     shader.flags = data.getUint32(0x3c);
     // FIXME: find this field's offset for demo files
     shader.enableCull = (shader.flags & ShaderFlags.Cull) != 0;
-
-    // FIXME: the texmtx stuff below is broken or not present in SFA...
-    // shader.hasTexmtx01 = data.getUint32(offs + 8) == 1 || data.getUint32(offs + 20) == 1;
-    // shader.hasTexmtx2 = (data.getUint32(offs + 64 + 2) & 0x80) != 0;
-    shader.hasTexmtx01 = data.getUint32(0x34) != 0;
-    shader.hasTexmtx2 = false;
 
     shader.attrFlags = data.getUint8(0x40);
 
