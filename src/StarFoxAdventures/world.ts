@@ -21,6 +21,7 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
+import { createDownloadLink } from './util';
 import { Model } from './models';
 import { hexdump } from '../util';
 import { HitSensor } from '../SuperMarioGalaxy/HitSensor';
@@ -50,16 +51,7 @@ interface ObjectSphere {
     name: string;
     pos: vec3;
     radius: number;
-}
-
-function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
-    const aEl = document.createElement('a')
-    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}))
-    aEl.download = filename
-    if (text !== undefined) {
-        aEl.append(text)
-    }
-    return aEl
+    model?: Model;
 }
 
 async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, modelNum: number) {
@@ -79,7 +71,6 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
 
     const modelOffs = modelTabValue & 0xffffff;
     const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
-    hexdump(modelData);
     
     window.main.downloadModel = () => {
         const aEl = createDownloadLink(modelData, 'model.bin');
@@ -216,23 +207,23 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
 
         // Draw bones
-        const ctx = getDebugOverlayCanvas2D();
-        for (let i = 1; i < model.joints.length; i++) {
-            const joint = model.joints[i];
-            const jointMtx = mat4.clone(model.boneMatrices[i]);
-            mat4.mul(jointMtx, jointMtx, matrix);
-            const jointPt = vec3.create();
-            mat4.getTranslation(jointPt, jointMtx);
-            if (joint.parent != 0xff) {
-                const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
-                mat4.mul(parentMtx, parentMtx, matrix);
-                const parentPt = vec3.create();
-                mat4.getTranslation(parentPt, parentMtx);
-                drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
-            } else {
-                drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
-            }
-        }
+        // const ctx = getDebugOverlayCanvas2D();
+        // for (let i = 1; i < model.joints.length; i++) {
+        //     const joint = model.joints[i];
+        //     const jointMtx = mat4.clone(model.boneMatrices[i]);
+        //     mat4.mul(jointMtx, jointMtx, matrix);
+        //     const jointPt = vec3.create();
+        //     mat4.getTranslation(jointPt, jointMtx);
+        //     if (joint.parent != 0xff) {
+        //         const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
+        //         mat4.mul(parentMtx, parentMtx, matrix);
+        //         const parentPt = vec3.create();
+        //         mat4.getTranslation(parentPt, parentMtx);
+        //         drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+        //     } else {
+        //         drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
+        //     }
+        // }
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
@@ -260,24 +251,33 @@ class WorldRenderer extends SFARenderer {
             // XXX: radius is too big to be workable. Or sometimes it's 0. Set it to a default.
             obj.radius = 8;
 
-            drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined,
-                {font: '8pt sans-serif', outline: 2.0});
+            // drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined,
+            //     {font: '8pt sans-serif', outline: 2.0});
             
-            this.objddraw.begin(GX.Command.DRAW_QUADS);
-            this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-            this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-            this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-            this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-            this.objddraw.end();
+            // this.objddraw.begin(GX.Command.DRAW_QUADS);
+            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+            // this.objddraw.end();
         }
         const renderInst = this.objddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperObjectSphere, renderInst, viewerInput);
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
+
+        for (let i = 0; i < this.objectSpheres.length; i++) {
+            const obj = this.objectSpheres[i];
+            if (obj.model) {
+                const mtx = mat4.create();
+                mat4.fromTranslation(mtx, obj.pos);
+                this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
+            }
+        }
         
         for (let i = 0; i < this.models.length; i++) {
             const matrix = mat4.create();
@@ -318,12 +318,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const texColl = new SFATextureCollection(this.gameInfo);
         await texColl.create(dataFetcher, 'swaphol'); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, true);
+        const objectMan = new ObjectManager(this.gameInfo, texColl, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
         const [_1, _2, _3, romlistFile] = await Promise.all([
-            objectMan.create(dataFetcher),
-            earlyObjectMan.create(dataFetcher),
+            objectMan.create(dataFetcher, 'swaphol'),
+            earlyObjectMan.create(dataFetcher, 'swaphol'),
             envfxMan.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
@@ -342,12 +342,13 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 z: romlist.getFloat32(offs + 0x10),
             };
 
-            const obj = objectMan.loadObject(fields.objType);
+            const obj = await objectMan.loadObject(device, fields.objType);
 
             objectSpheres.push({
                 name: obj.name,
                 pos: vec3.fromValues(fields.x, fields.y, fields.z),
-                radius: fields.radius
+                radius: fields.radius,
+                model: obj.models[0],
             });
 
             console.log(`Object #${i}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
@@ -356,13 +357,13 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             i++;
         }
 
-        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
-            const obj = objectMan.loadObject(objType, skipObjindex);
+        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
+            const obj = await objectMan.loadObject(device, objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 
-        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
-            const obj = earlyObjectMan.loadObject(objType, skipObjindex);
+        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
+            const obj = await earlyObjectMan.loadObject(device, objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 

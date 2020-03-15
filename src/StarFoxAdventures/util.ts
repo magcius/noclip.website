@@ -1,3 +1,4 @@
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
 // in the sequence.
@@ -35,4 +36,14 @@ export class LowBitReader {
         this.drop(bits);
         return x;
     }
+}
+
+export function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
+    const aEl = document.createElement('a')
+    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}))
+    aEl.download = filename
+    if (text !== undefined) {
+        aEl.append(text)
+    }
+    return aEl
 }

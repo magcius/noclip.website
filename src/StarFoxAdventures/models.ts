@@ -146,8 +146,7 @@ export class Model implements BlockRenderer {
         this.boneMatrices = [];
         this.invBindMatrices = [];
 
-        // Compute joint matrices
-        console.log(`there are ${this.joints.length} joint matrices`);
+        // Compute joint bones
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             let parentMtx = mat4.create();
@@ -173,8 +172,7 @@ export class Model implements BlockRenderer {
             this.boneMatrices.push(mtx);
         }
 
-        // Compute blended matrices
-        console.log(`there are ${this.weights.length} blended matrices`);
+        // Compute blended bones
         for (let i = 0; i < this.weights.length; i++) {
             const weight = this.weights[i];
 
