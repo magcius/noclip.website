@@ -21,7 +21,7 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { createDownloadLink, dataSubarray } from './util';
+import { createDownloadLink, dataSubarray, interpS16 } from './util';
 import { Model } from './models';
 
 const materialParams = new MaterialParams();
@@ -275,8 +275,8 @@ class WorldRenderer extends SFARenderer {
             if (obj.model) {
                 mat4.fromTranslation(mtx, obj.pos);
                 mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
-                mat4.rotateX(mtx, mtx, obj.obj.pitch);
                 mat4.rotateY(mtx, mtx, obj.obj.yaw);
+                mat4.rotateX(mtx, mtx, obj.obj.pitch);
                 mat4.rotateZ(mtx, mtx, obj.obj.roll);
                 this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
             }
@@ -348,19 +348,84 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const obj = await objectMan.loadObject(device, fields.objType);
 
-            if (obj.objClass === 256) {
+            if (obj.objClass === 201) {
+                // e.g. sharpclawGr
+                obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 424 || obj.objClass === 666) {
+                // e.g. setuppoint
+                // Do nothing
+            } else if (obj.objClass === 249) {
+                // e.g. ProjectileS
+                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+                const objScale = objParams.getUint8(0x1d);
+                if (objScale !== 0) {
+                    obj.scale *= objScale / 64;
+                }
+            } else if (obj.objClass === 254) {
+                // e.g. MagicPlant
+                obj.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 256) {
                 // e.g. TrickyWarp
                 obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 261) {
+                // e.g. LargeCrate
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 275) {
+                // e.g. SH_newseqob
+                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 284 || obj.objClass === 289) {
+                // e.g. StaffBoulde
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                // TODO: scale depends on subtype param
+            } else if (obj.objClass === 288) {
+                // e.g. TrickyGuard
+                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 293) {
+                // e.g. curve
+                obj.yaw = (objParams.getInt8(0x2c) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x2d) << 8) * Math.PI / 32768;
+                // FIXME: mode 8 and 0x1a also have roll at 0x38
+            } else if (obj.objClass === 294 && obj.objType === 77) {
+                obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 346) {
+                // e.g. SH_BombWall
+                obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
+                obj.pitch = objParams.getInt16(0x1c) * Math.PI / 32768;
+                obj.roll = objParams.getInt16(0x1e) * Math.PI / 32768;
+                let objScale = objParams.getInt8(0x2d);
+                if (objScale === 0) {
+                    objScale = 20;
+                }
+                obj.scale *= objScale / 20;
             } else if (obj.objClass === 429) {
                 // e.g. ThornTail
                 obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
                 obj.scale *= objParams.getUint16(0x1c) / 1000;
+            } else if (obj.objClass === 518) {
+                // e.g. PoleFlame
+                obj.yaw = interpS16((objParams.getUint8(0x18) & 0x3f) << 10) * Math.PI / 32768;
+                const objScale = objParams.getInt16(0x1a);
+                if (objScale < 1) {
+                    obj.scale = 0.1;
+                } else {
+                    obj.scale = objScale / 8192;
+                }
+            } else if (obj.objClass === 579) {
+                // e.g. DBHoleContr
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
             } else if (obj.objClass === 683) {
                 // e.g. LGTProjecte
                 obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
                 obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 302 || obj.objClass === 685 || obj.objClass === 688) {
+            } else if (obj.objClass === 689) {
+                // e.g. CmbSrc
+                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 302 || obj.objClass === 685 || obj.objClass === 687 || obj.objClass === 688) {
                 // e.g. Boulder, LongGrassCl
                 obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -370,7 +435,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                     obj.scale *= scaleParam / 255;
                 }
             } else {
-                console.log(`Don't know how to setup object class ${obj.objClass}`);
+                console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
             }
 
             objectSpheres.push({

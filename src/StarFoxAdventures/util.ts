@@ -4,6 +4,13 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
 }
 
+export function interpS16(n: number): number {
+    const u16 = new Uint16Array(1);
+    const s16 = new Int16Array(u16.buffer);
+    u16[0] = n & 0xffff;
+    return s16[0];
+}
+
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
 // in the sequence.
 export class LowBitReader {

@@ -145,6 +145,7 @@ export class Model implements BlockRenderer {
     public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
+    public modelTranslate: vec3 = vec3.create();
 
     public computeBoneMatrices() {
         this.boneMatrices = [];
@@ -388,8 +389,8 @@ export class Model implements BlockRenderer {
             const transIsPresent = blockDv.getUint32(0xa4);
             if (transIsPresent != 0) {
                 console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
-                const trans = readVec3(blockDv, 0x44);
-                console.log(`trans: ${trans}`);
+                this.modelTranslate = readVec3(blockDv, 0x44);
+                console.log(`trans: ${this.modelTranslate}`);
             }
         }
 
@@ -653,6 +654,7 @@ export class Model implements BlockRenderer {
         const models = this.models[drawStep];
         for (let i = 0; i < models.length; i++) {
             mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
+            mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
             models[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
         }
