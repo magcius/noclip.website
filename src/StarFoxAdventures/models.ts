@@ -8,13 +8,16 @@ import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
+import { DataFetcher } from '../DataFetcher';
 
+import { GameInfo } from './scenes';
 import { SFAMaterial } from './shaders';
 import * as GX from '../gx/gx_enum';
 import { TextureCollection } from './textures';
 import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader } from './util';
 import { BlockRenderer } from './blocks';
+import { loadRes } from './resource';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -639,5 +642,41 @@ export class Model implements BlockRenderer {
             mat4.mul(matrix_, matrix, trans);
             models[i].prepareToRender(device, renderInstManager, viewerInput, matrix_, sceneTexture);
         }
+    }
+}
+
+export class ModelCollection {
+    private modelsTab: DataView;
+    private modelsBin: ArrayBufferSlice;
+    private models: Model[] = [];
+
+    constructor(private texColl: TextureCollection, private gameInfo: GameInfo) {
+    }
+
+    public async create(dataFetcher: DataFetcher, subdir: string) {
+        const pathBase = this.gameInfo.pathBase;
+        const [modelsTab, modelsBin] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
+            dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
+        ]);
+        this.modelsTab = modelsTab.createDataView();
+        this.modelsBin = modelsBin;
+    }
+
+    public loadModel(device: GfxDevice, num: number): Model {
+        if (this.models[num] === undefined) {
+            console.log(`Loading model #${num} ...`);
+    
+            const modelTabValue = this.modelsTab.getUint32(num * 4);
+            if (modelTabValue === 0) {
+                throw Error(`Model #${num} not found`);
+            }
+    
+            const modelOffs = modelTabValue & 0xffffff;
+            const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
+            this.models[num] = new Model(device, modelData, this.texColl);
+        }
+
+        return this.models[num];
     }
 }
