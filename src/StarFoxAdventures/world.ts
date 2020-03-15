@@ -21,7 +21,7 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { createDownloadLink } from './util';
+import { createDownloadLink, dataSubarray } from './util';
 import { Model } from './models';
 
 const materialParams = new MaterialParams();
@@ -275,6 +275,9 @@ class WorldRenderer extends SFARenderer {
                 const mtx = mat4.create();
                 mat4.translate(mtx, mtx, obj.pos);
                 mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
+                mat4.rotateX(mtx, mtx, obj.obj.pitch);
+                mat4.rotateY(mtx, mtx, obj.obj.yaw);
+                mat4.rotateZ(mtx, mtx, obj.obj.roll);
                 this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
             }
         }
@@ -342,7 +345,27 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 z: romlist.getFloat32(offs + 0x10),
             };
 
+            const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
+
             const obj = await objectMan.loadObject(device, fields.objType);
+
+            if (obj.objClass === 256) {
+                // e.g. TrickyWarp
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 429) {
+                // e.g. ThornTail
+                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.scale *= objParams.getUint16(0x1c) / 1000;
+            } else if (obj.objClass === 685 || obj.objClass === 688) {
+                // e.g. Boulder, LongGrassCl
+                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+                const scaleParam = objParams.getUint8(0x1b);
+                if (scaleParam !== 0) {
+                    obj.scale *= scaleParam / 255;
+                }
+            }
 
             objectSpheres.push({
                 name: obj.name,

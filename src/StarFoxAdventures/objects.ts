@@ -6,15 +6,14 @@ import { GameInfo } from './scenes';
 import { Model, ModelCollection } from './models';
 import { SFATextureCollection } from './textures';
 import { loadRes } from './resource';
-import { createDownloadLink } from './util';
-
-function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
-}
+import { createDownloadLink, dataSubarray } from './util';
 
 export class SFAObject {
     public name: string;
     public objClass: number;
+    public yaw: number = 0;
+    public pitch: number = 0;
+    public roll: number = 0;
     public scale: number = 1.0;
     public models: Model[] = [];
 

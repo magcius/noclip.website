@@ -1,5 +1,9 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
+export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
+    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
+}
+
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
 // in the sequence.
 export class LowBitReader {
