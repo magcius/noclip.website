@@ -272,6 +272,7 @@ class Main {
         this._makeUI();
 
         this.dataFetcher = new DataFetcher(this.ui.sceneSelect);
+        await this.dataFetcher.init();
 
         this.groups = sceneGroups;
 

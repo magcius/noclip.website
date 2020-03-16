@@ -146,6 +146,7 @@ class Main {
         const progressMeter = { setProgress: () => {} };
         const destroyablePool = this.destroyablePool;
         const dataFetcher = new DataFetcher(progressMeter);
+        await dataFetcher.init();
         const dataShare = new DataShare();
         const uiContainer = document.createElement('div');
         this.sceneUIContainer.appendChild(uiContainer);
