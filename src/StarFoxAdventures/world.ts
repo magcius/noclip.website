@@ -72,10 +72,10 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const modelOffs = modelTabValue & 0xffffff;
     const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     
-    window.main.downloadModel = () => {
-        const aEl = createDownloadLink(modelData, 'model.bin');
-        aEl.click();
-    };
+    // window.main.downloadModel = () => {
+    //     const aEl = createDownloadLink(modelData, 'model.bin');
+    //     aEl.click();
+    // };
     
     return new Model(device, modelData, texColl);
 }
