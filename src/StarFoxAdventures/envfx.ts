@@ -44,8 +44,9 @@ export class EnvfxManager {
             const BASE = 0xc38;
             this.atmosphere.textures = [];
             for (let i = 0; i < 8; i++) {
-                console.log(`loading sky texture ${i}: 0x${BASE + fields.texIds[i]}`);
-                this.atmosphere.textures[i] = this.texColl.getTexture(device, BASE + fields.texIds[i]);
+                const texId = BASE + fields.texIds[i];
+                console.log(`loading sky texture ${i}: 0x${texId.toString(16)}`);
+                this.atmosphere.textures[i] = this.texColl.getTexture(device, BASE + fields.texIds[i], false);
             }
         }
 

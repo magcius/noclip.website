@@ -256,7 +256,7 @@ class AncientBlockFetcher implements BlockFetcher {
     }
 }
 
-const SFADEMO_GAME_INFO: GameInfo = {
+export const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
@@ -526,11 +526,11 @@ const sceneDescs = [
     // new SFAMapDesc(116, 'loc116', 'Location'), 
     // (end)
 
-    // 'Full Scenes',
-    // new SFAWorldSceneDesc('capeclaw', 'Cape Claw'),
-    // new SFAWorldSceneDesc('hollow', 'ThornTail Hollow'),
-    // new SFAWorldSceneDesc('moonpass', 'Moon Mountain Pass'),
-    // new SFAWorldSceneDesc('warlock', 'Krazoa Palace'),
+    'Full Scenes (HIGHLY EXPERIMENTAL)',
+    // new SFAWorldSceneDesc('capeclaw', 'capeclaw', 29, 'Cape Claw'),
+    new SFAWorldSceneDesc('hollow', 'swaphol', 7, 'ThornTail Hollow'),
+    // new SFAWorldSceneDesc('moonpass', 'mmpass', 18, 'Moon Mountain Pass'),
+    // new SFAWorldSceneDesc('warlock', 'warlock', 11, 'Krazoa Palace'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),

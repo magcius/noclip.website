@@ -249,7 +249,14 @@ export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camer
     drawViewportSpacePoint(ctx, x, y, color, size);
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta): void {
+interface TextOptions {
+    font?: string;
+    shadowColor?: string;
+    shadowBlur?: number;
+    outline?: number;
+}
+
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);
@@ -258,11 +265,24 @@ export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera
 
     const x = ( p[0][0] + 1) * cw / 2;
     const y = (-p[0][1] + 1) * ch / 2;
+
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'start';
-    ctx.font = '14pt monospace';
+    ctx.font = options.font ?? '14pt monospace';
+
+    if (options.outline) {
+        const oldLineWidth = ctx.lineWidth;
+        ctx.lineWidth = options.outline;
+        ctx.strokeText(text, x, y + offsY);
+        ctx.lineWidth = oldLineWidth;
+    }
+
+    ctx.shadowColor = options.shadowColor ?? 'black';
+    ctx.shadowBlur = options.shadowBlur ?? 0;
     ctx.fillText(text, x, y + offsY);
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 0;
 }
 
 export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {

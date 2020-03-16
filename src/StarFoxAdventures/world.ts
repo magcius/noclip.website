@@ -6,23 +6,23 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
-import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
-import { ObjectManager } from './objects';
+import { ObjectManager, SFAObject } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFATextureCollection } from './textures';
-import { SFARenderer, ModelInstance } from './render';
+import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { ModelHolder, SFABlockRenderer } from './blocks';
-import { hexdump } from '../util';
+import { createDownloadLink, dataSubarray, interpS16 } from './util';
+import { Model } from './models';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -47,48 +47,37 @@ function vecPitch(v: vec3): number {
 }
 
 interface ObjectSphere {
+    name: string;
+    obj: SFAObject;
     pos: vec3;
     radius: number;
+    model?: Model;
 }
 
-class MyModelHolder implements ModelHolder {
-    public models: ModelInstance[] = [];
-    public modelMatrices: mat4[] = [];
-    
-    public addModel(model: ModelInstance, modelMatrix: mat4) {
-        this.models.push(model);
-        this.modelMatrices.push(modelMatrix);
-    }
-}
-
-function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
-    const aEl = document.createElement('a')
-    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}))
-    aEl.download = filename
-    if (text !== undefined) {
-        aEl.append(text)
-    }
-    return aEl
-}
-
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo) {
+async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number) {
     const pathBase = gameInfo.pathBase;
-    const modelsBin = await dataFetcher.fetchData(`${pathBase}/MODELS.bin`);
     const texColl = new SFATextureCollection(gameInfo);
-    await texColl.create(dataFetcher, 'swaphol');
+    const [modelsTabData, modelsBin, _] = await Promise.all([
+        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
+        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
+        texColl.create(dataFetcher, subdir),
+    ]);
+    const modelsTab = modelsTabData.createDataView();
 
-    const modelData = loadRes(modelsBin.subarray(0x164));
-    hexdump(modelData);
+    const modelTabValue = modelsTab.getUint32(modelNum * 4);
+    if (modelTabValue === 0) {
+        throw Error(`Model #${modelNum} not found`);
+    }
+
+    const modelOffs = modelTabValue & 0xffffff;
+    const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     
-    window.main.downloadModel = () => {
-        const aEl = createDownloadLink(modelData, 'model.bin');
-        aEl.click();
-    };
-
-    const modelRenderer = new SFABlockRenderer(device, modelData, texColl);
-    const modelHolder = new MyModelHolder();
-    modelRenderer.addToModelHolder(modelHolder, mat4.create());
-    return modelHolder;
+    // window.main.downloadModel = () => {
+    //     const aEl = createDownloadLink(modelData, 'model.bin');
+    //     aEl.click();
+    // };
+    
+    return new Model(device, modelData, texColl);
 }
 
 class WorldRenderer extends SFARenderer {
@@ -97,7 +86,7 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private materialHelperObjectSphere: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private aModel: MyModelHolder) {
+    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private models: Model[]) {
         super(device);
 
         packetParams.clear();
@@ -153,6 +142,14 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        // Prolog
+        const skyTemplate = this.renderHelper.pushTemplateRenderInst();
+        const oldProjection = mat4.create();
+        mat4.copy(oldProjection, viewerInput.camera.projectionMatrix);
+        mat4.identity(viewerInput.camera.projectionMatrix);
+        fillSceneParamsDataOnTemplate(skyTemplate, viewerInput, false);
+
+        // Body
         const atmos = this.envfxMan.atmosphere;
         const atmosTexture = atmos.textures[0]!;
 
@@ -161,34 +158,18 @@ class WorldRenderer extends SFARenderer {
         getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
         vec3.negate(cameraFwd, cameraFwd);
         const camPitch = vecPitch(cameraFwd);
-        const aspect = viewerInput.backbufferWidth / viewerInput.backbufferHeight;
+        const camRoll = Math.PI / 2;
 
-        // FIXME: This implementation is adapted from the game but correctness is not verified.
-        // A different technique should probably be used, since this one ignores camera roll and works poorly in VR.
-        // TODO: Implement time of day, which the game implements by blending textures.
-        let factor = viewerInput.camera.fovY;
-        let texElevationCoeff = ((atmosTexture.height * (factor * 0.5)) / (0.5*Math.PI)) * 3.0;
-        let camField0x52 = 0; // ???
-        let camField0x54 = camPitch; // ???
-        factor = Math.sin(-camField0x54);
-        texElevationCoeff *= factor;
-        factor = (atmosTexture.height * 0.5 - 6.0) - (3.0 * (atmosTexture.height * camField0x52));
-        factor += texElevationCoeff;
-        factor *= 32.0;
-        factor = factor / (32 * atmosTexture.height);
-
-        const t0 = factor;
-        const t1 = factor - (texElevationCoeff * 2.0) / atmosTexture.height;
-        // const t0 = (camPitch / Math.PI + 1.0) / 2.0;
-        // const t1 = t0;
-
-        const ctx = getDebugOverlayCanvas2D();
-        ctx.fillStyle = '#eeeeee';
-        ctx.font = '16px sans-serif';
-        ctx.fillText(`Pitch: ${camPitch}`, 300, 100);
+        // Draw atmosphere
+        // FIXME: This implementation is adapted from the game, but correctness is not verified.
+        // We should probably use a different technique, since this one works poorly in VR.
+        // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
+        const fovRollFactor = 3.0 * (atmosTexture.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+        const pitchFactor = (0.5 * atmosTexture.height - 6.0) - (3.0 * atmosTexture.height * camPitch / Math.PI);
+        const t0 = (pitchFactor + fovRollFactor) / atmosTexture.height;
+        const t1 = t0 - (fovRollFactor * 2.0) / atmosTexture.height;
 
         this.ddraw.beginDraw();
-
         this.ddraw.begin(GX.Command.DRAW_QUADS);
         this.ddraw.position3f32(-1, -1, -1);
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
@@ -204,64 +185,148 @@ class WorldRenderer extends SFARenderer {
         submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
 
         this.ddraw.endAndUpload(device, renderInstManager);
+        
+        // Epilog
+        renderInstManager.popTemplateRenderInst();
+
+        mat4.copy(viewerInput.camera.projectionMatrix, oldProjection);
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        
+        renderInstManager.drawOnPassRenderer(device, this.renderPass);
+        renderInstManager.resetRenderInsts();
+        device.submitPass(this.renderPass);
+    }
+
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
+        let modeltemplate = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
+        model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+        renderInstManager.popTemplateRenderInst();
+
+        // Draw bones
+        // const ctx = getDebugOverlayCanvas2D();
+        // for (let i = 1; i < model.joints.length; i++) {
+        //     const joint = model.joints[i];
+        //     const jointMtx = mat4.clone(model.boneMatrices[i]);
+        //     mat4.mul(jointMtx, jointMtx, matrix);
+        //     const jointPt = vec3.create();
+        //     mat4.getTranslation(jointPt, jointMtx);
+        //     if (joint.parent != 0xff) {
+        //         const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
+        //         mat4.mul(parentMtx, parentMtx, matrix);
+        //         const parentPt = vec3.create();
+        //         mat4.getTranslation(parentPt, parentMtx);
+        //         drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+        //     } else {
+        //         drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
+        //     }
+        // }
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput);
-
-        let template = renderInstManager.pushTemplateRenderInst();
+        // Prolog
+        const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+        // Body
+        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        this.copyToSceneTexture(device);
+        // for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
+        //     this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
+        //     this.copyToSceneTexture(device);
+        // }
+
+        const ctx = getDebugOverlayCanvas2D();
+
+        let objtemplate = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);
         this.objddraw.beginDraw();
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < this.objectSpheres.length; i++) {
             const obj = this.objectSpheres[i];
 
             // TODO: draw sphere
-            // XXX: radius is too big to be workable. Or sometimes it's 0.
-            obj.radius = 64;
-            this.objddraw.begin(GX.Command.DRAW_QUADS);
-            this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-            this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-            this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-            this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-            this.objddraw.end();
+            // XXX: radius is too big to be workable. Or sometimes it's 0. Set it to a default.
+            obj.radius = 8;
+
+            // drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined,
+            //     {font: '8pt sans-serif', outline: 2.0});
+            
+            // this.objddraw.begin(GX.Command.DRAW_QUADS);
+            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
+            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+            // this.objddraw.end();
         }
         const renderInst = this.objddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperObjectSphere, renderInst, viewerInput);
         this.objddraw.endAndUpload(device, renderInstManager);
         renderInstManager.popTemplateRenderInst();
 
-        template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        for (let i = 0; i < this.aModel.models.length; i++) {
-            this.aModel.models[i].prepareToRender(device, renderInstManager, viewerInput, this.aModel.modelMatrices[i]);
+        const mtx = mat4.create();
+        for (let i = 0; i < this.objectSpheres.length; i++) {
+            const obj = this.objectSpheres[i];
+            if (obj.model) {
+                mat4.fromTranslation(mtx, obj.pos);
+                mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
+                mat4.rotateY(mtx, mtx, obj.obj.yaw);
+                mat4.rotateX(mtx, mtx, obj.obj.pitch);
+                mat4.rotateZ(mtx, mtx, obj.obj.roll);
+                this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
+            }
         }
+        
+        for (let i = 0; i < this.models.length; i++) {
+            mat4.fromTranslation(mtx, [i * 30, 0, 0]);
+            this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]);
+        }
+        
+        // Epilog
         renderInstManager.popTemplateRenderInst();
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        
+        renderInstManager.drawOnPassRenderer(device, this.renderPass);
+        renderInstManager.resetRenderInsts();
+        device.submitPass(this.renderPass);
     }
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, private subdir: string, private mapNum: number, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
-        const mapSceneInfo = await loadMap(device, context, 7, this.gameInfo);
+        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
+
+        // Translate map for SFA world coordinates
+        const mapMatrix = mat4.create();
+        mat4.fromTranslation(mapMatrix, vec3.fromValues(0, 0, -640));
+        mapInstance.setMatrix(mapMatrix);
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const texColl = new SFATextureCollection(this.gameInfo);
-        await texColl.create(dataFetcher, 'swaphol'); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo);
+        await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
+        const objectMan = new ObjectManager(this.gameInfo, texColl, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const [_1, _2, romlistFile] = await Promise.all([
-            objectMan.create(dataFetcher),
+        const [_1, _2, _3, romlistFile] = await Promise.all([
+            objectMan.create(dataFetcher, this.subdir),
+            earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
@@ -280,31 +345,151 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 z: romlist.getFloat32(offs + 0x10),
             };
 
+            const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
+
+            const obj = await objectMan.loadObject(device, fields.objType);
+
+            if (obj.objClass === 201) {
+                // e.g. sharpclawGr
+                obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 313 || obj.objClass === 424 || obj.objClass === 666) {
+                // e.g. setuppoint
+                // Do nothing
+            } else if (obj.objClass === 237) {
+                // e.g. SH_LargeSca
+                obj.yaw = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x22) << 8) * Math.PI / 32768;
+                obj.roll = (objParams.getInt8(0x23) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 249) {
+                // e.g. ProjectileS
+                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+                const objScale = objParams.getUint8(0x1d);
+                if (objScale !== 0) {
+                    obj.scale *= objScale / 64;
+                }
+            } else if (obj.objClass === 254) {
+                // e.g. MagicPlant
+                obj.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 256) {
+                // e.g. TrickyWarp
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 240 || obj.objClass === 260 || obj.objClass === 261) {
+                // e.g. WarpPoint, SmallBasket, LargeCrate
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 272) {
+                // e.g. SH_Portcull
+                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
+                const objScale = objParams.getUint8(0x21) / 64;
+                if (objScale === 0) {
+                    obj.scale = 1.0;
+                } else {
+                    obj.scale *= objScale;
+                }
+            } else if (obj.objClass === 275) {
+                // e.g. SH_newseqob
+                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 284 || obj.objClass === 289) {
+                // e.g. StaffBoulde
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                // TODO: scale depends on subtype param
+            } else if (obj.objClass === 288) {
+                // e.g. TrickyGuard
+                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 293) {
+                // e.g. curve
+                obj.yaw = (objParams.getInt8(0x2c) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x2d) << 8) * Math.PI / 32768;
+                // FIXME: mode 8 and 0x1a also have roll at 0x38
+            } else if (obj.objClass === 294 && obj.objType === 77) {
+                obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 306) {
+                // e.g. WaterFallSp
+                obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 346) {
+                // e.g. SH_BombWall
+                obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
+                obj.pitch = objParams.getInt16(0x1c) * Math.PI / 32768;
+                obj.roll = objParams.getInt16(0x1e) * Math.PI / 32768;
+                let objScale = objParams.getInt8(0x2d);
+                if (objScale === 0) {
+                    objScale = 20;
+                }
+                obj.scale *= objScale / 20;
+            } else if (obj.objClass === 429) {
+                // e.g. ThornTail
+                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.scale *= objParams.getUint16(0x1c) / 1000;
+            } else if (obj.objClass === 518) {
+                // e.g. PoleFlame
+                obj.yaw = interpS16((objParams.getUint8(0x18) & 0x3f) << 10) * Math.PI / 32768;
+                const objScale = objParams.getInt16(0x1a);
+                if (objScale < 1) {
+                    obj.scale = 0.1;
+                } else {
+                    obj.scale = objScale / 8192;
+                }
+            } else if (obj.objClass === 579) {
+                // e.g. DBHoleContr
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 683) {
+                // e.g. LGTProjecte
+                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 689) {
+                // e.g. CmbSrc
+                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 302 || obj.objClass === 685 || obj.objClass === 687 || obj.objClass === 688) {
+                // e.g. Boulder, LongGrassCl
+                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+                const scaleParam = objParams.getUint8(0x1b);
+                if (scaleParam !== 0) {
+                    obj.scale *= scaleParam / 255;
+                }
+            } else {
+                console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
+            }
+
             objectSpheres.push({
+                name: obj.name,
+                obj: obj,
                 pos: vec3.fromValues(fields.x, fields.y, fields.z),
-                radius: fields.radius
+                radius: fields.radius,
+                model: obj.models[0],
             });
 
-            // console.log(`Object ${i}: ${JSON.stringify(fields, null, '\t')}`);
-
-            const obj = objectMan.loadObject(fields.objType);
-            // console.log(`${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+            console.log(`Object #${i}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
 
             offs += fields.entrySize * 4;
             i++;
         }
 
-        window.main.lookupObject = (objType: number) => {
-            const obj = objectMan.loadObject(objType);
+        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
+            const obj = await objectMan.loadObject(device, objType, skipObjindex);
+            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+        };
+
+        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
+            const obj = await earlyObjectMan.loadObject(device, objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 
         const envfx = envfxMan.loadEnvfx(device, 60);
         console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
 
-        const aModel = await testLoadingAModel(device, dataFetcher, this.gameInfo);
+        const testModels = [];
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
 
-        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, aModel);
+        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;
     }
 }
