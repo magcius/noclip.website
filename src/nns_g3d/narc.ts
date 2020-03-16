@@ -59,15 +59,17 @@ function parseNitroFS(fatBuffer: ArrayBufferSlice, fntBuffer: ArrayBufferSlice, 
         }
     }
 
-    if (fntBuffer.byteLength === 0) {
-        // If we don't have an FNT, just fill in all the files one by one.
+    if (fntBuffer.byteLength > 0) {
+        parseDirectory(0, '');
+    }
+
+    if (files.length === 0) {
+        // Fallback case: We don't have a real FNT, so fill in files one by one.
         const fileCount = fatView.getUint32(0x00, true);
         for (let i = 0; i < fileCount - 1; i++) {
             const buffer = getBufferForFileId(i);
             files.push({ path: null, fileId: i, buffer });
         }
-    } else {
-        parseDirectory(0, '');
     }
 
     return { files };

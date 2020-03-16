@@ -5,7 +5,7 @@ import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero } from "../MathHelpers";
-import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat } from "./ActorUtil";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, preScaleMtx } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 
 const scratchVec3a = vec3.create();
@@ -989,19 +989,6 @@ function makeMtxTRS(dst: mat4, translation: vec3, rotation: vec3, scale: vec3): 
         scale[0], scale[1], scale[2],
         rotation[0], rotation[1], rotation[2],
         translation[0], translation[1], translation[2]);
-}
-
-function preScaleMtx(dst: mat4, v: vec3): void {
-    const x = v[0], y = v[1], z = v[2];
-    dst[0] *= x;
-    dst[1] *= x;
-    dst[2] *= x;
-    dst[4] *= y;
-    dst[5] *= y;
-    dst[6] *= y;
-    dst[8] *= z;
-    dst[9] *= z;
-    dst[10] *= z;
 }
 
 export function createGlobalPlaneGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {

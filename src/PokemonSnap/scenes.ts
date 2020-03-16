@@ -7,13 +7,13 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depth
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import { SnapPass, ModelRenderer, LevelGlobals } from './render';
-import { LevelArchive, parseLevel, InteractionType } from './room';
+import { SnapPass, ModelRenderer, buildTransform } from './render';
+import { LevelArchive, parseLevel, isActor } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { Actor } from './actor';
+import { createActor, LevelGlobals, Projectile } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -23,15 +23,15 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals: LevelGlobals = {collision: null, lastPesterBall: 0, currentSong: InteractionType.PokefluteA, songStart: 0, allObjects: []};
+    public globals: LevelGlobals;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.globals = new LevelGlobals(id);
     }
 
-    public createCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(32/60);
-        return c;
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(32 / 60);
     }
 
     public createPanels(): UI.Panel[] {
@@ -74,20 +74,12 @@ class SnapRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.globals.update(viewerInput);
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
-        // update song - maybe put somewhere better
-        if (viewerInput.time > this.globals.songStart + 10000) {
-            const r = (Math.random()*5) >>> 0;
-            if (r > 2)
-                this.globals.currentSong = 0;
-            else
-                this.globals.currentSong = InteractionType.PokefluteA + r;
-            this.globals.songStart = viewerInput.time;
-        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -100,7 +92,6 @@ class SnapRenderer implements Viewer.SceneGfx {
 
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, SnapPass.SKYBOX);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -136,14 +127,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=2`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=3`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
             const viewerTextures: Viewer.Texture[] = [];
             const holder = new FakeTextureHolder(viewerTextures);
 
-            const sceneRenderer = new SnapRenderer(device, holder);
+            const sceneRenderer = new SnapRenderer(device, holder, this.id);
             const level = parseLevel(archives);
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
@@ -157,12 +148,18 @@ class SceneDesc implements Viewer.SceneDesc {
                     skyboxRenderer.animations.push(level.skybox.animation!);
                     skyboxRenderer.setAnimation(0);
                 }
+                skyboxRenderer.forceLoop();
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
             }
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
-            sceneRenderer.modelRenderers.push(new ModelRenderer(zeroOneData,level.zeroOne.nodes,level.zeroOne.animations));
+            sceneRenderer.renderData.push(zeroOneData);
+
+            const projData: RenderData[] = [];
+            for (let i = 0; i < level.projectiles.length; i++)
+                projData.push(new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[i].sharedOutput));
+            sceneRenderer.renderData.push(...projData);
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
@@ -173,6 +170,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
             }
 
+            sceneRenderer.modelRenderers.push(
+                ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
+            );
+
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
                 const roomRenderer = new ModelRenderer(renderData, [level.rooms[i].node], []);
@@ -180,6 +181,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     roomRenderer.animations.push(level.rooms[i].animation!);
                     roomRenderer.setAnimation(0);
                 }
+                roomRenderer.forceLoop();
                 sceneRenderer.renderData.push(renderData);
                 sceneRenderer.modelRenderers.push(roomRenderer);
                 const objects = level.rooms[i].objects;
@@ -190,9 +192,17 @@ class SceneDesc implements Viewer.SceneDesc {
                         continue;
                     }
                     const def = level.objectInfo[objIndex];
-                    const objectRenderer = new Actor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
-                    sceneRenderer.modelRenderers.push(objectRenderer);
-                    sceneRenderer.globals.allObjects.push(objectRenderer);
+                    if (isActor(def)) {
+                        const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
+                        if (def.id === 133) // eevee actually uses chansey's path
+                            objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
+                        sceneRenderer.globals.allActors.push(objectRenderer);
+                        sceneRenderer.modelRenderers.push(objectRenderer);
+                    } else {
+                        const objectRenderer = new ModelRenderer(objectDatas[objIndex], [def.node], []);
+                        buildTransform(objectRenderer.modelMatrix, objects[j].pos, objects[j].euler, objects[j].scale);
+                        sceneRenderer.modelRenderers.push(objectRenderer);
+                    }
                 }
             }
 

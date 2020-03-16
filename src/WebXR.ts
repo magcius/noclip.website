@@ -20,7 +20,7 @@ import { assertExists } from "./util";
     // Scaling up and going close causes cross eye. Probably need to move the near plane out
 
 export class WebXRContext {
-    public xrSession: XRSession | null;
+    public xrSession: XRSession | null = null;
     public xrViewSpace: XRReferenceSpace;
     public xrLocalSpace: XRReferenceSpace;
 
@@ -28,6 +28,8 @@ export class WebXRContext {
 
     public onframe: ((time: number) => void) | null = null;
     public onsupportedchanged: (() => void) | null = null;
+    public onstart: (() => void) | null = null;
+    public onend: (() => void) | null = null;
 
     public currentFrame: XRFrame;
 
@@ -68,18 +70,24 @@ export class WebXRContext {
         const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
-        this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
+        if (this.onstart !== null)
+            this.onstart();
+
+        this.xrSession.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 
     public end() {
-        if (this.xrSession !== null)
+        if (this.xrSession)
             this.xrSession.end();
         this.xrSession = null;
+
+        if (this.onend !== null)
+            this.onend();
     }
 
-    private onXRFrame(time: number, frame: XRFrame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(this.xrLocalSpace);
+    private _onRequestAnimationFrame = (time: number, frame: XRFrame): void => {
+        const session = frame.session;
+        const pose = frame.getViewerPose(this.xrLocalSpace);
 
         this.currentFrame = frame;
 
@@ -89,6 +97,6 @@ export class WebXRContext {
         if (this.onframe !== null)
             this.onframe(time);
 
-        session.requestAnimationFrame(this.onXRFrame.bind(this));
+        session.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 }

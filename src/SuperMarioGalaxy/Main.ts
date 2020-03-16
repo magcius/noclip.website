@@ -20,25 +20,26 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { LightDataHolder, LightDirector } from './LightData';
+import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder } from './MiscActor';
-import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
-import { WaterAreaHolder } from './MiscMap';
+import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
-import { GravityExplainer } from './GravityExplainer';
+import { AreaObjMgr, AreaObj } from './AreaObj';
+import { CollisionDirector } from './Collision';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -55,6 +56,13 @@ export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): numbe
 
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
+}
+
+function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
+    if (sceneObjHolder.priorDrawAirHolder !== null)
+        return sceneObjHolder.priorDrawAirHolder.isExistValidDrawAir();
+    else
+        return false;
 }
 
 export class SMGRenderer implements Viewer.SceneGfx {
@@ -289,19 +297,19 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
-        // if (isExistPriorDrawAir())
-        // We assume that prior airs are drawing.
-        this.drawOpa(passRenderer, DrawBufferType.SKY);
-        this.drawOpa(passRenderer, DrawBufferType.AIR);
-        this.drawOpa(passRenderer, DrawBufferType.SUN);
-        this.drawXlu(passRenderer, DrawBufferType.SKY);
-        this.drawXlu(passRenderer, DrawBufferType.AIR);
-        this.drawXlu(passRenderer, DrawBufferType.SUN);
+        if (isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
+
         // if (isDrawSpinDriverPathAtOpa())
         //     execute(0x12);
 
         // Clear depth buffer.
-        passRenderer.endPass();
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
@@ -338,7 +346,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.ENEMY);
         this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
         this.drawOpa(passRenderer, 0x15);
-        // if not PriorDrawAir, they would go here...
+        if (!isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
 
         // executeDrawListOpa();
         this.execute(passRenderer, DrawType.OCEAN_RING_OUTSIDE);
@@ -380,7 +395,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
         // So, end our pass here and do indirect.
         // execute(0x2d);
-        passRenderer.endPass();
         device.submitPass(passRenderer);
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
@@ -410,7 +424,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // executeDrawImageEffect()
         if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
-            passRenderer.endPass();
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
@@ -466,12 +479,11 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     loadedVertexData.vertexBuffers[1] = buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.Attr.PNMTXIDX));
-    let offs = pnmtxidxLayout.bufferOffset;
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
+    let offs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.PNMTXIDX];
 
     for (let i = 0; i < vertexCount; i++) {
-        const p = view.getUint8(offs + 0x00);
+        const p = view.getFloat32(offs, true);
         for (let j = 0; j < bufferStride; j++) {
             if (texMtxIdxBaseOffsets[j] >= 0)
                 buffer[i*bufferStride + j] = p + texMtxIdxBaseOffsets[j];
@@ -549,9 +561,9 @@ function patchBMD(bmd: BMD): void {
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX0123MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }
@@ -780,15 +792,42 @@ class CaptureSceneDirector {
     }
 }
 
+class AreaObjContainer extends NameObj {
+    private managers: AreaObjMgr<AreaObj>[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'AreaObjContainer');
+        this.managers.push(new LightAreaHolder(sceneObjHolder));
+        this.managers.push(new WaterAreaMgr(sceneObjHolder));
+    }
+
+    public getManager(managerName: string): AreaObjMgr<AreaObj> {
+        for (let i = 0; i < this.managers.length; i++)
+            if (this.managers[i].name === managerName)
+                return this.managers[i];
+        throw "whoops";
+    }
+
+    public getAreaObj<T extends AreaObj>(managerName: string, position: vec3): T | null {
+        const mgr = this.getManager(managerName);
+        return mgr.find_in(position) as (T | null);
+    }
+}
+
 export const enum SceneObj {
-    SensorHitChecked     = 0x00,
+    SensorHitChecker     = 0x00,
+    CollisionDirector    = 0x01,
+    LightDirector        = 0x06,
+    AreaObjContainer     = 0x0D,
     PlanetGravityManager = 0x32,
+    CoinRotater          = 0x38,
     AirBubbleHolder      = 0x39,
     SwingRopeGroup       = 0x47,
     TrapezeRopeDrawInit  = 0x4A,
     ElectricRailHolder   = 0x59,
     WaterAreaHolder      = 0x62,
     WaterPlantDrawInit   = 0x63,
+    PriorDrawAirHolder   = 0x75,
 }
 
 export class SceneObjHolder {
@@ -804,14 +843,18 @@ export class SceneObjHolder {
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
 
+    public collisionDirector: CollisionDirector | null = null;
     public sensorHitChecker: SensorHitChecker | null = null;
+    public areaObjContainer: AreaObjContainer | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
+    public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
 
@@ -826,10 +869,16 @@ export class SceneObjHolder {
     }
 
     public getObj(sceneObj: SceneObj): NameObj | null {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.CollisionDirector)
+            return this.collisionDirector;
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.CoinRotater)
+            return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -842,14 +891,22 @@ export class SceneObjHolder {
             return this.waterPlantDrawInit;
         else if (sceneObj === SceneObj.ElectricRailHolder)
             return this.electricRailHolder;
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            return this.priorDrawAirHolder;
         return null;
     }
 
     private newEachObj(sceneObj: SceneObj): void {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             this.sensorHitChecker = new SensorHitChecker(this);
+        else if (sceneObj === SceneObj.CollisionDirector)
+            this.collisionDirector = new CollisionDirector(this);
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.CoinRotater)
+            this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -862,6 +919,8 @@ export class SceneObjHolder {
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
         else if (sceneObj === SceneObj.ElectricRailHolder)
             this.electricRailHolder = new ElectricRailHolder(this);
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            this.priorDrawAirHolder = new PriorDrawAirHolder(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -913,17 +972,25 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
 
     private legacySpawner: NoclipLegacyActorSpawner;
+    private gameBit: GameBits;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
+
+        if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy')
+            this.gameBit = GameBits.SMG1;
+        else if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2')
+            this.gameBit = GameBits.SMG2;
+        else
+            throw "whoops";
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const actorTableEntry = getNameObjFactoryTableEntry(objName);
+        const actorTableEntry = getNameObjFactoryTableEntry(objName, this.gameBit);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
-        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName);
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, this.gameBit);
         if (planetTableEntry !== null)
             return planetTableEntry;
 

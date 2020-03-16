@@ -3,6 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
 import { assertExists, nArray } from "../util";
 import { isNearZero } from "../MathHelpers";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 
 export class KC_PrismData {
     public length: number = 0.0;
@@ -11,6 +12,7 @@ export class KC_PrismData {
     public edge0NrmIdx: number = 0;
     public edge1NrmIdx: number = 0;
     public edge2NrmIdx: number = 0;
+    public attrib: number = 0;
 }
 
 class KC_PrismHit {
@@ -36,13 +38,20 @@ export class CheckArrowResult {
 
     public prisms: (KC_PrismData | null)[] = nArray(32, () => null);
     public distances: number[] = nArray(32, () => -1);
+
+    public reset(): void {
+        for (let i = 0; i < this.prisms.length; i++)
+            this.prisms[i] = null;
+        for (let i = 0; i < this.distances.length; i++)
+            this.distances[i] = -1;
+    }
 }
 
 const searchBlockScratch = new SearchBlockResult();
 const prismHitScratch = new KC_PrismHit();
 
 export class KCollisionServer {
-    public localSpaceTranslation = vec3.create();
+    private blocksTrans = vec3.create();
 
     private view: DataView;
 
@@ -60,16 +69,19 @@ export class KCollisionServer {
     private shiftLY: number;
     private shiftLZ: number;
 
-    constructor(buffer: ArrayBufferSlice) {
-        const view = buffer.createDataView();
+    private params: JMapInfoIter | null = null;
 
-        this.positionsOffs = view.getUint32(0x00);
-        this.normalsOffs = view.getUint32(0x04);
-        const prismsOffs = view.getUint32(0x08);
-        this.blocksOffs = view.getUint32(0x0C);
-        this.maxDistMul = view.getFloat32(0x10);
+    constructor(buffer: ArrayBufferSlice, paramsData: ArrayBufferSlice | null) {
+        this.view = buffer.createDataView();
 
-        for (let offs = prismsOffs; offs < this.blocksOffs; offs += 0x10) {
+        this.positionsOffs = this.view.getUint32(0x00);
+        this.normalsOffs = this.view.getUint32(0x04);
+        const prismsOffs = this.view.getUint32(0x08);
+        this.blocksOffs = this.view.getUint32(0x0C);
+        this.maxDistMul = this.view.getFloat32(0x10);
+
+        // Ignore the first prism.
+        for (let offs = prismsOffs + 0x10; offs < this.blocksOffs; offs += 0x10) {
             const prism = new KC_PrismData();
             prism.length = this.view.getFloat32(offs + 0x00);
             prism.posIdx = this.view.getUint16(offs + 0x04);
@@ -77,21 +89,79 @@ export class KCollisionServer {
             prism.edge0NrmIdx = this.view.getUint16(offs + 0x08);
             prism.edge1NrmIdx = this.view.getUint16(offs + 0x0A);
             prism.edge2NrmIdx = this.view.getUint16(offs + 0x0C);
+            prism.attrib = this.view.getUint16(offs + 0x0E);
             this.prisms.push(prism);
         }
 
-        const localSpaceX = view.getFloat32(0x14);
-        const localSpaceY = view.getFloat32(0x18);
-        const localSpaceZ = view.getFloat32(0x1C);
-        vec3.set(this.localSpaceTranslation, localSpaceX, localSpaceY, localSpaceZ);
+        const blocksTransX = this.view.getFloat32(0x14);
+        const blocksTransY = this.view.getFloat32(0x18);
+        const blocksTransZ = this.view.getFloat32(0x1C);
+        vec3.set(this.blocksTrans, blocksTransX, blocksTransY, blocksTransZ);
 
-        this.maskX = view.getUint32(0x20);
-        this.maskY = view.getUint32(0x24);
-        this.maskZ = view.getUint32(0x28);
+        this.maskX = this.view.getUint32(0x20);
+        this.maskY = this.view.getUint32(0x24);
+        this.maskZ = this.view.getUint32(0x28);
 
-        this.shiftR = view.getInt32(0x2C);
-        this.shiftLY = view.getInt32(0x30);
-        this.shiftLZ = view.getInt32(0x34);
+        this.shiftR = this.view.getInt32(0x2C);
+        this.shiftLY = this.view.getInt32(0x30);
+        this.shiftLZ = this.view.getInt32(0x34);
+
+        if (paramsData !== null)
+            this.params = createCsvParser(paramsData);
+    }
+
+    public getAttributes(idx: number): JMapInfoIter | null {
+        if (this.params !== null) {
+            this.params.setRecord(this.prisms[idx].attrib);
+            return this.params;
+        } else {
+            return null;
+        }
+    }
+
+    public toIndex(prism: KC_PrismData): number {
+        return this.prisms.indexOf(prism);
+    }
+
+    public getPrismData(idx: number): KC_PrismData {
+        return this.prisms[idx];
+    }
+
+    public getFaceNormal(dst: vec3, prism: KC_PrismData): void {
+        this.loadNormal(dst, prism.faceNrmIdx);
+    }
+
+    public getEdgeNormal1(dst: vec3, prism: KC_PrismData): void {
+        this.loadNormal(dst, prism.edge0NrmIdx);
+    }
+
+    public getEdgeNormal2(dst: vec3, prism: KC_PrismData): void {
+        this.loadNormal(dst, prism.edge1NrmIdx);
+    }
+
+    public getEdgeNormal3(dst: vec3, prism: KC_PrismData): void {
+        this.loadNormal(dst, prism.edge2NrmIdx);
+    }
+
+    public getPos(dst: vec3, prism: KC_PrismData, which: number): void {
+        if (which === 0) {
+            this.loadPosition(dst, prism.posIdx);
+        } else {
+            if (which === 1) {
+                this.loadNormal(scratchVec3a, prism.edge1NrmIdx);
+                this.loadNormal(scratchVec3b, prism.faceNrmIdx);
+            } else if (which === 2) {
+                this.loadNormal(scratchVec3a, prism.faceNrmIdx);
+                this.loadNormal(scratchVec3b, prism.edge0NrmIdx);
+            }
+            vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
+
+            this.loadNormal(scratchVec3b, prism.edge2NrmIdx);
+            const dist = prism.length / vec3.dot(scratchVec3a, scratchVec3b);
+
+            this.loadPosition(scratchVec3b, prism.posIdx);
+            vec3.scaleAndAdd(dst, scratchVec3b, scratchVec3a, dist);
+        }
     }
 
     private loadPosition(dst: vec3, idx: number): void {
@@ -109,16 +179,19 @@ export class KCollisionServer {
     }
 
     private loadPrismListIdx(offs: number): KC_PrismData | null {
-        const prismIdx = this.view.getUint16(this.blocksOffs + offs + 0x00);
-        return prismIdx !== null ? assertExists(this.prisms[prismIdx]) : null;
+        const prismIdx = this.view.getUint16(offs);
+        if (prismIdx > 0)
+            return assertExists(this.prisms[prismIdx - 1]);
+        else
+            return null;
     }
 
     public checkPoint(dst: KC_PrismHit, v: vec3, maxDist: number): boolean {
         maxDist *= this.maxDistMul;
 
-        const x = (v[0] - this.localSpaceTranslation[0]) | 0;
-        const y = (v[1] - this.localSpaceTranslation[1]) | 0;
-        const z = (v[2] - this.localSpaceTranslation[2]) | 0;
+        const x = (v[0] - this.blocksTrans[0]) | 0;
+        const y = (v[1] - this.blocksTrans[1]) | 0;
+        const z = (v[2] - this.blocksTrans[2]) | 0;
 
         if ((x & this.maskX) !== 0 || (y & this.maskY) !== 0 || (z & this.maskZ) !== 0)
             return false;
@@ -194,12 +267,12 @@ export class KCollisionServer {
         if (dotNrm0 >= 0.01)
             return false;
 
-        this.loadNormal(scratchVec3d, prism.edge0NrmIdx);
+        this.loadNormal(scratchVec3d, prism.edge1NrmIdx);
         const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
         if (dotNrm1 >= 0.01)
             return false;
 
-        this.loadNormal(scratchVec3d, prism.edge0NrmIdx);
+        this.loadNormal(scratchVec3d, prism.edge2NrmIdx);
         const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
         if (dotNrm2 >= 0.01 + prism.length)
             return false;
@@ -210,50 +283,46 @@ export class KCollisionServer {
         return true;
     }
 
-    public toIndex(prism: KC_PrismData): number {
-        return this.prisms.indexOf(prism);
-    }
+    public checkArrow(dst: CheckArrowResult, maxResults: number, origin: vec3, arrowDir: vec3): boolean {
+        const blkArrowDir = vec3.copy(scratchVec3a, arrowDir);
+        const blkOrigin = vec3.copy(scratchVec3b, origin);
 
-    public checkArrow(dst: CheckArrowResult, originIn: vec3, arrowDirIn: vec3): boolean {
-        const arrowDir = vec3.copy(scratchVec3a, arrowDirIn);
-        const origin = vec3.copy(scratchVec3b, originIn);
-
-        let arrowLength = vec3.length(arrowDir);
-        vec3.normalize(arrowDir, arrowDir);
+        let arrowLength = vec3.length(blkArrowDir);
+        vec3.normalize(blkArrowDir, blkArrowDir);
 
         // Put in local space.
-        vec3.sub(origin, origin, this.localSpaceTranslation);
+        vec3.sub(blkOrigin, blkOrigin, this.blocksTrans);
 
-        if (!this.isInsideMinMaxInLocalSpace(origin)) {
+        if (!this.isInsideMinMaxInLocalSpace(blkOrigin)) {
             // Origin is outside, test if the arrow goes inside...
-            if (arrowDir[0] !== 0.0) {
-                const bounds = (arrowDir[0] > 0.0) ? ((~this.maskX) >>> 0) : 0.0;
-                const length = (bounds - origin[0]) / arrowDir[0];
+            if (blkArrowDir[0] !== 0.0) {
+                const bounds = (blkArrowDir[0] > 0.0) ? ((~this.maskX) >>> 0) : 0.0;
+                const length = (bounds - blkOrigin[0]) / blkArrowDir[0];
                 if (length >= 0.0 && length <= arrowLength) {
                     // Clip ray origin to intersection point.
-                    vec3.scaleAndAdd(origin, origin, arrowDir, length);
+                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
                     arrowLength -= length;
                 } else {
                     return false;
                 }
             }
 
-            if (arrowDir[1] !== 0.0) {
-                const bounds = (arrowDir[1] > 0.0) ? ((~this.maskY) >>> 0) : 0.0;
-                const length = (bounds - origin[1]) / arrowDir[1];
+            if (blkArrowDir[1] !== 0.0) {
+                const bounds = (blkArrowDir[1] > 0.0) ? ((~this.maskY) >>> 0) : 0.0;
+                const length = (bounds - blkOrigin[1]) / blkArrowDir[1];
                 if (length >= 0.0 && length <= arrowLength) {
-                    vec3.scaleAndAdd(origin, origin, arrowDir, length);
+                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
                     arrowLength -= length;
                 } else {
                     return false;
                 }
             }
 
-            if (arrowDir[2] !== 0.0) {
-                const bounds = (arrowDir[2] > 0.0) ? ((~this.maskZ) >>> 0) : 0.0;
-                const length = (bounds - origin[2]) / arrowDir[2];
+            if (blkArrowDir[2] !== 0.0) {
+                const bounds = (blkArrowDir[2] > 0.0) ? ((~this.maskZ) >>> 0) : 0.0;
+                const length = (bounds - blkOrigin[2]) / blkArrowDir[2];
                 if (length >= 0.0 && length <= arrowLength) {
-                    vec3.scaleAndAdd(origin, origin, arrowDir, length);
+                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
                     arrowLength -= length;
                 } else {
                     return false;
@@ -261,15 +330,15 @@ export class KCollisionServer {
             }
         }
 
-        let dstPrismCount = 0, dstPrismMax = (dst.prisms !== null ? dst.prisms.length : 0);
+        let dstPrismCount = 0;
         while (true) {
             if (arrowLength < 0)
                 return false;
 
-            if (!this.isInsideMinMaxInLocalSpace(origin))
+            if (!this.isInsideMinMaxInLocalSpace(blkOrigin))
                 return false;
 
-            let x = (origin[0] | 0), y = (origin[1] | 0), z = (origin[2] | 0);
+            let x = (blkOrigin[0] | 0), y = (blkOrigin[1] | 0), z = (blkOrigin[2] | 0);
 
             this.searchBlock(searchBlockScratch, x, y, z);
             let prismListIdx = searchBlockScratch.prismListOffs;
@@ -282,7 +351,7 @@ export class KCollisionServer {
                 if (prism === null)
                     break;
 
-                if (this.KCHitArrow(prismHitScratch, prism, originIn, arrowDirIn)) {
+                if (this.KCHitArrow(prismHitScratch, prism, origin, arrowDir)) {
                     if (prismHitScratch.dist < bestDist) {
                         bestDist = prismHitScratch.dist;
                         // dst.bestPrism = prism;
@@ -290,12 +359,13 @@ export class KCollisionServer {
                     }
 
                     if (dst.prisms !== null) {
-                        if (dstPrismCount >= dstPrismMax) {
+                        dst.distances[dstPrismCount] = prismHitScratch.dist;
+                        dst.prisms[dstPrismCount] = prism;
+                        dstPrismCount++;
+
+                        if (dstPrismCount >= maxResults) {
                             // We've filled in all the prisms. We're done.
                             return true;
-                        } else {
-                            // Fill in and continue.
-                            dst.prisms[dstPrismCount++] = prism;
                         }
                     }
                 }
@@ -310,59 +380,47 @@ export class KCollisionServer {
 
                 let minLength = 1.0E9;
 
-                if (!isNearZero(arrowDir[0], 0.001)) {
+                if (!isNearZero(blkArrowDir[0], 0.001)) {
                     let bounds: number;
-                    if (arrowDir[0] >= 0.0) {
-                        bounds = ((mask + 1) - (x & mask));
-                        if (bounds === 0)
-                            bounds = 1;
+                    if (blkArrowDir[0] >= 0.0) {
+                        bounds = ((mask + 1) - (x & mask)) + 1;
                     } else {
-                        bounds = -(x & mask);
-                        if (bounds === 0)
-                            bounds = -1;
+                        bounds = -(x & mask) - 1;
                     }
 
-                    const length = bounds / arrowDir[0];
+                    const length = bounds / blkArrowDir[0];
                     if (length < minLength)
                         minLength = length;
                 }
 
-                if (!isNearZero(arrowDir[1], 0.001)) {
+                if (!isNearZero(blkArrowDir[1], 0.001)) {
                     let bounds: number;
-                    if (arrowDir[1] >= 0.0) {
-                        bounds = ((mask + 1) - (y & mask));
-                        if (bounds === 0)
-                            bounds = 1;
+                    if (blkArrowDir[1] >= 0.0) {
+                        bounds = ((mask + 1) - (y & mask)) + 1;
                     } else {
-                        bounds = -(y & mask);
-                        if (bounds === 0)
-                            bounds = -1;
+                        bounds = -(y & mask) - 1;
                     }
 
-                    const length = bounds / arrowDir[1];
+                    const length = bounds / blkArrowDir[1];
                     if (length < minLength)
                         minLength = length;
                 }
 
-                if (!isNearZero(arrowDir[2], 0.001)) {
+                if (!isNearZero(blkArrowDir[2], 0.001)) {
                     let bounds: number;
-                    if (arrowDir[2] >= 0.0) {
-                        bounds = ((mask + 1) - (z & mask));
-                        if (bounds === 0)
-                            bounds = 1;
+                    if (blkArrowDir[2] >= 0.0) {
+                        bounds = ((mask + 1) - (z & mask)) + 1;
                     } else {
-                        bounds = -(z & mask);
-                        if (bounds === 0)
-                            bounds = -1;
+                        bounds = -(z & mask) - 1;
                     }
 
-                    const length = bounds / arrowDir[2];
+                    const length = bounds / blkArrowDir[2];
                     if (length < minLength)
                         minLength = length;
                 }
 
-                vec3.scaleAndAdd(origin, origin, arrowDir, length);
-                arrowLength -= length;
+                vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, minLength);
+                arrowLength -= minLength;
             }
         }
     }
@@ -375,21 +433,23 @@ export class KCollisionServer {
         if (this.shiftLY === -1 && this.shiftLZ === -1) {
             blockIdx = 0;
         } else {
-            blockIdx = ((x >>> dst.shiftR) | ((y >> dst.shiftR) << this.shiftLY) | ((z >> dst.shiftR) << this.shiftLZ));
+            blockIdx = (((x >>> dst.shiftR) | ((y >> dst.shiftR) << this.shiftLY)) | ((z >> dst.shiftR) << this.shiftLZ));
         }
 
+        let blocksOffs = this.blocksOffs;
         while (true) {
-            const res = this.view.getInt32(this.blocksOffs + blockIdx * 0x04);
+            const res = this.view.getInt32(blocksOffs + blockIdx * 0x04);
 
             if (res < -1) {
                 // Found result, we're good.
-                dst.prismListOffs = (res & 0x7FFFFFFF);
+                dst.prismListOffs = blocksOffs + (res & 0x7FFFFFFF);
                 return;
             } else {
                 // Otherwise, walk further down octree.
                 dst.shiftR--;
 
-                blockIdx = ((x >>> dst.shiftR) & 1) | (((y >>> dst.shiftR) & 1 << 1)) | (((y >>> dst.shiftR) & 1 << 2));
+                blocksOffs += res;
+                blockIdx = ((x >>> dst.shiftR) & 1) | ((((y >>> dst.shiftR) & 1) << 1)) | ((((z >>> dst.shiftR) & 1) << 2));
             }
         }
     }

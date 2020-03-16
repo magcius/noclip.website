@@ -14,7 +14,7 @@ import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
@@ -889,6 +889,8 @@ export class AdjustableAnimationController {
     }
 
     public getTimeInFrames(): number {
+        if (!this.initialized)
+            return this.phaseFrames;
         return this.time*this.fps + this.phaseFrames;
     }
 
@@ -1107,8 +1109,6 @@ const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -1430,7 +1430,7 @@ export class GeometryRenderer {
             mat4.getTranslation(lookatScratch, this.modelMatrix);
             vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
             offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }

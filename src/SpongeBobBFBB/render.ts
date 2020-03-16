@@ -1011,9 +1011,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.025);
-        return c;
     }
 
     public update(renderState: RenderState) {
@@ -1088,7 +1087,6 @@ export class BFBBRenderer implements Viewer.SceneGfx {
             const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearColorPassDescriptor);
             renderInstManager.setVisibleByFilterKeyExact(BFBBPass.SKYDOME);
             renderInstManager.drawOnPassRenderer(device, skydomePassRenderer);
-            skydomePassRenderer.endPass();
             device.submitPass(skydomePassRenderer);
         }
 

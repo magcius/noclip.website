@@ -12,9 +12,8 @@ import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 
 class RTDLRenderer extends BasicRRESRenderer {
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(1/60);
-        return c;
     }
 }
 

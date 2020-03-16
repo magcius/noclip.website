@@ -618,7 +618,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.executeListSet(device, renderInstManager, skyboxPassRenderer, dlst.sky);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         // Now do main pass.
@@ -627,7 +626,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
-        mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
 
         // Execute PeekZ.
@@ -638,7 +636,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Indirect]);
 
-        indirectPassRenderer.endPass();
         device.submitPass(indirectPassRenderer);
 
         dlst.reset();

@@ -1,11 +1,12 @@
 
 import { LiveActor } from "./LiveActor";
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
+import { range } from "../MathHelpers";
 
 export const enum DrawBufferFlags {
     // TODO(jstpierre): Fill in.
@@ -99,43 +100,81 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 //     this->mDrawBuffer->drawOpa();
 
 // DrawBufferHolder is effectively a singleton. It holds DrawBufferGroups, of which there is one per DrawBufferType.
-// DrawBufferExecuter's are roughly 1:1 with an actor, and each contains a single DrawBuffer. The DrawBuffer is
-// created at actor load time (?), and each one contains a number of DrawBufferShapeDrawer, which is roughly equivalent
-// to our *MaterialInstance*. Each DrawBufferShapeDrawer contains multiple J3DShapePackets.
+// DrawBufferGroups contain DrawBufferExecuter's, which are 1:1 with a model. Each instance of a model is recorded
+// in the DrawBufferExecuter, and the shared model data goes in a DrawBuffer. Each DrawBuffer contains a number
+// of DrawBufferShapeDrawers, which is roughly equivalent to our *MaterialInstance*. Each DrawBufferShapeDrawer
+// contains multiple J3DShapePackets.
 
-// The entry-point to this is GameScene::draw3D, which will ""execute"" some number of draw lists, and then
-// call drawOpa/drawXlu on hardcoded buffer types in a certain order. The current system of "execution" is a bit unknown.
-// More rambly notes below:
+class DrawBufferExecuter {
+    public shapeOrderOpa: number[] = [];
+    public shapeOrderXlu: number[] = [];
 
-// There are four vfuncs on NameObj: calcAnim(), calcViewAndEntry(), draw(), and movement(). It seems like calcAnim,
-// draw and movement get special lists in NameObjListExecutor, while calcViewAndEntry is delegated to the DrawBuffer
-// system. There are a number of types: MR::MovementType, MR::CalcAnimType, MR::DrawType which get executed in a specific
-// order, and the SceneNameObjListExecutor has table for each describing the different types -- I need to figure out
-// what this table contains, though.
+    constructor(public modelInstance: J3DModelInstance) {
+        const modelData = this.modelInstance.modelData;
+
+        const shapeOrder = range(0, modelData.shapeData.length);
+
+        // Sort shapes by material name. Yes, this is what the actual game does.
+        // ref. DrawBuffer::sortShapeDrawer.
+        shapeOrder.sort((a, b) => {
+            const mata = modelData.modelMaterialData.materialData![modelData.shapeData[a].shape.materialIndex].material;
+            const matb = modelData.modelMaterialData.materialData![modelData.shapeData[b].shape.materialIndex].material;
+            return mata.name.localeCompare(matb.name);
+        });
+
+        for (let i = 0; i < shapeOrder.length; i++) {
+            const shape = modelData.shapeData[shapeOrder[i]].shape;
+            const material = modelData.modelMaterialData.materialData![shape.materialIndex].material;
+            if (material.translucent)
+                this.shapeOrderXlu.push(shapeOrder[i]);
+            else
+                this.shapeOrderOpa.push(shapeOrder[i]);
+        }
+    }
+
+    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, order: number[], depth: number): void {
+        if (!this.modelInstance.visible || !this.modelInstance.isAnyShapeVisible())
+            return;
+
+        for (let i = 0; i < order.length; i++) {
+            const shapeInstance = this.modelInstance!.shapeInstances[order[i]];
+            if (!shapeInstance.visible)
+                continue;
+            shapeInstance.prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+        }
+    }
+
+    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+        const depth = -1;
+        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderOpa, depth);
+    }
+
+    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+        const depth = this.modelInstance.computeDepth(camera);
+        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderXlu, depth);
+    }
+}
 
 export class DrawBufferGroup {
-    // TODO(jstpierre): DrawBufferExecuter? Do we need it? How does the lighting system work, exactly?
-    private models: J3DModelInstance[] = [];
+    private drawBufferExecuters: DrawBufferExecuter[] = [];
 
     constructor(public tableEntry: DrawBufferInitialTableEntry) {
     }
 
     public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
-        for (let i = 0; i < this.models.length; i++)
-            if (this.models[i].visible)
-                this.models[i].drawOpa(device, renderInstManager, camera, viewport);
+        for (let i = 0; i < this.drawBufferExecuters.length; i++)
+            this.drawBufferExecuters[i].drawOpa(device, renderInstManager, camera, viewport);
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
-        for (let i = 0; i < this.models.length; i++)
-            if (this.models[i].visible)
-                this.models[i].drawXlu(device, renderInstManager, camera, viewport);
+        for (let i = 0; i < this.drawBufferExecuters.length; i++)
+            this.drawBufferExecuters[i].drawXlu(device, renderInstManager, camera, viewport);
     }
 
     public registerDrawBuffer(actor: LiveActor): number {
-        // The original does far more than this...
-        this.models.push(actor.modelInstance!);
-        return this.models.length - 1;
+        // TODO(jstpierre): Do we need the DrawBuffer / DrawBufferExecuter split?
+        this.drawBufferExecuters.push(new DrawBufferExecuter(actor.modelInstance!));
+        return this.drawBufferExecuters.length - 1;
     }
 
     public findLightInfo(actor: LiveActor, drawBufferIndex: number): void {
@@ -144,8 +183,8 @@ export class DrawBufferGroup {
     }
 
     public hasVisible(): boolean {
-        for (let i = 0; i < this.models.length; i++)
-            if (this.models[i].visible)
+        for (let i = 0; i < this.drawBufferExecuters.length; i++)
+            if (this.drawBufferExecuters[i].modelInstance.visible)
                 return true;
         return false;
     }

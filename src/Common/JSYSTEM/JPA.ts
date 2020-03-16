@@ -21,7 +21,7 @@ import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
-import { getVertexAttribLocation } from "../../gx/gx_material";
+import { getVertexInputLocation } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
@@ -35,6 +35,7 @@ import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../TextureHolder";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
 import { BTIData, BTI } from "./JUTTexture";
+import { VertexAttributeInput } from "../../gx/gx_displaylist";
 
 const SORT_PARTICLES = false;
 
@@ -654,8 +655,8 @@ class JPAGlobalRes {
 
     constructor(device: GfxDevice) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
-            { location: getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4 },
+            { location: getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RG,  bufferIndex: 0, bufferByteOffset: 3*4 },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -1188,8 +1189,8 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
 // the traversal order bit says. In the original code, FORWARD is 0x00, and
 // REVERSE is 0x01.
 const enum TraverseOrder {
-    REVERSE = 0x00,
-    FORWARD = 0x01,
+    Reverse = 0x00,
+    Forward = 0x01,
 }
 
 export interface JPAEmitterCallBack {
@@ -1198,6 +1199,7 @@ export interface JPAEmitterCallBack {
 
 const scratchVec3Points = nArray(4, () => vec3.create());
 export class JPABaseEmitter {
+    private drawParticle = true;
     public flags: BaseEmitterFlags;
     public resData: JPAResourceData;
     public emitterScl = vec3.create();
@@ -1252,15 +1254,7 @@ export class JPABaseEmitter {
     }
 
     public setDrawParticle(v: boolean): void {
-        const stopDraw = !v;
-        if (stopDraw)
-            this.flags |= BaseEmitterFlags.STOP_DRAW_PARTICLE;
-        else
-            this.flags &= ~BaseEmitterFlags.STOP_DRAW_PARTICLE;
-    }
-
-    public getDrawParticle(): boolean {
-        return !(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE);
+        this.drawParticle = v;
     }
 
     public init(resData: JPAResourceData): void {
@@ -1306,6 +1300,7 @@ export class JPABaseEmitter {
             this.flags |= BaseEmitterFlags.TERMINATED;
 
         this.emitterCallBack = null;
+        this.userData = null;
     }
 
     public deleteAllParticle(): void {
@@ -1737,7 +1732,7 @@ export class JPABaseEmitter {
 
         const bsp1 = this.resData.res.bsp1;
         const esp1 = this.resData.res.esp1;
-        const reverseOrder = bsp1.traverseOrder === TraverseOrder.REVERSE;
+        const reverseOrder = bsp1.traverseOrder === TraverseOrder.Reverse;
 
         const packetParams = workData.packetParams;
         const materialParams = workData.materialParams;
@@ -1856,16 +1851,18 @@ export class JPABaseEmitter {
 
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
 
-        const renderInst1 = renderInstManager.pushRenderInst();
+        const renderInst1 = renderInstManager.newRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);
+        renderInstManager.submitRenderInst(renderInst1);
 
         if (isCross) {
             // Since we use a tristrip, that means that if we have 5 particles, we'll have 10 vertices (0-9), with the index
             // buffer doing something like this at the end: 6 7 8,  8 7 9,  8 9 10,  10 9 11,  10 11 12
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
-            const renderInst2 = renderInstManager.pushRenderInst();
+            const renderInst2 = renderInstManager.newRenderInst();
             renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
+            renderInstManager.submitRenderInst(renderInst2);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -1926,7 +1923,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesBase.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.REVERSE) ? n - 1 - i : i;
+                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[index].drawP(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
@@ -1977,7 +1974,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesChild.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.REVERSE) ? n - 1 - i : i;
+                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[index].drawC(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
@@ -1987,7 +1984,7 @@ export class JPABaseEmitter {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
-        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE))
+        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE) || !this.drawParticle)
             return;
 
         const bsp1 = this.resData.res.bsp1;
@@ -3042,13 +3039,15 @@ export class JPABaseParticle {
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = esp1 !== null && esp1.isEnableRotate;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = workData.particleSortKey;
 
         if (SORT_PARTICLES) {
             const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
+
+        renderInstManager.submitRenderInst(renderInst);
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;

@@ -501,6 +501,7 @@ export class d_a_sea extends fopAc_ac_c {
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     private scratchThetaX = nArray(4, () => 0);

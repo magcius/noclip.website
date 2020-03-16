@@ -8,12 +8,12 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
-import { assert, nArray } from '../util';
+import { assert } from '../util';
 import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
 import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
-import { DisplayListRegisters } from './gx_displaylist';
+import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -202,36 +202,32 @@ export interface RopInfo {
 
 // #region Material shader generation.
 interface VertexAttributeGenDef {
-    attrib: GX.Attr;
+    attrInput: VertexAttributeInput;
     format: GfxFormat;
     name: string;
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.Attr.POS,        name: "Position",      format: GfxFormat.F32_RGB },
-    { attrib: GX.Attr.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.F32_R },
-    // These are packed separately since we would run out of attribute space otherwise.
-    { attrib: GX.Attr.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.F32_RGBA },
-    { attrib: GX.Attr.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.F32_RGBA },
-    { attrib: GX.Attr.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
-    { attrib: GX.Attr.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
-    { attrib: GX.Attr.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
-    { attrib: GX.Attr.TEX0,       name: "Tex0",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX1,       name: "Tex1",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX2,       name: "Tex2",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX3,       name: "Tex3",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX4,       name: "Tex4",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX5,       name: "Tex5",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX6,       name: "Tex6",          format: GfxFormat.F32_RG },
-    { attrib: GX.Attr.TEX7,       name: "Tex7",          format: GfxFormat.F32_RG },
+    { attrInput: VertexAttributeInput.POS,           name: "Position",      format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX0123MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX4567MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.NRM,           name: "Normal",        format: GfxFormat.F32_RGB },
+    { attrInput: VertexAttributeInput.BINRM,         name: "Binormal",      format: GfxFormat.F32_RGB },
+    { attrInput: VertexAttributeInput.TANGENT,       name: "Tangent",       format: GfxFormat.F32_RGB },
+    { attrInput: VertexAttributeInput.CLR0,          name: "Color0",        format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.CLR1,          name: "Color1",        format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX01,         name: "Tex01",         format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX23,         name: "Tex23",         format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX45,         name: "Tex45",         format: GfxFormat.F32_RGBA },
+    { attrInput: VertexAttributeInput.TEX67,         name: "Tex67",         format: GfxFormat.F32_RGBA },
 ];
 
-export function getVertexAttribLocation(vtxAttrib: GX.Attr): number {
-    return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrib === vtxAttrib);
+export function getVertexInputLocation(attrInput: VertexAttributeInput): number {
+    return vtxAttributeGenDefs.findIndex((genDef) => genDef.attrInput === attrInput);
 }
 
-export function getVertexAttribGenDef(vtxAttrib: GX.Attr): VertexAttributeGenDef {
-    return vtxAttributeGenDefs.find((genDef) => genDef.attrib === vtxAttrib)!;
+export function getVertexInputGenDef(attrInput: VertexAttributeInput): VertexAttributeGenDef {
+    return vtxAttributeGenDefs.find((genDef) => genDef.attrInput === attrInput)!;
 }
 
 export interface LightingFudgeParams {
@@ -509,14 +505,14 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
-        if (index === GX.TexCoordID.TEXCOORD0) return `uint(a_TexMtx0123Idx.x)`;
-        if (index === GX.TexCoordID.TEXCOORD1) return `uint(a_TexMtx0123Idx.y)`;
-        if (index === GX.TexCoordID.TEXCOORD2) return `uint(a_TexMtx0123Idx.z)`;
-        if (index === GX.TexCoordID.TEXCOORD3) return `uint(a_TexMtx0123Idx.w)`;
-        if (index === GX.TexCoordID.TEXCOORD4) return `uint(a_TexMtx4567Idx.x)`;
-        if (index === GX.TexCoordID.TEXCOORD5) return `uint(a_TexMtx4567Idx.y)`;
-        if (index === GX.TexCoordID.TEXCOORD6) return `uint(a_TexMtx4567Idx.z)`;
-        if (index === GX.TexCoordID.TEXCOORD7) return `uint(a_TexMtx4567Idx.w)`;
+        if (index === GX.TexCoordID.TEXCOORD0) return `(a_TexMtx0123Idx.x * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD1) return `(a_TexMtx0123Idx.y * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD2) return `(a_TexMtx0123Idx.z * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD3) return `(a_TexMtx0123Idx.w * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD4) return `(a_TexMtx4567Idx.x * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD5) return `(a_TexMtx4567Idx.y * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD6) return `(a_TexMtx4567Idx.z * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD7) return `(a_TexMtx4567Idx.w * 256.0)`;
         throw "whoops";
     }
 
@@ -525,18 +521,20 @@ ${this.generateLightAttnFn(chan, lightName)}
     // Output is a vec4.
     private generateTexGenSource(src: GX.TexGenSrc) {
         switch (src) {
-        case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
-        case GX.TexGenSrc.NRM:       return `vec4(a_Normal, 1.0)`;
+        case GX.TexGenSrc.POS:       return `vec4(a_Position.xyz, 1.0)`;
+        case GX.TexGenSrc.NRM:       return `vec4(a_Normal.xyz, 1.0)`;
+        case GX.TexGenSrc.BINRM:     return `vec4(a_Binormal.xyz, 1.0)`;
+        case GX.TexGenSrc.TANGENT:   return `vec4(a_Tangent.xyz, 1.0)`;
         case GX.TexGenSrc.COLOR0:    return `v_Color0`;
         case GX.TexGenSrc.COLOR1:    return `v_Color1`;
-        case GX.TexGenSrc.TEX0:      return `vec4(a_Tex0, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX1:      return `vec4(a_Tex1, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX2:      return `vec4(a_Tex2, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX3:      return `vec4(a_Tex3, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX4:      return `vec4(a_Tex4, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX5:      return `vec4(a_Tex5, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX6:      return `vec4(a_Tex6, 1.0, 1.0)`;
-        case GX.TexGenSrc.TEX7:      return `vec4(a_Tex7, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX0:      return `vec4(a_Tex01.xy, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX1:      return `vec4(a_Tex01.zw, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX2:      return `vec4(a_Tex23.xy, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX3:      return `vec4(a_Tex23.zw, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX4:      return `vec4(a_Tex45.xy, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX5:      return `vec4(a_Tex45.zw, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX6:      return `vec4(a_Tex67.xy, 1.0, 1.0)`;
+        case GX.TexGenSrc.TEX7:      return `vec4(a_Tex67.zw, 1.0, 1.0)`;
         // Use a previously generated texcoordgen.
         case GX.TexGenSrc.TEXCOORD0: return `vec4(v_TexCoord0, 1.0)`;
         case GX.TexGenSrc.TEXCOORD1: return `vec4(v_TexCoord1, 1.0)`;
@@ -1145,9 +1143,9 @@ ${this.generateFogFunc(`t_Fog`)}
     private generateMulPos(): string {
         // Default to using pnmtxidx.
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
-        const src = `vec4(a_Position, 1.0)`;
+        const src = `vec4(a_Position.xyz, 1.0)`;
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1155,10 +1153,10 @@ ${this.generateFogFunc(`t_Fog`)}
     private generateMulNrm(): string {
         // Default to using pnmtxidx.
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
-        const src = `vec4(a_Normal, 0.0)`;
+        const src = `vec4(a_Normal.xyz, 0.0)`;
         // TODO(jstpierre): Move to a normal matrix calculated on the CPU
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`uint(a_PnMtxIdx)`, src);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1188,13 +1186,14 @@ varying vec3 v_TexCoord7;
 ${both}
 ${this.generateVertAttributeDefs()}
 
-Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
-    if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
+Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
+    uint t_MtxIdx = uint(t_MtxIdxFloat / 3.0);
+    if (t_MtxIdx == 20u)
         return _Mat4x3(1.0);
-    else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
-        return u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u];
+    else if (t_MtxIdx >= 10u)
+        return u_TexMtx[(t_MtxIdx - 10u)];
     else
-        return u_PosMtx[t_MtxIdx / 3u];
+        return u_PosMtx[t_MtxIdx];
 }
 
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {

@@ -301,9 +301,6 @@ export interface GfxRenderPass {
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
-
-    // TODO(jstpierre): Remove this. It does nothing.
-    endPass(): void;
 };
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;

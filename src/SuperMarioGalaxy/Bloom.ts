@@ -288,7 +288,6 @@ export class BloomPostFXRenderer {
     }
 
     public renderEndObjects(device: GfxDevice, objectsPassRenderer: GfxRenderPass, renderInstManager: GfxRenderInstManager, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput, template: GfxRenderInst, parameterBufferOffs: number): GfxRenderPass {
-        objectsPassRenderer.endPass();
         device.submitPass(objectsPassRenderer);
 
         // Downsample.
@@ -300,7 +299,7 @@ export class BloomPostFXRenderer {
         downsampleColorTarget.setParameters(device, targetWidth, targetHeight, 1);
         downsampleColorTexture.setParameters(device, targetWidth, targetHeight);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setFromTemplate(template);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
@@ -313,7 +312,6 @@ export class BloomPostFXRenderer {
         this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, downsamplePassRenderer);
-        downsamplePassRenderer.endPass();
         device.submitPass(downsamplePassRenderer);
 
         // Blur.
@@ -326,7 +324,6 @@ export class BloomPostFXRenderer {
         this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blurPassRenderer);
-        blurPassRenderer.endPass();
         device.submitPass(blurPassRenderer);
 
         // TODO(jstpierre): Downsample blur / bokeh as well.
@@ -340,7 +337,6 @@ export class BloomPostFXRenderer {
         this.textureMapping[0].gfxTexture = blurColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, bokehPassRenderer);
-        bokehPassRenderer.endPass();
         device.submitPass(bokehPassRenderer);
 
         // Combine.

@@ -5,7 +5,7 @@ import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1A
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
-import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../../../gx/gx_render';
+import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
@@ -22,7 +22,6 @@ import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
-import { setAttachmentStateSimple } from '../../../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { translateSampler } from '../JUTTexture';
 
 export class ShapeInstanceState {
@@ -334,15 +333,6 @@ interface TexNoCalc {
     calcTextureIndex(): number;
 }
 
-function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
-    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
-    if (en)
-        colorWriteMask |= bits;
-    else
-        colorWriteMask &= ~bits;
-    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
-}
-
 type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
 
 const materialParams = new MaterialParams();
@@ -383,6 +373,10 @@ export class MaterialInstance {
 
     public setColorWriteEnabled(v: boolean): void {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
+    }
+
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -1252,7 +1246,7 @@ export class J3DModelInstance {
         throw "could not find joint";
     }
 
-    protected isAnyShapeVisible(): boolean {
+    public isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.shapeInstanceState.drawViewMatrixVisibility.length; i++)
             if (this.shapeInstanceState.drawViewMatrixVisibility[i])
                 return true;
@@ -1308,7 +1302,6 @@ export class J3DModelInstance {
         return depth;
     }
 
-    // TODO(jstpierre): Sort shapeInstances based on translucent material?
     private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, translucent: boolean): void {
         if (!this.isAnyShapeVisible())
             return;

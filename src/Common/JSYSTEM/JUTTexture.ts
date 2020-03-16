@@ -121,4 +121,3 @@ export class BTIData {
         device.destroyTexture(this.gfxTexture);
     }
 }
-

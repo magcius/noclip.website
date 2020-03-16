@@ -2,7 +2,7 @@ import { vec3, vec4 } from "gl-matrix";
 import { TileState } from '../Common/N64/RDP';
 import { GfxTexture } from '../gfx/platform/GfxPlatform';
 import { clamp, lerp } from '../MathHelpers';
-import { getPointBasis, getPointBezier, getPointHermite } from '../Spline';
+import { getPointBasis, getPointBezier, getPointHermite, getDerivativeBezier, getDerivativeBasis, getDerivativeHermite } from '../Spline';
 import { TextureMapping } from '../TextureHolder';
 import { assert, assertExists, nArray } from '../util';
 import { AnimationTrack, ColorFlagStart, DataMap, EntryKind, MaterialData, MaterialFlags, Path, PathKind, GFXNode } from './room';
@@ -104,8 +104,7 @@ class ColorAObj {
     }
 }
 
-
-export function getPathPoint(dst: vec3, path: Path, t: number): void {
+export function getPathPoint(dst: vec3, path: Path, t: number, useRaw = false): void {
     let segment = 0;
     while (segment + 1 < path.length && t > path.times[segment + 1])
         segment++;
@@ -132,8 +131,39 @@ export function getPathPoint(dst: vec3, path: Path, t: number): void {
                     (path.points[offs + 6 + i] - path.points[offs + i]) * path.segmentRate, (path.points[offs + 9 + i] - path.points[offs + 3 + i]) * path.segmentRate, frac);
         } break;
     }
+    // paths in the level need to be rescaled by 100
+    if (!useRaw)
+        vec3.scale(dst, dst, 100);
 }
 
+export function getPathTangent(dst: vec3, path: Path, t: number): void {
+    let segment = 0;
+    while (segment + 1 < path.length && t > path.times[segment + 1])
+        segment++;
+    // TODO: modify this using quartics
+    const frac = (t - path.times[segment]) / (path.times[segment + 1] - path.times[segment]);
+
+    const offs = segment * (path.kind === PathKind.Bezier ? 9 : 3);
+    switch (path.kind) {
+        case PathKind.Linear: {
+            for (let i = 0; i < 3; i++)
+                dst[i] = path.points[offs + 3 + i] - path.points[offs + i];
+        } break;
+        case PathKind.Bezier: {
+            for (let i = 0; i < 3; i++)
+                dst[i] = getDerivativeBezier(path.points[offs + i], path.points[offs + 3 + i], path.points[offs + 6 + i], path.points[offs + 9 + i], frac);
+        } break;
+        case PathKind.BSpline: {
+            for (let i = 0; i < 3; i++)
+                dst[i] = getDerivativeBasis(path.points[offs + i], path.points[offs + 3 + i], path.points[offs + 6 + i], path.points[offs + 9 + i], frac);
+        } break;
+        case PathKind.Hermite: {
+            for (let i = 0; i < 3; i++)
+                dst[i] = getDerivativeHermite(path.points[offs + 3 + i], path.points[offs + 6 + i],
+                    (path.points[offs + 6 + i] - path.points[offs + i]) * path.segmentRate, (path.points[offs + 9 + i] - path.points[offs + 3 + i]) * path.segmentRate, frac);
+        } break;
+    }
+}
 
 export class Animator {
     public track: AnimationTrack | null = null;
@@ -141,6 +171,7 @@ export class Animator {
     public colors: ColorAObj[] = [];
     public stateFlags = 0;
     public loopCount = 0;
+    public forceLoop = false;
 
     private trackIndex = 0;
     private nextUpdate = 0;
@@ -186,11 +217,11 @@ export class Animator {
                 if (this.track.loopStart >= 0)
                     this.trackIndex = this.track.loopStart;
                 else {
+                    if (!this.forceLoop)
+                        return false;
                     // should end, but loop anyway
                     // causes some glitches, but e.g. lava is clearly supposed to loop
                     this.trackIndex = 0;
-                    // stay at last position for a frame, in case an actor is waiting on the animation
-                    return false;
                 }
             }
             const entry = entries[this.trackIndex++];
@@ -311,6 +342,10 @@ export class Material {
     public lastTime: number;
 
     constructor(public data: MaterialData, private textures: GfxTexture[]) { }
+
+    public forceLoop(): void {
+        this.animator.forceLoop = true;
+    }
 
     public update(time: number): void {
         if (this.animator.update(time))

@@ -5,7 +5,7 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists, nArray, hexdump } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist';
 import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material';
@@ -20,7 +20,7 @@ import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNewFromRGBA, colorCopy } from '../Color';
-import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
+import { computeModelMatrixSRT, MathConstants, lerp, Vec3UnitY } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
 import { Camera } from '../Camera';
@@ -86,29 +86,29 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS *  sinR;
-    dst[12] = scaleS * (-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5)) + 0.5;
+    dst[12] = scaleS * ((-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5))) + 0.5;
 
     dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = scaleT * ( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5)) + 0.5;
+    dst[13] = scaleT * (( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5))) + 0.5;
 }
 
 const enum TexMatrixMode {
-    BASIC = -1,
-    MAYA = 0,
+    Basic = -1,
+    Maya = 0,
     XSI = 1,
-    MAX = 2,
+    Max = 2,
 };
 
 function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     switch (texMtxMode) {
-    case TexMatrixMode.BASIC:
+    case TexMatrixMode.Basic:
         return calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT);
-    case TexMatrixMode.MAYA:
+    case TexMatrixMode.Maya:
         return calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
     case TexMatrixMode.XSI:
         return calcTexMtx_XSI(dst, scaleS, scaleT, rotation, translationS, translationT);
-    case TexMatrixMode.MAX:
+    case TexMatrixMode.Max:
         return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
     default:
         throw "whoops";
@@ -143,6 +143,71 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
     }
 
     return entries;
+}
+
+export const enum ResUserDataItemValueType {
+    S32, F32, STRING,
+}
+
+interface ResUserDataItemBase {
+    userDataType: ResUserDataItemValueType;
+    name: string;
+    id: number;
+}
+
+interface ResUserDataItemNumber extends ResUserDataItemBase {
+    value: number[];
+}
+
+interface ResUserDataItemString extends ResUserDataItemBase {
+    value: string[];
+}
+
+export type ResUserDataItem = ResUserDataItemNumber | ResUserDataItemString;
+
+interface ResUserData {
+    entries: ResUserDataItem[];
+}
+
+function parseUserData(buffer: ArrayBufferSlice, offs: number): ResUserData | null {
+    if (offs === 0)
+        return null;
+
+    const view = buffer.createDataView();
+    const size = view.getUint32(offs + 0x00);
+    const resDic = parseResDic(buffer, offs + 0x04);
+    const entries: ResUserDataItem[] = [];
+
+    for (let i = 0; i < resDic.length; i++) {
+        const itemOffs = resDic[i].offs;
+        const size = view.getUint32(itemOffs + 0x00);
+        const toData = view.getUint32(itemOffs + 0x04);
+        const arraySize = view.getUint32(itemOffs + 0x08);
+        const userDataType = view.getUint32(itemOffs + 0x0C);
+        const nameOffs = view.getUint32(itemOffs + 0x10);
+        const name = readString(buffer, itemOffs + nameOffs);
+        assert(name === resDic[i].name);
+        const id = view.getUint32(0x14);
+
+        if (userDataType === ResUserDataItemValueType.S32) {
+            const value: number[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(view.getInt32(itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        } else if (userDataType === ResUserDataItemValueType.F32) {
+            const value: number[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(view.getFloat32(itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        } else if (userDataType === ResUserDataItemValueType.STRING) {
+            const value: string[] = [];
+            for (let i = 0; i < arraySize; i++)
+                value.push(readString(buffer, itemOffs + toData + 0x04 * i));
+            entries.push({ userDataType, name, id, value });
+        }
+    }
+
+    return { entries };
 }
 //#endregion
 //#region PLT0
@@ -802,6 +867,7 @@ export interface MDL0_NodeEntry {
     parentNodeId: number;
     forwardBindPose: mat4;
     inverseBindPose: mat4;
+    userData: ResUserData | null;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOffs: number): MDL0_NodeEntry {
@@ -845,6 +911,8 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const toNextSibling = view.getInt32(0x64);
     const toPrevSibling = view.getInt32(0x68);
     const toResUserData = view.getInt32(0x6C);
+
+    const userData = parseUserData(buffer, toResUserData);
 
     let parentNodeId: number = -1;
     if (toParentNode !== 0) {
@@ -898,7 +966,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
 
     const visible = !!(flags & NodeFlags.VISIBLE);
 
-    return { name, id, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
+    return { name, id, userData, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
 }
 
 export const enum ByteCodeOp {
@@ -1641,7 +1709,7 @@ export class SRT0TexMtxAnimator {
     }
 
     public calcIndTexMtx(dst: mat4): void {
-        this._calcTexMtx(dst, TexMatrixMode.BASIC);
+        this._calcTexMtx(dst, TexMatrixMode.Basic);
     }
 
     public calcTexMtx(dst: mat4): void {
@@ -3115,13 +3183,62 @@ export class LightSetting {
 }
 
 export class SCN0Animator {
-    constructor(private animationController: AnimationController, private scn0: SCN0) {
+    private scratchPos = vec3.create();
+    private scratchAim = vec3.create();
+
+    constructor(private animationController: AnimationController, public scn0: SCN0) {
+    }
+
+    public calcCameraPositionAim(camera: Camera, cameraIndex: number): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+        const scn0Cam = this.scn0.cameras[cameraIndex];
+
+        const posX = sampleFloatAnimationTrack(scn0Cam.posX, animFrame);
+        const posY = sampleFloatAnimationTrack(scn0Cam.posY, animFrame);
+        const posZ = sampleFloatAnimationTrack(scn0Cam.posZ, animFrame);
+        vec3.set(this.scratchPos, posX, posY, posZ);
+
+        if (scn0Cam.cameraType === SCN0_CameraType.AIM) {
+            const aimX = sampleFloatAnimationTrack(scn0Cam.aimX, animFrame);
+            const aimY = sampleFloatAnimationTrack(scn0Cam.aimY, animFrame);
+            const aimZ = sampleFloatAnimationTrack(scn0Cam.aimZ, animFrame);
+            vec3.set(this.scratchAim, aimX, aimY, aimZ);
+
+            mat4.lookAt(camera.viewMatrix, this.scratchPos, this.scratchAim, Vec3UnitY);
+
+            // TODO(jstpierre): What units is twist in?
+            // const twist = sampleFloatAnimationTrack(scn0Cam.twist, animFrame);
+            // mat4.rotateZ(camera.viewMatrix, camera.viewMatrix, twist);
+
+            mat4.invert(camera.worldMatrix, camera.viewMatrix);
+        } else {
+            // TODO(jstpierre): Support rotation.
+            assert(false);
+        }
+
+        camera.worldMatrixUpdated();
+    }
+
+    public calcCameraProjection(camera: Camera, cameraIndex: number): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+        const scn0Cam = this.scn0.cameras[cameraIndex];
+
+        if (scn0Cam.projType === GX.ProjectionType.PERSPECTIVE) {
+            const perspFovy = sampleFloatAnimationTrack(scn0Cam.perspFovy, animFrame);
+            const fovY = MathConstants.DEG_TO_RAD * perspFovy;
+            const aspect = sampleFloatAnimationTrack(scn0Cam.aspect, animFrame);
+            const near = sampleFloatAnimationTrack(scn0Cam.near, animFrame);
+            const far = sampleFloatAnimationTrack(scn0Cam.far, animFrame);
+            camera.setPerspective(fovY, aspect, near, far);
+        } else {
+            // TODO(jstpierre): Orthographic.
+        }
     }
 
     public calcCameraClipPlanes(camera: Camera, cameraIndex: number): void {
         const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
-
         const scn0Cam = this.scn0.cameras[cameraIndex];
+
         const near = sampleFloatAnimationTrack(scn0Cam.near, animFrame);
         const far = sampleFloatAnimationTrack(scn0Cam.far, animFrame);
 

@@ -39,6 +39,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
         mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
     fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+    renderInstManager.submitRenderInst(renderInst);
 }
 
 function vecPitch(v: vec3): number {

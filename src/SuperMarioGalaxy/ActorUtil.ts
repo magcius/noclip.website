@@ -11,12 +11,13 @@ import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
-import { HitSensor } from "./HitSensor";
+import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
+import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -89,6 +90,10 @@ export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: Sce
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
+export function connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT, -1);
+}
+
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x24, 0x05, DrawBufferType.SKY, -1);
 }
@@ -125,14 +130,16 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x2A, -1, -1, -1);
 }
 
+export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
 
 export function isBckStopped(actor: LiveActor): boolean {
-    const bckCtrl = actor.modelManager!.getBckCtrl();
-    // TODO(jstpierre): Add stopped flags?
-    return bckCtrl.speedInFrames === 0.0;
+    return actor.modelManager!.isBckStopped();
 }
 
 export function getBckFrameMax(actor: LiveActor): number {
@@ -213,6 +220,12 @@ export function startBck(actor: LiveActor, name: string): void {
 
 export function startBckWithInterpole(actor: LiveActor, name: string, interpole: number): void {
     actor.modelManager!.startBckWithInterpole(name, interpole);
+    if (actor.effectKeeper !== null)
+        actor.effectKeeper.changeBck();
+}
+
+export function startBckNoInterpole(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBckWithInterpole(name, 0.0);
     if (actor.effectKeeper !== null)
         actor.effectKeeper.changeBck();
 }
@@ -333,6 +346,11 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function setBvaRate(actor: LiveActor, rate: number): void {
+    const ctrl = actor.modelManager!.getBvaCtrl();
+    ctrl.speedInFrames = rate;
+}
+
 export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
     // TODO(jstpierre): Support stopped flag?
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
@@ -364,6 +382,23 @@ export function isBpkPlaying(actor: LiveActor, name: string): boolean {
 
 export function isBvaPlaying(actor: LiveActor, name: string): boolean {
     return actor.modelManager!.isBvaPlaying(name);
+}
+
+export function isAnyAnimStopped(actor: LiveActor, name: string): boolean {
+    // TODO(jstpierre): I can't figure out what actually checks that the animation *was* playing. Weird.
+    if (!isBckExist(actor, name) || !actor.modelManager!.isBckStopped())
+        return false;
+    if (!isBtkExist(actor, name) || !actor.modelManager!.isBtkStopped())
+        return false;
+    if (!isBpkExist(actor, name) || !actor.modelManager!.isBpkStopped())
+        return false;
+    if (!isBtpExist(actor, name) || !actor.modelManager!.isBtpStopped())
+        return false;
+    if (!isBrkExist(actor, name) || !actor.modelManager!.isBrkStopped())
+        return false;
+    if (!isBvaExist(actor, name) || !actor.modelManager!.isBvaStopped())
+        return false;
+    return true;
 }
 
 export function isActionStart(actor: LiveActor, action: string): boolean {
@@ -405,16 +440,56 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
+export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
+}
+
+export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
+}
+
 export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, 0x05, pairwiseCapacity, radius, actor, offset);
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
-export function receiveMessage(thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
-    return thisSensor.actor.receiveMessage(messageType, thisSensor, otherSensor);
+export function receiveMessage(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
+    return thisSensor.actor.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
 }
 
-export function sendArbitraryMsg(messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
-    return receiveMessage(otherSensor, messageType, thisSensor);
+export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+    return receiveMessage(sceneObjHolder, otherSensor, messageType, thisSensor);
+}
+
+function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
+    mat4.copy(dst, assertExists(actor.getBaseMtx()));
+    const scaleX = actor.scale[0];
+    mat4.multiplyScalar(dst, dst, scaleX);
+}
+
+export function resetAllCollisionMtx(actor: LiveActor): void {
+    const parts = actor.collisionParts!;
+    if (parts.hostMtx !== null) {
+        parts.resetAllMtxFromHost();
+    } else {
+        calcCollisionMtx(scratchMatrix, actor);
+        parts.resetAllMtx(scratchMatrix);
+    }
+}
+
+export function validateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    validateCollisionParts(sceneObjHolder, parts);
+    // parts.updateBoundingSphereRange();
+    resetAllCollisionMtx(actor);
+}
+
+export function invalidateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    invalidateCollisionParts(sceneObjHolder, parts);
+}
+
+export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, null, hostMtx, CollisionScaleType.AutoScale);
 }
 
 export function getRailTotalLength(actor: LiveActor): number {
@@ -488,6 +563,10 @@ export function adjustmentRailCoordSpeed(actor: LiveActor, target: number, maxSp
     actor.railRider!.setSpeed(target);
 }
 
+export function moveCoordToNearestPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(actor.translation);
+}
+
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     actor.railRider!.moveToNearestPos(actor.translation);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
@@ -513,8 +592,16 @@ export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
+export function moveTransToCurrentRailPos(actor: LiveActor): void {
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
 export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
+}
+
+export function getNextRailPointNo(actor: LiveActor): number {
+    return actor.railRider!.getNextPointNo();
 }
 
 export function getRailPartLength(actor: LiveActor, partIdx: number): number {
@@ -798,4 +885,47 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
+}
+
+export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+    const m = vec3.dot(a, b);
+    dst[0] = a[0] - b[0]*m;
+    dst[1] = a[1] - b[1]*m;
+    dst[2] = a[2] - b[2]*m;
+    return m;
+}
+
+function getMaxAbsElementIndex(v: vec3): number {
+    const x = Math.abs(v[0]);
+    const y = Math.abs(v[1]);
+    const z = Math.abs(v[2]);
+    if (x > z && y > z)
+        return 0;
+    else if (y > z)
+        return 1;
+    else
+        return 2;
+}
+
+export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
+    const max = getMaxAbsElementIndex(up);
+    const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
+    makeMtxUpFrontPos(dst, up, front, pos);
+}
+
+export function preScaleMtx(dst: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] *= x;
+    dst[1] *= x;
+    dst[2] *= x;
+    dst[4] *= y;
+    dst[5] *= y;
+    dst[6] *= y;
+    dst[8] *= z;
+    dst[9] *= z;
+    dst[10] *= z;
+}
+
+export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
+    return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
 }
