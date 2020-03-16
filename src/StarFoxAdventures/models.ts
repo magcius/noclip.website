@@ -28,7 +28,7 @@ export class ModelInstance {
     private packetParams = new PacketParams();
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
-    private pnMatrices: mat4[] = [];
+    private pnMatrices: mat4[] = nArray(10, () => mat4.create());
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
