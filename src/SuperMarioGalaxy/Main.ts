@@ -479,12 +479,11 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     loadedVertexData.vertexBuffers[1] = buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === VertexAttributeInput.PNMTXIDX));
-    let offs = pnmtxidxLayout.bufferOffset;
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
+    let offs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.PNMTXIDX];
 
     for (let i = 0; i < vertexCount; i++) {
-        const p = view.getUint8(offs + 0x00);
+        const p = view.getFloat32(offs, true);
         for (let j = 0; j < bufferStride; j++) {
             if (texMtxIdxBaseOffsets[j] >= 0)
                 buffer[i*bufferStride + j] = p + texMtxIdxBaseOffsets[j];

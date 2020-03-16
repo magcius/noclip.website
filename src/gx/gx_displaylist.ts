@@ -38,7 +38,7 @@ import { align, assert, hexzero, fallbackUndefined } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat';
 import { HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
@@ -64,7 +64,6 @@ export interface GX_Array {
 // Similar to GX.Attr, but is for what the shader will use as inputs, rather than
 // the raw GX attributes.
 export const enum VertexAttributeInput {
-    PNMTXIDX,
     // TEXnMTXIDX are packed specially because of GL limitations.
     TEX0123MTXIDX,
     TEX4567MTXIDX,
@@ -83,9 +82,7 @@ export const enum VertexAttributeInput {
 }
 
 function getAttrInputForAttr(attrib: GX.Attr): VertexAttributeInput {
-    if (attrib === GX.Attr.PNMTXIDX)
-        return VertexAttributeInput.PNMTXIDX;
-    else if (attrib === GX.Attr.POS)
+    if (attrib === GX.Attr.POS)
         return VertexAttributeInput.POS;
     else if (attrib === GX.Attr.NRM)
         return VertexAttributeInput.NRM;
@@ -118,8 +115,8 @@ export interface LoadedVertexLayout {
     singleVertexInputLayouts: SingleVertexInputLayout[];
 
     // Precalculated offsets and formats for each attribute, for convenience filling buffers...
-    vertexAttributeOffsets: GfxFormat[];
-    vertexAttributeFormats: number[];
+    vertexAttributeOffsets: number[];
+    vertexAttributeFormats: GfxFormat[];
 }
 
 interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
@@ -406,7 +403,10 @@ function getAttributeFormat(vatLayouts: (VatLayout | undefined)[], vtxAttrib: GX
 
     const baseFormat = getAttributeBaseFormat(vtxAttrib);
 
-    if (isVtxAttribColor(vtxAttrib)) {
+    if (vtxAttrib === GX.Attr.POS) {
+        // We pack PNMTXIDX into w of POS.
+        formatCompFlags = FormatCompFlags.COMP_RGBA;
+    } else if (isVtxAttribColor(vtxAttrib)) {
         // For color attributes, we always output all 4 components.
         formatCompFlags = FormatCompFlags.COMP_RGBA;
     } else if (isVtxAttribTexMtxIdx(vtxAttrib)) {
@@ -513,6 +513,12 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             input = allocateVertexInput(attrInput, inputFormat);
             fieldCompOffset = (vtxAttrib - GX.Attr.TEX0MTXIDX) & 0x03;
             fieldFormat = input.format;
+        } else if (vtxAttrib === GX.Attr.PNMTXIDX) {
+            // PNMTXIDX is packed in w of POS.
+            const inputFormat = getAttributeFormat(vatLayouts, GX.Attr.POS);
+            input = allocateVertexInput(VertexAttributeInput.POS, inputFormat);
+            fieldCompOffset = 3;
+            fieldFormat = input.format;
         } else if (vtxAttrib === GX.Attr.NBT) {
             // NBT. Allocate layouts for all of NRM, BINRM, TANGENT.
             input = allocateVertexInput(VertexAttributeInput.NRM, inputFormat);
@@ -530,6 +536,11 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             const attrInput = getAttrInputForAttr(vtxAttrib);
             input = allocateVertexInput(attrInput, inputFormat);
             fieldFormat = input.format;
+        }
+
+        if (isVtxAttribMtxIdx(vtxAttrib)) {
+            // Remove the normalized flag for the conversion.
+            fieldFormat = setFormatFlags(fieldFormat, FormatFlags.NONE);
         }
 
         const fieldByteOffset = getFormatCompByteSize(input.format) * fieldCompOffset;
@@ -631,13 +642,6 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
                 throw "whoops";
         }
 
-        function compileOneAttribMtxIdx(viewName: string, attrOffs: string): string {
-            // TODO(jstpierre): Compute matrix slot in here, rather than the shader.
-            const value = `${viewName}.getUint8(${attrOffs})`;
-            const dstOffs = dstBaseOffs;
-            return compileWriteOneComponentU8(dstOffs, value);
-        }
-
         function compileOneAttribColor(viewName: string, attrOffs: string): string {
             const dstComponentCount = getFormatComponentCount(dstFormat);
             const dstOffs = dstBaseOffs;
@@ -697,16 +701,10 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             const dstComponentSize = getFormatCompByteSize(dstFormat);
             const dstComponentCount = getFormatComponentCount(dstFormat);
 
-            for (let i = 0; i < dstComponentCount; i++) {
+            for (let i = 0; i < srcAttrCompCount; i++) {
                 const dstOffs = dstBaseOffs + (i * dstComponentSize);
                 const srcOffs: string = `${attrOffs} + ${i * srcAttrCompSize}`;
-
-                // Fill in components not in the source with zero.
-                let value: string;
-                if (i < srcAttrCompCount)
-                    value = compileReadOneComponent(viewName, srcOffs);
-                else
-                    value = `0`;
+                const value = compileReadOneComponent(viewName, srcOffs);
 
                 S += `
     ${compileWriteOneComponent(dstOffs, value)};`;
@@ -719,18 +717,16 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             let S = ``;
 
             if (enableOutput) {
-            if (isVtxAttribMtxIdx(vtxAttrib))
-                S += compileOneAttribMtxIdx(viewName, attrOffsetBase);
-            else if (isVtxAttribColor(vtxAttrib))
-                S += compileOneAttribColor(viewName, attrOffsetBase);
-            else
-                S += compileOneAttribOther(viewName, attrOffsetBase);
+                if (isVtxAttribColor(vtxAttrib))
+                    S += compileOneAttribColor(viewName, attrOffsetBase);
+                else
+                    S += compileOneAttribOther(viewName, attrOffsetBase);
             }
 
             S += `
     drawCallIdx += ${drawCallIdxIncr};
 `;
-            
+
             return S;
         }
 
@@ -750,16 +746,16 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
                 // Special case: NBT3.
                 return `
-        // NBT Normal
-        ${compileOneIndex(viewName, `${readIndex} + 0`, drawCallIdxIncr, `_N`)}
-        // NBT Bitangent
-        ${compileOneIndex(viewName, `${readIndex} + 3`, drawCallIdxIncr, `_B`)}
-        // NBT Tangent
-        ${compileOneIndex(viewName, `${readIndex} + 6`, drawCallIdxIncr, `_T`)}`;
+    // NRM
+    ${compileOneIndex(viewName, `${readIndex} + 0`, drawCallIdxIncr, `_N`)}
+    // BINRM
+    ${compileOneIndex(viewName, `${readIndex} + 3`, drawCallIdxIncr, `_B`)}
+    // TANGENT
+    ${compileOneIndex(viewName, `${readIndex} + 6`, drawCallIdxIncr, `_T`)}`;
             } else {
                 return `
-        // ${getAttrName(vtxAttrib)}
-        ${compileOneIndex(viewName, readIndex, drawCallIdxIncr)}`;
+    // ${getAttrName(vtxAttrib)}
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr)}`;
             }
         }
 
@@ -791,6 +787,7 @@ ${compileVatLayout(vatLayout)}
     return drawCallIdx;
 };
 `;
+
     const runVerticesGenerator = new Function(source);
     const runVertices: SingleVtxLoaderFunc = runVerticesGenerator();
 

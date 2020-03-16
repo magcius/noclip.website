@@ -208,8 +208,7 @@ interface VertexAttributeGenDef {
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrInput: VertexAttributeInput.POS,           name: "Position",      format: GfxFormat.F32_RGB },
-    { attrInput: VertexAttributeInput.PNMTXIDX,      name: "PnMtxIdx",      format: GfxFormat.F32_R },
+    { attrInput: VertexAttributeInput.POS,           name: "Position",      format: GfxFormat.F32_RGBA },
     { attrInput: VertexAttributeInput.TEX0123MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.F32_RGBA },
     { attrInput: VertexAttributeInput.TEX4567MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.F32_RGBA },
     { attrInput: VertexAttributeInput.NRM,           name: "Normal",        format: GfxFormat.F32_RGB },
@@ -506,14 +505,14 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
-        if (index === GX.TexCoordID.TEXCOORD0) return `a_TexMtx0123Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD1) return `a_TexMtx0123Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD2) return `a_TexMtx0123Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD3) return `a_TexMtx0123Idx.w`;
-        if (index === GX.TexCoordID.TEXCOORD4) return `a_TexMtx4567Idx.x`;
-        if (index === GX.TexCoordID.TEXCOORD5) return `a_TexMtx4567Idx.y`;
-        if (index === GX.TexCoordID.TEXCOORD6) return `a_TexMtx4567Idx.z`;
-        if (index === GX.TexCoordID.TEXCOORD7) return `a_TexMtx4567Idx.w`;
+        if (index === GX.TexCoordID.TEXCOORD0) return `(a_TexMtx0123Idx.x * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD1) return `(a_TexMtx0123Idx.y * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD2) return `(a_TexMtx0123Idx.z * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD3) return `(a_TexMtx0123Idx.w * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD4) return `(a_TexMtx4567Idx.x * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD5) return `(a_TexMtx4567Idx.y * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD6) return `(a_TexMtx4567Idx.z * 256.0)`;
+        if (index === GX.TexCoordID.TEXCOORD7) return `(a_TexMtx4567Idx.w * 256.0)`;
         throw "whoops";
     }
 
@@ -522,10 +521,10 @@ ${this.generateLightAttnFn(chan, lightName)}
     // Output is a vec4.
     private generateTexGenSource(src: GX.TexGenSrc) {
         switch (src) {
-        case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
-        case GX.TexGenSrc.NRM:       return `vec4(a_Normal, 1.0)`;
-        case GX.TexGenSrc.BINRM:     return `vec4(a_Binormal, 1.0)`;
-        case GX.TexGenSrc.TANGENT:   return `vec4(a_Tangent, 1.0)`;
+        case GX.TexGenSrc.POS:       return `vec4(a_Position.xyz, 1.0)`;
+        case GX.TexGenSrc.NRM:       return `vec4(a_Normal.xyz, 1.0)`;
+        case GX.TexGenSrc.BINRM:     return `vec4(a_Binormal.xyz, 1.0)`;
+        case GX.TexGenSrc.TANGENT:   return `vec4(a_Tangent.xyz, 1.0)`;
         case GX.TexGenSrc.COLOR0:    return `v_Color0`;
         case GX.TexGenSrc.COLOR1:    return `v_Color1`;
         case GX.TexGenSrc.TEX0:      return `vec4(a_Tex01.xy, 1.0, 1.0)`;
@@ -1144,9 +1143,9 @@ ${this.generateFogFunc(`t_Fog`)}
     private generateMulPos(): string {
         // Default to using pnmtxidx.
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
-        const src = `vec4(a_Position, 1.0)`;
+        const src = `vec4(a_Position.xyz, 1.0)`;
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1154,10 +1153,10 @@ ${this.generateFogFunc(`t_Fog`)}
     private generateMulNrm(): string {
         // Default to using pnmtxidx.
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
-        const src = `vec4(a_Normal, 0.0)`;
+        const src = `vec4(a_Normal.xyz, 0.0)`;
         // TODO(jstpierre): Move to a normal matrix calculated on the CPU
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
@@ -1188,13 +1187,13 @@ ${both}
 ${this.generateVertAttributeDefs()}
 
 Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
-    uint t_MtxIdx = uint(t_MtxIdxFloat * 256.0);
-    if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
+    uint t_MtxIdx = uint(t_MtxIdxFloat / 3.0);
+    if (t_MtxIdx == 20u)
         return _Mat4x3(1.0);
-    else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
-        return u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u];
+    else if (t_MtxIdx >= 10u)
+        return u_TexMtx[(t_MtxIdx - 10u)];
     else
-        return u_PosMtx[t_MtxIdx / 3u];
+        return u_PosMtx[t_MtxIdx];
 }
 
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
