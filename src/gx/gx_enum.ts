@@ -76,7 +76,6 @@ export const enum Attr {
     TEX6 = 19,
     TEX7 = 20,
     MAX = TEX7,
-    // NBT is an "API convenience" and practically shouldn't exist...
     NBT = 25,
     NULL = 0xFF,
 }

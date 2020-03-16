@@ -9,7 +9,7 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
 import { assert, nArray } from '../util';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
@@ -407,14 +407,10 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
     let usesZeroBuffer = false;
-    for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
-        const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-
-        if (attribLocation === -1)
-            continue;
-
-        const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
-        const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+    for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+        const attribLocation = GX_Material.getVertexInputLocation(attrInput);
+        const attribGenDef = GX_Material.getVertexInputGenDef(attrInput);
+        const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
 
         if (attrib !== undefined) {
             const bufferByteOffset = attrib.bufferOffset;
@@ -458,13 +454,8 @@ export class GXShapeHelperGfx {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         let usesZeroBuffer = false;
-        for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
-            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-    
-            if (attribLocation === -1)
-                continue;
-    
-            const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
             if (attrib === undefined) {
                 usesZeroBuffer = true;
                 break;

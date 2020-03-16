@@ -29,11 +29,12 @@ import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, Gf
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TextureMapping } from '../TextureHolder';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { getVertexAttribLocation } from '../gx/gx_material';
+import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround } from './Collision';
+import { VertexAttributeInput } from '../gx/gx_displaylist';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -5379,10 +5380,9 @@ class OceanRingPipe extends LiveActor {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
-            { location: getVertexAttribLocation(GX.Attr.NRM), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 3*0x04, },
-            { location: getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 6*0x04, },
-            { location: getVertexAttribLocation(GX.Attr.TEX1), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 8*0x04, },
+            { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*0x04, },
+            { location: getVertexInputLocation(VertexAttributeInput.NRM), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 3*0x04, },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 6*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },

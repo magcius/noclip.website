@@ -21,7 +21,7 @@ import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
-import { getVertexAttribLocation } from "../../gx/gx_material";
+import { getVertexInputLocation } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
@@ -35,6 +35,7 @@ import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../TextureHolder";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
 import { BTIData, BTI } from "./JUTTexture";
+import { VertexAttributeInput } from "../../gx/gx_displaylist";
 
 const SORT_PARTICLES = false;
 
@@ -654,8 +655,8 @@ class JPAGlobalRes {
 
     constructor(device: GfxDevice) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
-            { location: getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4 },
+            { location: getVertexInputLocation(VertexAttributeInput.POS),   format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RG,  bufferIndex: 0, bufferByteOffset: 3*4 },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [

@@ -11,7 +11,7 @@ import { range } from '../../MathHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { NormalizedViewportCoords } from '../helpers/RenderTargetHelpers';
 
-const SHADER_DEBUG = false // IS_DEVELOPMENT;
+const SHADER_DEBUG = IS_DEVELOPMENT;
 
 const TRACK_RESOURCES = IS_DEVELOPMENT;
 
@@ -1136,6 +1136,8 @@ void main() {
 
             const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
             gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
+            if (gl.getError() !== gl.NO_ERROR)
+                debugger;
 
             if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
                 gl.vertexAttribDivisor(attr.location, 1);

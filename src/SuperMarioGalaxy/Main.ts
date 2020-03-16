@@ -20,7 +20,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
@@ -479,7 +479,7 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     loadedVertexData.vertexBuffers[1] = buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.Attr.PNMTXIDX));
+    const pnmtxidxLayout = assertExists(loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === VertexAttributeInput.PNMTXIDX));
     let offs = pnmtxidxLayout.bufferOffset;
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
 
@@ -562,9 +562,9 @@ function patchBMD(bmd: BMD): void {
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX0123MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }
