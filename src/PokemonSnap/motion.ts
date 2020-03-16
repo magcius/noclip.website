@@ -28,6 +28,8 @@ const enum MotionFuncs {
     ApproachPoint   = 0x361E58,
     ResetPos        = 0x362050,
     Path            = 0x3620C8,
+
+    VolcanoForward  = 0x2D6E14,
 }
 
 export class MotionData {
@@ -198,8 +200,13 @@ export interface Splash {
     scale: vec3;
 }
 
+export interface Forward {
+    kind: "forward";
+    stopIfBlocked: boolean;
+}
+
 export const enum BasicMotionKind {
-    Placeholder,
+    Custom, // by default, just wait
     Wait,
     Song,
     SetSpeed,
@@ -211,7 +218,7 @@ interface BasicMotion {
     param: number;
 }
 
-export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear | ApproachPoint | Splash;
+export type Motion = BasicMotion | FollowPath | FaceTarget | RandomCircle | WalkToTarget | Projectile | Animation | Vertical | Linear | ApproachPoint | Splash | Forward;
 
 export class MotionParser extends MIPS.NaiveInterpreter {
     public blocks: Motion[] = [];
@@ -393,6 +400,13 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     flags: MoveFlags.Ground,
                 });
             } break;
+            case MotionFuncs.MoveForward:
+            case MotionFuncs.VolcanoForward: {
+                this.blocks.push({
+                    kind: "forward",
+                    stopIfBlocked: false,
+                });
+            } break;
             case StateFuncs.SplashAt:
             case StateFuncs.SplashBelow: {
                 this.blocks.push({
@@ -521,7 +535,7 @@ export class MotionParser extends MIPS.NaiveInterpreter {
         if (this.blocks.length === 0)
             this.blocks.push({
                 kind: "basic",
-                subtype: BasicMotionKind.Placeholder,
+                subtype: BasicMotionKind.Custom,
                 param: 5,
             });
         fixupMotion(this.startAddress, this.blocks);
@@ -595,6 +609,11 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
         case 0x802D1FC0: {
             assert(blocks[1].kind === "projectile");
             blocks[1].direction = Direction.PathEnd;
+        } break;
+        // custom motion
+        case 0x802DDA0C: {
+            assert(blocks[0].kind === "basic");
+            blocks[0].subtype = BasicMotionKind.Custom;
         } break;
     }
 }
@@ -907,5 +926,17 @@ export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals:
     if (attemptMove(pos, approachScratch, data, globals, block.flags))
         return MotionResult.None;
     stepYawTowards(euler, targetYaw, block.maxTurn, dt);
+    return MotionResult.Update;
+}
+
+const forwardScratch = vec3.create();
+export function forward(pos: vec3, euler: vec3, data: MotionData, globals: LevelGlobals, block: Forward, dt: number): MotionResult {
+    vec3.set(forwardScratch, Math.sin(euler[1]), 0, Math.cos(euler[1]));
+    vec3.scaleAndAdd(forwardScratch, pos, forwardScratch, dt * data.forwardSpeed);
+    if (block.stopIfBlocked) {
+        if (attemptMove(pos, forwardScratch, data, globals, MoveFlags.Ground))
+            return MotionResult.Done;
+    } else
+        vec3.copy(pos, forwardScratch);
     return MotionResult.Update;
 }

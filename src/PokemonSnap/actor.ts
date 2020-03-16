@@ -4,10 +4,11 @@ import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction } from "./motion";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward } from "./motion";
 import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY } from "../MathHelpers";
 import { getPathPoint } from "./animation";
 import { ObjectDef } from "./room";
+import { randomRange } from "../BanjoKazooie/particles";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
@@ -202,9 +203,16 @@ export class LevelGlobals {
                         tempIDs.add(block.spawn!.id);
         }
 
+        if (this.id === '18') {
+            tempIDs.add(58);
+            tempIDs.add(59);
+        }
+
         for (let id of tempIDs) {
             let count = 1; // assume just one by default
             switch (id) {
+                case 58: count = 3; break; // growlithe
+                case 59: count = 3; break; // arcanine
                 case 132: count = 4; break; // ditto
                 case 1030: count = 10; break; // lava splash
             }
@@ -221,6 +229,7 @@ export class LevelGlobals {
                 const actor = new Actor(data[tempIndex], fakeSpawn, defs[tempIndex] as ActorDef, this);
                 actor.visible = false;
                 this.tempActors.push(actor);
+                this.allActors.push(actor);
                 out.push(actor);
             }
         }
@@ -488,6 +497,7 @@ export class Actor extends ModelRenderer {
     protected currBlock = 0;
     protected currAux = 0;
     protected target: Target | null = null;
+    protected lastSpawn: Actor | null = null;
 
     private blockEnd = 0;
     private loopTarget = 1;
@@ -583,6 +593,13 @@ export class Actor extends ModelRenderer {
     }
 
     protected endBlock(globals: LevelGlobals): void { }
+
+    protected customMotion(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (viewerInput.time - this.motionData.start > 5000)
+            return MotionResult.Done;
+        else
+            return MotionResult.None;
+    }
 
     protected changeState(newIndex: number, globals: LevelGlobals): boolean {
         if (newIndex === -1)
@@ -685,15 +702,15 @@ export class Actor extends ModelRenderer {
                 yaw = this.euler[1];
             else if (block.spawn.yaw === Direction.Backward)
                 yaw = this.euler[1] + Math.PI;
-            const spawned = globals.activateObject(
+            this.lastSpawn = globals.activateObject(
                 block.spawn.id,
                 this.translation,
                 yaw,
                 block.spawn.behavior >= 0 ? block.spawn.behavior : this.spawn.behavior,
                 block.spawn.scale,
             );
-            if (spawned !== null)
-                spawned.motionData.path = this.motionData.path;
+            if (this.lastSpawn !== null)
+                this.lastSpawn.motionData.path = this.motionData.path;
         }
 
         if (block.motion !== null) {
@@ -752,7 +769,7 @@ export class Actor extends ModelRenderer {
         return false;
     }
 
-    private followEdge(edge: StateEdge, globals: LevelGlobals): boolean {
+    protected followEdge(edge: StateEdge, globals: LevelGlobals): boolean {
         if (edge.auxFunc !== 0) {
             this.currAux = edge.auxFunc;
             this.motionData.stateFlags &= ~EndCondition.Aux;
@@ -891,6 +908,8 @@ export class Actor extends ModelRenderer {
                     result = faceTarget(this.translation, this.euler, this.motionData, block, this.target, dt, globals); break;
                 case "point":
                     result = approachPoint(this.translation, this.euler, this.motionData, globals, block, dt); break;
+                case "forward":
+                    result = forward(this.translation, this.euler, this.motionData, globals, block, dt); break;
                 case "splash": {
                     if (block.index === -1)
                         vec3.copy(splashScratch, this.translation);
@@ -908,7 +927,6 @@ export class Actor extends ModelRenderer {
                 } break;
                 case "basic": {
                     switch (block.subtype) {
-                        case BasicMotionKind.Placeholder:
                         case BasicMotionKind.Wait: {
                             if ((viewerInput.time - this.motionData.start) / 1000 > block.param)
                                 result = MotionResult.Done;
@@ -924,6 +942,9 @@ export class Actor extends ModelRenderer {
                         case BasicMotionKind.SetSpeed: {
                             this.motionData.forwardSpeed = block.param;
                             result = MotionResult.Done;
+                        } break;
+                        case BasicMotionKind.Custom: {
+                            result = this.customMotion(viewerInput, globals);
                         } break;
                     }
                 } break;
@@ -999,7 +1020,7 @@ class Charmander extends Actor {
         switch (state.startAddress) {
             case 0x802D94E8: {
                 if (this.motionData.storedValues[0] === 0 && this.currBlock === 0 && (this.spawn.behavior === 1 || this.spawn.behavior === 2)) {
-                    this.changeState(state.blocks[0].edges[0].index, globals);
+                    this.followEdge(state.blocks[0].edges[0], globals);
                     return;
                 }
             } break;
@@ -1085,7 +1106,7 @@ class Pikachu extends Actor {
         switch (state.startAddress) {
             case 0x802E8290: {
                 if (Pikachu.currDiglett & Pikachu.targetDiglett) {
-                    this.changeState(state.blocks[0].edges[0].index, globals);
+                    this.followEdge(state.blocks[0].edges[0], globals);
                     return;
                 }
                 Pikachu.targetDiglett <<= 1;
@@ -1271,6 +1292,52 @@ class Porygon extends Actor {
     }
 }
 
+class MiniCrater extends Actor {
+    private lavaSplash: Actor;
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802DD954)
+            if (this.motionData.storedValues[0] === 0 && this.target && vec3.dist(this.translation, this.target.translation) < 200) {
+                const spawnID = Math.random() < .2 ? 59 : 58;
+                globals.activateObject(spawnID, this.translation, 0);
+                this.motionData.storedValues[0] = 1;
+            }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.motionData.storedValues[0] !== 0) {
+            this.lavaSplash.receiveSignal(this, 0x23, globals);
+            return MotionResult.Done;
+        }
+        if (viewerInput.time > this.motionData.start) {
+            this.lavaSplash.receiveSignal(this, 0x22, globals);
+            this.motionData.start += randomRange(4, 10) * 1000;
+        }
+        return MotionResult.None;
+    }
+
+    protected endBlock(globals: LevelGlobals): void {
+        if (this.def.stateGraph.states[this.currState].startAddress === 0x802DD7F0)
+            this.lavaSplash = assertExists(this.lastSpawn);
+    }
+}
+
+class Crater extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802DE95C) {
+            let edgeIndex = 0;
+            if (this.target && findGroundPlane(globals.collision, this.target.translation[0], this.target.translation[2]).type === 0xFF4C19)
+                edgeIndex = 1;
+            this.followEdge(state.blocks[0].edges[edgeIndex], globals);
+            return;
+        }
+        super.startBlock(globals);
+    }
+}
+
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
     switch (def.id) {
         case 4: return new Charmander(renderData, spawn, def, globals);
@@ -1285,6 +1352,8 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 124: return new Jynx(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
+        case 1026: return new MiniCrater(renderData, spawn, def, globals);
+        case 1027: return new Crater(renderData, spawn, def, globals);
     }
     return new Actor(renderData, spawn, def, globals);
 }
