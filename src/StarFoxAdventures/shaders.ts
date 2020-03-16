@@ -5,31 +5,31 @@ import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
-
-function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
-}
+import { dataSubarray } from './util';
 
 interface ShaderLayer {
     texNum: number;
     tevMode: number;
+    enableTexChainStuff: number;
+    texmtxIndex: number;
 }
 
 export interface Shader {
     layers: ShaderLayer[],
-    enableCull: boolean;
     flags: number;
+    attrFlags: number;
     hasAuxTex0: boolean;
     hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
                          // It is possibly related to projected lighting.
     auxTexNum: number;
-    attrFlags: number;
 }
 
 function parseShaderLayer(data: DataView): ShaderLayer {
     return {
-        texNum: data.getUint32(0),
-        tevMode: data.getUint8(4),
+        texNum: data.getUint32(0x0),
+        tevMode: data.getUint8(0x4),
+        enableTexChainStuff: data.getUint8(0x5),
+        texmtxIndex: data.getUint8(0x6),
     };
 }
 
@@ -51,19 +51,28 @@ export const EARLY_SFA_SHADER_FIELDS: ShaderFields = {
     layers: 0x24, // ???
 };
 
-enum ShaderFlags {
-    Cull = 0x8,
+export enum ShaderFlags {
+    DevGeometry = 0x2,
+    Fog = 0x4,
+    CullBackface = 0x8,
+    ReflectSkyscape = 0x20, // ???
+    Water = 0x40,
+    Lava = 0x80,
+    Reflective = 0x100, // Occurs in Krazoa Palace reflective floors
+    AlphaCompare = 0x400,
+    StreamingVideo = 0x20000,
+    SkyAmbientLit = 0x40000,
+    SkipLighting = 0x80000000, // ???
 }
 
 export function parseShader(data: DataView, fields: ShaderFields): Shader {
     const shader: Shader = {
         layers: [],
-        enableCull: false,
         flags: 0,
+        attrFlags: 0,
         hasAuxTex0: false,
         hasAuxTex1: false,
         auxTexNum: -1,
-        attrFlags: 0,
     };
 
     let numLayers = data.getUint8(fields.numLayers);
@@ -80,13 +89,10 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
     shader.hasAuxTex1 = data.getUint32(0x14) != 0;
     shader.auxTexNum = data.getUint32(0x34);
 
-    shader.flags = data.getUint32(0x3c);
-    // FIXME: find this field's offset for demo files
-    shader.enableCull = (shader.flags & ShaderFlags.Cull) != 0;
-
+    shader.flags = data.getUint32(0x3c); // FIXME: find this field in demo files
     shader.attrFlags = data.getUint8(0x40);
 
-    return shader
+    return shader;
 }
 
 export interface SFAMaterialTexture_Texture {
@@ -234,22 +240,6 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     let texGenSrc = GX.TexGenSrc.TEX0;
     let cprevIsValid = false;
     let aprevIsValid = false;
-
-    if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-    } else {
-        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
-        mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        if (((shader.flags & 0x400) == 0) || ((shader.flags & 0x80) != 0)) {
-            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-        } else {
-            mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-        }
-    }
-    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-    mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
 
     function addTevStagesForTextureWithSkyAmbient() {
         // TODO: set texture matrix
@@ -483,7 +473,6 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         // Used in reflective floors
 
         // TODO: set texture matrix
-        // TODO: load tiny framebuffer texture
         // GXSetTexCoordGen2(gTexCoordID,GX_TG_MTX3x4,GX_TG_POS,0x24,0,0x7d);
         // mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -503,6 +492,40 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         tevStage++;
     }
 
+    function addTevStagesForNonLava() {
+        if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
+            addTevStageForTextureWithWhiteKonst(0);
+            if (shader.flags & ShaderFlags.Reflective) {
+                console.log(`Found some reflective surfaces (special case)!`);
+                blendWithTinyFramebufferTexture();
+            }
+            addTevStagesForTextureWithMode(9);
+            addTevStageForMultVtxColor();
+
+            for (let i = 0; i < shader.layers.length; i++) {
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+            }
+        } else {
+            for (let i = 0; i < shader.layers.length; i++) {
+                const layer = shader.layers[i];
+                if (shader.flags & ShaderFlags.SkyAmbientLit) {
+                    addTevStagesForTextureWithSkyAmbient();
+                } else {
+                    addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
+                }
+            }
+
+            for (let i = 0; i < shader.layers.length; i++) {
+                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+            }
+
+            if (shader.flags & ShaderFlags.Reflective) {
+                console.log(`Found some reflective surfaces (normal case)!`);
+                blendWithTinyFramebufferTexture();
+            }
+        }
+    }
+
     if (!isMapBlock) {
         // Not a map block. Just do basic texturing.
         mb.setUsePnMtxIdx(true);
@@ -511,47 +534,46 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
         }
     } else {
-        if ((shader.flags & 0x80) != 0) {
+        if ((shader.flags & 0x80000000) != 0) {
+            console.log(`TODO: this shader is disabled?`);
+        }
+
+        if ((shader.flags & ShaderFlags.StreamingVideo) != 0) {
+            console.log(`Found streaming video surface (?)`);
+        }
+
+        if ((shader.flags & ShaderFlags.Lava) != 0) {
             console.log(`Found some lava!`);
             addTevStagesForLava();
-        } else if ((shader.flags & 0x40) != 0) {
+        } else {
+            addTevStagesForNonLava();
+        }
+
+        if ((shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
+            console.log(`TODO: skyscape reflection?`);
+        } else if ((shader.flags & ShaderFlags.Water) != 0) {
             console.log(`Found some water!`);
             addTevStagesForWater();
         } else {
-            if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
-                addTevStageForTextureWithWhiteKonst(0);
-                if (shader.flags & 0x100) {
-                    console.log(`Found some reflective surfaces (special case)!`);
-                    blendWithTinyFramebufferTexture();
-                }
-                addTevStagesForTextureWithMode(9);
-                addTevStageForMultVtxColor();
-    
-                for (let i = 0; i < shader.layers.length; i++) {
-                    textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
-                }
-            } else {
-                for (let i = 0; i < shader.layers.length; i++) {
-                    const layer = shader.layers[i];
-                    if (shader.flags & 0x40000) {
-                        addTevStagesForTextureWithSkyAmbient();
-                    } else {
-                        addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
-                    }
-                }
-    
-                for (let i = 0; i < shader.layers.length; i++) {
-                    textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
-                }
-    
-                if (shader.flags & 0x100) {
-                    // Occurs in Krazoa Palace's reflective floors
-                    console.log(`Found some reflective surfaces (normal case)!`);
-                    blendWithTinyFramebufferTexture();
-                }
-            }
+            // TODO
         }
     }
+    
+    if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+    } else {
+        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
+            mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+        } else {
+            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        }
+    }
+    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+    mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
     return {
         material: mb.finish(),

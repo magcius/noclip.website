@@ -354,6 +354,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 313 || obj.objClass === 424 || obj.objClass === 666) {
                 // e.g. setuppoint
                 // Do nothing
+            } else if (obj.objClass === 237) {
+                // e.g. SH_LargeSca
+                obj.yaw = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x22) << 8) * Math.PI / 32768;
+                obj.roll = (objParams.getInt8(0x23) << 8) * Math.PI / 32768;
             } else if (obj.objClass === 249) {
                 // e.g. ProjectileS
                 obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
@@ -398,6 +403,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             } else if (obj.objClass === 294 && obj.objType === 77) {
                 obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 306) {
+                // e.g. WaterFallSp
+                obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+                obj.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
+                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
             } else if (obj.objClass === 346) {
                 // e.g. SH_BombWall
                 obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;

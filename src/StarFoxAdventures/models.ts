@@ -14,7 +14,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial } from './shaders';
 import * as GX from '../gx/gx_enum';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
+import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
@@ -534,11 +534,16 @@ export class Model implements BlockRenderer {
                     }
     
                     try {
-                        const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                        const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-                        newModel.setMaterial(material);
-                        newModel.setPnMatrices(pnMatrices);
-                        models.push(newModel);
+                        if ((curShader.flags & ShaderFlags.DevGeometry) != 0) {
+                            // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
+                            // TODO: Implement an option to view this geometry
+                        } else {
+                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                            const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                            newModel.setMaterial(material);
+                            newModel.setPnMatrices(pnMatrices);
+                            models.push(newModel);
+                        }
                     } catch (e) {
                         console.warn(`Failed to create model and shader instance due to exception:`);
                         console.error(e);
@@ -555,7 +560,7 @@ export class Model implements BlockRenderer {
 
                         let texmtxNum = 0;
                         if (curShader.hasAuxTex0 || curShader.hasAuxTex1) {
-                            if (curShader.auxTexNum != 0xffffffff) {
+                            if (curShader.auxTexNum !== 0xffffffff) {
                                 vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
                                 texmtxNum++;
                                 vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
@@ -576,7 +581,7 @@ export class Model implements BlockRenderer {
                     const posDesc = bits.get(1);
                     vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
     
-                    if (fields.hasNormals && (curShader.attrFlags & 1) != 0) {
+                    if (fields.hasNormals && (curShader.attrFlags & 1) !== 0) {
                         const nrmDesc = bits.get(1);
                         if ((nrmTypeFlags & 8) != 0) {
                             // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
@@ -590,7 +595,7 @@ export class Model implements BlockRenderer {
                         vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
                     }
     
-                    if ((curShader.attrFlags & 2) != 0) {
+                    if ((curShader.attrFlags & 2) !== 0) {
                         const clr0Desc = bits.get(1);
                         vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                     } else {
