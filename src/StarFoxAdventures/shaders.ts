@@ -62,7 +62,7 @@ export enum ShaderFlags {
     AlphaCompare = 0x400,
     StreamingVideo = 0x20000,
     SkyAmbientLit = 0x40000,
-    SkipLighting = 0x80000000, // ???
+    FancyWater = 0x80000000, // ???
 }
 
 export function parseShader(data: DataView, fields: ShaderFields): Shader {
@@ -104,9 +104,14 @@ export interface SFAMaterialTexture_FbColorDownscaled8x {
     kind: 'fb-color-downscaled-8x'; // FIXME: In addition to downscaling, some filtering is applied (I think)
 }
 
+export interface SFAMaterialTexture_FbColorDownscaled2x {
+    kind: 'fb-color-downscaled-2x';
+}
+
 export type SFAMaterialTexture =
     SFAMaterialTexture_Texture |
     SFAMaterialTexture_FbColorDownscaled8x |
+    SFAMaterialTexture_FbColorDownscaled2x |
     null;
 
 export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialTexture {
@@ -427,7 +432,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         indStageId = 2;
     }
 
-    function addTevStagesForWater() {
+    function addTevStagesForWater_OLD() {
         // TODO: set texture matrix
         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, GX.PostTexGenMatrix.PTIDENTITY /* TODO */);
         // TODO: set texture matrix
@@ -526,6 +531,62 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         }
     }
 
+    function addTevStagesForFancyWater() {
+        textures[0] = { kind: 'fb-color-downscaled-2x' };
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
+        textures[1] = makeMaterialTexture(makeWavyTexture(device));
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
+
+        mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
+        mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+        // TODO: GXSetIndTexMtx
+        mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        // TODO: LoadTexMtxImm
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
+        mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
+        // TODO: SetIndTexMtx
+        mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+
+        // TODO: GXSetTevKColor
+        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_5_8); // TODO
+        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_5_8); // TODO
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0); // TODO: CS_DIVIDE_2 is used in some cases
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
+
+        // TODO: GXSetIndTexMtx
+        mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        mb.setTevIndirect(3, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._2, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO: Pos, mtx 0x21
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(3, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(3, GX.CC.TEXC, GX.CC.C0, GX.CC.A0, GX.CC.ZERO);
+        mb.setTevAlphaIn(3, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+        mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+    }
+
     if (!isMapBlock) {
         // Not a map block. Just do basic texturing.
         mb.setUsePnMtxIdx(true);
@@ -533,11 +594,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         for (let i = 0; i < shader.layers.length; i++) {
             textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
         }
+    } else if (shader.flags & ShaderFlags.FancyWater) {
+        addTevStagesForFancyWater();
     } else {
-        if ((shader.flags & 0x80000000) != 0) {
-            console.log(`TODO: this shader is disabled?`);
-        }
-
         if ((shader.flags & ShaderFlags.StreamingVideo) != 0) {
             console.log(`Found streaming video surface (?)`);
         }
@@ -552,28 +611,30 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         if ((shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
             console.log(`TODO: skyscape reflection?`);
         } else if ((shader.flags & ShaderFlags.Water) != 0) {
-            console.log(`Found some water!`);
-            addTevStagesForWater();
+            console.log(`Found some water?`);
+            addTevStagesForWater_OLD();
         } else {
             // TODO
         }
     }
     
-    if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-    } else {
-        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
-        mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
-            mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-        } else {
+    if (!(shader.flags & ShaderFlags.FancyWater)) {
+        if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+            mb.setZMode(true, GX.CompareType.LEQUAL, false);
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        } else {
+            mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+            mb.setZMode(true, GX.CompareType.LEQUAL, true);
+            if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
+                mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+            } else {
+                mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+            }
         }
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
     }
-    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-    mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
     return {
         material: mb.finish(),
