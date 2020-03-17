@@ -9,10 +9,10 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
+import * as GX from '../gx/gx_enum';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial } from './shaders';
-import * as GX from '../gx/gx_enum';
 import { TextureCollection } from './textures';
 import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader } from './util';
@@ -56,6 +56,7 @@ export class ModelInstance {
     }
 
     private scratchMtx = mat4.create();
+    private modelViewMtx = mat4.create();
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
         if (this.shapeHelper === null) {
@@ -81,8 +82,8 @@ export class ModelInstance {
                 this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
                 if (this.sceneTextureSampler === null) {
                     this.sceneTextureSampler = device.createSampler({
-                        wrapS: GfxWrapMode.REPEAT,
-                        wrapT: GfxWrapMode.REPEAT,
+                        wrapS: GfxWrapMode.CLAMP,
+                        wrapT: GfxWrapMode.CLAMP,
                         minFilter: GfxTexFilterMode.BILINEAR,
                         magFilter: GfxTexFilterMode.BILINEAR,
                         mipFilter: GfxMipFilterMode.NO_MIP,
@@ -103,6 +104,10 @@ export class ModelInstance {
             }
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+
+        mat4.mul(this.scratchMtx, this.pnMatrices[0], modelMatrix);
+        this.computeModelView(this.modelViewMtx, viewerInput.camera, this.scratchMtx);
+        this.material.setupMaterialParams(this.materialParams, viewerInput, this.modelViewMtx);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);

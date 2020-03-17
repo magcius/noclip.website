@@ -338,6 +338,7 @@ export class AncientBlockRenderer implements BlockRenderer {
                     const material: SFAMaterial = {
                         material: mb.finish(),
                         textures: [makeMaterialTexture(texColl.getTexture(device, texIds[shader.tex0Num], true))],
+                        setupMaterialParams: () => {},
                     }
                     newModel.setMaterial(material);
 
