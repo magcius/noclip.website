@@ -21,7 +21,8 @@ import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } fro
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder } from "./Collision";
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
+import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -412,6 +413,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public hitSensorKeeper: HitSensorKeeper | null = null;
     public collisionParts: CollisionParts | null = null;
     public binder: Binder | null = null;
+    public stageSwitchCtrl: StageSwitchCtrl | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -469,7 +471,21 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        vec3.set(this.velocity, 0, 0, 0);
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
+        if (this.binder !== null)
+            this.binder.clear();
+        if (this.effectKeeper !== null)
+            this.effectKeeper.clear();
+        if (this.collisionParts !== null)
+            invalidateCollisionParts(sceneObjHolder, this.collisionParts);
         this.visibleAlive = false;
+        // removeFromClippingTarget
+        // disconnectToSceneTemporarily
+        // disconnectToDrawTemporarily
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
@@ -545,6 +561,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initHitSensor(): void {
         this.hitSensorKeeper = new HitSensorKeeper();
+    }
+
+    public initStageSwitch(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.stageSwitchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
     }
 
     public initNerve(nerve: TNerve): void {

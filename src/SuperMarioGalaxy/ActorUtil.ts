@@ -18,6 +18,7 @@ import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
+import { addSleepControlForLiveActor, isExistStageSwitchAppear, SwitchFunctorEventListener, getSwitchWatcherHolder, SwitchCallback, isExistStageSwitchA, isExistStageSwitchB, isExistStageSwitchDead } from "./Switch";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -928,4 +929,85 @@ export function preScaleMtx(dst: mat4, v: vec3): void {
 
 export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
     return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
+}
+
+export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    addSleepControlForLiveActor(sceneObjHolder, actor, infoIter);
+}
+
+export function useStageSwitchWriteA(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchA(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchWriteB(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchB(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchWriteDead(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchDead(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchReadAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchAppear(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    // TODO(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
+
+    // NOTE(jstpierre): ActorAppearSwitchListener is calls appear/kill vfunc instead, but
+    // I can't see the motivation behind these two different vfuncs tbqh.
+
+    // Also, ActorAppearSwitchListener can turn off one or both of these vfuncs, but syncStageSwitchAppear
+    // does never do that, so we emulate it with a functor listener.
+    const switchOn = (sceneObjHolder: SceneObjHolder) => actor.makeActorAppeared(sceneObjHolder);
+    const switchOff = (sceneObjHolder: SceneObjHolder) => actor.makeActorDead(sceneObjHolder);
+    const eventListener = new SwitchFunctorEventListener(switchOn, switchOff);
+
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function listenStageSwitchOnOffA(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerA(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function isValidSwitchDead(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchDead();
 }

@@ -6,7 +6,8 @@ import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
 import { computeModelMatrixR } from "../MathHelpers";
 import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
-import { vecKillElement } from "./ActorUtil";
+import { vecKillElement, listenStageSwitchOnOffAppear } from "./ActorUtil";
+import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForLiveActor } from "./Switch";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx
@@ -181,6 +182,9 @@ class AreaFormBowl implements AreaFormBase {
 export abstract class AreaObj extends NameObj {
     private form: AreaFormBase;
     private aliveScenario: boolean = true;
+    private switchCtrl: StageSwitchCtrl;
+    public isValid: boolean = true;
+    public isAwake: boolean = true;
 
     constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(sceneObjHolder, getObjectName(infoIter));
@@ -196,9 +200,35 @@ export abstract class AreaObj extends NameObj {
         else if (formType === AreaFormType.Bowl)
             this.form = new AreaFormBowl(sceneObjHolder, infoIter);
 
+        this.switchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
+        if (this.switchCtrl.isValidSwitchAppear()) {
+            const eventListener = new SwitchFunctorEventListener(this.validate.bind(this), this.invalidate.bind(this));
+            getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(this.switchCtrl, eventListener);
+            this.isValid = false;
+        }
+
         sceneObjHolder.create(SceneObj.AreaObjContainer);
         const areaObjMgr = sceneObjHolder.areaObjContainer!.getManager(this.getManagerName());
         areaObjMgr.entry(this);
+
+        // TODO(jstpierre): addSleepControl
+        addSleepControlForLiveActor
+    }
+
+    public awake(sceneObjHolder: SceneObjHolder): void {
+        this.isAwake = true;
+    }
+
+    public sleep(sceneObjHolder: SceneObjHolder): void {
+        this.isAwake = false;
+    }
+
+    public validate(sceneObjHolder: SceneObjHolder): void {
+        this.isValid = true;
+    }
+
+    public invalidate(sceneObjHolder: SceneObjHolder): void {
+        this.isValid = false;
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
@@ -206,7 +236,9 @@ export abstract class AreaObj extends NameObj {
     }
 
     public isInVolume(v: vec3): boolean {
-        return this.aliveScenario && this.form.isInVolume(v);
+        if (!this.isValid || !this.aliveScenario)
+            return false;
+        return this.form.isInVolume(v);
     }
 
     public abstract getManagerName(): string;

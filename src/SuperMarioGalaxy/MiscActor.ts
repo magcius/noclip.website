@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -35,6 +35,7 @@ import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
+import { isExistStageSwitchSleep } from './Switch';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -463,6 +464,37 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         }
 
         this.makeActorAppeared(sceneObjHolder);
+
+        if (useStageSwitchWriteA(sceneObjHolder, this, infoIter))
+            this.initCaseUseSwitchA(sceneObjHolder, infoIter);
+        else
+            this.initCaseNoUseSwitchA(sceneObjHolder, infoIter);
+
+        if (useStageSwitchWriteB(sceneObjHolder, this, infoIter))
+            this.initCaseUseSwitchB(sceneObjHolder, infoIter);
+        else
+            this.initCaseNoUseSwitchB(sceneObjHolder, infoIter);
+
+        // useStageSwitchWriteDead
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        }
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        if (this.bloomModel !== null)
+            this.bloomModel.makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        if (this.bloomModel !== null)
+            this.bloomModel.makeActorDead(sceneObjHolder);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
@@ -473,6 +505,18 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             connectToSceneCollisionMapObjWeakLight(sceneObjHolder, this);
         else
             connectToSceneCollisionMapObj(sceneObjHolder, this);
+    }
+
+    protected initCaseUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+
+    protected initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+
+    protected initCaseNoUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+
+    protected initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 
     public isObjectName(name: string): boolean {
@@ -486,8 +530,8 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railMover.start();
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
 
         if (this.rotator !== null)
             this.rotator.movement(sceneObjHolder, viewerInput);
@@ -1120,17 +1164,44 @@ export class BlackHole extends LiveActor {
     }
 }
 
-export class PeachCastleGardenPlanet extends MapObjActor {
+const enum PeachCastleGardenPlanetNrv { Wait, Damage }
+
+export class PeachCastleGardenPlanet extends MapObjActor<PeachCastleGardenPlanetNrv> {
     private indirectModel: PartsModel | null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        const initInfo = new MapObjActorInitInfo();
+        const initInfo = new MapObjActorInitInfo<PeachCastleGardenPlanetNrv>();
         setupInitInfoPlanet(initInfo);
+        initInfo.setupNerve(PeachCastleGardenPlanetNrv.Wait);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
-        tryStartAllAnim(this, 'Before');
-        tryStartAllAnim(this, 'PeachCastleGardenPlanet');
+    }
+
+    protected initCaseUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.initCaseUseSwitchA(sceneObjHolder, infoIter);
+        // listenStageSwitchOnA(sceneObjHolder, this, this.startDamage.bind(this));
+        listenStageSwitchOnOffA(sceneObjHolder, this, this.startDamage.bind(this), this.startWait.bind(this));
+    }
+
+    private startWait(sceneObjHolder: SceneObjHolder): void {
+        this.setNerve(PeachCastleGardenPlanetNrv.Wait);
+    }
+
+    private startDamage(sceneObjHolder: SceneObjHolder): void {
+        this.setNerve(PeachCastleGardenPlanetNrv.Damage);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachCastleGardenPlanetNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === PeachCastleGardenPlanetNrv.Wait) {
+            if (isFirstStep(this))
+                startBrk(this, 'Before');
+        } else if (currentNerve === PeachCastleGardenPlanetNrv.Damage) {
+            if (isFirstStep(this))
+                startBrk(this, 'After');
+        }
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
@@ -1231,6 +1302,8 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (fallback(infoIter.getValueNumber('SW_APPEAR'), -1) !== -1)
             this.makeActorDead(sceneObjHolder);
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KinopioNrv, deltaTimeFrames: number): void {
@@ -2565,6 +2638,18 @@ export class CrystalCage extends LiveActor {
 
         if (this.size === CrystalCageSize.L)
             this.initEffectKeeper(sceneObjHolder, null);
+
+        if (this.size === CrystalCageSize.L) {
+            this.makeActorAppeared(sceneObjHolder);
+        } else if (isExistStageSwitchSleep(infoIter)) {
+            useStageSwitchSleep(sceneObjHolder, this, infoIter);
+            this.makeActorDead(sceneObjHolder);
+        } else if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
     }
 }
 
@@ -6984,6 +7069,34 @@ export class PlantGroup extends LiveActor {
         }
 
         vec3.scale(center, center, 1 / this.members.length);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+export class MovieStarter extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        // Normally, this would play a movie when appeared and then flip the dead switch after it's dead,
+        // but we want two-way synchronization, so we just sync our appear status to death and so on.
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.onAppeared.bind(this), this.offAppeared.bind(this));
+        }
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+    }
+
+    private onAppeared(sceneObjHolder: SceneObjHolder): void {
+        // We appear, play the movie, and then kill ourselves.
+        this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+    }
+
+    private offAppeared(sceneObjHolder: SceneObjHolder): void {
+        // noclip special: we rewind to before we played the movie and killed ourselves.
+        this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {

@@ -45,12 +45,6 @@ export default class BitMap {
     }
 }
 
-export function bitMapIntersect(dst: BitMap, s1: BitMap, s2: BitMap): void {
-    assert(dst.numBits === s1.numBits && dst.numBits === s2.numBits);
-    for (let i = 0; i < dst.words.length; i++)
-        dst.words[i] = s1.words[i] & s2.words[i];
-}
-
 export function bitMapSerialize(view: DataView, offs: number, bitMap: BitMap): number {
     const numBytes = (bitMap.numBits + 7) >>> 3;
     for (let i = 0; i < numBytes; i++) {

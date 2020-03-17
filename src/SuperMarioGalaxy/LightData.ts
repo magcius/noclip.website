@@ -431,10 +431,6 @@ export class LightArea extends AreaObj {
         this.zoneId = zoneAndLayer.zoneId;
         this.lightId = fallback(getJMapInfoArg0(infoIter), -1);
         this.priority = fallback(getJMapInfoArg1(infoIter), -1);
-
-        // HACK
-        if (infoIter.getValueNumber('SW_APPEAR') !== -1)
-            this.priority -= 1000;
     }
 
     public getManagerName(): string {

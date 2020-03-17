@@ -39,6 +39,7 @@ export class HitSensor {
     public invalidateBySystem(): void {
         if (this.sensorValid) {
             arrayRemove(this.group, this);
+            this.sensorValid = false;
         }
     }
 

@@ -473,6 +473,8 @@ export class MultiEmitter {
     }
 
     public playEmitterOffClipped(): void {
+        // TODO(jstpierre): SyncEffectInfo
+
         for (let i = 0; i < this.singleEmitters.length; i++) {
             const emitter = this.singleEmitters[i];
             if (!emitter.isValid() || emitter.isOneTime())
@@ -494,6 +496,11 @@ export class MultiEmitter {
         }
     }
 
+    public playCalcAndDeleteForeverEmitter(): void {
+        this.playCalcEmitter(-1);
+        this.deleteForeverEmitter();
+    }
+
     public setName(name: string): void {
         this.name = name;
     }
@@ -506,6 +513,20 @@ export class MultiEmitter {
             if (!emitter.isValid())
                 continue;
             emitter.setDrawParticle(v);
+        }
+    }
+
+    public playCalcEmitter(emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
         }
     }
 
@@ -709,6 +730,11 @@ export class EffectKeeper {
     public stopEmitterOnClipped(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.multiEmitters[i].stopEmitterOnClipped();
+    }
+
+    public clear(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].playCalcAndDeleteForeverEmitter();
     }
 
     public changeBck(): void {

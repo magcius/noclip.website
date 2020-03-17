@@ -40,6 +40,7 @@ import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
+import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -815,19 +816,22 @@ class AreaObjContainer extends NameObj {
 }
 
 export const enum SceneObj {
-    SensorHitChecker     = 0x00,
-    CollisionDirector    = 0x01,
-    LightDirector        = 0x06,
-    AreaObjContainer     = 0x0D,
-    PlanetGravityManager = 0x32,
-    CoinRotater          = 0x38,
-    AirBubbleHolder      = 0x39,
-    SwingRopeGroup       = 0x47,
-    TrapezeRopeDrawInit  = 0x4A,
-    ElectricRailHolder   = 0x59,
-    WaterAreaHolder      = 0x62,
-    WaterPlantDrawInit   = 0x63,
-    PriorDrawAirHolder   = 0x75,
+    SensorHitChecker      = 0x00,
+    CollisionDirector     = 0x01,
+    LightDirector         = 0x06,
+    StageSwitchContainer  = 0x0A,
+    SwitchWatcherHolder   = 0x0B,
+    SleepControllerHolder = 0x0C,
+    AreaObjContainer      = 0x0D,
+    PlanetGravityManager  = 0x32,
+    CoinRotater           = 0x38,
+    AirBubbleHolder       = 0x39,
+    SwingRopeGroup        = 0x47,
+    TrapezeRopeDrawInit   = 0x4A,
+    ElectricRailHolder    = 0x59,
+    WaterAreaHolder       = 0x62,
+    WaterPlantDrawInit    = 0x63,
+    PriorDrawAirHolder    = 0x75,
 }
 
 export class SceneObjHolder {
@@ -843,8 +847,11 @@ export class SceneObjHolder {
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
 
-    public collisionDirector: CollisionDirector | null = null;
     public sensorHitChecker: SensorHitChecker | null = null;
+    public collisionDirector: CollisionDirector | null = null;
+    public stageSwitchContainer: StageSwitchContainer | null = null;
+    public switchWatcherHolder: SwitchWatcherHolder | null = null;
+    public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
@@ -873,6 +880,12 @@ export class SceneObjHolder {
             return this.sensorHitChecker;
         else if (sceneObj === SceneObj.CollisionDirector)
             return this.collisionDirector;
+        else if (sceneObj === SceneObj.StageSwitchContainer)
+            return this.stageSwitchContainer;
+        else if (sceneObj === SceneObj.SwitchWatcherHolder)
+            return this.switchWatcherHolder;
+        else if (sceneObj === SceneObj.SleepControllerHolder)
+            return this.sleepControllerHolder;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -901,6 +914,12 @@ export class SceneObjHolder {
             this.sensorHitChecker = new SensorHitChecker(this);
         else if (sceneObj === SceneObj.CollisionDirector)
             this.collisionDirector = new CollisionDirector(this);
+        else if (sceneObj === SceneObj.StageSwitchContainer)
+            this.stageSwitchContainer = new StageSwitchContainer(this);
+        else if (sceneObj === SceneObj.SwitchWatcherHolder)
+            this.switchWatcherHolder = new SwitchWatcherHolder(this);
+        else if (sceneObj === SceneObj.SleepControllerHolder)
+            this.sleepControllerHolder = new SleepControllerHolder(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -1397,6 +1416,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         this.placeExtra(sceneObjHolder);
 
         spawner.place();
+
+        // GameScene::init()
+        initSyncSleepController(sceneObjHolder);
 
         const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
         this.patchRenderer(renderer);
