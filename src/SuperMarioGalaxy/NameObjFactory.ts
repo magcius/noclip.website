@@ -346,7 +346,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("KoopaShipB",                     SimpleMapObj),
     _("KoopaShipC",                     SimpleMapObj),
     _("KoopaShipD",                     SimpleMapObj),
-    _("KoopaShipE",                     SimpleMapObj),
+    // XXX(jstpierre): This is removed since we want a pristine PeachCastleGardenGalaxy.
+    N("KoopaShipE"),
     _("KoopaJrSmallShipAGuidePoint",    SimpleMapObj),
     _("KoopaJrKillerShipA",             SimpleMapObj),
     _("KoopaJrNormalShipA",             SimpleMapObj),
