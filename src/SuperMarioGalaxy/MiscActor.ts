@@ -5904,7 +5904,7 @@ export class Flag extends LiveActor {
         if (!this.noColorTint) {
             getCamPos(scratchVec3, camera);
             const dist = vec3.distance(this.translation, scratchVec3);
-            const t = saturate(invlerp(500.0, 1000.0, dist));
+            const t = saturate(invlerp(1000.0, 500.0, dist));
             colorTintMinClamp = lerp(120, 200, t);
         }
 

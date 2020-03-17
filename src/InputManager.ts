@@ -1,7 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
-import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {

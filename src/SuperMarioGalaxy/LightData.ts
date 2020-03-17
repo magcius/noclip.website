@@ -6,7 +6,7 @@ import { Light } from "../gx/gx_material";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { SceneObjHolder, SceneObj } from "./Main";
+import { SceneObjHolder } from "./Main";
 import { ColorKind, MaterialParams } from "../gx/gx_render";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
@@ -41,7 +41,6 @@ class LightInfo {
         const posY = fallback(infoIter.getValueNumber(`${prefix}PosY`), 0);
         const posZ = fallback(infoIter.getValueNumber(`${prefix}PosZ`), 0);
         vec3.set(this.Position, posX, posY, posZ);
-
         this.FollowCamera = infoIter.getValueNumber(`${prefix}FollowCamera`) !== 0;
     }
 
@@ -391,9 +390,9 @@ export class LightAreaHolder extends AreaObjMgr<LightArea> {
     }
 
     private sort(): void {
-        // Sort by lowest priority.
+        // Sort by highest priority.
         this.areaObj.sort((a, b) => {
-            return a.priority - b.priority;
+            return b.priority - a.priority;
         });
     }
 
@@ -432,6 +431,10 @@ export class LightArea extends AreaObj {
         this.zoneId = zoneAndLayer.zoneId;
         this.lightId = fallback(getJMapInfoArg0(infoIter), -1);
         this.priority = fallback(getJMapInfoArg1(infoIter), -1);
+
+        // HACK
+        if (infoIter.getValueNumber('SW_APPEAR') !== -1)
+            this.priority -= 1000;
     }
 
     public getManagerName(): string {

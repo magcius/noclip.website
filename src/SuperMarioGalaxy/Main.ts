@@ -180,17 +180,17 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const bloomArea = this.findBloomArea();
         if (bloomArea !== null) {
             // TODO(jstpierre): What is arg1
-            bloomParameters.blurStrength = bloomArea.objArg2 / 256;
-            bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
-            bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
+            bloomParameters.intensity1 = bloomArea.objArg2 / 256;
+            bloomParameters.intensity2 = bloomArea.objArg3 / 256;
+            bloomParameters.bloomIntensity = bloomArea.objArg0 / 256;
         } else if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
-            bloomParameters.blurStrength = 40/256;
-            bloomParameters.bokehStrength = 60/256;
-            bloomParameters.bokehCombineStrength = 110/256;
+            bloomParameters.intensity1 = 40/256;
+            bloomParameters.intensity2 = 60/256;
+            bloomParameters.bloomIntensity = 110/256;
         } else {
-            bloomParameters.blurStrength = 25/256;
-            bloomParameters.bokehStrength = 25/256;
-            bloomParameters.bokehCombineStrength = 50/256;
+            bloomParameters.intensity1 = 25/256;
+            bloomParameters.intensity2 = 25/256;
+            bloomParameters.bloomIntensity = 50/256;
         }
     }
 
