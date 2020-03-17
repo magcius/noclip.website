@@ -541,10 +541,10 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     }
 
     function addTevStagesForFancyWater() {
-        texMtx[0] = (viewerInput: ViewerRenderInput, modelMtx: mat4) => {
+        texMtx[0] = (viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
             const m = mat4.create();
             texProjCameraSceneTex(m, viewerInput.camera, viewerInput.viewport, -1);
-            mat4.mul(m, m, viewerInput.camera.viewMatrix);
+            mat4.mul(m, m, modelViewMtx);
             return m;
         };
         texMtx[1] = (viewerInput: ViewerRenderInput) => {
@@ -555,6 +555,16 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
+
+        // XXX: bail early after tex0
+        mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_1_8);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        return;
+
         textures[1] = null; // makeMaterialTexture(makeWavyTexture(device));
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX3); // TODO
 
@@ -672,9 +682,9 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     return {
         material: mb.finish(),
         textures,
-        setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => {
+        setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
             for (let i = 0; i < 10; i++) {
-                params.u_TexMtx[i] = texMtx[i](viewerInput, modelMtx);
+                params.u_TexMtx[i] = texMtx[i](viewerInput, modelViewMtx);
             }
             
             for (let i = 0; i < 3; i++) {

@@ -104,7 +104,11 @@ export class ModelInstance {
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
-        this.material.setupMaterialParams(this.materialParams, viewerInput, modelMatrix);
+        const m = mat4.create();
+        mat4.mul(m, this.pnMatrices[0], modelMatrix);
+        const modelViewMtx = mat4.create();
+        this.computeModelView(modelViewMtx, viewerInput.camera, m);
+        this.material.setupMaterialParams(this.materialParams, viewerInput, modelViewMtx);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
