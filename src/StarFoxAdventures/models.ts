@@ -56,6 +56,7 @@ export class ModelInstance {
     }
 
     private scratchMtx = mat4.create();
+    private modelViewMtx = mat4.create();
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
         if (this.shapeHelper === null) {
@@ -81,8 +82,8 @@ export class ModelInstance {
                 this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
                 if (this.sceneTextureSampler === null) {
                     this.sceneTextureSampler = device.createSampler({
-                        wrapS: GfxWrapMode.REPEAT,
-                        wrapT: GfxWrapMode.REPEAT,
+                        wrapS: GfxWrapMode.CLAMP,
+                        wrapT: GfxWrapMode.CLAMP,
                         minFilter: GfxTexFilterMode.BILINEAR,
                         magFilter: GfxTexFilterMode.BILINEAR,
                         mipFilter: GfxMipFilterMode.NO_MIP,
@@ -104,11 +105,9 @@ export class ModelInstance {
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
-        const m = mat4.create();
-        mat4.mul(m, this.pnMatrices[0], modelMatrix);
-        const modelViewMtx = mat4.create();
-        this.computeModelView(modelViewMtx, viewerInput.camera, m);
-        this.material.setupMaterialParams(this.materialParams, viewerInput, modelViewMtx);
+        mat4.mul(this.scratchMtx, this.pnMatrices[0], modelMatrix);
+        this.computeModelView(this.modelViewMtx, viewerInput.camera, this.scratchMtx);
+        this.material.setupMaterialParams(this.materialParams, viewerInput, this.modelViewMtx);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
