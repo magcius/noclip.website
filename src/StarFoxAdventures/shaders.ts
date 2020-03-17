@@ -241,12 +241,14 @@ function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
     return { gfxTexture, gfxSampler, width, height }
 }
 
+type TexMtx = ((dst: mat4, viewerInput: ViewerRenderInput, modelMtx: mat4) => void) | undefined;
+
 export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
     const textures = [] as SFAMaterialTexture[];
-    const texMtx: ((viewerInput: ViewerRenderInput, modelMtx: mat4) => mat4)[] = nArray(10, () => () => mat4.create());
-    const postTexMtx: (mat4 | null)[] = nArray(20, () => null);
-    const indTexMtx: (mat4 | null)[] = nArray(3, () => null);
+    const texMtx: TexMtx[] = [];
+    const postTexMtx: (mat4 | undefined)[] = [];
+    const indTexMtx: (mat4 | undefined)[] = [];
     let tevStage = 0;
     let indStageId = GX.IndTexStageID.STAGE0;
     let texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -548,20 +550,16 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     }
 
     function addTevStagesForFancyWater() {
-        const texMtx0 = mat4.create();
-        texMtx[0] = (viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-            // flipped
-            texProjCameraSceneTex(texMtx0, viewerInput.camera, viewerInput.viewport, 1);
-            mat4.mul(texMtx0, texMtx0, modelViewMtx);
-            return texMtx0;
+        texMtx[0] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            // Flipped
+            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
+            mat4.mul(dst, dst, modelViewMtx);
         };
 
-        const texMtx1 = mat4.create();
-        texMtx[1] = (viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-            // unflipped
-            texProjCameraSceneTex(texMtx1, viewerInput.camera, viewerInput.viewport, -1);
-            mat4.mul(texMtx1, texMtx1, modelViewMtx);
-            return texMtx1;
+        texMtx[1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            // Unflipped
+            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, -1);
+            mat4.mul(dst, dst, modelViewMtx);
         }
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
@@ -586,12 +584,11 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
         indTexMtx[1] = mat4.create();
         mat4.set(indTexMtx[1],
+            0.3, -0.3, 0.0, 0.0,
             0.3, 0.3, 0.0, 0.0,
-            -0.3, 0.3, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
-        mat4.transpose(indTexMtx[1], indTexMtx[1]);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: GXSetTevKColor
@@ -612,12 +609,12 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
         indTexMtx[2] = mat4.create();
         mat4.set(indTexMtx[2],
-            0.0, 0.5, 0.0, 0.0,
-            -0.5, 0.0, 0.0, 0.0,
+            0.0, -0.5, 0.0, 0.0,
+            0.5, 0.0, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
-        mat4.transpose(indTexMtx[2], indTexMtx[2]);
+        
         mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         mb.setTevIndirect(3, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._2, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
@@ -651,11 +648,11 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     } else if (shader.flags & ShaderFlags.FancyWater) {
         addTevStagesForFancyWater();
     } else {
-        const texMtx2 = mat4.create();
-        texMtx[2] = (viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-            texProjCameraSceneTex(texMtx2, viewerInput.camera, viewerInput.viewport, 1);
-            mat4.mul(texMtx2, texMtx2, modelViewMtx);
-            return texMtx2;
+        texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            // Flipped
+            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
+            mat4.mul(dst, dst, modelViewMtx);
+            return dst;
         }
 
         if ((shader.flags & ShaderFlags.StreamingVideo) != 0) {
@@ -702,18 +699,20 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         textures,
         setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
             for (let i = 0; i < 10; i++) {
-                params.u_TexMtx[i] = texMtx[i](viewerInput, modelViewMtx);
+                if (texMtx[i] !== undefined) {
+                    texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                }
             }
             
             for (let i = 0; i < 3; i++) {
-                if (indTexMtx[i] !== null) {
-                    params.u_IndTexMtx[i] = indTexMtx[i]!;
+                if (indTexMtx[i] !== undefined) {
+                    mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
                 }
             }
 
             for (let i = 0; i < 20; i++) {
-                if (postTexMtx[i] !== null) {
-                    params.u_PostTexMtx[i] = postTexMtx[i]!;
+                if (postTexMtx[i] !== undefined) {
+                    mat4.copy(params.u_PostTexMtx[i], postTexMtx[i]!);
                 }
             }
         },
