@@ -1,11 +1,17 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
+import { ViewerRenderInput } from '../viewer';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
+import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { nArray } from '../util';
+import { loadTexProjectionMtx } from '../SuperMarioGalaxy/ActorUtil';
 
 import { SFATexture, TextureCollection } from './textures';
 import { dataSubarray } from './util';
+import { mat4 } from 'gl-matrix';
+import { texProjCameraSceneTex, computeViewMatrix } from '../Camera';
 
 interface ShaderLayer {
     texNum: number;
@@ -125,6 +131,7 @@ export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialText
 export interface SFAMaterial {
     material: GXMaterial;
     textures: SFAMaterialTexture[];
+    setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => void;
 }
 
 function makeWavyTexture(device: GfxDevice): SFATexture {
@@ -238,6 +245,8 @@ function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
 export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
     const mb = new GXMaterialBuilder('Material');
     const textures = [] as SFAMaterialTexture[];
+    const texMtx: ((viewerInput: ViewerRenderInput, modelMtx: mat4) => mat4)[] = nArray(10, () => () => mat4.create());
+    const indTexMtx: mat4[] = nArray(3, () => mat4.create());
     let tevStage = 0;
     let indStageId = GX.IndTexStageID.STAGE0;
     let texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -532,24 +541,42 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     }
 
     function addTevStagesForFancyWater() {
+        texMtx[0] = (viewerInput: ViewerRenderInput, modelMtx: mat4) => {
+            const m = mat4.create();
+            texProjCameraSceneTex(m, viewerInput.camera, viewerInput.viewport, -1);
+            mat4.mul(m, m, viewerInput.camera.viewMatrix);
+            return m;
+        };
+        texMtx[1] = (viewerInput: ViewerRenderInput) => {
+            const result = mat4.create();
+            // loadTexProjectionMtx(result, viewerInput.camera, viewerInput.viewport);
+            return result;
+        }
+
         textures[0] = { kind: 'fb-color-downscaled-2x' };
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
-        textures[1] = makeMaterialTexture(makeWavyTexture(device));
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
+        textures[1] = null; // makeMaterialTexture(makeWavyTexture(device));
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX3); // TODO
 
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
         mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-        // TODO: GXSetIndTexMtx
+        mat4.fromScaling(indTexMtx[0], [0.5, 0.5, 1.0]); // FIXME: scale_exp is -2. How does it apply here?
         mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         // TODO: LoadTexMtxImm
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4); // TODO
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
-        // TODO: SetIndTexMtx
+        mat4.set(indTexMtx[1],
+            0.3, 0.3, 0.0, 0.0,
+            -0.3, 0.3, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0
+        );
+        mat4.transpose(indTexMtx[1], indTexMtx[1]);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: GXSetTevKColor
-        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_5_8); // TODO
-        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_5_8); // TODO
+        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_1_8); // TODO
+        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_1_8); // TODO
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -563,10 +590,16 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0); // TODO: CS_DIVIDE_2 is used in some cases
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
 
-        // TODO: GXSetIndTexMtx
+        mat4.set(indTexMtx[2],
+            0.0, 0.5, 0.0, 0.0,
+            -0.5, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0
+        );
+        mat4.transpose(indTexMtx[2], indTexMtx[2]);
         mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         mb.setTevIndirect(3, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._2, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY); // TODO: Pos, mtx 0x21
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
 
         mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -638,6 +671,15 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     return {
         material: mb.finish(),
-        textures
+        textures,
+        setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => {
+            for (let i = 0; i < 10; i++) {
+                params.u_TexMtx[i] = texMtx[i](viewerInput, modelMtx);
+            }
+            
+            for (let i = 0; i < 3; i++) {
+                params.u_IndTexMtx[i] = indTexMtx[i];
+            }
+        },
     };
 }

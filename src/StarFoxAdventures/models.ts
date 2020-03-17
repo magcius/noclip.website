@@ -9,10 +9,10 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
+import * as GX from '../gx/gx_enum';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial } from './shaders';
-import * as GX from '../gx/gx_enum';
 import { TextureCollection } from './textures';
 import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader } from './util';
@@ -103,6 +103,8 @@ export class ModelInstance {
             }
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+
+        this.material.setupMaterialParams(this.materialParams, viewerInput, modelMatrix);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
