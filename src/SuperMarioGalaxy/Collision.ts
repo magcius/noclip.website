@@ -16,9 +16,10 @@ export class Triangle {
     public collisionParts: CollisionParts | null = null;
     public prismIdx: number | null = null;
     public hitSensor: HitSensor | null = null;
-    public pos0: vec3 = vec3.create();
-    public pos1: vec3 = vec3.create();
-    public pos2: vec3 = vec3.create();
+    public pos0 = vec3.create();
+    public pos1 = vec3.create();
+    public pos2 = vec3.create();
+    public faceNormal = vec3.create();
 
     public getAttributes(): JMapInfoIter | null {
         if (this.prismIdx !== null)
@@ -34,6 +35,7 @@ export class Triangle {
         vec3.copy(this.pos0, other.pos0);
         vec3.copy(this.pos1, other.pos1);
         vec3.copy(this.pos2, other.pos2);
+        vec3.copy(this.faceNormal, other.faceNormal);
     }
 
     public fillData(collisionParts: CollisionParts, prismIdx: number, hitSensor: HitSensor): void {
@@ -50,6 +52,8 @@ export class Triangle {
         transformVec3Mat4w1(this.pos1, collisionParts.worldMtx, this.pos1);
         server.getPos(this.pos2, prismData, 2);
         transformVec3Mat4w1(this.pos2, collisionParts.worldMtx, this.pos2);
+        server.getFaceNormal(this.faceNormal, prismData);
+        transformVec3Mat4w0(this.faceNormal, collisionParts.worldMtx, this.faceNormal);
     }
 }
 

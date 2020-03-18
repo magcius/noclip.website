@@ -135,6 +135,10 @@ export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObj
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
+export function connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
@@ -537,6 +541,11 @@ export function isLoopRail(actor: LiveActor): boolean {
     return actor.railRider!.isLoop();
 }
 
+export function moveCoordToRailPoint(actor: LiveActor, i: number): void {
+    const coord = actor.railRider!.getPointCoord(i);
+    actor.railRider!.setCoord(coord);
+}
+
 export function moveCoordToStartPos(actor: LiveActor): void {
     actor.railRider!.setCoord(0);
 }
@@ -601,6 +610,22 @@ export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
 }
 
+export function getCurrentRailPointArg0(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg0');
+}
+
+export function getCurrentRailPointArg1(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg1');
+}
+
+export function getCurrentRailPointArg5(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg5');
+}
+
+export function getCurrentRailPointArg7(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg7');
+}
+
 export function getNextRailPointNo(actor: LiveActor): number {
     return actor.railRider!.getNextPointNo();
 }
@@ -619,6 +644,11 @@ export function getRailPos(v: vec3, actor: LiveActor): void {
 
 export function setRailCoord(actor: LiveActor, coord: number): void {
     actor.railRider!.setCoord(coord);
+}
+
+export function setRailDirectionToEnd(actor: LiveActor): void {
+    if (actor.railRider!.direction === RailDirection.TOWARDS_START)
+        actor.railRider!.reverse();
 }
 
 export function moveRailRider(actor: LiveActor): void {
@@ -789,16 +819,16 @@ export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
     quat.normalize(dst, dst);
 }
 
-export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number, scratch = scratchVec3): void {
+export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number = 1.0, scratch = scratchVec3): void {
     // v0 and v1 are normalized.
 
     // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
-    vec3.cross(scratchVec3, v0, v1);
-    const sin = vec3.length(scratchVec3);
+    vec3.cross(scratch, v0, v1);
+    const sin = vec3.length(scratch);
     if (sin > MathConstants.EPSILON) {
         const cos = vec3.dot(v0, v1);
         const theta = Math.atan2(sin, cos);
-        quat.setAxisAngle(q, scratchVec3, theta * t);
+        quat.setAxisAngle(q, scratch, theta * t);
     } else {
         quat.identity(q);
     }

@@ -8,7 +8,7 @@ import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos } from './ActorUtil';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7 } from './ActorUtil';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 
@@ -31,22 +31,6 @@ const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
 
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
     return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg1'), MoveStopType.Mirror);
-}
-
-function getCurrentRailPointArg0(actor: LiveActor): number | null {
-    return actor.railRider!.getCurrentPointArg('point_arg0');
-}
-
-function getCurrentRailPointArg1(actor: LiveActor): number | null {
-    return actor.railRider!.getCurrentPointArg('point_arg1');
-}
-
-function getCurrentRailPointArg5(actor: LiveActor): number | null {
-    return actor.railRider!.getCurrentPointArg('point_arg5');
-}
-
-function getCurrentRailPointArg7(actor: LiveActor): number | null {
-    return actor.railRider!.getCurrentPointArg('point_arg7');
 }
 
 function getMapPartsArgMoveSpeed(actor: LiveActor): number | null {
@@ -420,7 +404,8 @@ export class MapPartsRailMover extends NameObj {
 
         this.passChecker.movement();
 
-        this.spine.update(getDeltaTimeFrames(viewerInput));
+        this.spine.changeNerve();
+        this.spine.updateTick(getDeltaTimeFrames(viewerInput));
 
         if (currentNerve === MapPartsRailMoverNrv.Move) {
             if (isFirstStep(this)) {
@@ -479,6 +464,8 @@ export class MapPartsRailMover extends NameObj {
             if (isFirstStep(this))
                 sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_Vanish);
         }
+
+        this.spine.changeNerve();
 
         super.movement(sceneObjHolder, viewerInput);
     }
