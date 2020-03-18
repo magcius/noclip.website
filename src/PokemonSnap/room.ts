@@ -1923,7 +1923,7 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
     parser.parse();
 
     if (!parser.trivial)
-        fixupState(states[parser.stateIndex]);
+        fixupState(states[parser.stateIndex], animationAddresses);
 
     return parser.stateIndex;
 }
@@ -1931,7 +1931,7 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
 export const fakeAux = 0x123456;
 
 // make minor changes to specific states
-function fixupState(state: State): void {
+function fixupState(state: State, animationAddresses: number[]): void {
     switch (state.startAddress) {
         // switch statements
         case 0x802DBBA0: {
@@ -2006,6 +2006,30 @@ function fixupState(state: State): void {
         case 0x802BEB24: {
             assert(state.doCleanup);
             state.blocks[0].edges = [];
+        } break;
+        // staryu random animation
+        case 0x802CD0B8: {
+            const index = animationAddresses.indexOf(0x802D3808);
+            assert(index >= 0);
+            // create a duplicate block, and use actor code to randomly pick one
+            state.blocks.push({
+                animation: index,
+                force: false,
+                edges: state.blocks[0].edges, // copy existing edges
+
+                motion: null,
+                auxAddress: -1,
+                wait: null,
+                flagClear: 0,
+                flagSet: 0,
+                signals: [],
+            });
+        } break;
+        // let actor choose signals
+        case 0x802CD4F4: {
+            state.blocks[1].signals[0].condition = InteractionType.Unknown;
+            state.blocks[1].signals[1].condition = InteractionType.Unknown;
+            state.blocks[1].signals[2].condition = InteractionType.Unknown;
         } break;
     }
 }

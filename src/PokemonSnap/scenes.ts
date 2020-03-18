@@ -13,7 +13,7 @@ import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { createActor, LevelGlobals, Projectile } from './actor';
+import { createActor, LevelGlobals, sceneActorInit } from './actor';
 
 const pathBase = `PokemonSnap`;
 
@@ -140,6 +140,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
             sceneRenderer.globals.collision = level.collision;
+
+            sceneActorInit();
 
             if (level.skybox !== null) {
                 const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);

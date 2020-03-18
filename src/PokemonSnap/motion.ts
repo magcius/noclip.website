@@ -177,12 +177,14 @@ interface Linear {
 const enum ApproachGoal {
     AtPoint,
     GoodGround,
+    Radius,
 }
 
 const enum Destination {
     Custom,
     PathStart,
     Target,
+    Player,
 }
 
 interface ApproachPoint {
@@ -210,9 +212,10 @@ export const enum BasicMotionKind {
     Wait,
     Song,
     SetSpeed,
+    Loop,
 }
 
-interface BasicMotion {
+export interface BasicMotion {
     kind: "basic";
     subtype: BasicMotionKind;
     param: number;
@@ -536,11 +539,13 @@ export class MotionParser extends MIPS.NaiveInterpreter {
             this.blocks.push({
                 kind: "basic",
                 subtype: BasicMotionKind.Custom,
-                param: 5,
+                param: 0,
             });
         fixupMotion(this.startAddress, this.blocks);
     }
 }
+
+export let staryuApproach: ApproachPoint;
 
 function fixupMotion(addr: number, blocks: Motion[]): void {
     switch (addr) {
@@ -609,11 +614,50 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
         case 0x802D1FC0: {
             assert(blocks[1].kind === "projectile");
             blocks[1].direction = Direction.PathEnd;
+            blocks.push({
+                kind: "basic",
+                subtype: BasicMotionKind.Loop,
+                param: 0,
+            });
         } break;
         // custom motion
         case 0x802DDA0C: {
             assert(blocks[0].kind === "basic");
             blocks[0].subtype = BasicMotionKind.Custom;
+        } break;
+        // staryu player tracking
+        case 0x802CCE70: {
+            assert(blocks[1].kind === "point");
+            blocks[1].destination = Destination.Player;
+            blocks[1].goal = ApproachGoal.Radius;
+            blocks.splice(2, 0, {
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 1,
+            });
+            assert(blocks[3].kind === "basic" && blocks[3].subtype === BasicMotionKind.SetSpeed)
+            blocks[3].param = 8000; // speed up to accommodate increased radius
+            assert(blocks[4].kind === "point");
+            staryuApproach = blocks[4];
+            blocks[4] = {
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 2,
+            };
+        } break;
+        case 0x802CD1AC: {
+            blocks[0] = {
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 3,
+            };
+        } break;
+        case 0x802CD2FC: {
+            blocks.unshift({
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 4,
+            });
         } break;
     }
 }
@@ -671,7 +715,7 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
                 case Direction.PathEnd: {
                     getPathPoint(blockScratch, assertExists(data.path), block.direction === Direction.PathStart ? 0 : 1);
                     if (block.direction === Direction.PathEnd)
-                        data.movingYaw = Math.atan2(blockScratch[0] - pos[0], blockScratch[2] - pos[2]);
+                        data.movingYaw = yawTowards(blockScratch, pos);
                     else { // only used in one place
                         vec3.copy(pos, blockScratch);
                         vec3.copy(data.startPos, blockScratch);
@@ -709,6 +753,10 @@ export function motionBlockInit(data: MotionData, pos: vec3, euler: vec3, viewer
         } break;
     }
     return MotionResult.None;
+}
+
+export function yawTowards(end: vec3, start: vec3): number {
+    return Math.atan2(end[0] - start[0], end[2] - start[2]);
 }
 
 const moveScratch = vec3.create();
@@ -867,7 +915,7 @@ export function walkToTarget(pos: vec3, euler: vec3, data: MotionData, block: Wa
             return MotionResult.Done;
         vec3.copy(data.refPosition, target.translation);
     }
-    const yawToTarget = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]) + (block.away ? Math.PI : 0);
+    const yawToTarget = yawTowards(data.refPosition, pos) + (block.away ? Math.PI : 0);
     vec3.copy(posScratch, pos);
     posScratch[0] += data.forwardSpeed * dt * Math.sin(yawToTarget);
     posScratch[2] += data.forwardSpeed * dt * Math.cos(yawToTarget);
@@ -893,7 +941,7 @@ export function faceTarget(pos: vec3, euler: vec3, data: MotionData, block: Face
     }
     if ((block.flags & MoveFlags.DuringSong) && !canHearSong(pos, globals))
         return MotionResult.Done;
-    let targetYaw = Math.atan2(data.refPosition[0] - pos[0], data.refPosition[2] - pos[2]);
+    let targetYaw = yawTowards(data.refPosition, pos);
     if (block.flags & MoveFlags.FaceAway)
         targetYaw += Math.PI;
     if (stepYawTowards(euler, targetYaw, block.maxTurn, dt) && !(block.flags & MoveFlags.Continuous))
@@ -903,16 +951,25 @@ export function faceTarget(pos: vec3, euler: vec3, data: MotionData, block: Face
 
 const approachScratch = vec3.create();
 export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals: LevelGlobals, block: ApproachPoint, dt: number): MotionResult {
-    const atPoint = Math.hypot(pos[0] - data.destination[0], pos[2] - data.destination[2]) < data.forwardSpeed / 30;
+    if (block.destination === Destination.Player)
+        vec3.copy(data.destination, globals.translation);
+
+    const dist = Math.hypot(pos[0] - data.destination[0], pos[2] - data.destination[2]);
+    const atPoint = dist < data.forwardSpeed * dt;
     // target flag is set independent of end condition
     if (atPoint)
         data.stateFlags |= EndCondition.Target;
     let done = false;
     switch (block.goal) {
-        case ApproachGoal.AtPoint:
-            done = atPoint; break;
+        case ApproachGoal.AtPoint:{
+            done = atPoint;
+            if (done)
+                vec3.copy(pos, data.destination);
+        } break;
         case ApproachGoal.GoodGround:
             done = data.groundType !== 0x7F6633; break;
+        case ApproachGoal.Radius:
+            done = dist < 500; break; // only used by staryu, just hard code for now
     }
     if (done)
         return MotionResult.Done;

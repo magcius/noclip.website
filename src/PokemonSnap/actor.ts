@@ -4,8 +4,8 @@ import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward } from "./motion";
-import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY } from "../MathHelpers";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards } from "./motion";
+import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp } from "../MathHelpers";
 import { getPathPoint } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
@@ -594,7 +594,7 @@ export class Actor extends ModelRenderer {
 
     protected endBlock(globals: LevelGlobals): void { }
 
-    protected customMotion(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (viewerInput.time - this.motionData.start > 5000)
             return MotionResult.Done;
         else
@@ -638,6 +638,7 @@ export class Actor extends ModelRenderer {
                 case InteractionType.OverSurface:
                     if (this.motionData.groundType !== 0x337FB2 && this.motionData.groundType !== 0x7F66 && this.motionData.groundType !== 0xFF4C19)
                         continue;
+                default: continue;
             }
             if (block.signals[i].target === 0)
                 globals.sendGlobalSignal(this, block.signals[i].value);
@@ -944,7 +945,11 @@ export class Actor extends ModelRenderer {
                             result = MotionResult.Done;
                         } break;
                         case BasicMotionKind.Custom: {
-                            result = this.customMotion(viewerInput, globals);
+                            result = this.customMotion(block.param, viewerInput, globals);
+                        } break;
+                        case BasicMotionKind.Loop: {
+                            this.motionData.currBlock = -1;
+                            result = MotionResult.Done;
                         } break;
                     }
                 } break;
@@ -999,7 +1004,7 @@ export class Actor extends ModelRenderer {
             vec3.normalize(collideScratch[0], collideScratch[0]);
 
             const moveBoth = (this.motionData.stateFlags & EndCondition.AllowBump) && (other.motionData.stateFlags & EndCondition.AllowBump);
-            const magnitude = separation * (moveBoth ? 1 / 2 : 1);
+            const magnitude = separation * (moveBoth ? .5 : 1);
             if (this.motionData.stateFlags & EndCondition.AllowBump) {
                 vec3.scaleAndAdd(collideScratch[1], this.translation, collideScratch[0], magnitude);
                 if (!attemptMove(this.translation, collideScratch[1], this.motionData, globals, MoveFlags.Ground))
@@ -1203,6 +1208,126 @@ class Grimer extends Actor {
     }
 }
 
+export class Staryu extends Actor {
+    private spinSpeed = 0;
+    private whirlpool: Actor | null = null;
+    private relativeToPlayer = true;
+
+    public static evolveCount = 0;
+    public static separationScale = 1;
+    private static playerRadius = 800;
+    private static baseAngle(time: number): number {
+        return MathConstants.TAU * (1 - ((time / 1500) % 1));
+    }
+
+    private static targetPosition(dst: vec3, pos: vec3, time: number, bhv: number): void {
+        const angle = Staryu.baseAngle(time) + (bhv === 0 ? 0 : (bhv - 1) * Math.PI / 9) * Staryu.separationScale;
+        vec3.set(dst,
+            Staryu.playerRadius * Math.sin(angle),
+            -200,
+            Staryu.playerRadius * Math.cos(angle),
+        );
+        vec3.add(dst, dst, pos);
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        switch (this.currAux) {
+            case 0x802CD5D8: {
+                const refHeight = this.relativeToPlayer ? globals.translation[1] : findGroundHeight(globals.collision, this.translation[0], this.translation[2]);
+                const delta = refHeight + this.motionData.storedValues[0] - this.translation[1];
+                const step = 600 * viewerInput.deltaTime / 1000;
+                if (Math.abs(delta) < step)
+                    this.motionData.stateFlags |= EndCondition.Misc;
+                this.translation[1] += clampRange(delta, step);
+            } // fall through to spinning
+            case 0x802CCAB4: {
+                if (this.spinSpeed === 0)
+                    this.spinSpeed = randomRange(1, 2) * Math.PI / 3;
+                this.euler[1] += this.spinSpeed * viewerInput.deltaTime / 1000;
+            } break;
+
+        }
+        return MotionResult.Update;
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        const dt = viewerInput.deltaTime / 1000;
+        switch (param) {
+            case 1: {
+                // approach the camera directly, staying playerRadius away
+                vec3.sub(this.motionData.destination, this.translation, globals.translation);
+                const approachAngle = Math.atan2(this.motionData.destination[0], this.motionData.destination[2]);
+                const radius = vec3.len(this.motionData.destination);
+                normToLength(this.motionData.destination, Staryu.playerRadius);
+                vec3.add(this.motionData.destination, this.motionData.destination, globals.translation);
+                approachPoint(this.translation, this.euler, this.motionData, globals, staryuApproach, dt);
+                this.euler[1] = approachAngle + Math.PI;
+                // finish when aligned with the staryu cluster
+                if (Math.abs(radius - Staryu.playerRadius) < 25 && Math.abs(angleDist(approachAngle, Staryu.baseAngle(viewerInput.time))) < Math.PI / 72) {
+                    Staryu.targetPosition(this.motionData.destination, globals.translation, viewerInput.time, this.spawn.behavior);
+                    return MotionResult.Done;
+                }
+            } break;
+            case 2:
+            case 3:
+            case 4: {
+                Staryu.targetPosition(this.motionData.destination, globals.translation, viewerInput.time, this.spawn.behavior);
+                if (vec3.dist(this.translation, this.motionData.destination) > Staryu.playerRadius) {
+                    this.changeState(3, globals); // go back to pursuit state
+                    return MotionResult.Update;
+                }
+                const oldYaw = this.euler[1];
+                const result = approachPoint(this.translation, this.euler, this.motionData, globals, staryuApproach, dt);
+                // check end condition based on parameter
+                if (param === 2)
+                    return result;
+                this.euler[1] = oldYaw;
+                if (this.whirlpool === null)
+                    this.whirlpool = globals.allActors.find((a) => a.def.id === 1033)!;
+                if (param === 3)
+                    if (vec3.dist(globals.translation, this.whirlpool.translation) < 4000) // an approximate distance; the game uses the track position
+                        return MotionResult.Done;
+                    else
+                        return MotionResult.Update;
+                // happens faster with multiple circling, not sure if this was really intended since it's such a short-lasting effect in game
+                Staryu.separationScale = clamp(Staryu.separationScale + .9 * dt, 1, 4);
+                const whirlpoolAngle = yawTowards(this.whirlpool.translation, globals.translation);
+                const staryuAngle = yawTowards(this.translation, globals.translation);
+                if (Math.abs(angleDist(whirlpoolAngle, staryuAngle)) < Math.PI / 60) {
+                    vec3.copy(this.motionData.destination, this.whirlpool!.translation);
+                    this.relativeToPlayer = false;
+                    this.motionData.storedValues[0] = 1000;
+                    this.motionData.destination[1] = findGroundHeight(globals.collision, this.whirlpool.translation[0], this.whirlpool.translation[2]) + 1000;
+                    return MotionResult.Done;
+                }
+            } break;
+            default: return super.customMotion(param, viewerInput, globals);
+        }
+        return MotionResult.Update;
+    }
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        switch (state.startAddress) {
+            case 0x802CCCFC:
+            case 0x802CCD80:
+                this.motionData.storedValues[0] = 3000; break;
+            case 0x802CCDDC: this.motionData.storedValues[0] = -200; break;
+            case 0x802CD0B8: {
+                if (this.currBlock === 0 && Math.random() < .5)
+                    this.currBlock = 1;
+            } break;
+            case 0x802CD4F4: {
+                if (this.currBlock === 0)
+                    this.motionData.storedValues[0] = -400;
+                else if (this.currBlock === 1 && Staryu.evolveCount <= 2)
+                    globals.sendGlobalSignal(this, state.blocks[1].signals[Staryu.evolveCount++].value);
+            } break;
+        }
+        super.startBlock(globals);
+    }
+}
+
 class Jynx extends Actor {
     private static flags = 0;
 
@@ -1216,6 +1341,20 @@ class Jynx extends Actor {
         super.startBlock(globals);
     }
 }
+
+class Magikarp extends Actor {
+    private gyarados: Actor | null = null;
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802D2128) {
+            if (this.gyarados === null)
+                this.gyarados = globals.allActors.find((a) => a.def.id === this.def.id + 1)!;
+            if (this.translation[1] > this.gyarados.translation[1] + 100)
+                return MotionResult.Done;
+        }
+        return MotionResult.None;
+    }
+}
+
 // effectively the same extra logic as Grimer, but done in a more confusing way
 class Lapras extends Actor {
     private static flags = 0;
@@ -1306,7 +1445,7 @@ class MiniCrater extends Actor {
         super.startBlock(globals);
     }
 
-    protected customMotion(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (this.motionData.storedValues[0] !== 0) {
             this.lavaSplash.receiveSignal(this, 0x23, globals);
             return MotionResult.Done;
@@ -1338,6 +1477,13 @@ class Crater extends Actor {
     }
 }
 
+export function sceneActorInit(): void {
+    Pikachu.currDiglett = 0;
+    Pikachu.targetDiglett = 1;
+    Staryu.evolveCount = 0;
+    Staryu.separationScale = 1;
+}
+
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
     switch (def.id) {
         case 4: return new Charmander(renderData, spawn, def, globals);
@@ -1349,7 +1495,9 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 70: return new Weepinbell(renderData, spawn, def, globals);
         case 71: return new Victreebel(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
+        case 120: return new Staryu(renderData, spawn, def, globals);
         case 124: return new Jynx(renderData, spawn, def, globals);
+        case 129: return new Magikarp(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
         case 1026: return new MiniCrater(renderData, spawn, def, globals);
