@@ -157,6 +157,7 @@ export class Model implements BlockRenderer {
         this.invBindMatrices = [];
 
         // Compute joint bones
+        console.log(`computing ${this.joints.length} rigid joint bones`);
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             let parentMtx = mat4.create();
@@ -183,6 +184,7 @@ export class Model implements BlockRenderer {
         }
 
         // Compute blended bones
+        console.log(`computing ${this.weights.length} blended bones`);
         for (let i = 0; i < this.weights.length; i++) {
             const weight = this.weights[i];
 
