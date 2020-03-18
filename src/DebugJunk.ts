@@ -1,11 +1,12 @@
 // Misc utilities to help me debug various issues. Mostly garbage.
 
 import { AABB } from "./Geometry";
-import { Color, Magenta, colorToCSS } from "./Color";
+import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
-import { vec4, vec3 } from "gl-matrix";
+import { vec4, vec3, mat4 } from "gl-matrix";
 import { nArray, assert, assertExists } from "./util";
 import { UI, Slider } from "./ui";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ } from "./MathHelpers";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -186,6 +187,21 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.lineWidth = thickness;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
+}
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, camera: Camera, m: mat4, mag: number = 100, thickness = 2): void {
+    getMatrixTranslation(scratchVec3a, m);
+
+    getMatrixAxisX(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Red, thickness);
+
+    getMatrixAxisY(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Green, thickness);
+
+    getMatrixAxisZ(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Blue, thickness);
 }
 
 export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, camera: Camera, pos: vec3, dir: vec3, mag: number, color: Color = Magenta, thickness = 2): void {

@@ -6,7 +6,7 @@ import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, creat
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
 import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Magenta, Yellow } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -36,6 +36,7 @@ import { isInWater } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceLine, drawWorldSpaceBasis } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -167,11 +168,11 @@ export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: 
 }
 
 export function getJointNum(actor: LiveActor): number {
-    return actor.modelInstance!.shapeInstanceState.jointToParentMatrixArray.length;
+    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray.length;
 }
 
 export function getJointMtx(actor: LiveActor, i: number): mat4 {
-    return actor.modelInstance!.shapeInstanceState.jointToParentMatrixArray[i];
+    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray[i];
 }
 
 export function scaleMatrixScalar(m: mat4, s: number): void {
@@ -3237,8 +3238,8 @@ class CoconutTreeLeaf extends LiveActor {
     private axisY = vec3.create();
     private axisZ = vec3.create();
     private upVec = vec3.create();
-    private currentPoint = vec3.create();
-    private chasePoint = vec3.create();
+    private currFrontChase = vec3.create();
+    private origFrontChase = vec3.create();
     private accelCounter = 0;
     private waitCounter = 0;
     private accel = vec3.create();
@@ -3246,13 +3247,16 @@ class CoconutTreeLeaf extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private leafGroup: CoconutTreeLeafGroup, private jointMtx: mat4, private treeAxisZ: vec3) {
         super(zoneAndLayer, sceneObjHolder, 'CoconutTreeLeaf');
 
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, this.jointMtx);
         vec3.copy(this.upVec, this.axisY);
 
-        mat4.getTranslation(this.translation, this.jointMtx);
+        getMatrixTranslation(this.translation, this.jointMtx);
 
-        vec3.scaleAndAdd(this.chasePoint, this.translation, this.axisZ, 100.0);
-        vec3.copy(this.currentPoint, this.chasePoint);
+        vec3.scaleAndAdd(this.origFrontChase, this.translation, this.axisZ, 100.0);
+        vec3.copy(this.currFrontChase, this.origFrontChase);
     }
 
     public getBaseMtx(): mat4 {
@@ -3290,21 +3294,22 @@ class CoconutTreeLeaf extends LiveActor {
 
         vec3.scaleAndAdd(this.velocity, this.velocity, this.upVec, -velUp);
 
-        vec3.sub(scratchVec3, this.chasePoint, this.currentPoint);
-        const mag = -vec3.dot(this.chasePoint, this.treeAxisZ);
+        vec3.sub(scratchVec3, this.origFrontChase, this.currFrontChase);
+        const mag = -vec3.dot(scratchVec3, this.treeAxisZ);
         vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3, velChase);
 
         vec3.scale(this.velocity, this.velocity, velDrag);
-        vec3.scaleAndAdd(this.currentPoint, this.currentPoint, this.velocity, deltaTimeFrames);
-        vec3.sub(this.axisZ, this.currentPoint, this.translation);
+        vec3.scaleAndAdd(this.currFrontChase, this.currFrontChase, this.velocity, deltaTimeFrames);
+        vec3.sub(this.axisZ, this.currFrontChase, this.translation);
         vec3.normalize(this.axisZ, this.axisZ);
 
-        vec3.scaleAndAdd(scratchVec3, this.upVec, this.treeAxisZ, 0.01 * mag);
+        vec3.scaleAndAdd(scratchVec3, this.upVec, this.treeAxisZ, Math.max(0.0, 0.01 * mag));
         vec3.cross(this.axisX, scratchVec3, this.axisZ);
         vec3.normalize(this.axisX, this.axisX);
 
         vec3.cross(this.axisY, this.axisZ, this.axisX);
         vec3.normalize(this.axisY, this.axisY);
+
         setMtxAxisXYZ(this.jointMtx, this.axisX, this.axisY, this.axisZ);
     }
 }
@@ -3320,8 +3325,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'CoconutTreeLeaf');
         connectToSceneMapObjNoCalcAnim(sceneObjHolder, this);
 
-        const leafCount = getJointNum(this) - 1;
-        for (let i = 0; i < leafCount; i++) {
+        for (let i = 1; i < getJointNum(this); i++) {
             const jointMtx = getJointMtx(this, i);
             this.leaves.push(new CoconutTreeLeaf(zoneAndLayer, sceneObjHolder, this, jointMtx, this.axisZ));
         }
@@ -7100,5 +7104,53 @@ export class MovieStarter extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+const enum WaterLeakPipeNrv { Wait, Freeze }
+
+export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
+    private jointTop: mat4;
+    private jointBottom: mat4;
+    private pipeHeight: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "WaterLeakPipe");
+
+        this.jointTop = assertExists(this.getJointMtx('Top'));
+        this.jointBottom = assertExists(this.getJointMtx('Bottom'));
+        this.pipeHeight = fallback(getJMapInfoArg0(infoIter), 500.0);
+        this.initPipeHeight();
+        connectToSceneMapObj(sceneObjHolder, this);
+
+        this.initHitSensor();
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        this.initNerve(WaterLeakPipeNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    }
+
+    private initPipeHeight(): void {
+        calcUpVec(scratchVec3, this);
+        vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3, this.pipeHeight);
+        this.jointTop[12] = scratchVec3[0];
+        this.jointTop[13] = scratchVec3[1];
+        this.jointTop[14] = scratchVec3[2];
+        this.calcAndSetBaseMtxBase();
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterLeakPipeNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === WaterLeakPipeNrv.Wait) {
+            if (isFirstStep(this))
+                emitEffect(sceneObjHolder, this, 'Splash');
+        }
     }
 }

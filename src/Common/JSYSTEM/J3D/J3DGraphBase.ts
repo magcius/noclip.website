@@ -1001,7 +1001,6 @@ const scratchViewMatrix = mat4.create();
 export class J3DModelInstance {
     public name: string = '';
     public visible: boolean = true;
-    public isSkybox: boolean = false;
 
     public modelMatrix = mat4.create();
     public baseScale = vec3.fromValues(1, 1, 1);
@@ -1254,19 +1253,12 @@ export class J3DModelInstance {
     }
 
     public calcAnim(camera: Camera): void {
-        if (this.isSkybox) {
-            this.modelMatrix[12] = camera.worldMatrix[12];
-            this.modelMatrix[13] = camera.worldMatrix[13];
-            this.modelMatrix[14] = camera.worldMatrix[14];
-        }
-
         // Update joints from our matrix calculator.
         this.calcJointAnim();
+        this.calcJointToWorld();
     }
 
     public calcView(camera: Camera): void {
-        this.calcJointToWorld();
-
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
@@ -1404,6 +1396,7 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
     public vaf1Animator: VAF1Animator | null = null;
     public passMask: number = 0x01;
     public ownedModelMaterialData: BMDModelMaterialData | null = null;
+    public isSkybox: boolean = false;
 
     public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
         this.setModelMaterialData(modelMaterialData);
@@ -1412,6 +1405,12 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
     }
 
     public calcAnim(camera: Camera): void {
+        if (this.isSkybox) {
+            this.modelMatrix[12] = camera.worldMatrix[12];
+            this.modelMatrix[13] = camera.worldMatrix[13];
+            this.modelMatrix[14] = camera.worldMatrix[14];
+        }
+
         super.calcAnim(camera);
 
         if (this.vaf1Animator !== null)

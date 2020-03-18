@@ -502,6 +502,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelInstance.modelMatrix;
     }
 
+    // TODO(jstpierre): This is actually MR::getJointMtx
     public getJointMtx(jointName: string): mat4 | null {
         if (this.modelInstance === null)
             return null;

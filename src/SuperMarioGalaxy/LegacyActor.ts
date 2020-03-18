@@ -7,7 +7,7 @@ import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
-import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
+import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj, getCamPos } from "./MiscActor";
 import { isFirstStep } from "./Spine";
 
 // The old actor code, before we started emulating things natively.
@@ -66,6 +66,7 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
     private rotateSpeed = 0;
     private rotatePhase = 0;
     private rotateAxis: RotateAxis = RotateAxis.Y;
+    private isSkybox = false;
 
     public firstStepCallback: (() => void) | null = null;
 
@@ -95,7 +96,7 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
             objinfo.modelMatrix[13] = 0;
             objinfo.modelMatrix[14] = 0;
 
-            this.modelInstance!.isSkybox = true;
+            this.isSkybox = true;
         }
 
         this.initEffectKeeper(sceneObjHolder, null);
@@ -124,6 +125,12 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
         const time = viewerInput.time / 1000;
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        if (this.isSkybox)
+            getCamPos(this.translation, viewerInput.camera);
+        super.calcAnim(sceneObjHolder, viewerInput);
     }
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
