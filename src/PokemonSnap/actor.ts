@@ -630,16 +630,16 @@ export class Actor extends ModelRenderer {
         }
 
         for (let i = 0; i < block.signals.length; i++) {
+            let skip = true; // skip signals we don't understand
             switch (block.signals[i].condition) {
                 case InteractionType.Behavior:
-                    if (this.spawn.behavior !== block.signals[i].conditionParam)
-                        continue;
-                    break;
+                    skip = this.spawn.behavior !== block.signals[i].conditionParam; break;
                 case InteractionType.OverSurface:
-                    if (this.motionData.groundType !== 0x337FB2 && this.motionData.groundType !== 0x7F66 && this.motionData.groundType !== 0xFF4C19)
-                        continue;
-                default: continue;
+                    skip = (this.motionData.groundType !== 0x337FB2 && this.motionData.groundType !== 0x7F66 && this.motionData.groundType !== 0xFF4C19); break;
+                case InteractionType.Basic: skip = false; break;
             }
+            if (skip)
+                continue;
             if (block.signals[i].target === 0)
                 globals.sendGlobalSignal(this, block.signals[i].value);
             else if (block.signals[i].target === ObjectField.Target && this.target instanceof Actor)

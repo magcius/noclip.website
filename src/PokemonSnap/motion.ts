@@ -1,6 +1,6 @@
 import * as MIPS from "./mips";
 import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room";
-import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One } from "../MathHelpers";
+import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One, normToLength } from "../MathHelpers";
 import { vec3, mat4 } from "gl-matrix";
 import { getPathPoint, getPathTangent } from "./animation";
 import { hexzero, assert, nArray, assertExists } from "../util";
@@ -963,8 +963,11 @@ export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals:
     switch (block.goal) {
         case ApproachGoal.AtPoint:{
             done = atPoint;
-            if (done)
+            if (done) {
                 vec3.copy(pos, data.destination);
+                if (block.flags & MoveFlags.Ground)
+                    pos[1] = findGroundHeight(globals.collision, pos[0], pos[2]);
+            }
         } break;
         case ApproachGoal.GoodGround:
             done = data.groundType !== 0x7F6633; break;
@@ -975,10 +978,9 @@ export function approachPoint(pos: vec3, euler: vec3, data: MotionData, globals:
         return MotionResult.Done;
 
     vec3.sub(approachScratch, data.destination, pos);
+    approachScratch[1] = 0;
     const targetYaw = Math.atan2(approachScratch[0], approachScratch[2]);
-
-    vec3.normalize(approachScratch, approachScratch);
-    vec3.scale(approachScratch, approachScratch, dt * data.forwardSpeed);
+    normToLength(approachScratch, dt * data.forwardSpeed);
     vec3.add(approachScratch, approachScratch, pos);
     if (attemptMove(pos, approachScratch, data, globals, block.flags))
         return MotionResult.None;

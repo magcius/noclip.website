@@ -897,8 +897,10 @@ export class AdjustableAnimationController {
     public getTimeInSeconds(): number {
         if (this.fps === 0)
             return 0; // not sure what this should mean
-        else
+        else if (this.initialized)
             return this.time + this.phaseFrames/this.fps;
+        else
+            return this.phaseFrames/this.fps;
     }
 
     public resetPhase(): void {
