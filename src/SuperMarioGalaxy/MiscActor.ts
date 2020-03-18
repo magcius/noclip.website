@@ -7368,21 +7368,14 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
 }
 
 const triangleScratch = new Triangle();
-function getPolygonOnRailPoint(sceneObjHolder: SceneObjHolder, dstPos: vec3, dstNrm: vec3, actor: LiveActor, pointIdx: number): boolean {
+function getPolygonOnRailPoint(sceneObjHolder: SceneObjHolder, dstPos: vec3, dstNrm: vec3, actor: LiveActor, pointIdx: number): void {
     calcRailPointPos(dstPos, actor, pointIdx);
     calcGravityVector(sceneObjHolder, actor, dstPos, dstNrm);
     vec3.scale(dstNrm, dstNrm, 2000.0);
     // TODO(jstpierre): getFirstPolyOnLineToMapExceptSensor
     // const hitSensor = actor.getSensor('body');
-    if (getFirstPolyOnLineToMap(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm)) {
-        vec3.copy(dstNrm, triangleScratch.faceNormal);
-        return true;
-    } else {
-        // Fall back. TODO(jstpierre): Figure out why this isn't working.
-        vec3.normalize(dstNrm, dstNrm);
-        vec3.negate(dstNrm, dstNrm);
-        return false;
-    }
+    assert(getFirstPolyOnLineToMap(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm));
+    vec3.copy(dstNrm, triangleScratch.faceNormal);
 }
 
 export class OnimasuJump extends Onimasu {

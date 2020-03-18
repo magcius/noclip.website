@@ -293,40 +293,38 @@ export class KCollisionServer {
         // Put in local space.
         vec3.sub(blkOrigin, blkOrigin, this.blocksTrans);
 
-        if (!this.isInsideMinMaxInLocalSpace(blkOrigin)) {
-            // Origin is outside, test if the arrow goes inside...
-            if (blkArrowDir[0] !== 0.0) {
-                const bounds = (blkArrowDir[0] > 0.0) ? ((~this.maskX) >>> 0) : 0.0;
-                const length = (bounds - blkOrigin[0]) / blkArrowDir[0];
-                if (length >= 0.0 && length <= arrowLength) {
-                    // Clip ray origin to intersection point.
-                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
-                    arrowLength -= length;
-                } else {
-                    return false;
-                }
+        // Origin is outside, test if the arrow goes inside...
+        if (!this.isInsideMinMaxInLocalSpace(blkOrigin) && blkArrowDir[0] !== 0.0) {
+            const bounds = (blkArrowDir[0] > 0.0) ? 0.0 : ((~this.maskX) >>> 0);
+            const length = (bounds - blkOrigin[0]) / blkArrowDir[0];
+            if (length >= 0.0 && length <= arrowLength) {
+                // Clip ray origin to intersection point.
+                vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
+                arrowLength -= length;
+            } else {
+                return false;
             }
+        }
 
-            if (blkArrowDir[1] !== 0.0) {
-                const bounds = (blkArrowDir[1] > 0.0) ? ((~this.maskY) >>> 0) : 0.0;
-                const length = (bounds - blkOrigin[1]) / blkArrowDir[1];
-                if (length >= 0.0 && length <= arrowLength) {
-                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
-                    arrowLength -= length;
-                } else {
-                    return false;
-                }
+        if (!this.isInsideMinMaxInLocalSpace(blkOrigin) && blkArrowDir[1] !== 0.0) {
+            const bounds = (blkArrowDir[1] > 0.0) ? 0.0 : ((~this.maskY) >>> 0);
+            const length = (bounds - blkOrigin[1]) / blkArrowDir[1];
+            if (length >= 0.0 && length <= arrowLength) {
+                vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
+                arrowLength -= length;
+            } else {
+                return false;
             }
+        }
 
-            if (blkArrowDir[2] !== 0.0) {
-                const bounds = (blkArrowDir[2] > 0.0) ? ((~this.maskZ) >>> 0) : 0.0;
-                const length = (bounds - blkOrigin[2]) / blkArrowDir[2];
-                if (length >= 0.0 && length <= arrowLength) {
-                    vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
-                    arrowLength -= length;
-                } else {
-                    return false;
-                }
+        if (!this.isInsideMinMaxInLocalSpace(blkOrigin) && blkArrowDir[2] !== 0.0) {
+            const bounds = (blkArrowDir[2] > 0.0) ? 0.0 : ((~this.maskZ) >>> 0);
+            const length = (bounds - blkOrigin[2]) / blkArrowDir[2];
+            if (length >= 0.0 && length <= arrowLength) {
+                vec3.scaleAndAdd(blkOrigin, blkOrigin, blkArrowDir, length);
+                arrowLength -= length;
+            } else {
+                return false;
             }
         }
 
