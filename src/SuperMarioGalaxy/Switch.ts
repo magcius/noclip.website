@@ -102,10 +102,9 @@ function createSwitchIdInfo(sceneObjHolder: SceneObjHolder, fieldName: string, i
     const zoneId = placedZone.zoneId;
     const switchIdInfo = new SwitchIdInfo(zoneId, switchId);
 
-    if (!switchIdInfo.isGlobalSwitch) {
-        sceneObjHolder.create(SceneObj.StageSwitchContainer);
+    sceneObjHolder.create(SceneObj.StageSwitchContainer);
+    if (!switchIdInfo.isGlobalSwitch)
         sceneObjHolder.stageSwitchContainer!.createAndAddZone(switchIdInfo);
-    }
 
     return switchIdInfo;
 }
