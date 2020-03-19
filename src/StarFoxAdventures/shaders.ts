@@ -50,7 +50,13 @@ export const SFA_SHADER_FIELDS: ShaderFields = {
     layers: 0x24,
 };
 
-export const EARLY_SFA_SHADER_FIELDS: ShaderFields = {
+export const SFADEMO_MODEL_SHADER_FIELDS: ShaderFields = {
+    size: 0x44,
+    numLayers: 0x41,
+    layers: 0x24, // ???
+};
+
+export const SFADEMO_MAP_SHADER_FIELDS: ShaderFields = {
     size: 0x40,
     numLayers: 0x3b,
     layers: 0x24, // ???

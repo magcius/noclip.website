@@ -54,7 +54,7 @@ interface ObjectSphere {
     model?: Model;
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number) {
+async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, isDemoModel: boolean = false) {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo);
     const [modelsTabData, modelsBin, _] = await Promise.all([
@@ -72,12 +72,12 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const modelOffs = modelTabValue & 0xffffff;
     const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     
-    // window.main.downloadModel = () => {
-    //     const aEl = createDownloadLink(modelData, 'model.bin');
-    //     aEl.click();
-    // };
+    window.main.downloadModel = () => {
+        const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
+        aEl.click();
+    };
     
-    return new Model(device, modelData, texColl);
+    return new Model(device, modelData, texColl, isDemoModel);
 }
 
 class WorldRenderer extends SFARenderer {
@@ -492,8 +492,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         console.log(`Loading General Scales....`);
         testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
-        console.log(`Loading SharpClaw (Krazoa Palace version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'warlock', 0x21c / 4)); // SharpClaw (Krazoa Palace version)
+        console.log(`Loading Fox (beta version)....`);
+        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'swaphol', 0x4 / 4)); // Fox (beta version)
+        console.log(`Loading SharpClaw (beta version)....`);
+        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, true)); // SharpClaw (beta version)
+        console.log(`Loading General Scales (beta version)....`);
+        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, true)); // General Scales (beta version)
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;

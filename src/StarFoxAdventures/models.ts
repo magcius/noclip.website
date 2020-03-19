@@ -14,8 +14,8 @@ import * as GX from '../gx/gx_enum';
 import { GameInfo } from './scenes';
 import { SFAMaterial } from './shaders';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, EARLY_SFA_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
-import { LowBitReader } from './util';
+import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
+import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 
@@ -142,6 +142,19 @@ function readVec3(data: DataView, byteOffset: number = 0): vec3 {
         );
 }
 
+interface DisplayListInfo {
+    offset: number;
+    size: number;
+    // TODO: Also includes bounding box
+}
+
+function parseDisplayListInfo(data: DataView): DisplayListInfo {
+    return {
+        offset: data.getUint32(0),
+        size: data.getUint16(4),
+    }
+}
+
 export class Model implements BlockRenderer {
     // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
     public models: ModelInstance[][] = [];
@@ -203,45 +216,85 @@ export class Model implements BlockRenderer {
         }
     }
 
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, earlyFields: boolean = false) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private isDemoModel: boolean = false) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
         let fields: any;
-        if (earlyFields) {
-            fields = {
-                texOffset: 0x54,
-                texCount: 0xa0,
-                posOffset: 0x58,
-                posCount: 0x90,
-                hasNormals: false,
-                nrmOffset: 0,
-                nrmCount: 0,
-                clrOffset: 0x5c,
-                clrCount: 0x94,
-                texcoordOffset: 0x60,
-                texcoordCount: 0x96,
-                hasBones: false,
-                jointOffset: 0,
-                jointCount: 0,
-                shaderOffset: 0x64,
-                shaderCount: 0xa0, // Polygon attributes and material information
-                shaderFields: EARLY_SFA_SHADER_FIELDS,
-                shaderSize: 0x40,
-                listOffset: 0x68,
-                listCount: 0x9f,
-                listSize: 0x34,
-                // FIXME: Yet another format occurs in sfademo/frontend!
-                // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                numLayersOffset: 0x3b,
-                bitsOffsets: [0x74], // Whoa...
-                // FIXME: There are three bitstreams, probably for opaque and transparent objects
-                bitsByteCounts: [0x84],
-                oldVat: true,
-                hasYTranslate: false,
-                oldShaders: true,
-            };
+        if (this.isDemoModel) {
+            const isMapModel = false; // TODO: detect
+            if (isMapModel) {
+                // TODO: verify for correctness
+                fields = {
+                    isMapBlock: true,
+                    texOffset: 0x54,
+                    texCount: 0xa0,
+                    posOffset: 0x58,
+                    posCount: 0x90,
+                    hasNormals: false,
+                    nrmOffset: 0,
+                    nrmCount: 0,
+                    clrOffset: 0x5c,
+                    clrCount: 0x94,
+                    texcoordOffset: 0x60,
+                    texcoordCount: 0x96,
+                    hasBones: false,
+                    jointOffset: 0,
+                    jointCount: 0,
+                    shaderOffset: 0x64,
+                    shaderCount: 0xa0, // Polygon attributes and material information
+                    shaderFields: SFADEMO_MAP_SHADER_FIELDS,
+                    shaderSize: 0x40,
+                    dlInfoOffset: 0x68,
+                    dlInfoCount: 0x9f,
+                    dlInfoSize: 0x34,
+                    // FIXME: Yet another format occurs in sfademo/frontend!
+                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                    bitsOffsets: [0x74], // Whoa...
+                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
+                    bitsByteCounts: [0x84],
+                    oldVat: true,
+                    hasYTranslate: false,
+                };
+            } else {
+                // TODO: verify for correctness
+                fields = {
+                    isMapBlock: false,
+                    alwaysUseTex1: true,
+                    texOffset: 0x20,
+                    texCount: 0xf2,
+                    posOffset: 0x28,
+                    posCount: 0xe4,
+                    hasNormals: true,
+                    nrmOffset: 0x2c,
+                    nrmCount: 0xe6,
+                    clrOffset: 0x30,
+                    clrCount: 0xe8,
+                    texcoordOffset: 0x34,
+                    texcoordCount: 0xea,
+                    hasBones: true,
+                    jointOffset: 0x3c,
+                    jointCount: 0xf3,
+                    weightOffset: 0x54,
+                    weightCount: 0xf4,
+                    shaderOffset: 0x38,
+                    shaderCount: 0xf8, // Polygon attributes and material information
+                    shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
+                    shaderSize: 0x40,
+                    dlInfoOffset: 0xd0,
+                    dlInfoCount: 0xf5,
+                    dlInfoSize: 0x1c,
+                    // FIXME: Yet another format occurs in sfademo/frontend!
+                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
+                    bitsOffsets: [0xd4], // Whoa...
+                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
+                    bitsByteCounts: [0xd8],
+                    oldVat: true,
+                    hasYTranslate: false,
+                };
+            }
         } else {
             // FIXME: This field is NOT a model type and doesn't reliably indicate
             // the type of model.
@@ -251,8 +304,7 @@ export class Model implements BlockRenderer {
                 // Used in character and object models
                 fields = {
                     isMapBlock: false,
-                    //alwaysUseTex1: false,
-                    alwaysUseTex1: true, // FIXME: wtf?
+                    alwaysUseTex1: true,
                     texOffset: 0x20,
                     texCount: 0xf2,
                     posOffset: 0x28,
@@ -272,15 +324,14 @@ export class Model implements BlockRenderer {
                     shaderOffset: 0x38,
                     shaderCount: 0xf8,
                     shaderFields: SFA_SHADER_FIELDS,
-                    listOffset: 0xd0,
-                    listCount: 0xf5,
-                    listSize: 0x1c,
+                    dlInfoOffset: 0xd0,
+                    dlInfoCount: 0xf5,
+                    dlInfoSize: 0x1c,
                     numListBits: 8,
                     bitsOffsets: [0xd4],
                     bitsByteCounts: [0xd8],
                     oldVat: false,
                     hasYTranslate: false,
-                    oldShaders: false,
                 };
                 break;
             case 8:
@@ -306,15 +357,14 @@ export class Model implements BlockRenderer {
                     shaderOffset: 0x64,
                     shaderCount: 0xa2,
                     shaderFields: SFA_SHADER_FIELDS,
-                    listOffset: 0x68,
-                    listCount: 0xa1, // TODO
-                    listSize: 0x1c,
+                    dlInfoOffset: 0x68,
+                    dlInfoCount: 0xa1, // TODO
+                    dlInfoSize: 0x1c,
                     numListBits: 8,
                     bitsOffsets: [0x78, 0x7c, 0x80],
                     bitsByteCounts: [0x84, 0x86, 0x88],
                     oldVat: false,
                     hasYTranslate: true,
-                    oldShaders: false,
                 };
                 break;
             default:
@@ -475,8 +525,8 @@ export class Model implements BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const listOffset = blockDv.getUint32(fields.listOffset);
-        const listCount = blockDv.getUint8(fields.listCount);
+        const dlInfoOffset = blockDv.getUint32(fields.dlInfoOffset);
+        const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
         // console.log(`Loading ${chunkCount} display lists from 0x${chunkOffset.toString(16)}`);
 
         const bitsOffsets = [];
@@ -503,6 +553,7 @@ export class Model implements BlockRenderer {
 
         const self = this;
         function runBitstream(bitsOffset: number, drawStep: number) {
+            console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             const models: ModelInstance[] = [];
             self.models[drawStep] = models;
 
@@ -521,14 +572,14 @@ export class Model implements BlockRenderer {
                     break;
                 case 2: // Call display list
                     const listNum = bits.get(fields.numListBits);
-                    if (listNum >= listCount) {
+                    if (listNum >= dlInfoCount) {
                         console.warn(`Can't draw display list #${listNum} (out of range)`);
                         continue;
                     }
-                    offs = listOffset + listNum * fields.listSize;
-                    const dlOffset = blockDv.getUint32(offs);
-                    const dlSize = blockDv.getUint16(offs + 4);
-                    const displayList = blockData.subarray(dlOffset, dlSize);
+                    offs = dlInfoOffset + listNum * fields.dlInfoSize;
+                    const dlInfo = parseDisplayListInfo(dataSubarray(blockDv, offs, fields.dlInfoSize));
+                    console.log(`Calling DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+                    const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
     
                     const vtxArrays: GX_Array[] = [];
                     vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
