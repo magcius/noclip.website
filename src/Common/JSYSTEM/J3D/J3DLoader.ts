@@ -596,11 +596,11 @@ export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rota
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
-    dst[12] = translationS + centerS - dst[0] * centerS + dst[4] * centerT;
+    dst[12] = translationS + centerS - (dst[0] * centerS + dst[4] * centerT);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + centerT - dst[1] * centerS + dst[5] * centerT;
+    dst[13] = translationT + centerT - (dst[1] * centerS + dst[5] * centerT);
 }
 
 export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
