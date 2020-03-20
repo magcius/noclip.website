@@ -237,6 +237,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.sceneObjHolder.viewerInput = viewerInput;
+
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
         const camera = viewerInput.camera;
 
@@ -869,6 +871,8 @@ export class SceneObjHolder {
     // on the same singleton, but c'est la vie...
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
+
+    public viewerInput: Viewer.ViewerRenderInput;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)

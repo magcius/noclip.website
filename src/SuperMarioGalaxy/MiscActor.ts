@@ -690,10 +690,9 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         return true;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RailMoveObjNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === RailMoveObjNrv.Move) {
             if (isFirstStep(this))
                 this.startMapPartsFunctions();
@@ -2412,11 +2411,10 @@ export class Air extends LiveActor<AirNrv> {
         return !isDead(this) && !isHiddenModel(this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
-        const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
+        const distanceToPlayer = calcSqDistanceToPlayer(this, sceneObjHolder.viewerInput.camera);
 
         if (currentNerve === AirNrv.Out) {
             if (!isHiddenModel(this) && isAnyAnimStopped(this, 'Disappear'))
@@ -2491,12 +2489,11 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         startBpk(this, 'ShootingStar');
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         const SPEED = 10 * MathConstants.DEG_TO_RAD;
-        this.rotation[1] = (this.rotation[1] + (SPEED * getDeltaTimeFrames(viewerInput))) % MathConstants.TAU;
-        const currentNerve = this.getCurrentNerve();
+        this.rotation[1] = (this.rotation[1] + (SPEED * deltaTimeFrames)) % MathConstants.TAU;
 
         if (currentNerve === ShootingStarNrv.PreShooting) {
             if (isFirstStep(this)) {
@@ -2731,10 +2728,9 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaSteamNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === LavaSteamNrv.Wait) {
             if (isFirstStep(this)) {
                 emitEffect(sceneObjHolder, this, 'Sign');
@@ -2968,10 +2964,8 @@ class Fish extends LiveActor<FishNrv> {
         connectToSceneEnvironment(sceneObjHolder, this);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        const currentNerve = this.getCurrentNerve();
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FishNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FishNrv.Approach) {
             if (isFirstStep(this))
@@ -3012,6 +3006,10 @@ class Fish extends LiveActor<FishNrv> {
             if (vec3.squaredDistance(this.followPointPos, this.translation) > (this.approachThreshold * this.approachThreshold))
                 this.setNerve(FishNrv.Approach);
         }
+    }
+
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
 
         vec3.scale(this.velocity, this.velocity, 0.95);
 
@@ -3177,16 +3175,14 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        // nerves
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === SeaGullNrv.HoverFront) {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(0, 60);
 
-            this.bankRotation *= 0.995 * getDeltaTimeFrames(viewerInput);
+            this.bankRotation *= 0.995 * deltaTimeFrames;
             if (isGreaterStep(this, this.hoverStep)) {
                 const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
                 vec3.subtract(scratchVec3, chasePoint, this.translation);
@@ -3202,7 +3198,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
-            this.bankRotation -= 0.1 * getDeltaTimeFrames(viewerInput);
+            this.bankRotation -= 0.1 * deltaTimeFrames;
 
             if (isGreaterStep(this, this.hoverStep))
                 this.setNerve(SeaGullNrv.HoverFront);
@@ -3210,13 +3206,16 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
-            this.bankRotation += 0.1 * getDeltaTimeFrames(viewerInput);
+            this.bankRotation += 0.1 * deltaTimeFrames;
 
             if (isGreaterStep(this, this.hoverStep))
                 this.setNerve(SeaGullNrv.HoverFront);
         }
+    }
 
-        // control
+    public control(sceneObjHolder: SceneObjHolder, viewerRenderInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerRenderInput);
+
         this.updateHover();
 
         if (vec3.squaredLength(this.velocity) > 10*10)
@@ -3446,11 +3445,11 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         this.lifetime = lifetime;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === AirBubbleNrv.Wait) {
+            // Nothing.
         } else if (currentNerve === AirBubbleNrv.Move) {
             if (isFirstStep(this)) {
                 // Calc gravity.
@@ -3526,10 +3525,9 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         this.lifetime = fallback(getJMapInfoArg1(infoIter), -1);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleGeneratorNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === AirBubbleGeneratorNrv.Wait) {
             if (isGreaterStep(this, this.delay))
                 this.setNerve(AirBubbleGeneratorNrv.Generate);
@@ -3588,10 +3586,9 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureBoxNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === TreasureBoxNrv.Wait) {
             if (this.type === TreasureBoxType.Cracked) {
                 startBrk(this, `Wait`);
@@ -3726,10 +3723,9 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return false;
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === TicoRailNrv.Wait) {
             if (isFirstStep(this)) {
                 startBck(this, `Turn`);
@@ -3753,7 +3749,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 turnAmt = 1.2;
             else
                 turnAmt = 0.0;
-            turnAmt *= getDeltaTimeFrames(viewerInput);
+            turnAmt *= deltaTimeFrames;
             rotateVecDegree(this.direction, scratchVec3, turnAmt);
 
             if (isGreaterStep(this, 160)) {
@@ -3785,7 +3781,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 tryStartBck(this, `Wait`);
             }
 
-            const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, 0, 200, 15);
+            const speed = deltaTimeFrames * calcNerveValue(this, 0, 200, 15);
             moveCoordAndFollowTrans(this, speed);
 
             getRailDirection(this.direction, this);
@@ -3796,7 +3792,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 startBck(this, `Spin`);
 
             const duration = getBckFrameMax(this);
-            const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, duration, 15, 0);
+            const speed = deltaTimeFrames * calcNerveValue(this, duration, 15, 0);
             moveCoordAndFollowTrans(this, speed);
             if (isBckStopped(this))
                 this.setNerve(TicoRailNrv.Wait);
@@ -3804,7 +3800,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
             if (isFirstStep(this))
                 tryStartBck(this, `Spin`);
 
-            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 15);
+            moveCoordAndFollowTrans(this, deltaTimeFrames * 15);
             getRailDirection(this.direction, this);
             if (isBckStopped(this))
                 this.setNerve(TicoRailNrv.Move);
@@ -3820,7 +3816,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                     reverseRailDirection(this);
             }
 
-            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 2);
+            moveCoordAndFollowTrans(this, deltaTimeFrames * 2);
             const frameMax = getBckFrameMax(this);
             const rate = calcNerveRate(this, frameMax);
             getRailDirection(scratchVec3b, this);
@@ -3844,7 +3840,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
                 if (vec3.dot(this.direction, scratchVec3a) > 0)
                     reverseRailDirection(this);
             }
-            moveCoordAndFollowTrans(this, getDeltaTimeFrames(viewerInput) * 1.5);
+            moveCoordAndFollowTrans(this, deltaTimeFrames * 1.5);
             // TODO(jstpierre): isBckLooped
             const endFrame = getBckFrameMax(this);
             if (isGreaterStep(this, endFrame)) {
@@ -3900,10 +3896,9 @@ export class PalmIsland extends LiveActor<PalmIslandNrv> {
         vec3.negate(this.gravityVector, this.gravityVector);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PalmIslandNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === PalmIslandNrv.Wait) {
             if (isGreaterStep(this, this.floatDelay))
                 this.setNerve(PalmIslandNrv.Float);

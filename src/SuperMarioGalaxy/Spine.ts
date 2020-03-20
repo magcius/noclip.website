@@ -64,8 +64,6 @@ export class Spine<Nerve extends number = number> {
         } else {
             this.tick += deltaTime;
         }
-
-        this.changeNerve();
     }
 
     public getCurrentNerve(): Nerve {
