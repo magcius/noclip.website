@@ -190,8 +190,8 @@ const scratchQuat = quat.create();
 export class XanimeCore implements JointMatrixCalc {
     public curAnmTime = 0.0;
     public interpoleRatio = 0.0;
-    public freeze: boolean = false;
-    public resetJointXform: boolean = false;
+    public isFrozen: boolean = false;
+    public updateFrozenJoints: boolean = false;
     private ank1: ANK1 | null = null;
     private joints: XjointInfo[];
 
@@ -215,12 +215,13 @@ export class XanimeCore implements JointMatrixCalc {
     }
 
     public doFreeze(): void {
-        this.freeze = true;
+        this.isFrozen = true;
+        this.interpoleRatio = 0.0;
     }
 
     public updateFrame(): void {
-        this.resetJointXform = this.freeze;
-        this.freeze = false;
+        this.updateFrozenJoints = this.isFrozen;
+        this.isFrozen = false;
     }
 
     public setBck(track: number, ank1: ANK1): void {
@@ -251,7 +252,7 @@ export class XanimeCore implements JointMatrixCalc {
             vec3.set(anmTrans, translationX, translationY, translationZ);
             quatFromEulerRadians(anmRot, rotationX, rotationY, rotationZ);
 
-            if (this.resetJointXform)
+            if (this.updateFrozenJoints)
                 xj.xformFrozen.copy(xj.xformAnm);
 
             if (this.interpoleRatio < 1.0) {

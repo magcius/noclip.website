@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, quatSetRotate, moveCoordToRailPoint } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, quatSetRotate, moveCoordToRailPoint, isValidSwitchDead } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -1618,8 +1618,8 @@ export class CoinRotater extends NameObj {
 }
 
 class Coin extends LiveActor {
+    public useLocalGravity: boolean = false;
     private isInWater: boolean = false;
-    private useLocalGravity: boolean = false;
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, protected isPurpleCoin: boolean) {
@@ -1644,18 +1644,40 @@ class Coin extends LiveActor {
         if (this.useLocalGravity) {
             calcActorAxis(null, this.gravityVector, null, this);
             vec3.negate(this.gravityVector, this.gravityVector);
-        } else {
-            calcGravity(sceneObjHolder, this);
         }
+
+        if (infoIter === null) {
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+                syncStageSwitchAppear(sceneObjHolder, this);
+                this.makeActorDead(sceneObjHolder);
+            } else {
+                this.appearFixInit(sceneObjHolder);
+            }
+        }
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        super.initAfterPlacement(sceneObjHolder);
+    private appearFixInit(sceneObjHolder: SceneObjHolder): void {
+        this.makeActorAppeared(sceneObjHolder);
+        // validateClipping
+        // validateHitSensors
+        // offBind
+    }
 
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        this.calcGravityFlag = false;
+        if (!this.useLocalGravity) {
+            calcGravity(sceneObjHolder, this);
+        }
+
+        super.makeActorAppeared(sceneObjHolder);
         this.isInWater = isInWater(sceneObjHolder, this.translation);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.useLocalGravity) {
             this.calcAndSetBaseMtxBase();
         } else {
@@ -1671,11 +1693,11 @@ class Coin extends LiveActor {
     }
 }
 
-export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): Coin {
+export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     return new Coin(zoneAndLayer, sceneObjHolder, infoIter, false);
 }
 
-export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): Coin {
+export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     return new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
 }
 
@@ -1693,56 +1715,51 @@ export function requestArchivesPurpleCoin(sceneObjHolder: SceneObjHolder, infoIt
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
 }
 
-export class QuestionCoin extends LiveActor {
-    private useLocalGravity: boolean = false;
-    private mtx = mat4.create();
+const enum CoinGroupNrv { Wait, Appear }
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, sceneObjHolder, 'QuestionCoin');
-
-        initDefaultPos(sceneObjHolder, this, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, 'QuestionCoin');
-        startBpk(this, 'QuestionCoin');
-        connectToSceneItemStrongLight(sceneObjHolder, this);
-
-        this.useLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
-
-        // TODO(jstpierre): initAfterPlacement
-        makeMtxTRFromActor(this.mtx, this);
-    }
-
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        sceneObjHolder.create(SceneObj.CoinRotater);
-        const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
-        mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
-    }
-}
-
-abstract class CoinGroup extends LiveActor {
+abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
     protected coinArray: Coin[] = [];
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private isPurpleCoin: boolean) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const coinCount = fallback(getJMapInfoArg0(infoIter), 0);
 
         for (let i = 0; i < coinCount; i++) {
+            // TODO(jstpierre): This is technically wrong, to pass infoIter through to the Coin like this.
+            // Typically, setShadowAndPoseModeFromJMapInfoIter is called. This has the effect of causing the
+            // Coins to appear by default, even when attached to a switch.
+
             if (this.isPurpleCoin) {
                 this.coinArray.push(createPurpleCoin(zoneAndLayer, sceneObjHolder, infoIter));
             } else {
                 this.coinArray.push(createCoin(zoneAndLayer, sceneObjHolder, infoIter));
             }
 
-            const coin = this.coinArray[i];
             // Coin has been default init'd at this point. Set some extra properties on it.
+            const coin = this.coinArray[i];
+            // if (coin.useLocalGravity)
+            //     initDefaultPos(sceneObjHolder, coin, infoIter);
             vec3.set(coin.scale, 1, 1, 1);
         }
 
         this.initCoinArray(sceneObjHolder, infoIter);
         this.placementCoin();
 
-        connectToSceneMapObjMovement(sceneObjHolder, this);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            connectToSceneMapObjMovement(sceneObjHolder, this);
+            this.initNerve(CoinGroupNrv.Appear);
+        } else {
+            this.appearCoinFix(sceneObjHolder);
+        }
+
         this.makeActorDead(sceneObjHolder);
+    }
+
+    private appearCoinFix(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.coinArray.length; i++)
+            this.coinArray[i].makeActorAppeared(sceneObjHolder);
     }
 
     protected abstract initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
@@ -1836,6 +1853,49 @@ export function createCircleCoinGroup(zoneAndLayer: ZoneAndLayer, sceneObjHolder
 
 export function createPurpleCircleCoinGroup(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): CircleCoinGroup {
     return new CircleCoinGroup(zoneAndLayer, sceneObjHolder, infoIter, true);
+}
+
+export class QuestionCoin extends LiveActor {
+    private useLocalGravity: boolean = false;
+    private mtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'QuestionCoin');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+
+        this.useLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+
+        // TODO(jstpierre): initAfterPlacement
+
+        if (this.useLocalGravity) {
+            makeMtxTRFromActor(this.mtx, this);
+        } else {
+            makeMtxTRFromActor(this.mtx, this);
+            getMatrixAxisZ(scratchVec3a, this.mtx);
+            vec3.negate(scratchVec3b, this.gravityVector);
+            makeMtxUpFrontPos(this.mtx, scratchVec3b, scratchVec3a, this.translation);
+        }
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'QuestionCoin');
+        startBpk(this, 'QuestionCoin');
+        connectToSceneItemStrongLight(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        sceneObjHolder.create(SceneObj.CoinRotater);
+        const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
+        mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+        super.makeActorDead(sceneObjHolder);
+    }
 }
 
 export class MiniRoutePoint extends LiveActor {
@@ -2102,12 +2162,13 @@ export class GCaptureTarget extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "GCaptureTarget");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
-        startBck(this, 'Wait');
-        startBrk(this, 'Switch');
-        setBrkFrameAndStop(this, 1);
 
         emitEffect(sceneObjHolder, this, 'TargetLight');
         emitEffect(sceneObjHolder, this, 'TouchAble');
+
+        startBck(this, 'Wait');
+        startBrk(this, 'Switch');
+        setBrkFrameAndStop(this, 1);
     }
 }
 
@@ -4481,18 +4542,19 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.item = new Coin(this.zoneAndLayer, sceneObjHolder, null, false);
         const mtx = this.getBaseMtx()!;
         vec3.transformMat4(this.item.translation, shellfishCoinOffset, mtx);
+        this.item.makeActorAppeared(sceneObjHolder);
     }
 
     private initYellowChip(sceneObjHolder: SceneObjHolder): void {
         this.item = new YellowChip(this.zoneAndLayer, sceneObjHolder, null);
         const mtx = this.getBaseMtx()!;
         vec3.transformMat4(this.item.translation, shellfishChipOffset, mtx);
+        this.item.makeActorAppeared(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShellfishNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const currentNerve = this.getCurrentNerve();
         if (currentNerve === ShellfishNrv.Wait) {
             if (isFirstStep(this))
                 startBck(this, 'Wait');

@@ -961,7 +961,7 @@ export function isExistCollisionResource(actor: LiveActor, name: string): boolea
     return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
 }
 
-export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
     addSleepControlForLiveActor(sceneObjHolder, actor, infoIter);
 }
 

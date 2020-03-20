@@ -10,23 +10,33 @@ import { connectToSceneMapObjMovement, connectToScene } from "./ActorUtil";
 import { AreaObj } from "./AreaObj";
 
 //#region MapTool
-export function isExistStageSwitchA(infoIter: JMapInfoIter): boolean {
+export function isExistStageSwitchA(infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
     return infoIter.getValueNumberNoInit('SW_A') !== null;
 }
 
-export function isExistStageSwitchB(infoIter: JMapInfoIter): boolean {
+export function isExistStageSwitchB(infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
     return infoIter.getValueNumberNoInit('SW_B') !== null;
 }
 
-export function isExistStageSwitchAppear(infoIter: JMapInfoIter): boolean {
+export function isExistStageSwitchAppear(infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
     return infoIter.getValueNumberNoInit('SW_APPEAR') !== null;
 }
 
-export function isExistStageSwitchDead(infoIter: JMapInfoIter): boolean {
+export function isExistStageSwitchDead(infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
     return infoIter.getValueNumberNoInit('SW_DEAD') !== null;
 }
 
-export function isExistStageSwitchSleep(infoIter: JMapInfoIter): boolean {
+export function isExistStageSwitchSleep(infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
     return infoIter.getValueNumberNoInit('SW_SLEEP') !== null;
 }
 //#endregion
@@ -93,7 +103,10 @@ export class SwitchIdInfo {
     }
 }
 
-function createSwitchIdInfo(sceneObjHolder: SceneObjHolder, fieldName: string, infoIter: JMapInfoIter): SwitchIdInfo | null {
+function createSwitchIdInfo(sceneObjHolder: SceneObjHolder, fieldName: string, infoIter: JMapInfoIter | null): SwitchIdInfo | null {
+    if (infoIter === null)
+        return null;
+
     const switchId = fallback(infoIter.getValueNumber(fieldName), -1);
     if (switchId < 0)
         return null;
@@ -296,7 +309,7 @@ class SleepController {
     public switchIdInfo: SwitchIdInfo;
     public isSwitchOn: boolean = false;
 
-    constructor(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private eventListener: SwitchEventListener) {
+    constructor(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, private eventListener: SwitchEventListener) {
         this.switchIdInfo = assertExists(createSwitchIdInfo(sceneObjHolder, 'SW_SLEEP', infoIter));
     }
 
@@ -335,12 +348,12 @@ export class SleepControllerHolder extends NameObj {
             this.controllers[i].update(sceneObjHolder);
     }
 
-    public add(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, eventListener: SwitchFunctorEventListener): void {
+    public add(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, eventListener: SwitchFunctorEventListener): void {
         this.controllers.push(new SleepController(sceneObjHolder, infoIter, eventListener));
     }
 }
 
-export function addSleepControlForLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+export function addSleepControlForLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
     if (!isExistStageSwitchSleep(infoIter))
         return;
 

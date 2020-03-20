@@ -90,11 +90,14 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            const count = 100;
+            if (grav.constructor.name !== 'DiskGravity')
+                continue;
+
+            const count = 50;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
-                arrow.scale = 0.5;
+                arrow.scale = 0.1;
 
                 grav.generateRandomPoint(arrow.coord);
                 vec3.copy(arrow.pos, arrow.coord);
@@ -121,7 +124,7 @@ export class GravityExplainer extends LiveActor {
             calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
             vec3.normalize(arrow.gravityVec, arrow.gravityVec);
 
-            vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
+            // vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
             arrow.time += deltaTimeFrames;
 
             if (arrow.time >= arrow.lifetime) {
@@ -137,6 +140,8 @@ export class GravityExplainer extends LiveActor {
                 arrow.color.a = invlerp(arrow.lifetime, fadeOutTime, arrow.time);
             else
                 arrow.color.a = 1.0;
+
+            arrow.color.a = 1.0;
         }
     }
 

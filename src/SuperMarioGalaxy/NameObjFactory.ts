@@ -8,7 +8,7 @@ import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, P
 import { OceanBowl } from "./OceanBowl";
 import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
-import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj } from './Gravity';
+import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj } from './Gravity';
 import { SwitchSynchronizer } from './Switch';
 
 export interface NameObjFactory {
@@ -638,7 +638,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     // Gravity
     E("GlobalConeGravity",            createGlobalConeGravityObj),
     E("GlobalCubeGravity",            createGlobalCubeGravityObj),
-    N("GlobalDiskGravity"),
+    E("GlobalDiskGravity",            createGlobalDiskGravityObj),
     N("GlobalDiskTorusGravity"),
     E("GlobalPointGravity",           createGlobalPointGravityObj),
     E("GlobalPlaneGravity",           createGlobalPlaneGravityObj),

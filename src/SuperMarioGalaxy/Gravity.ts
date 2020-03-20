@@ -4,9 +4,12 @@ import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero } from "../MathHelpers";
-import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, preScaleMtx } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, transformVec3Mat4w1 } from "../MathHelpers";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, preScaleMtx, connectToSceneMapObjMovement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
+import { ViewerRenderInput } from "../viewer";
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { Red, Green } from "../Color";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -151,6 +154,7 @@ abstract class PlanetGravity {
     }
 
     // Generate a random point somewhere around or inside the gravity.
+    // This is a noclip special, and is basically a hack for GravityExplainer.
     protected abstract generateOwnRandomPoint(dst: vec3): void;
 
     public generateRandomPoint(dst: vec3): void {
@@ -160,6 +164,9 @@ abstract class PlanetGravity {
             if (this.calcOwnGravityVector(scratchVec3a, dst) >= 0)
                 break;
         }
+    }
+
+    public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
     }
 }
 
@@ -766,7 +773,7 @@ class SegmentGravity extends PlanetGravity {
     private gravityPoints = nArray(2, () => vec3.create());
     private sideVector = vec3.create();
     private edgeValid = nArray(2, () => true);
-    private validSideVector = vec3.create();
+    private sideVectorOrtho = vec3.create();
     private validSideDegree: number = 360.0;
     private validSideCos: number = -1.0;
     private segmentDirection = vec3.create();
@@ -793,33 +800,31 @@ class SegmentGravity extends PlanetGravity {
         this.validSideCos = Math.cos(theta);
 
         vec3.sub(scratchVec3a, this.gravityPoints[1], this.gravityPoints[0]);
-        vec3.normalize(scratchVec3a, scratchVec3a);
+        vec3.normalize(this.segmentDirection, scratchVec3a);
+        this.segmentLength = vec3.length(scratchVec3a);
 
+        // Orthonormalize sideVector.
         // NOTE(jstpierre): I'm quite sure sideVector and segmentDirection will already be orthonormal...
-        const dot = vec3.dot(scratchVec3a, this.sideVector);
-        vec3.scaleAndAdd(scratchVec3b, this.sideVector, scratchVec3a, -dot);
+        const dot = vec3.dot(this.segmentDirection, this.sideVector);
+        vec3.scaleAndAdd(scratchVec3b, this.sideVector, this.segmentDirection, -dot);
 
-        mat4.fromRotation(scratchMatrix, theta, scratchVec3a);
-        vec3.transformMat4(this.validSideVector, scratchVec3b, scratchMatrix);
+        mat4.fromRotation(scratchMatrix, theta, this.segmentDirection);
+        vec3.transformMat4(this.sideVectorOrtho, scratchVec3b, scratchMatrix);
     }
 
     protected updateMtx(): void {
         this.updateLocalParam();
-
-        vec3.subtract(scratchVec3a, this.gravityPoints[1], this.gravityPoints[0]);
-        this.segmentLength = vec3.length(scratchVec3a);
-        vec3.normalize(this.segmentDirection, scratchVec3a);
     }
 
     protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
         vec3.subtract(scratchVec3a, coord, this.gravityPoints[0]);
         const dot = vec3.dot(scratchVec3a, this.segmentDirection);
 
-        if (this.validSideCos > -1 && vec3.squaredLength(this.validSideVector) >= 0.0) {
+        if (this.validSideCos > -1 && vec3.squaredLength(this.sideVectorOrtho) >= 0.0) {
             vec3.scale(scratchVec3b, this.segmentDirection, dot);
             vec3.sub(scratchVec3b, scratchVec3a, scratchVec3b);
             vec3.normalize(scratchVec3b, scratchVec3b);
-            if (vec3.dot(scratchVec3b, this.validSideVector) < this.validSideCos)
+            if (vec3.dot(scratchVec3b, this.sideVectorOrtho) < this.validSideCos)
                 return -1;
         }
 
@@ -854,6 +859,124 @@ class SegmentGravity extends PlanetGravity {
         dst[0] += getRandomFloat(-this.range, this.range);
         dst[1] += getRandomFloat(-this.range, this.range);
         dst[2] += getRandomFloat(-this.range, this.range);
+    }
+}
+
+class DiskGravity extends PlanetGravity {
+    private enableEdgeGravity: boolean = false;
+    private bothSide: boolean = false;
+    private validDegree: number = 360.0;
+    private validCos: number = -1.0;
+    private localPosition = vec3.create();
+    private localDirection = vec3.create();
+    private sideDirection = vec3.create();
+    private sideDirectionOrtho = vec3.create();
+    private radius: number = 250.0;
+
+    private worldPosition = vec3.create();
+    private worldDirection = vec3.create();
+    private worldSideDirection = vec3.create();
+    private worldRadius: number = 250.0;
+
+    public setBothSide(v: boolean): void {
+        this.bothSide = v;
+    }
+
+    public setEnableEdgeGravity(v: boolean): void {
+        this.enableEdgeGravity = v;
+    }
+
+    public setValidDegree(v: number): void {
+        this.validDegree = v;
+    }
+
+    public setLocalPosition(v: vec3): void {
+        vec3.copy(this.localPosition, v);
+    }
+
+    public setLocalDirection(v: vec3): void {
+        vec3.normalize(this.localDirection, v);
+    }
+
+    public setSideDirection(v: vec3): void {
+        vec3.copy(this.sideDirection, v);
+    }
+
+    public setRadius(v: number): void {
+        this.radius = v;
+    }
+
+    private updateLocalParam(): void {
+        const theta = MathConstants.DEG_TO_RAD * this.validDegree * 0.5;
+        this.validCos = Math.cos(theta);
+
+        // Orthonormalize the side direction.
+        // NOTE(jstpierre): I'm quite sure sideDirection and segmentDirection will already be orthonormal...
+        const dot = vec3.dot(this.localDirection, this.sideDirection);
+        vec3.scaleAndAdd(scratchVec3b, this.sideDirection, this.localDirection, -dot);
+
+        mat4.fromRotation(scratchMatrix, theta, this.sideDirection);
+        vec3.transformMat4(this.sideDirectionOrtho, scratchVec3b, scratchMatrix);
+    }
+
+    protected updateMtx(): void {
+        this.updateLocalParam();
+
+        vec3.copy(this.worldPosition, this.localPosition);
+        vec3.copy(this.worldDirection, this.localDirection);
+        vec3.copy(this.worldSideDirection, this.sideDirectionOrtho);
+        const length = vec3.length(this.worldSideDirection);
+        vec3.normalize(this.worldSideDirection, this.worldSideDirection);
+        this.worldRadius = this.radius * length;
+    }
+
+    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+        vec3.subtract(scratchVec3a, coord, this.worldPosition);
+        const dot = vec3.dot(scratchVec3a, this.worldDirection);
+
+        // Wrong side.
+        if (dot < 0.0 && !this.bothSide)
+            return -1;
+
+        vec3.scale(scratchVec3b, this.worldDirection, dot);
+        vec3.sub(scratchVec3b, scratchVec3a, scratchVec3b);
+        const length = vec3.length(scratchVec3b);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        // Check degree validity.
+        if (this.validCos > -1 && vec3.dot(scratchVec3b, this.worldSideDirection) < this.validCos)
+            return -1;
+
+        let dist: number;
+        if (length >= this.worldRadius) {
+            if (!this.enableEdgeGravity)
+                return -1;
+
+            vec3.scale(scratchVec3b, scratchVec3b, this.worldRadius);
+            vec3.sub(dst, scratchVec3b, scratchVec3a);
+            dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
+        } else {
+            vec3.scale(dst, this.worldDirection, -1 * Math.sign(dot));
+            dist = Math.abs(dot);
+        }
+
+        if (!this.isInRangeDistance(dist))
+            return -1;
+
+        return dist;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        dst[0] = this.worldPosition[0] + getRandomFloat(-this.range, this.range);
+        dst[1] = this.worldPosition[1] + getRandomFloat(-this.range, this.range);
+        dst[2] = this.worldPosition[2] + getRandomFloat(-this.range, this.range);
+    }
+
+    public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const ctx = getDebugOverlayCanvas2D();
+        drawWorldSpaceVector(ctx, viewerInput.camera, this.worldPosition, this.worldSideDirection, this.worldRadius, Red);
+        drawWorldSpaceVector(ctx, viewerInput.camera, this.worldPosition, this.worldDirection, 100, Green);
     }
 }
 
@@ -974,7 +1097,15 @@ class ConeGravity extends PlanetGravity {
 export class GlobalGravityObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        // connectToSceneMapObjMovement(sceneObjHolder, this);
     }
+
+    /*
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) {
+        super.movement(sceneObjHolder, viewerInput);
+        this.gravity.drawDebug(sceneObjHolder, viewerInput);
+    }
+    */
 }
 
 function makeMtxTR(dst: mat4, translation: vec3, rotation: vec3): void {
@@ -1158,6 +1289,43 @@ export function createGlobalSegmentGravityObj(zoneAndLayer: ZoneAndLayer, sceneO
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     if (arg1 >= 0)
         gravity.setValidSideDegree(arg1);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalDiskGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new DiskGravity();
+
+    // SegmentGravityCreator::settingFromSRT
+    getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
+    getJMapInfoScale(scratchVec3c, infoIter);
+
+    makeMtxTR(scratchMatrix, scratchVec3a, scratchVec3b);
+    gravity.setLocalPosition(scratchVec3a);
+    getMatrixAxisY(scratchVec3b, scratchMatrix);
+    gravity.setLocalDirection(scratchVec3b);
+    getMatrixAxisX(scratchVec3b, scratchMatrix);
+    gravity.setSideDirection(scratchVec3b);
+
+    const maxElem = Math.max(scratchVec3c[0], scratchVec3c[1], scratchVec3c[2]);
+    gravity.setRadius(500.0 * maxElem);
+
+    // SegmentGravityCreator::settingFromJMapArgs
+    const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+    const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
+    const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
+
+    gravity.setBothSide(arg0 !== 0);
+    gravity.setEnableEdgeGravity(arg1 !== 0);
+    if (arg2 >= 0)
+        gravity.setValidDegree(arg2);
+    else
+        gravity.setValidDegree(360.0);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

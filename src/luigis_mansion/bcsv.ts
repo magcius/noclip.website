@@ -182,7 +182,10 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
 }
 
 export function getFieldIndexFromHash(bcsv: Bcsv, nameHash: number): number {
-    return bcsv.fields.findIndex((field) => field.nameHash === nameHash);
+    for (let i = 0; i < bcsv.fields.length; i++)
+        if (bcsv.fields[i].nameHash === nameHash)
+            return i;
+    return -1;
 }
 
 export function getFieldIndexFromName(bcsv: Bcsv, name: string): number {
