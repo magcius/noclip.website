@@ -600,7 +600,7 @@ export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rota
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + centerT + -scaleT * (-sinR * centerS + cosR * centerT);
+    dst[13] = translationT + centerT + -scaleT * (sinR * centerS + cosR * centerT);
 }
 
 export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
