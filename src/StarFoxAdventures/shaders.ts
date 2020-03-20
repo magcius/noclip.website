@@ -39,6 +39,7 @@ function parseShaderLayer(data: DataView): ShaderLayer {
 }
 
 interface ShaderFields {
+    isAncient?: boolean;
     size: number;
     numLayers: number;
     layers: number;
@@ -62,6 +63,13 @@ export const SFADEMO_MAP_SHADER_FIELDS: ShaderFields = {
     layers: 0x24, // ???
 };
 
+export const ANCIENT_MODEL_SHADER_FIELDS: ShaderFields = {
+    isAncient: true,
+    size: 0x38,
+    numLayers: 0x36,
+    layers: 0x20, // ???
+};
+
 export enum ShaderFlags {
     DevGeometry = 0x2,
     Fog = 0x4,
@@ -74,6 +82,11 @@ export enum ShaderFlags {
     StreamingVideo = 0x20000,
     SkyAmbientLit = 0x40000,
     FancyWater = 0x80000000, // ???
+}
+
+export enum ShaderAttrFlags {
+    NRM = 0x1,
+    CLR = 0x2,
 }
 
 export function parseShader(data: DataView, fields: ShaderFields): Shader {
@@ -96,12 +109,28 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
         shader.layers.push(layer);
     }
 
-    shader.hasAuxTex0 = data.getUint32(0x8) != 0;
-    shader.hasAuxTex1 = data.getUint32(0x14) != 0;
-    shader.auxTexNum = data.getUint32(0x34);
+    if (!fields.isAncient) {
+        shader.flags = data.getUint32(0x3c); // FIXME: find this field in demo files
+        shader.attrFlags = data.getUint8(0x40);
+        shader.hasAuxTex0 = data.getUint32(0x8) != 0;
+        shader.hasAuxTex1 = data.getUint32(0x14) != 0;
+        shader.auxTexNum = data.getUint32(0x34);
+    } else {
+        const ancientAttrs = data.getUint8(0x34);
+        shader.flags = 0;
+        shader.attrFlags = 0;
+        if (ancientAttrs & 1) {
+            shader.attrFlags |= ShaderAttrFlags.NRM;
+        }
+        if (ancientAttrs & 2) {
+            shader.attrFlags |= ShaderAttrFlags.CLR;
+        }
+        shader.hasAuxTex0 = false;
+        shader.hasAuxTex1 = false;
+        shader.auxTexNum = -1;
+    }
 
-    shader.flags = data.getUint32(0x3c); // FIXME: find this field in demo files
-    shader.attrFlags = data.getUint8(0x40);
+    console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
 
     return shader;
 }

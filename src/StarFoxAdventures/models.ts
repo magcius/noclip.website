@@ -12,9 +12,9 @@ import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial } from './shaders';
+import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, ShaderFlags, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
+import { Shader, parseShader, ShaderFlags, ANCIENT_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
@@ -142,6 +142,12 @@ function readVec3(data: DataView, byteOffset: number = 0): vec3 {
         );
 }
 
+export enum ModelVersion {
+    Ancient, // Demo swapcircle, ancient BLOCKS.bin?
+    Demo, // Most demo files
+    Final,
+}
+
 interface DisplayListInfo {
     offset: number;
     size: number;
@@ -216,12 +222,46 @@ export class Model implements BlockRenderer {
         }
     }
 
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private isDemoModel: boolean = false) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
         let fields: any;
-        if (this.isDemoModel) {
+        if (this.modelVersion === ModelVersion.Ancient) {
+            fields = {
+                isAncient: true,
+                isMapBlock: false, // TODO: support map blocks
+                alwaysUseTex1: true,
+                shaderFields: ANCIENT_MODEL_SHADER_FIELDS,
+                hasNormals: true,
+                hasBones: true,
+                texOffset: 0x1c,
+                posOffset: 0x24,
+                nrmOffset: 0x2c, // ???
+                clrOffset: 0x2c,
+                texcoordOffset: 0x30,
+                shaderOffset: 0x34,
+                jointOffset: 0x38,
+                listOffsets: 0x6c,
+                listSizes: 0x70,
+                posCount: 0x9e,
+                nrmCount: 0xa0,
+                clrCount: 0xa2,
+                texcoordCount: 0xa4,
+                texCount: 0xaa,
+                jointCount: 0xab,
+                weightCount: 0xad,
+                shaderCount: 0xae,
+                dlOffsets: 0x88,
+                dlSizes: 0x8c,
+                dlInfoCount: 0xac,
+                numListBits: 6,
+                bitsOffsets: [0x90],
+                bitsByteCounts: [0x94],
+                oldVat: true,
+                hasYTranslate: false,
+            }
+        } else if (this.modelVersion === ModelVersion.Demo) {
             const isMapModel = false; // TODO: detect
             if (isMapModel) {
                 // TODO: verify for correctness
@@ -244,7 +284,6 @@ export class Model implements BlockRenderer {
                     shaderOffset: 0x64,
                     shaderCount: 0xa0, // Polygon attributes and material information
                     shaderFields: SFADEMO_MAP_SHADER_FIELDS,
-                    shaderSize: 0x40,
                     dlInfoOffset: 0x68,
                     dlInfoCount: 0x9f,
                     dlInfoSize: 0x34,
@@ -281,7 +320,6 @@ export class Model implements BlockRenderer {
                     shaderOffset: 0x38,
                     shaderCount: 0xf8, // Polygon attributes and material information
                     shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
-                    shaderSize: 0x40,
                     dlInfoOffset: 0xd0,
                     dlInfoCount: 0xf5,
                     dlInfoSize: 0x1c,
@@ -378,7 +416,7 @@ export class Model implements BlockRenderer {
 
         const texOffset = blockDv.getUint32(fields.texOffset);
         const texCount = blockDv.getUint8(fields.texCount);
-        // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
+        console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
@@ -386,8 +424,8 @@ export class Model implements BlockRenderer {
         }
 
         const posOffset = blockDv.getUint32(fields.posOffset);
-        // const posCount = blockDv.getUint16(fields.posCount);
-        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+        const posCount = blockDv.getUint16(fields.posCount);
+        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = blockData.subarray(posOffset);
 
         let nrmBuffer = blockData;
@@ -399,19 +437,20 @@ export class Model implements BlockRenderer {
         }
 
         const clrOffset = blockDv.getUint32(fields.clrOffset);
-        // const clrCount = blockDv.getUint16(fields.clrCount);
-        // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
+        const clrCount = blockDv.getUint16(fields.clrCount);
+        console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = blockData.subarray(clrOffset);
 
         const texcoordOffset = blockDv.getUint32(fields.texcoordOffset);
-        // const texcoordCount = blockDv.getUint16(fields.texcoordCount);
-        // console.log(`Loading ${coordCount} texcoords from 0x${coordOffset.toString(16)}`);
+        const texcoordCount = blockDv.getUint16(fields.texcoordCount);
+        console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordCount.toString(16)}`);
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         let jointCount = 0;
         if (fields.hasBones) {
             const jointOffset = blockDv.getUint32(fields.jointOffset);
             jointCount = blockDv.getUint8(fields.jointCount);
+            console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
 
             this.joints = [];
             let offs = jointOffset;
@@ -426,6 +465,7 @@ export class Model implements BlockRenderer {
 
             const weightOffset = blockDv.getUint32(fields.weightOffset);
             const weightCount = blockDv.getUint8(fields.weightCount);
+            console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
 
             this.weights = [];
             offs = weightOffset;
@@ -443,16 +483,17 @@ export class Model implements BlockRenderer {
 
             this.computeBoneMatrices();
 
-            const transIsPresent = blockDv.getUint32(0xa4);
-            if (transIsPresent != 0) {
-                console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
-                this.modelTranslate = readVec3(blockDv, 0x44);
-                console.log(`trans: ${this.modelTranslate}`);
-            }
+            // const transIsPresent = blockDv.getUint32(0xa4);
+            // if (transIsPresent != 0) {
+            //     console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
+            //     this.modelTranslate = readVec3(blockDv, 0x44);
+            //     console.log(`trans: ${this.modelTranslate}`);
+            // }
         }
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
+        console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
 
         const shaders: Shader[] = [];
         offs = shaderOffset;
@@ -525,9 +566,31 @@ export class Model implements BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const dlInfoOffset = blockDv.getUint32(fields.dlInfoOffset);
+        const dlOffsets: number[] = [];
+        const dlSizes: number[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
-        // console.log(`Loading ${chunkCount} display lists from 0x${chunkOffset.toString(16)}`);
+        console.log(`Loading ${dlInfoCount} display lists...`);
+        if (this.modelVersion === ModelVersion.Ancient) {
+            for (let i = 0; i < dlInfoCount; i++) {
+                const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
+                const dlSizesOffs = blockDv.getUint32(fields.dlSizes);
+
+                const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
+                const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
+                dlOffsets.push(dlOffset);
+                dlSizes.push(dlSize);
+            }
+        } else {
+            const dlInfoOffset = blockDv.getUint32(fields.dlInfoOffset);
+
+            for (let i = 0; i < dlInfoCount; i++) {
+                offs = dlInfoOffset + i * fields.dlInfoSize;
+                const dlInfo = parseDisplayListInfo(dataSubarray(blockDv, offs, fields.dlInfoSize));
+                dlOffsets.push(dlInfo.offset);
+                dlSizes.push(dlInfo.size);
+            }
+        }
+        console.log(`DL offsets: ${dlOffsets}; sizes: ${dlSizes}`);
 
         const bitsOffsets = [];
         const bitsByteCounts = [];
@@ -567,19 +630,21 @@ export class Model implements BlockRenderer {
             while (!done) {
                 const opcode = bits.get(4);
                 switch (opcode) {
-                case 1: // Set shader
-                    curShader = shaders[bits.get(6)];
+                case 1: { // Set shader
+                    const shaderNum = bits.get(6);
+                    console.log(`Setting shader #${shaderNum}`);
+                    curShader = shaders[shaderNum];
                     break;
-                case 2: // Call display list
+                }
+                case 2: { // Call display list
                     const listNum = bits.get(fields.numListBits);
                     if (listNum >= dlInfoCount) {
                         console.warn(`Can't draw display list #${listNum} (out of range)`);
                         continue;
                     }
-                    offs = dlInfoOffset + listNum * fields.dlInfoSize;
-                    const dlInfo = parseDisplayListInfo(dataSubarray(blockDv, offs, fields.dlInfoSize));
-                    console.log(`Calling DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
-                    const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
+
+                    console.log(`Calling DL #${listNum} at offset 0x${dlOffsets[listNum].toString(16)}, size 0x${dlSizes[listNum].toString(16)}`);
+                    const displayList = blockData.subarray(dlOffsets[listNum], dlSizes[listNum]);
     
                     const vtxArrays: GX_Array[] = [];
                     vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -607,7 +672,9 @@ export class Model implements BlockRenderer {
                         console.error(e);
                     }
                     break;
-                case 3: // Set descriptor
+                }
+                case 3: { // Set descriptor
+                    console.log(`Setting descriptor`);
                     vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
                     for (let i = 0; i < 8; i++) {
                         vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
@@ -639,9 +706,10 @@ export class Model implements BlockRenderer {
                     const posDesc = bits.get(1);
                     vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
     
-                    if (fields.hasNormals && (curShader.attrFlags & 1) !== 0) {
+                    if (fields.hasNormals && (curShader.attrFlags & ShaderAttrFlags.NRM)) {
                         const nrmDesc = bits.get(1);
-                        if ((nrmTypeFlags & 8) != 0) {
+                        if (nrmTypeFlags & 8) {
+                            // TODO: Enable NBT normals
                             // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
                             // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                             vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
@@ -653,7 +721,7 @@ export class Model implements BlockRenderer {
                         vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
                     }
     
-                    if ((curShader.attrFlags & 2) !== 0) {
+                    if (curShader.attrFlags & ShaderAttrFlags.CLR) {
                         const clr0Desc = bits.get(1);
                         vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                     } else {
@@ -672,6 +740,7 @@ export class Model implements BlockRenderer {
                         }
                     }
                     break;
+                }
                 case 4: // Set weights (skipped by SFA block renderer)
                     const numBones = bits.get(4);
                     if (numBones > self.boneMatrices.length) {
