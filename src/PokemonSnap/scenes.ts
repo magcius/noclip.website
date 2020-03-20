@@ -172,6 +172,10 @@ class SceneDesc implements Viewer.SceneDesc {
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
             }
 
+            for (let particle of level.levelParticles.particleTextures)
+                for (let texture of particle)
+                    viewerTextures.push(textureToCanvas(texture));
+
             sceneRenderer.modelRenderers.push(
                 ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
             );

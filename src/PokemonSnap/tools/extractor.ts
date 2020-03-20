@@ -23,6 +23,9 @@ function extractMap(romData: ArrayBufferSlice, sceneID: number, header = 0, obje
     const codeRomEnd = view.getUint32(0x28);
     const CodeStartAddress = view.getUint32(0x2C);
 
+    const particleStart = particleAddresses[(sceneID - 14) >>> 1];
+    const particleEnd = particleAddresses[((sceneID - 14) >>> 1) + 1];
+
     const crg1 = {
         Name: sceneID,
         Data: romData.slice(romStart, romEnd),
@@ -32,6 +35,7 @@ function extractMap(romData: ArrayBufferSlice, sceneID: number, header = 0, obje
         Header: header,
         Objects: objectStart,
         Collision: collisionStart,
+        ParticleData: romData.slice(particleStart, particleEnd),
     };
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));
@@ -53,6 +57,18 @@ interface OverlaySpec {
     ram: number;
     len: number;
 }
+
+const particleAddresses: number[] = [
+    0xAB5860,
+    0xAB85E0,
+    0xABE7A0,
+    0xAC6890,
+    0xAC8510,
+    0xACF6F0,
+    0xAD0E00,
+    0xADD310,
+    0xADEC60,
+];
 
 function main() {
     const romData = fetchDataSync(`${pathBaseIn}/rom.z64`);

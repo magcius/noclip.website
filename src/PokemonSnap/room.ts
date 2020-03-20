@@ -11,6 +11,7 @@ import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
 import { MotionParser, Motion, Splash, Direction } from "./motion";
 import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
+import {parseParticles, ParticleSystem } from "./particles";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -21,6 +22,8 @@ export interface Level {
     zeroOne: ZeroOne;
     projectiles: ProjectileData[];
     fishTable: FishEntry[];
+    levelParticles: ParticleSystem;
+    pesterParticles: ParticleSystem;
 }
 
 export interface Room {
@@ -78,6 +81,7 @@ export interface LevelArchive {
     Header: number;
     Objects: number;
     Collision: number;
+    ParticleData: ArrayBufferSlice;
 };
 
 export interface DataRange {
@@ -309,7 +313,10 @@ export function parseLevel(archives: LevelArchive[]): Level {
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable };
+    const levelParticles = parseParticles(archives[0].ParticleData);
+    const pesterParticles = parseParticles(archives[1].ParticleData);
+
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles };
 }
 
 function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: ObjectDef[]): void {
@@ -440,7 +447,7 @@ export const enum MaterialFlags {
     Ambient = 0x2000,
 }
 
-function getVec3(view: DataView, offs: number): vec3 {
+export function getVec3(view: DataView, offs: number): vec3 {
     return vec3.fromValues(
         view.getFloat32(offs + 0x00),
         view.getFloat32(offs + 0x04),
@@ -448,7 +455,7 @@ function getVec3(view: DataView, offs: number): vec3 {
     );
 }
 
-function getColor(view: DataView, offs: number): vec4 {
+export function getColor(view: DataView, offs: number): vec4 {
     return vec4.fromValues(
         view.getUint8(offs + 0x00) / 0xFF,
         view.getUint8(offs + 0x01) / 0xFF,
