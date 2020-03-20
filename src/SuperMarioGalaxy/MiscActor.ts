@@ -65,6 +65,16 @@ export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, nam
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
 }
 
+export function isEffectValid(actor: LiveActor, name: string): boolean {
+    if (actor.effectKeeper === null)
+        return false;
+    const multiEmitter = actor.effectKeeper.getEmitter(name);
+    if (multiEmitter !== null)
+        return multiEmitter.isValid();
+    else
+        return false;
+}
+
 export function emitEffectWithScale(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, scale: number): void {
     if (actor.effectKeeper === null)
         return;
@@ -7496,5 +7506,43 @@ export class OnimasuJump extends Onimasu {
         vec3.scale(scratchVec3b, scratchVec3b, -0.5 * gravityScalar * timeToNextPoint);
 
         vec3.add(this.velocity, scratchVec3a, scratchVec3b);
+    }
+}
+
+const enum DriftWoodNrv { Wait }
+
+export class DriftWood extends MapObjActor<DriftWoodNrv> {
+    private front: vec3;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<DriftWoodNrv>();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(null);
+        initInfo.setupNerve(DriftWoodNrv.Wait);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        moveCoordAndTransToNearestRailPos(this);
+        this.front = vec3.create();
+        getRailDirection(this.front, this);
+    }
+
+    protected connectToScene(sceneObjHolder: SceneObjHolder): void {
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.front);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: DriftWoodNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === DriftWoodNrv.Wait) {
+            if (isFirstStep(this) && !isEffectValid(this, 'Ripple'))
+                emitEffect(sceneObjHolder, this, 'Ripple');
+            moveCoordAndFollowTrans(this, 3.0);
+            rotateVecDegree(this.front, this.gravityVector, 0.05);
+            // this.tryVibrate();
+        }
     }
 }

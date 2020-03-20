@@ -431,6 +431,13 @@ export class MultiEmitter {
             this.singleEmitters[i].setGroupID(drawOrder);
     }
 
+    public isValid(): boolean {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (this.singleEmitters[i].isValid())
+                return true;
+        return false;
+    }
+
     public createEmitter(effectSystem: EffectSystem): void {
         for (let i = 0; i < this.singleEmitters.length; i++)
             effectSystem.createSingleEmitter(this.singleEmitters[i], this.emitterCallBack);
