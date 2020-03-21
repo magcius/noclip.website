@@ -172,6 +172,7 @@ export class Animator {
     public stateFlags = 0;
     public loopCount = 0;
     public forceLoop = false;
+    public lastFunction = -1;
 
     private trackIndex = 0;
     private nextUpdate = 0;
@@ -218,7 +219,7 @@ export class Animator {
                     this.trackIndex = this.track.loopStart;
                 else {
                     if (!this.forceLoop)
-                        return false;
+                        return this.loopCount === 1;
                     // should end, but loop anyway
                     // causes some glitches, but e.g. lava is clearly supposed to loop
                     this.trackIndex = 0;
@@ -327,6 +328,8 @@ export class Animator {
                         }
                     }
                 } break;
+                case EntryKind.Func:
+                    this.lastFunction = entry.flags; break;
             }
             if (entry.block)
                 this.nextUpdate += entry.increment;

@@ -389,12 +389,22 @@ export class ModelRenderer {
 
     protected motion(viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void { }
 
-    private animate(): void {
+    private animate(globals: LevelGlobals): void {
         if (this.animationPaused)
             return;
         const time = this.animationController.getTimeInFrames();
-        for (let i = 0; i < this.renderers.length; i++)
+        for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animate(time);
+            if (this.renderers[i].animator.lastFunction >= 0 && i > 0) {
+                // function calls from anything but the root are particle effects
+                const arg = this.renderers[i].animator.lastFunction;
+                const category = arg >>> 8; // there are 8 categories, but only 0 and 3 are used
+                const index = (arg & 0xFF) - 1;
+                if (index >= 0)
+                    globals.particles.createEmitter(category === 3, index, this.renderers[i].modelMatrix);
+                this.renderers[i].animator.lastFunction = -1;
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void {
@@ -403,7 +413,7 @@ export class ModelRenderer {
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.motion(viewerInput, globals);
-        this.animate();
+        this.animate(globals);
         if (this.hidden)
             return;
 

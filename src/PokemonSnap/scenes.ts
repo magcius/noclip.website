@@ -133,7 +133,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=3`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=4`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 

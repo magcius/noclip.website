@@ -177,7 +177,7 @@ export function parseParticles(data: ArrayBufferSlice, isCommon: boolean): Parti
                         let frames = view.getUint8(offs++);
                         if (frames & 0x80)
                             frames = ((frames & 0x7F) << 8) + view.getUint8(offs++);
-                        values.push(frames);
+                        values.push(frames + 1);
                         values.push(view.getFloat32(offs));
                         offs += 4;
                         if (subtype === 0x0C) {
@@ -185,11 +185,12 @@ export function parseParticles(data: ArrayBufferSlice, isCommon: boolean): Parti
                             offs += 4;
                         }
                     } break;
+                    case 0x1C: // extra byte
+                        values.push(view.getUint8(offs++));
                     case 0x01:
                     case 0x07:
                     case 0x17:
                     case 0x18:
-                    case 0x1C:
                     case 0x1F:
                         values.push(view.getUint8(offs++)); break;
                     case 0x02:
@@ -247,6 +248,7 @@ export function parseParticles(data: ArrayBufferSlice, isCommon: boolean): Parti
                 let frames = view.getUint8(offs++);
                 if (frames & 0x80)
                     frames = ((frames & 0x7F) << 8) + view.getUint8(offs++);
+                frames++;
                 const color = vec4.create();
                 for (let j = 0; j < 4; j++)
                     if (command & (1 << j))
@@ -351,7 +353,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 export class ParticleManager {
     public emitterPool = nArray(20, () => new Emitter());
-    public particlePool = nArray(100, () => new Particle());
+    public particlePool = nArray(400, () => new Particle()); // four times the game limit, valley can still hit this
     public refPositions = nArray(8, () => vec3.create());
 
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -516,23 +518,27 @@ class Emitter {
     }
 
     // helper function to handle the pattern for emitter values
-    private static compute(x: number): number {
+    private static compute(x: number, random?: number): number {
         if (x < 0)
             return -x;
+        if (random !== undefined)
+            return x * random;
         return x * Math.random();
     }
 
     public update(dt: number, manager: ParticleManager): void {
         this.accumulator += Emitter.compute(this.data.increment) * dt;
         if (this.accumulator >= 1) {
-            // emitters shoot particles relative to their forward direction,
-            // which may transform according to some external source matrix
+            // emitters shoot particles in a cone centered on their velocity,
             vec3.copy(emitScratch[0], this.data.velocity);
-            if (this.sourceMatrix)
+            if (this.sourceMatrix) { // if this is attached to a bone, orient by the transform
                 transformVec3Mat4w0(emitScratch[0], this.sourceMatrix, emitScratch[0]);
-            // the coordinate system the game chooses treats X specially, but the final velocity/offset
-            // don't distinguish between X and Y - it justs avoids choking on the cases where velocity is along Y
-            mat4.lookAt(emitMatrix, Vec3Zero, emitScratch[0], Vec3UnitX);
+                mat4.getTranslation(this.position, this.sourceMatrix);
+            }
+            // the game sets up a coordinate system with Z pointing along the transformed velocity, and the Y vector perpdendicular to world X
+            // X isn't really special, as the cone doesn't distinguish between X and Y - it justs avoids issues when velocity is along world Y
+            mat4.targetTo(emitMatrix, Vec3Zero, emitScratch[0], Vec3UnitX);
+
             while (this.accumulator >= 1) {
                 // set random offset direction, shared by velocity
                 const phi = Math.random() * MathConstants.TAU;
@@ -541,16 +547,18 @@ class Emitter {
                     Math.sin(phi),
                     0,
                 );
-                vec3.scale(emitScratch[0], emitScratch[0], Emitter.compute(this.data.radius));
+                // the spread angle uses the same scaling as the offset if randomized
+                const radiusScale = this.data.radius < 0 ? 1 : Math.random();
+                vec3.scale(emitScratch[0], emitScratch[0], Emitter.compute(this.data.radius, radiusScale));
                 transformVec3Mat4w0(emitScratch[0], emitMatrix, emitScratch[0]);
                 vec3.add(emitScratch[0], emitScratch[0], this.position);
 
-                // velocity lies either on the surface of a cone or somewhere in the interior
-                const spread = Emitter.compute(this.data.sprayAngle);
+                // set velocity either on the surface of a cone or somewhere in the interior
+                const spread = Emitter.compute(this.data.sprayAngle, radiusScale);
                 vec3.set(emitScratch[1],
                     Math.cos(phi) * Math.sin(spread),
                     Math.sin(phi) * Math.sin(spread),
-                    Math.cos(spread),
+                    -Math.cos(spread), // forward is negative Z
                 );
                 vec3.scale(emitScratch[1], emitScratch[1], vec3.len(this.data.velocity));
                 transformVec3Mat4w0(emitScratch[1], emitMatrix, emitScratch[1]);
@@ -742,23 +750,31 @@ class Particle {
                                 vec[i] = instr.values[i] + ((instr.flags & InstrFlags.IncVec) ? vec[i] : 0);
                     } break;
                     case "color": {
-                        let color: vec4;
-                        if (instr.flags & InstrFlags.SetEnv) {
-                            color = instr.frames === 1 ? this.envGoal : this.env;
-                            this.envTimer = instr.frames;
-                        } else {
-                            color = instr.frames === 1 ? this.primGoal : this.prim;
-                            this.primTimer = instr.frames;
-                        }
+                        let color = (instr.flags & InstrFlags.SetEnv) ? this.env : this.prim;
+                        let goal = (instr.flags & InstrFlags.SetEnv) ? this.envGoal : this.primGoal;
+                        vec4.copy(goal, color);
                         for (let i = 0; i < 4; i++)
                             if (instr.flags & (1 << i))
-                                color[i] = instr.color[i];
+                                goal[i] = instr.color[i];
+                        let frames = instr.frames;
+                        if (instr.frames === 1) { // set right away
+                            frames = 0;
+                            vec4.copy(color, goal);
+                        }
+                        if (instr.flags & InstrFlags.SetEnv)
+                            this.envTimer = frames;
+                        else
+                            this.primTimer = frames;
                     } break;
                     case "misc": {
                         switch (instr.subtype) {
                             case 0x00: {
                                 this.sizeTimer = instr.values[0];
                                 this.sizeGoal = instr.values[1];
+                                if (this.sizeTimer === 1) {
+                                    this.sizeTimer = 0;
+                                    this.size = this.sizeGoal;
+                                }
                             } break;
                             case 0x01:
                                 this.flags = instr.values[0]; break;
@@ -805,6 +821,10 @@ class Particle {
                             case 0x0C: {
                                 this.sizeTimer = instr.values[0];
                                 this.sizeGoal = instr.values[1] + Math.random() * instr.values[2];
+                                if (this.sizeTimer === 1) {
+                                    this.sizeTimer = 0;
+                                    this.size = this.sizeGoal;
+                                }
                             } break;
                             case 0x0D:
                                 this.flags |= Flags.TexAsLerp; break;
