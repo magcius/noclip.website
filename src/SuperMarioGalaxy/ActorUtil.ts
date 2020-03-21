@@ -1033,6 +1033,11 @@ export function listenStageSwitchOnOffA(sceneObjHolder: SceneObjHolder, actor: L
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerA(actor.stageSwitchCtrl!, eventListener);
 }
 
+export function listenStageSwitchOnOffB(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerB(actor.stageSwitchCtrl!, eventListener);
+}
+
 export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
     const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
