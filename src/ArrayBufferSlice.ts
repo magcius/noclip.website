@@ -12,6 +12,17 @@
 import { assert } from "./util";
 import { getSystemEndianness, Endianness } from "./endian";
 
+declare global {
+    interface ArrayBuffer { [Symbol.species]?: "ArrayBuffer"; }
+    interface Uint8Array { [Symbol.species]?: "Uint8Array"; }
+    interface Uint16Array { [Symbol.species]?: "Uint16Array"; }
+    interface Uint32Array { [Symbol.species]?: "Uint32Array"; }
+    interface Int8Array { [Symbol.species]?: "Int8Array"; }
+    interface Int16Array { [Symbol.species]?: "Int16Array"; }
+    interface Int32Array { [Symbol.species]?: "Int32Array"; }
+    interface Float32Array { [Symbol.species]?: "Float32Array"; }
+}
+
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
 ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {

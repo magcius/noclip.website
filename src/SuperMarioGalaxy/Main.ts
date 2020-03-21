@@ -479,7 +479,7 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
 
     const buffer = new Uint8Array(vertexCount * bufferStride);
     loadedVertexLayout.vertexBufferStrides[1] = bufferStride;
-    loadedVertexData.vertexBuffers[1] = buffer;
+    loadedVertexData.vertexBuffers[1] = buffer.buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
