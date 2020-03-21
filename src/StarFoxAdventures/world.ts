@@ -56,7 +56,7 @@ interface ObjectSphere {
 
 async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
     const pathBase = gameInfo.pathBase;
-    const texColl = new SFATextureCollection(gameInfo);
+    const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Ancient);
     const [modelsTabData, modelsBin, _] = await Promise.all([
         dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
         dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
@@ -327,7 +327,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const texColl = new SFATextureCollection(this.gameInfo);
+        const texColl = new SFATextureCollection(this.gameInfo, false);
         await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
         const objectMan = new ObjectManager(this.gameInfo, texColl, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, true);

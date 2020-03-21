@@ -48,7 +48,7 @@ export class BlockCollection implements IBlockCollection {
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             try {
-                const texColl = new SFATextureCollection(gameInfo);
+                const texColl = new SFATextureCollection(gameInfo, false); // TODO: support beta blocks (swapcircle)
                 await texColl.create(dataFetcher, subdir);
                 this.texColl = texColl;
             } catch (e) {

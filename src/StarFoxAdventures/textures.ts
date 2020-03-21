@@ -31,7 +31,7 @@ export abstract class TextureCollection {
     }
 }
 
-function loadTexture(device: GfxDevice, texData: ArrayBufferSlice): SFATexture {
+function loadTexture(device: GfxDevice, texData: ArrayBufferSlice, isBeta: boolean): SFATexture {
     const dv = texData.createDataView();
     const textureInput = {
         name: `Texture`,
@@ -39,7 +39,7 @@ function loadTexture(device: GfxDevice, texData: ArrayBufferSlice): SFATexture {
         height: dv.getUint16(0x0C),
         format: dv.getUint8(0x16),
         mipCount: dv.getUint16(0x1c) + 1,
-        data: texData.slice(0x60),
+        data: texData.slice(isBeta ? 0x20 : 0x60),
     };
     const fields = {
         wrapS: dv.getUint8(0x17),
@@ -75,7 +75,7 @@ function isValidTextureTabValue(tabValue: number) {
     return tabValue != 0xFFFFFFFF && (tabValue & 0x80000000) != 0;
 }
 
-function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice): SFATextureArray | null {
+function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, isBeta: boolean): SFATextureArray | null {
     let firstValidId = 0;
     let found = false;
     for (let i = 0; i < tab.byteLength; i += 4) {
@@ -94,10 +94,10 @@ function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBuffe
         return null;
     }
 
-    return loadTextureArrayFromTable(device, tab, bin, firstValidId);
+    return loadTextureArrayFromTable(device, tab, bin, firstValidId, isBeta);
 }
 
-function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, id: number): (SFATextureArray | null) {
+function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, id: number, isBeta: boolean): (SFATextureArray | null) {
     const tabValue = tab.getUint32(id * 4);
     if (isValidTextureTabValue(tabValue)) {
         const arrayLength = (tabValue >> 24) & 0x3f;
@@ -105,7 +105,7 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
         if (arrayLength === 1) {
             const compData = bin.slice(binOffs);
             const uncompData = loadRes(compData);
-            return { textures: [loadTexture(device, uncompData)] };
+            return { textures: [loadTexture(device, uncompData, isBeta)] };
         } else {
             const result = { textures: [] as SFATexture[] };
             const binDv = bin.createDataView();
@@ -113,13 +113,13 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
                 const texOffs = binDv.getUint32(binOffs + i * 4);
                 const compData = bin.slice(binOffs + texOffs);
                 const uncompData = loadRes(compData);
-                result.textures.push(loadTexture(device, uncompData));
+                result.textures.push(loadTexture(device, uncompData, isBeta));
             }
             return result;
         }
     } else {
         console.warn(`Texture id 0x${id.toString(16)} (tab value 0x${hexzero(tabValue, 8)}) not found in table. Using first valid texture.`);
-        return loadFirstValidTexture(device, tab, bin);
+        return loadFirstValidTexture(device, tab, bin, isBeta);
     }
 }
 
@@ -171,13 +171,13 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
 class TextureFile {
     private textures: (SFATextureArray | null)[] = [];
 
-    constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string) {
+    constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string, private isBeta: boolean) {
     }
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
             try {
-                this.textures[num] = loadTextureArrayFromTable(device, this.tab, this.bin, num);
+                this.textures[num] = loadTextureArrayFromTable(device, this.tab, this.bin, num, this.isBeta);
             } catch (e) {
                 console.warn(`Failed to load texture 0x${num.toString(16)} from ${this.name} due to exception:`);
                 console.error(e);
@@ -189,13 +189,13 @@ class TextureFile {
     }
 }
 
-async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPath: string): Promise<TextureFile | null> {
+async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPath: string, isBeta: boolean): Promise<TextureFile | null> {
     try {
         const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(tabPath),
             dataFetcher.fetchData(binPath),
         ])
-        return new TextureFile(tab.createDataView(), bin, binPath);
+        return new TextureFile(tab.createDataView(), bin, binPath, isBeta);
     } catch (e) {
         console.warn(`Failed to fetch texture file due to exception:`);
         console.error(e);
@@ -221,7 +221,7 @@ export class SFATextureCollection extends TextureCollection {
     private tex1: TextureFile | null;
     private fakes: FakeTextureCollection = new FakeTextureCollection();
 
-    constructor(private gameInfo: GameInfo) {
+    constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();
     }
 
@@ -231,13 +231,13 @@ export class SFATextureCollection extends TextureCollection {
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
             fetchTextureFile(dataFetcher,
                 `${pathBase}/TEXPRE.tab`,
-                `${pathBase}/TEXPRE.bin`),
+                `${pathBase}/TEXPRE.bin`, false), // TEXPRE is never beta
             fetchTextureFile(dataFetcher,
                 `${pathBase}/${subdir}/TEX0.tab`,
-                `${pathBase}/${subdir}/TEX0.bin`),
+                `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
             fetchTextureFile(dataFetcher,
                 `${pathBase}/${subdir}/TEX1.tab`,
-                `${pathBase}/${subdir}/TEX1.bin`),
+                `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
         ]);
         this.textableBin = textableBin!.createDataView();
         this.texpre = texpre;

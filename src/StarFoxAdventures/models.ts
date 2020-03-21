@@ -500,7 +500,7 @@ export class Model implements BlockRenderer {
         const shaderFields = fields.shaderFields;
         for (let i = 0; i < shaderCount; i++) {
             const shaderBin = blockData.subarray(offs, shaderFields.size).createDataView();
-            const shader = parseShader(shaderBin, shaderFields);
+            const shader = parseShader(shaderBin, shaderFields, texIds, fields.isAncient);
             shaders.push(shader);
             offs += shaderFields.size;
         }

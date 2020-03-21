@@ -13,7 +13,7 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex, computeViewMatrix } from '../Camera';
 
 interface ShaderLayer {
-    texNum: number;
+    texId: number;
     tevMode: number;
     enableTexChainStuff: number;
     texmtxIndex: number;
@@ -29,9 +29,21 @@ export interface Shader {
     auxTexNum: number;
 }
 
-function parseShaderLayer(data: DataView): ShaderLayer {
+function parseShaderLayer(data: DataView, texIds: number[], isAncient: boolean): ShaderLayer {
+    let texId = texIds[data.getUint32(0x0)];
+
+    if (isAncient) {
+        // Remap ancient textures
+        const ANCIENT_TEX_REMAP : {[key: number]: number} = {
+            0x66f: 0xbec,
+        }
+        if (ANCIENT_TEX_REMAP[texId] !== undefined) {
+            texId = ANCIENT_TEX_REMAP[texId];
+        }
+    }
+
     return {
-        texNum: data.getUint32(0x0),
+        texId,
         tevMode: data.getUint8(0x4),
         enableTexChainStuff: data.getUint8(0x5),
         texmtxIndex: data.getUint8(0x6),
@@ -89,7 +101,7 @@ export enum ShaderAttrFlags {
     CLR = 0x2,
 }
 
-export function parseShader(data: DataView, fields: ShaderFields): Shader {
+export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], isAncient: boolean): Shader {
     const shader: Shader = {
         layers: [],
         flags: 0,
@@ -105,7 +117,7 @@ export function parseShader(data: DataView, fields: ShaderFields): Shader {
         numLayers = 2;
     }
     for (let i = 0; i < numLayers; i++) {
-        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8));
+        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, isAncient);
         shader.layers.push(layer);
     }
 
@@ -422,7 +434,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     function addTevStagesForLava() { // and other similar effects?
         // Occurs for lava
-        textures[2] = makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[0].texNum], alwaysUseTex1));
+        textures[2] = makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId, alwaysUseTex1));
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         const texture0x600 = texColl.getTexture(device, 0x600, false);
         textures[0] = makeMaterialTexture(texture0x600);
@@ -561,7 +573,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             addTevStageForMultVtxColor();
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
             }
         } else {
             for (let i = 0; i < shader.layers.length; i++) {
@@ -574,7 +586,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             }
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
             }
 
             if (shader.flags & ShaderFlags.Reflective) {
@@ -678,7 +690,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setUsePnMtxIdx(true);
         addTevStageForTextureWithWhiteKonst(0);
         for (let i = 0; i < shader.layers.length; i++) {
-            textures.push(makeMaterialTexture(texColl.getTexture(device, texIds[shader.layers[i].texNum], alwaysUseTex1)));
+            textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
         }
     } else if (shader.flags & ShaderFlags.FancyWater) {
         addTevStagesForFancyWater();
