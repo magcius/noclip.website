@@ -167,31 +167,40 @@ export class Model implements BlockRenderer {
     public joints: Joint[] = [];
     public weights: Weight[] = [];
     public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
+    public bindMatrices: mat4[] = [];
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
 
     public computeBoneMatrices() {
         this.boneMatrices = [];
+        this.bindMatrices = [];
         this.invBindMatrices = [];
 
         // Compute joint bones
         console.log(`computing ${this.joints.length} rigid joint bones`);
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
-            let parentMtx = mat4.create();
+            const parentMtx = mat4.create();
+            const parentWorldTrans = vec3.create();
             if (joint.parent != 0xff) {
                 if (joint.parent >= i) {
                     throw Error(`Bad joint hierarchy in model`);
                 }
 
-                parentMtx = this.boneMatrices[joint.parent];
-            } else {
-                parentMtx = mat4.create();
+                mat4.copy(parentMtx, this.boneMatrices[joint.parent]);
+                vec3.copy(parentWorldTrans, this.joints[joint.parent].worldTranslation);
+            }
+
+            const bindTranslation = vec3.clone(joint.worldTranslation);
+            if (this.modelVersion === ModelVersion.Beta) {
+                vec3.sub(bindTranslation, bindTranslation, parentWorldTrans);
             }
 
             const bindMtx = mat4.create();
-            mat4.fromTranslation(bindMtx, joint.worldTranslation);
+            mat4.fromTranslation(bindMtx, bindTranslation);
+            this.bindMatrices.push(bindMtx);
+
             const invBind = mat4.create();
             mat4.invert(invBind, bindMtx);
             this.invBindMatrices.push(invBind);
@@ -199,6 +208,9 @@ export class Model implements BlockRenderer {
             const mtx = mat4.create();
             mat4.fromTranslation(mtx, joint.translation);
             mat4.mul(mtx, mtx, parentMtx);
+            if (this.modelVersion === ModelVersion.Beta) {
+                mat4.mul(mtx, mtx, invBind);
+            }
             this.boneMatrices.push(mtx);
         }
 
@@ -251,7 +263,7 @@ export class Model implements BlockRenderer {
                 texcoordCount: 0xa4,
                 texCount: 0xaa,
                 jointCount: 0xab,
-                weightCount: 0xad,
+                // weightCount: 0xad,
                 shaderCount: 0xae,
                 dlOffsets: 0x88,
                 dlSizes: 0x8c,
@@ -758,8 +770,11 @@ export class Model implements BlockRenderer {
                     } else {
                         self.computeBoneMatrices();
                         for (let i = 0; i < numBones; i++) {
-                            const weightNum = bits.get(8);
-                            pnMatrices[i] = self.boneMatrices[weightNum];
+                            const boneId = bits.get(8);
+                            if (boneId >= self.boneMatrices.length) {
+                                throw Error(`Invalid bone ID ${boneId} / ${self.boneMatrices.length}`);
+                            }
+                            pnMatrices[i] = self.boneMatrices[boneId];
                         }
                     }
                     break;
