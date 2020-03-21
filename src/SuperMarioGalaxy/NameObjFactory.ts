@@ -4,7 +4,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ZoneAndLayer } from './LiveActor';
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked, RailPlanetMap, TicoRail, createSuperSpinDriverYellow, createSuperSpinDriverGreen, createSuperSpinDriverPink, requestArchivesSuperSpinDriver, SubmarineSteam, PalmIsland, WarpPod, WaterPlant, StarPieceGroup, Shellfish, PunchBox, ChooChooTrain, Trapeze, SwingRope, OceanRing, Flag, ElectricRail, ElectricRailMoving, QuestionCoin, FluffWind, OceanFloaterLandParts, Dossun, Tsukidashikun, PlantGroup, MovieStarter, WaterLeakPipe, OnimasuJump, DriftWood } from "./MiscActor";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked, RailPlanetMap, TicoRail, createSuperSpinDriverYellow, createSuperSpinDriverGreen, createSuperSpinDriverPink, requestArchivesSuperSpinDriver, SubmarineSteam, PalmIsland, WarpPod, WaterPlant, StarPieceGroup, Shellfish, PunchBox, ChooChooTrain, Trapeze, SwingRope, OceanRing, Flag, ElectricRail, ElectricRailMoving, QuestionCoin, FluffWind, OceanFloaterLandParts, Dossun, Tsukidashikun, PlantGroup, MovieStarter, WaterLeakPipe, OnimasuJump, DriftWood, UFOBreakable, UFOSolid } from "./MiscActor";
 import { OceanBowl } from "./OceanBowl";
 import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
@@ -510,6 +510,12 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("GhostShipCaveMoveGroundA",       RailMoveObj),
     _("GhostShipCaveMoveGroundB",       RailMoveObj),
     _("OceanFloaterTypeU",              OceanFloaterLandParts),
+    _("UFONormalB",                     UFOBreakable),
+    _("UFONormalD",                     UFOBreakable),
+    _("UFOStrongA",                     UFOSolid),
+    _("UFOBattleStageC",                UFOSolid),
+    _("UFOBattleStageD",                UFOSolid),
+    _("UFOBattleStageE",                UFOSolid),
 
     // Astro
     _("AstroCore",                      AstroCore),

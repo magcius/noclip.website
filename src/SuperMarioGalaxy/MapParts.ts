@@ -268,7 +268,6 @@ export class MapPartsRailMover extends NameObj {
     private moveConditionType: number;
     private moveStopType: MoveStopType;
     private signMotionType: SignMotionType;
-    private translation = vec3.create();
     private startRailCoord: number;
     private passChecker: MapPartsRailPointPassChecker;
     private stopTime: number = 0;
@@ -277,6 +276,7 @@ export class MapPartsRailMover extends NameObj {
     private moveSpeed: number = 0;
     private startMoveCoord: number = 0;
 
+    public translation = vec3.create();
     public spine: Spine<MapPartsRailMoverNrv>;
     public mtx = mat4.create();
 

@@ -1038,6 +1038,30 @@ export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, act
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
 }
 
+export function isValidSwitchA(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchA();
+}
+
+export function isValidSwitchB(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchB();
+}
+
+export function isValidSwitchAppear(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchAppear();
+}
+
 export function isValidSwitchDead(actor: LiveActor): boolean {
     return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchDead();
+}
+
+export function isOnSwitchA(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchA(sceneObjHolder);
+}
+
+export function isOnSwitchB(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchB(sceneObjHolder);
+}
+
+export function isOnSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchAppear(sceneObjHolder);
 }

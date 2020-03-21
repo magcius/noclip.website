@@ -175,6 +175,10 @@ export class StageSwitchCtrl {
         this.switchDead = createSwitchIdInfo(sceneObjHolder, 'SW_DEAD', infoIter);
     }
 
+    public isValidSwitchA(): boolean {
+        return this.switchA !== null;
+    }
+
     public isOnSwitchA(sceneObjHolder: SceneObjHolder): boolean {
         return isOnSwitchBySwitchIdInfo(sceneObjHolder, this.switchA!);
     }
@@ -185,6 +189,10 @@ export class StageSwitchCtrl {
 
     public offSwitchA(sceneObjHolder: SceneObjHolder): void {
         offSwitchBySwitchIdInfo(sceneObjHolder, this.switchA!);
+    }
+
+    public isValidSwitchB(): boolean {
+        return this.switchB !== null;
     }
 
     public isOnSwitchB(sceneObjHolder: SceneObjHolder): boolean {
