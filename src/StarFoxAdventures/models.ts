@@ -242,6 +242,7 @@ export class Model implements BlockRenderer {
                 texcoordOffset: 0x30,
                 shaderOffset: 0x34,
                 jointOffset: 0x38,
+                // weightOffset: 0x3c, // ???
                 listOffsets: 0x6c,
                 listSizes: 0x70,
                 posCount: 0x9e,
@@ -463,22 +464,24 @@ export class Model implements BlockRenderer {
                 offs += 0x1c;
             }
 
-            const weightOffset = blockDv.getUint32(fields.weightOffset);
-            const weightCount = blockDv.getUint8(fields.weightCount);
-            console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
+            if (fields.weightOffset !== undefined) {
+                const weightOffset = blockDv.getUint32(fields.weightOffset);
+                const weightCount = blockDv.getUint8(fields.weightCount);
+                console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
 
-            this.weights = [];
-            offs = weightOffset;
-            for (let i = 0; i < weightCount; i++) {
-                const split = blockDv.getUint8(offs + 0x2);
-                const influence0 = 0.25 * split;
-                this.weights.push({
-                    joint0: blockDv.getUint8(offs),
-                    joint1: blockDv.getUint8(offs + 0x1),
-                    influence0,
-                    influence1: 1 - influence0,
-                });
-                offs += 0x4;
+                this.weights = [];
+                offs = weightOffset;
+                for (let i = 0; i < weightCount; i++) {
+                    const split = blockDv.getUint8(offs + 0x2);
+                    const influence0 = 0.25 * split;
+                    this.weights.push({
+                        joint0: blockDv.getUint8(offs),
+                        joint1: blockDv.getUint8(offs + 0x1),
+                        influence0,
+                        influence1: 1 - influence0,
+                    });
+                    offs += 0x4;
+                }
             }
 
             this.computeBoneMatrices();
@@ -601,7 +604,11 @@ export class Model implements BlockRenderer {
 
         let texMtxCount = 0;
         if (fields.hasBones) {
-            texMtxCount = blockDv.getUint8(0xfa);
+            if (fields.isAncient) {
+                texMtxCount = 1; // ??? breaks some models... where is this field?
+            } else {
+                texMtxCount = blockDv.getUint8(0xfa);
+            }
         }
 
         if (fields.hasYTranslate) {

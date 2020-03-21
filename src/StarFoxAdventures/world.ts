@@ -507,7 +507,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading General Scales (beta version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
         console.log(`Loading a model (really old version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x4 / 4, ModelVersion.Beta));
+        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;
