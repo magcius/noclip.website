@@ -14,6 +14,7 @@ import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
 import { createActor, LevelGlobals, sceneActorInit } from './actor';
+import { ParticleManager } from './particles';
 
 const pathBase = `PokemonSnap`;
 
@@ -55,6 +56,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.modelRenderers.length; i++)
                 this.modelRenderers[i].setTexturesEnabled(enableTextures.checked);
+            this.globals.particles.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
@@ -67,6 +69,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         enableAlphaVisualizer.onchanged = () => {
             for (let i = 0; i < this.modelRenderers.length; i++)
                 this.modelRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            this.globals.particles.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
@@ -78,6 +81,8 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
+        this.globals.particles.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -107,6 +112,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.renderData.length; i++)
             this.renderData[i].destroy(device);
+        this.globals.particles.destroy(device);
     }
 
 }
@@ -179,6 +185,7 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.modelRenderers.push(
                 ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
             );
+            sceneRenderer.globals.particles = new ParticleManager(device, sceneRenderer.renderHelper.getCache(), level.levelParticles, level.pesterParticles);
 
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);

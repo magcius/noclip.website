@@ -313,19 +313,6 @@ export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
     return { name: texture.name, surfaces, extraInfo };
 }
 
-const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
-    }
-}
-
 function makeVertexBufferData(v: Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
@@ -479,8 +466,8 @@ export class RenderData {
         const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
-            this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, cache, tex));
+            this.textures.push(RDP.translateToGfxTexture(device, tex));
+            this.samplers.push(RDP.translateSampler(device, cache, tex));
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
@@ -509,29 +496,6 @@ export class RenderData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
-    }
-
-    private translateTexture(device: GfxDevice, texture: RDP.Texture): GfxTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-        return gfxTexture;
-    }
-
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: RDP.Texture): GfxSampler {
-        return cache.createSampler(device, {
-            // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
-            // it should repeat within the coordinate range, and clamp outside
-            // then ignore clamping here, and handle it in the shader
-            wrapS: translateCM(RDP.getMaskedCMS(texture.tile)),
-            wrapT: translateCM(RDP.getMaskedCMT(texture.tile)),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
     }
 
     public destroy(device: GfxDevice): void {

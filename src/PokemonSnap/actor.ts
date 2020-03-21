@@ -9,6 +9,7 @@ import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength
 import { getPathPoint } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
+import { ParticleManager } from "./particles";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
@@ -29,6 +30,8 @@ export class LevelGlobals {
     public splashes: Splash[] = [];
     public tempActors: Actor[] = [];
     public zeroOne: ModelRenderer;
+
+    public particles: ParticleManager;
 
     constructor(public id: string) { }
 
@@ -279,9 +282,14 @@ export class Projectile extends ModelRenderer {
         return true;
     }
 
-    public eat(globals: LevelGlobals): void {
+    public remove(globals: LevelGlobals): void {
         this.visible = false;
         globals.sendGlobalSignal(this, InteractionType.AppleRemoved);
+        if (this.isPester) {
+            const smoke = globals.particles.createEmitter(true, 0, null);
+            if (smoke)
+                vec3.copy(smoke.position, this.translation);
+        }
     }
 
     protected motion(viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
@@ -290,12 +298,12 @@ export class Projectile extends ModelRenderer {
             const frames = 30 * (viewerInput.time - this.landedAt) / 1000;
             if (this.inWater) {
                 if (frames > 60)
-                    this.eat(globals);
+                    this.remove(globals);
                 else
                     this.translation[1] -= 60 * dt;
             } else {
                 if (frames > 170)
-                    this.eat(globals);
+                    this.remove(globals);
                 else if (frames > 140) {
                     const scale = .1 * Math.pow(.9, 2 * (frames - 140));
                     this.modelMatrix[0] = scale;
@@ -349,7 +357,7 @@ export class Projectile extends ModelRenderer {
                 // valley whirlpool
                 case 0x0019FF: globals.sendTargetedSignal(this, 0x2B, 0x802D3B34); break;
             }
-            this.visible = false; // TODO: smoke effect
+            this.remove(globals);
             return true;
         }
         globals.sendGlobalSignal(this, InteractionType.AppleLanded);
@@ -370,7 +378,7 @@ export class Projectile extends ModelRenderer {
                 this.inWater = true;
             } break;
             case 0xFF0000: {
-                this.visible = false;
+                this.remove(globals);
             } break;
             // some of these play different sounds?
             case 0x193333:
@@ -440,7 +448,7 @@ export class Projectile extends ModelRenderer {
             vec3.copy(chosenCollider.motionData.lastImpact, impactScratch[0]);
             if (this.isPester) {
                 chosenCollider.receiveSignal(this, InteractionType.PesterHit, globals);
-                this.visible = false;
+                this.remove(globals);
             } else {
                 chosenCollider.receiveSignal(this, InteractionType.AppleHit, globals);
                 // set position to the entry point of the collision sphere
@@ -677,7 +685,7 @@ export class Actor extends ModelRenderer {
 
         if (block.eatApple && this.target !== null) {
             if (this.target instanceof Projectile)
-                this.target.eat(globals);
+                this.target.remove(globals);
             else
                 console.warn("eating non apple");
             this.target = null;

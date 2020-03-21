@@ -313,8 +313,8 @@ export function parseLevel(archives: LevelArchive[]): Level {
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    const levelParticles = parseParticles(archives[0].ParticleData);
-    const pesterParticles = parseParticles(archives[1].ParticleData);
+    const levelParticles = parseParticles(archives[0].ParticleData, false);
+    const pesterParticles = parseParticles(archives[1].ParticleData, true);
 
     return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles };
 }
