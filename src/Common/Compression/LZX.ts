@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, nArray, hexzero } from "../../util";
-
 // Microsoft LZX
 
 // https://docs.microsoft.com/en-us/previous-versions/bb417343(v=msdn.10)#microsoft-lzx-data-compression-format
 // https://github.com/FNA-XNA/FNA/blob/master/src/Content/LzxDecoder.cs
+
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { assert } from "../../util";
 
 class BitStream {
     public offs: number = 0;

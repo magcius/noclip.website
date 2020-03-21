@@ -1,3 +1,6 @@
+
+// Common utilities for the N64 Reality Display Processor (RDP).
+
 import { assert, hexzero } from "../../util";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
