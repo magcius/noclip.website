@@ -32,8 +32,8 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this.tx = (view.getInt16(offs + 0x08) / 0x20);
-        this.ty = (view.getInt16(offs + 0x0A) / 0x20);
+        this.tx = (view.getInt16(offs + 0x08) / 0x20) + 0.5;
+        this.ty = (view.getInt16(offs + 0x0A) / 0x20) + 0.5;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
         this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
         this.c2 = view.getUint8(offs + 0x0E) / 0xFF;

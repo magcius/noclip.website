@@ -16,7 +16,7 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
 import { getImageFormatString } from "../BanjoKazooie/f3dex";
-import { TexCM, TextFilt } from '../Common/N64/Image';
+import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { translateCM } from '../Common/N64/RDP';
@@ -326,8 +326,6 @@ class ModelTreeLeafInstance {
         mat4.identity(dst);
 
         // tileMatrix[tileId] is specified in pixel units, so we need to convert to abstract space.
-        dst[0] = 1 / image.width;
-        dst[5] = 1 / image.height;
         if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
             mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
 
@@ -353,6 +351,11 @@ class ModelTreeLeafInstance {
         dst[5] *= scaleT;
         dst[12] += offsetS;
         dst[13] += offsetT;
+
+        dst[0] *= 1 / image.width;
+        dst[5] *= 1 / image.height;
+        dst[12] *= 1 / image.width;
+        dst[13] *= 1 / image.height;
     }
 
     public setTexAnimEnabled(enabled: boolean): void {
