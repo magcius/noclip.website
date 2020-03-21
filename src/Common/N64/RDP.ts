@@ -262,7 +262,7 @@ export function translateToGfxTexture(device: GfxDevice, texture: Texture): GfxT
     return gfxTexture;
 }
 
-function translateCM(cm: TexCM): GfxWrapMode {
+export function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
     case TexCM.WRAP:   return GfxWrapMode.REPEAT;
     case TexCM.MIRROR: return GfxWrapMode.MIRROR;

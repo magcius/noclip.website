@@ -19,6 +19,7 @@ import { getImageFormatString } from "../BanjoKazooie/f3dex";
 import { TexCM, TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import { translateCM } from '../Common/N64/RDP';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -130,14 +131,6 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
-    }
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
     }
 }
 
