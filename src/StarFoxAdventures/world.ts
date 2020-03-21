@@ -56,7 +56,7 @@ interface ObjectSphere {
 
 async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
     const pathBase = gameInfo.pathBase;
-    const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Ancient);
+    const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
     const [modelsTabData, modelsBin, _] = await Promise.all([
         dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
         dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
@@ -507,7 +507,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading General Scales (beta version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
         console.log(`Loading a model (really old version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x4 / 4, ModelVersion.Ancient));
+        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x4 / 4, ModelVersion.Beta));
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;

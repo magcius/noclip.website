@@ -14,7 +14,7 @@ import * as GX from '../gx/gx_enum';
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, ShaderFlags, ANCIENT_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
+import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
@@ -143,7 +143,7 @@ function readVec3(data: DataView, byteOffset: number = 0): vec3 {
 }
 
 export enum ModelVersion {
-    Ancient, // Demo swapcircle, ancient BLOCKS.bin?
+    Beta, // Demo swapcircle
     Demo, // Most demo files
     Final,
 }
@@ -227,12 +227,12 @@ export class Model implements BlockRenderer {
         const blockDv = blockData.createDataView();
 
         let fields: any;
-        if (this.modelVersion === ModelVersion.Ancient) {
+        if (this.modelVersion === ModelVersion.Beta) {
             fields = {
                 isAncient: true,
                 isMapBlock: false, // TODO: support map blocks
                 alwaysUseTex1: true,
-                shaderFields: ANCIENT_MODEL_SHADER_FIELDS,
+                shaderFields: BETA_MODEL_SHADER_FIELDS,
                 hasNormals: true,
                 hasBones: true,
                 texOffset: 0x1c,
@@ -570,7 +570,7 @@ export class Model implements BlockRenderer {
         const dlSizes: number[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
         console.log(`Loading ${dlInfoCount} display lists...`);
-        if (this.modelVersion === ModelVersion.Ancient) {
+        if (this.modelVersion === ModelVersion.Beta) {
             for (let i = 0; i < dlInfoCount; i++) {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
                 const dlSizesOffs = blockDv.getUint32(fields.dlSizes);

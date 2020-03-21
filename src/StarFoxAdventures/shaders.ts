@@ -30,17 +30,7 @@ export interface Shader {
 }
 
 function parseShaderLayer(data: DataView, texIds: number[], isAncient: boolean): ShaderLayer {
-    let texId = texIds[data.getUint32(0x0)];
-
-    if (isAncient) {
-        // Remap ancient textures
-        const ANCIENT_TEX_REMAP : {[key: number]: number} = {
-            0x66f: 0xbec,
-        }
-        if (ANCIENT_TEX_REMAP[texId] !== undefined) {
-            texId = ANCIENT_TEX_REMAP[texId];
-        }
-    }
+    const texId = texIds[data.getUint32(0x0)];
 
     return {
         texId,
@@ -75,7 +65,7 @@ export const SFADEMO_MAP_SHADER_FIELDS: ShaderFields = {
     layers: 0x24, // ???
 };
 
-export const ANCIENT_MODEL_SHADER_FIELDS: ShaderFields = {
+export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
     isAncient: true,
     size: 0x38,
     numLayers: 0x36,
