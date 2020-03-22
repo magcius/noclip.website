@@ -757,3 +757,53 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         },
     };
 }
+
+export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
+    const mb = new GXMaterialBuilder('FurMaterial');
+    const textures = [] as SFAMaterialTexture[];
+    const texMtx: TexMtx[] = [];
+    const postTexMtx: (mat4 | undefined)[] = [];
+    const indTexMtx: (mat4 | undefined)[] = [];
+
+    // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
+    // but then it replaces texmap 0 with shader layer 0 before drawing...
+    textures[0] = makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, alwaysUseTex1));
+    mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
+    mb.setTevDirect(0);
+    mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+    mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+    mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+    mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+    mb.setCullMode(GX.CullMode.BACK);
+    mb.setZMode(true, GX.CompareType.LEQUAL, false);
+    mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+    mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+
+    return {
+        material: mb.finish(),
+        textures,
+        setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            for (let i = 0; i < 10; i++) {
+                if (texMtx[i] !== undefined) {
+                    texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                }
+            }
+            
+            for (let i = 0; i < 20; i++) {
+                if (postTexMtx[i] !== undefined) {
+                    mat4.copy(params.u_PostTexMtx[i], postTexMtx[i]!);
+                }
+            }
+
+            for (let i = 0; i < 3; i++) {
+                if (indTexMtx[i] !== undefined) {
+                    mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
+                }
+            }
+        },
+    };
+}

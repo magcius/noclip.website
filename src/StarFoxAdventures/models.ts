@@ -14,7 +14,7 @@ import * as GX from '../gx/gx_enum';
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, makeMaterialTexture } from './shaders';
+import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, buildFurMaterial } from './shaders';
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
@@ -699,7 +699,7 @@ export class Model implements BlockRenderer {
 
                         if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                            const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                            const material = buildFurMaterial(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
                             newModel.setMaterial(material);
                             newModel.setPnMatrices(pnMatrices);
 
