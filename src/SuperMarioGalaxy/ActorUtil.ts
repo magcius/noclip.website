@@ -468,7 +468,8 @@ export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: Me
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
     mat4.copy(dst, assertExists(actor.getBaseMtx()));
     const scaleX = actor.scale[0];
-    mat4.multiplyScalar(dst, dst, scaleX);
+    vec3.set(scratchVec3, scaleX, scaleX, scaleX);
+    mat4.scale(dst, dst, scratchVec3);
 }
 
 export function resetAllCollisionMtx(actor: LiveActor): void {
