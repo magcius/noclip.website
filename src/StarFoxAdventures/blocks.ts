@@ -24,6 +24,7 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getNumDrawSteps(): number;
     public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
+    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
 }
 
 export interface IBlockCollection {
@@ -394,14 +395,7 @@ export class AncientBlockRenderer implements BlockRenderer {
             this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
     }
-
-    // public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
-    //     for (let i = 0; i < this.models.length; i++) {
-    //         const trans = mat4.create();
-    //         mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
-    //         const matrix = mat4.create();
-    //         mat4.mul(matrix, modelMatrix, trans);
-    //         holder.addModel(this.models[i], matrix);
-    //     }
-    // }
+    
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    }
 }

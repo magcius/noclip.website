@@ -151,14 +151,21 @@ export enum ModelVersion {
 interface DisplayListInfo {
     offset: number;
     size: number;
+    specialBitAddress: number; // Command bit address for fur/grass or fancy water
     // TODO: Also includes bounding box
 }
 
 function parseDisplayListInfo(data: DataView): DisplayListInfo {
     return {
-        offset: data.getUint32(0),
-        size: data.getUint16(4),
+        offset: data.getUint32(0x0),
+        size: data.getUint16(0x4),
+        specialBitAddress: data.getUint16(0x14),
     }
+}
+
+interface Fur {
+    model: ModelInstance;
+    numLayers: number;
 }
 
 export class Model implements BlockRenderer {
@@ -171,6 +178,7 @@ export class Model implements BlockRenderer {
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
+    public furs: Fur[] = [];
 
     public computeBoneMatrices() {
         this.boneMatrices = [];
@@ -515,7 +523,7 @@ export class Model implements BlockRenderer {
         const shaderFields = fields.shaderFields;
         for (let i = 0; i < shaderCount; i++) {
             const shaderBin = blockData.subarray(offs, shaderFields.size).createDataView();
-            const shader = parseShader(shaderBin, shaderFields, texIds, fields.isAncient);
+            const shader = parseShader(shaderBin, shaderFields, texIds);
             shaders.push(shader);
             offs += shaderFields.size;
         }
@@ -581,8 +589,7 @@ export class Model implements BlockRenderer {
         vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
-        const dlOffsets: number[] = [];
-        const dlSizes: number[] = [];
+        const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
         console.log(`Loading ${dlInfoCount} display lists...`);
         if (this.modelVersion === ModelVersion.Beta) {
@@ -592,8 +599,11 @@ export class Model implements BlockRenderer {
 
                 const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
                 const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
-                dlOffsets.push(dlOffset);
-                dlSizes.push(dlSize);
+                dlInfos.push({
+                    offset: dlOffset,
+                    size: dlSize,
+                    specialBitAddress: -1,
+                });
             }
         } else {
             const dlInfoOffset = blockDv.getUint32(fields.dlInfoOffset);
@@ -601,11 +611,9 @@ export class Model implements BlockRenderer {
             for (let i = 0; i < dlInfoCount; i++) {
                 offs = dlInfoOffset + i * fields.dlInfoSize;
                 const dlInfo = parseDisplayListInfo(dataSubarray(blockDv, offs, fields.dlInfoSize));
-                dlOffsets.push(dlInfo.offset);
-                dlSizes.push(dlInfo.size);
+                dlInfos.push(dlInfo);
             }
         }
-        console.log(`DL offsets: ${dlOffsets}; sizes: ${dlSizes}`);
 
         const bitsOffsets = [];
         const bitsByteCounts = [];
@@ -634,6 +642,7 @@ export class Model implements BlockRenderer {
         const pnMatrices = nArray(0x10, () => mat4.create());
 
         const self = this;
+
         function runBitstream(bitsOffset: number, drawStep: number) {
             console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             const models: ModelInstance[] = [];
@@ -662,8 +671,9 @@ export class Model implements BlockRenderer {
                         continue;
                     }
 
-                    console.log(`Calling DL #${listNum} at offset 0x${dlOffsets[listNum].toString(16)}, size 0x${dlSizes[listNum].toString(16)}`);
-                    const displayList = blockData.subarray(dlOffsets[listNum], dlSizes[listNum]);
+                    const dlInfo = dlInfos[listNum];
+                    console.log(`Calling DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+                    const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
     
                     const vtxArrays: GX_Array[] = [];
                     vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -685,6 +695,24 @@ export class Model implements BlockRenderer {
                             newModel.setMaterial(material);
                             newModel.setPnMatrices(pnMatrices);
                             models.push(newModel);
+                        }
+
+                        if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
+                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                            const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                            newModel.setMaterial(material);
+                            newModel.setPnMatrices(pnMatrices);
+
+                            let numFurLayers;
+                            if (curShader.flags & ShaderFlags.ShortFur) {
+                                numFurLayers = 4;
+                            } else if (curShader.flags & ShaderFlags.MediumFur) {
+                                numFurLayers = 8;
+                            } else { // curShader.flags & ShaderFlags.LongFur
+                                numFurLayers = 16;
+                            }
+
+                            self.furs.push({ model: newModel, numLayers: numFurLayers });
                         }
                     } catch (e) {
                         console.warn(`Failed to create model and shader instance due to exception:`);
@@ -811,6 +839,20 @@ export class Model implements BlockRenderer {
             mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
             models[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+        }
+    }
+
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+        for (let i = 0; i < this.furs.length; i++) {
+            const fur = this.furs[i];
+
+            for (let j = 0; j < fur.numLayers; j++) {
+                mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
+                mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
+                mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
+                mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
+                fur.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+            }
         }
     }
 }

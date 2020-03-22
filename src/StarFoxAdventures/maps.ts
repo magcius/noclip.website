@@ -116,6 +116,17 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        for (let i = 0; i < this.models.length; i++) {
+            const matrix = mat4.create();
+            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
+            this.models[i].prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+
     public async reloadBlocks() {
         this.clearModels();
         for (let y = 0; y < this.numRows; y++) {
@@ -311,6 +322,7 @@ class MapSceneRenderer extends SFARenderer {
 
             // Body
             this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
 
             // Epilog
             renderInstManager.popTemplateRenderInst();

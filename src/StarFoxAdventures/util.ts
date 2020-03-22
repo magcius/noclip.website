@@ -15,12 +15,14 @@ export function interpS16(n: number): number {
 // in the sequence.
 export class LowBitReader {
     dv: DataView
+    baseOffs: number;
     offs: number
     num: number
     buf: number
 
     constructor(dv: DataView, offs: number = 0) {
         this.dv = dv;
+        this.baseOffs = offs;
         this.offs = offs;
         this.num = 0;
         this.buf = 0;
@@ -46,6 +48,20 @@ export class LowBitReader {
         const x = this.peek(bits);
         this.drop(bits);
         return x;
+    }
+
+    public seekBit(bitAddr: number) {
+        // TODO: make this more efficient
+        this.offs = this.baseOffs;
+        this.num = 0;
+        this.buf = 0;
+        
+        let i = bitAddr;
+        while (i >= 8) {
+            this.drop(8);
+            i -= 8;
+        }
+        this.drop(i);
     }
 }
 

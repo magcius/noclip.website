@@ -503,14 +503,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         // console.log(`Loading General Scales....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
-        console.log(`Loading Fox (beta version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'swaphol', 0x4 / 4)); // Fox (beta version)
         // console.log(`Loading SharpClaw (beta version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
         // console.log(`Loading General Scales (beta version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
-        console.log(`Loading a model (really old version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
+        // console.log(`Loading a model (really old version)....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
         return renderer;

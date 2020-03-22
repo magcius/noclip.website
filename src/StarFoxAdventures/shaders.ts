@@ -13,7 +13,7 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex, computeViewMatrix } from '../Camera';
 
 interface ShaderLayer {
-    texId: number;
+    texId: number | null;
     tevMode: number;
     enableTexChainStuff: number;
     texmtxIndex: number;
@@ -27,13 +27,17 @@ export interface Shader {
     hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
                          // It is possibly related to projected lighting.
     auxTexNum: number;
+    furRegionsTexId: number | null;
 }
 
-function parseShaderLayer(data: DataView, texIds: number[], isAncient: boolean): ShaderLayer {
-    const texId = texIds[data.getUint32(0x0)];
+function parseTexId(data: DataView, offs: number, texIds: number[]): number | null {
+    const texNum = data.getUint32(offs);
+    return texNum !== 0xffffffff ? texIds[texNum] : null;
+}
 
+function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): ShaderLayer {
     return {
-        texId,
+        texId: parseTexId(data, 0x0, texIds),
         tevMode: data.getUint8(0x4),
         enableTexChainStuff: data.getUint8(0x5),
         texmtxIndex: data.getUint8(0x6),
@@ -41,7 +45,7 @@ function parseShaderLayer(data: DataView, texIds: number[], isAncient: boolean):
 }
 
 interface ShaderFields {
-    isAncient?: boolean;
+    isBeta?: boolean;
     size: number;
     numLayers: number;
     layers: number;
@@ -66,7 +70,7 @@ export const SFADEMO_MAP_SHADER_FIELDS: ShaderFields = {
 };
 
 export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
-    isAncient: true,
+    isBeta: true,
     size: 0x38,
     numLayers: 0x36,
     layers: 0x20, // ???
@@ -81,6 +85,9 @@ export enum ShaderFlags {
     Lava = 0x80,
     Reflective = 0x100, // Occurs in Krazoa Palace reflective floors
     AlphaCompare = 0x400,
+    ShortFur = 0x4000, // 4 layers
+    MediumFur = 0x8000, // 8 layers
+    LongFur = 0x10000, // 16 layers
     StreamingVideo = 0x20000,
     SkyAmbientLit = 0x40000,
     FancyWater = 0x80000000, // ???
@@ -91,7 +98,7 @@ export enum ShaderAttrFlags {
     CLR = 0x2,
 }
 
-export function parseShader(data: DataView, fields: ShaderFields, texIds: number[], isAncient: boolean): Shader {
+export function parseShader(data: DataView, fields: ShaderFields, texIds: number[]): Shader {
     const shader: Shader = {
         layers: [],
         flags: 0,
@@ -99,6 +106,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         hasAuxTex0: false,
         hasAuxTex1: false,
         auxTexNum: -1,
+        furRegionsTexId: null,
     };
 
     let numLayers = data.getUint8(fields.numLayers);
@@ -107,26 +115,20 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         numLayers = 2;
     }
     for (let i = 0; i < numLayers; i++) {
-        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, isAncient);
+        const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, !!fields.isBeta);
         shader.layers.push(layer);
     }
 
-    if (!fields.isAncient) {
-        shader.flags = data.getUint32(0x3c); // FIXME: find this field in demo files
+    if (!fields.isBeta) {
+        shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
-        shader.hasAuxTex0 = data.getUint32(0x8) != 0;
-        shader.hasAuxTex1 = data.getUint32(0x14) != 0;
+        shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
+        shader.hasAuxTex1 = data.getUint32(0x14) !== 0;
         shader.auxTexNum = data.getUint32(0x34);
+        shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
     } else {
-        const ancientAttrs = data.getUint8(0x34);
-        shader.flags = 0;
-        shader.attrFlags = 0;
-        if (ancientAttrs & 1) {
-            shader.attrFlags |= ShaderAttrFlags.NRM;
-        }
-        if (ancientAttrs & 2) {
-            shader.attrFlags |= ShaderAttrFlags.CLR;
-        }
+        shader.attrFlags = data.getUint8(0x34);
+        shader.flags = 0; // TODO: where is this field?
         shader.hasAuxTex0 = false;
         shader.hasAuxTex1 = false;
         shader.auxTexNum = -1;
@@ -172,8 +174,8 @@ export interface SFAMaterial {
 
 function makeWavyTexture(device: GfxDevice): SFATexture {
     // This function generates a texture with a wavy pattern used for water and lava.
-    // Strangely, the original function to generate this function is not customizable and
-    // generates the same texture every time. (?)
+    // The original function used to generate this texture is not customizable and
+    // always generates the same texture every time it is called. (?)
     
     const width = 64;
     const height = 64;
@@ -221,8 +223,8 @@ function makeWavyTexture(device: GfxDevice): SFATexture {
 
 function makeWaterRelatedTexture(device: GfxDevice): SFATexture {
     // This function generates a texture with a circular pattern used for water.
-    // Strangely, the original function to generate this function is not customizable and
-    // generates the same texture every time. (?)
+    // The original function to generate this texture is not customizable and
+    // generates the same texture every time it is called. (?)
     
     const width = 128;
     const height = 128;
@@ -424,7 +426,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
 
     function addTevStagesForLava() { // and other similar effects?
         // Occurs for lava
-        textures[2] = makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId, alwaysUseTex1));
+        textures[2] = makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, alwaysUseTex1));
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         const texture0x600 = texColl.getTexture(device, 0x600, false);
         textures[0] = makeMaterialTexture(texture0x600);
@@ -563,7 +565,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             addTevStageForMultVtxColor();
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId!, alwaysUseTex1)));
             }
         } else {
             for (let i = 0; i < shader.layers.length; i++) {
@@ -576,7 +578,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             }
 
             for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
+                textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId!, alwaysUseTex1)));
             }
 
             if (shader.flags & ShaderFlags.Reflective) {
@@ -680,7 +682,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         mb.setUsePnMtxIdx(true);
         addTevStageForTextureWithWhiteKonst(0);
         for (let i = 0; i < shader.layers.length; i++) {
-            textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId, alwaysUseTex1)));
+            textures.push(makeMaterialTexture(texColl.getTexture(device, shader.layers[i].texId!, alwaysUseTex1)));
         }
     } else if (shader.flags & ShaderFlags.FancyWater) {
         addTevStagesForFancyWater();
