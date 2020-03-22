@@ -378,7 +378,7 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.staticData.indexCount);
-        renderInstManager.submitRenderInst(renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
