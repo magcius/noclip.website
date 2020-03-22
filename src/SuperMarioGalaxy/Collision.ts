@@ -8,7 +8,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor } from "./LiveActor";
 import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3 } from "../MathHelpers";
-import { preScaleMtx, connectToScene } from "./ActorUtil";
+import { connectToScene } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 
@@ -141,7 +141,7 @@ export class CollisionParts {
         }
 
         vec3.set(scratchVec3a, scale / scratchVec3a[0], scale / scratchVec3a[1], scale / scratchVec3a[2]);
-        preScaleMtx(mtx, scratchVec3a);
+        mat4.scale(mtx, mtx, scratchVec3a);
     }
 
     private resetAllMtxPrivate(hostMtx: mat4): void {

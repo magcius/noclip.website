@@ -5,7 +5,7 @@ import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, transformVec3Mat4w1 } from "../MathHelpers";
-import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, preScaleMtx, connectToSceneMapObjMovement } from "./ActorUtil";
+import { setTrans, calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -1154,7 +1154,7 @@ export function createGlobalPlaneInBoxGravityObj(zoneAndLayer: ZoneAndLayer, sce
     gravity.setPlane(scratchVec3c, scratchVec3b);
     vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3c, scratchVec3a[1]);
     setTrans(scratchMatrix, scratchVec3c);
-    preScaleMtx(scratchMatrix, scratchVec3a);
+    mat4.scale(scratchMatrix, scratchMatrix, scratchVec3a);
     gravity.setRangeBox(scratchMatrix);
 
     // PlaneInBoxGravityCreator::settingFromJMapArgs
@@ -1222,7 +1222,7 @@ export function createGlobalCubeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
     vec3.scale(scratchVec3c, scratchVec3c, 500.0);
     vec3.scaleAndAdd(scratchVec3a, scratchVec3b, scratchVec3a, scratchVec3c[1]);
     setTrans(scratchMatrix, scratchVec3a);
-    preScaleMtx(scratchMatrix, scratchVec3c);
+    mat4.scale(scratchMatrix, scratchMatrix, scratchVec3c);
     gravity.setCube(scratchMatrix);
 
     // CubeGravityCreator::settingFromJMapArgs

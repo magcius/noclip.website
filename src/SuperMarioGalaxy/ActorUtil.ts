@@ -945,19 +945,6 @@ export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
     makeMtxUpFrontPos(dst, up, front, pos);
 }
 
-export function preScaleMtx(dst: mat4, v: vec3): void {
-    const x = v[0], y = v[1], z = v[2];
-    dst[0] *= x;
-    dst[1] *= x;
-    dst[2] *= x;
-    dst[4] *= y;
-    dst[5] *= y;
-    dst[6] *= y;
-    dst[8] *= z;
-    dst[9] *= z;
-    dst[10] *= z;
-}
-
 export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
     return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
 }
