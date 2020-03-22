@@ -37,7 +37,7 @@ export class MotionData {
 
     public currMotion: Motion[] = [];
     public currBlock: number;
-    public storedValues = nArray(3, () => 0);
+    public storedValues = nArray(6, () => 0);
 
     public pathParam: number;
     public start = -1;
@@ -106,7 +106,7 @@ export interface FollowPath {
     kind: "path";
     speed: ObjParam;
     start: PathStart;
-    end: number;
+    end: ObjParam;
     maxTurn: number;
     flags: number;
 }
@@ -583,6 +583,14 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
             assert(blocks[0].kind === "faceTarget");
             blocks[0].flags |= MoveFlags.Continuous;
         } break;
+        case 0x802DD1C0: {
+            assert(blocks[0].kind === "faceTarget");
+            blocks[0].flags |= MoveFlags.Continuous;
+        } break;
+        case 0x802D7C30: {
+            assert(blocks[0].kind === "faceTarget");
+            blocks[0].flags |= MoveFlags.Continuous;
+        } break;
         // set splash params
         case 0x802BFF74: {
             assert(blocks[1].kind === "splash");
@@ -657,6 +665,17 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
                 kind: "basic",
                 subtype: BasicMotionKind.Custom,
                 param: 4,
+            });
+        } break;
+        // charmeleon motion
+        case 0x802DC280: {
+            blocks.push({
+                kind: "path",
+                speed: {index: 5},
+                start: PathStart.Resume,
+                end: {index: 4},
+                maxTurn: 0,
+                flags: MoveFlags.Ground | MoveFlags.SnapTurn,
             });
         } break;
     }
@@ -823,7 +842,7 @@ export function followPath(pos: vec3, euler: vec3, data: MotionData, block: Foll
     if (!!(data.stateFlags & EndCondition.Pause) || !data.path)
         return MotionResult.None;
     data.pathParam += 30 * lookupValue(data, block.speed) * dt / data.path.duration;
-    let end = block.end;
+    let end = lookupValue(data, block.end);
     if (block.start === PathStart.StoredSegment)
         end = data.path.times[data.storedValues[1]];
     else if (block.start === PathStart.FirstSegment)

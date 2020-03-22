@@ -133,7 +133,7 @@ export class LevelGlobals {
 
     public sendTargetedSignal(source: Target | null, signal: number, targetPointer: number): void {
         for (let i = 0; i < this.allActors.length; i++) {
-            if (this.allActors[i].def.globalPointer !== targetPointer)
+            if (this.allActors[i].globalPointer !== targetPointer)
                 continue;
             this.allActors[i].receiveSignal(source, signal, this);
             break;
@@ -188,7 +188,7 @@ export class LevelGlobals {
                 euler: vec3.create(),
                 scale: vec3.clone(Vec3One),
             };
-            const fish = new Actor(data[fishIndex], fakeSpawn, defs[fishIndex] as ActorDef, this);
+            const fish = createActor(data[fishIndex], fakeSpawn, defs[fishIndex] as ActorDef, this);
             fish.visible = false;
             this.tempActors.push(fish);
             out.push(fish);
@@ -229,7 +229,7 @@ export class LevelGlobals {
                     euler: vec3.create(),
                     scale: vec3.clone(Vec3One),
                 };
-                const actor = new Actor(data[tempIndex], fakeSpawn, defs[tempIndex] as ActorDef, this);
+                const actor = createActor(data[tempIndex], fakeSpawn, defs[tempIndex] as ActorDef, this);
                 actor.visible = false;
                 this.tempActors.push(actor);
                 this.allActors.push(actor);
@@ -517,10 +517,12 @@ export class Actor extends ModelRenderer {
     public center = vec3.create();
 
     public tangible = true;
+    public globalPointer = 0;
 
     constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals) {
         super(renderData, def.nodes, def.stateGraph.animations);
         this.motionData.path = spawn.path;
+        this.globalPointer = def.globalPointer;
         this.reset(globals);
     }
 
@@ -1031,6 +1033,16 @@ class Charmander extends Actor {
     protected startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
         switch (state.startAddress) {
+            case 0x802D8BB8: // stored in an array
+                this.globalPointer = 0x802E1A1C + 4 * this.spawn.behavior; break;
+            case 0x802D9074: {
+                if (this.currBlock === 1) {
+                    if (this.target && this.target instanceof Actor && this.target.def.id === 126) {
+                        this.followEdge(state.blocks[0].edges[0], globals);
+                        return;
+                    }
+                }
+            } break;
             case 0x802D94E8: {
                 if (this.motionData.storedValues[0] === 0 && this.currBlock === 0 && (this.spawn.behavior === 1 || this.spawn.behavior === 2)) {
                     this.followEdge(state.blocks[0].edges[0], globals);
@@ -1046,6 +1058,28 @@ class Charmander extends Actor {
             } break;
         }
         super.startBlock(globals);
+    }
+}
+
+class Charmeleon extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        switch (state.startAddress) {
+            case 0x802DC170:
+                this.motionData.storedValues[5] = .04; break;
+            case 0x802DC1F8:
+                this.motionData.storedValues[5] = .08; break;
+            case 0x802DC758:
+            case 0x802DC7A8:
+                vec3.copy(this.motionData.destination, this.translation); break;
+        }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        this.motionData.pathParam = this.motionData.pathParam % 1;
+        this.motionData.storedValues[4] = Math.min(1, this.motionData.pathParam + .3 * (1 + Math.random()));
+        return MotionResult.Done;
     }
 }
 
@@ -1495,6 +1529,7 @@ export function sceneActorInit(): void {
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
     switch (def.id) {
         case 4: return new Charmander(renderData, spawn, def, globals);
+        case 5: return new Charmeleon(renderData, spawn, def, globals);
         case 7: return new Squirtle(renderData, spawn, def, globals);
         case 14: return new Kakuna(renderData, spawn, def, globals);
         case 16: return new Pidgey(renderData, spawn, def, globals);

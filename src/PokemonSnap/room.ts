@@ -2038,6 +2038,20 @@ function fixupState(state: State, animationAddresses: number[]): void {
             state.blocks[1].signals[1].condition = InteractionType.Unknown;
             state.blocks[1].signals[2].condition = InteractionType.Unknown;
         } break;
+        // mark edge as off by default
+        case 0x802D9074: {
+            state.blocks[0].edges[0].type = InteractionType.Unknown;
+        } break;
+        // these spawns look like they were copied from elsewhere, without changing the ID
+        // they work in game, but break our simple detection logic
+        case 0x802D9B8C: {
+            assert(state.blocks[0].spawn !== undefined);
+            state.blocks[0].spawn.id = 1002;
+        } break;
+        case 0x802D9C84: {
+            assert(state.blocks[0].spawn !== undefined);
+            state.blocks[0].spawn.id = 5;
+        } break;
     }
 }
 
