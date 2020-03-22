@@ -71,10 +71,25 @@ const enum AccelType { NORMAL, REVERSE, TIMED }
 
 const scratchVec3 = vec3.create();
 
+class MapPartsFunction<TNerve extends number> extends NameObj {
+    public spine = new Spine<TNerve>();
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+        this.spine.changeNerve();
+        this.updateSpine(sceneObjHolder, this.spine.getCurrentNerve(), deltaTimeFrames);
+        this.spine.updateTick(deltaTimeFrames);
+        this.spine.changeNerve();
+    }
+}
+
 const enum MapPartsRotatorNrv { NeverMove, Wait, RotateStart, Rotate, StopAtEnd }
 
-// TODO(jstpierre): MapPartsFunction?
-export class MapPartsRotator extends NameObj {
+export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     private rotateAngle: number;
     private rotateAxis: AxisType;
     private rotateAccelType: AccelType;
@@ -86,15 +101,12 @@ export class MapPartsRotator extends NameObj {
     private velocity: number = 0;
     private isOnReverse: boolean = false;
     private angle: number = 0;
-    private spine: Spine<MapPartsRotatorNrv>;
 
     private baseHostMtx = mat4.create();
     public mtx = mat4.create();
 
     constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, 'MapPartsRotator');
-
-        this.spine = new Spine<MapPartsRotatorNrv>();
 
         this.rotateAngle = assertExists(infoIter.getValueNumber('RotateSpeed'));
         this.rotateAxis = assertExists(infoIter.getValueNumber('RotateAxis'));
@@ -196,10 +208,10 @@ export class MapPartsRotator extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        if (this.spine.getCurrentNerve() === MapPartsRotatorNrv.Rotate) {
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRotatorNrv, deltaTimeFrames: number): void {
+        if (currentNerve === MapPartsRotatorNrv.Rotate) {
             this.updateVelocity();
-            this.updateAngle(getDeltaTimeFrames(viewerInput));
+            this.updateAngle(deltaTimeFrames);
 
             if ((this.rotateAccelType === AccelType.NORMAL || this.rotateAccelType === AccelType.TIMED) && this.isReachedTargetAngle()) {
                 this.angle = this.targetAngle;
@@ -216,8 +228,6 @@ export class MapPartsRotator extends NameObj {
                     this.updateRotateMtx();
             }
         }
-
-        super.movement(sceneObjHolder, viewerInput);
     }
 }
 
@@ -264,7 +274,7 @@ function sendMsgToHost(sceneObjHolder: SceneObjHolder, actorHost: ActorHost, mes
     return actorHost.actor.receiveMessage(sceneObjHolder, messageType, bodySensor, bodySensor);
 }
 
-export class MapPartsRailMover extends NameObj {
+export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
     private moveConditionType: number;
     private moveStopType: MoveStopType;
     private signMotionType: SignMotionType;
@@ -277,14 +287,12 @@ export class MapPartsRailMover extends NameObj {
     private startMoveCoord: number = 0;
 
     public translation = vec3.create();
-    public spine: Spine<MapPartsRailMoverNrv>;
     public mtx = mat4.create();
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, 'MapPartsRailMover');
 
         this.passChecker = new MapPartsRailPointPassChecker(this.actor);
-        this.spine = new Spine<MapPartsRailMoverNrv>();
 
         this.moveConditionType = getMapPartsArgMoveConditionType(infoIter);
         this.moveStopType = getMapPartsArgMoveStopType(this.actor);
@@ -393,20 +401,8 @@ export class MapPartsRailMover extends NameObj {
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const currentNerve = this.spine.getCurrentNerve();
-
-        if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
-            this.tryPassPoint(sceneObjHolder);
-        } else {
-            this.tryRestartAtEnd();
-        }
-
-        this.passChecker.movement();
-
-        this.spine.changeNerve();
-        this.spine.updateTick(getDeltaTimeFrames(viewerInput));
-
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailMoverNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
         if (currentNerve === MapPartsRailMoverNrv.Move) {
             if (isFirstStep(this)) {
                 this.updateAccel();
@@ -464,9 +460,18 @@ export class MapPartsRailMover extends NameObj {
             if (isFirstStep(this))
                 sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_Vanish);
         }
+    }
 
-        this.spine.changeNerve();
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const currentNerve = this.spine.getCurrentNerve();
 
+        if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
+            this.tryPassPoint(sceneObjHolder);
+        } else {
+            this.tryRestartAtEnd();
+        }
+
+        this.passChecker.movement();
         super.movement(sceneObjHolder, viewerInput);
     }
 

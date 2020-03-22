@@ -714,7 +714,7 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
             if (!this.isWorking && isWorking)
                 this.startMoveInner();
 
-            this.isWorking = this.isWorking;
+            this.isWorking = isWorking;
             this.move();
 
             if (this.railMover!.isReachedEnd()) {
