@@ -634,7 +634,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         if (this.textureAnimator !== null) {
             for (let i = 0; i < this.drawCall.textureIndices.length && i < this.textureMappings.length; i++) {
@@ -672,6 +672,7 @@ class DrawCallInstance {
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -1639,7 +1640,7 @@ export class FlipbookRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -1676,5 +1677,6 @@ export class FlipbookRenderer {
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }

@@ -711,12 +711,13 @@ class FSHPMeshInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         // TODO(jstpierre): Do we have to care about submeshes?
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawIndexes(this.meshData.mesh.count);
         renderInst.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 

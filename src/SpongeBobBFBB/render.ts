@@ -666,7 +666,7 @@ export class FragRenderer extends BaseRenderer {
     }
 
     public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -689,6 +689,7 @@ export class FragRenderer extends BaseRenderer {
         
         renderInst.sortKey = setSortKeyDepth(this.sortKey, viewSpaceDepth);
         renderInst.filterKey = this.filterKey;
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public prepareToRender(renderState: RenderState) {

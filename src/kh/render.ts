@@ -422,7 +422,7 @@ class DrawCallInstance {
         if (!this.drawCall.layer!.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
         renderInst.sortKey = this.drawCallIndex;
 
@@ -452,6 +452,8 @@ class DrawCallInstance {
             mapped[offs++] = uvAnimOffsetScratch[0];
             mapped[offs++] = uvAnimOffsetScratch[1];
         }
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public setVertexColorsEnabled(v: boolean): void {

@@ -80,7 +80,7 @@ class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -97,6 +97,8 @@ class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

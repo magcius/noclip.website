@@ -1700,7 +1700,7 @@ class MaterialInstance {
         if (!this.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(this.stateFlags);
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 2 * 8);
         const d = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
@@ -1764,6 +1764,7 @@ class MaterialInstance {
         const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         renderInst.setGfxProgram(gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -2272,7 +2273,7 @@ class SnowRenderer {
         if (!this.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.filterKey = PW64Pass.SNOW;
 
         renderInst.setBindingLayouts(snowBindingLayouts);
@@ -2305,6 +2306,7 @@ class SnowRenderer {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));
         renderInst.drawIndexes(6 * this.flakeCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

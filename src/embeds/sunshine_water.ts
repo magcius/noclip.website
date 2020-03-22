@@ -92,7 +92,7 @@ class PlaneShape {
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, packetParams: PacketParams): void {
         const renderInstManager = renderHelper.renderInstManager;
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         // Force this so it renders after the skybox.
         renderInst.filterKey = SMSPass.OPAQUE;
         renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
@@ -102,6 +102,8 @@ class PlaneShape {
         let offs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_PacketParams);
         fillPacketParamsData(d, offs, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice) {

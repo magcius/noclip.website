@@ -660,29 +660,11 @@ export class GfxRenderInstManager {
     }
 
     /**
-     * Creates a new render instance, immediately submits it to the current
-     * render inst list. Unlike {@param submitRenderInst}, this is slightly
-     * more efficient as this function cannot assume that the render inst is
-     * fully formed.
-     *
-     * {@deprecated}
-     */
-    public pushRenderInst(): GfxRenderInst {
-        const renderInst = this.newRenderInst();
-        // Submitted to the current list by default. We can't insert
-        // sorted because there's no guarantee the sortKey is correct
-        // at this point.
-        this.currentRenderInstList.insertToEnd(renderInst);
-        return renderInst;
-    }
-
-    /**
      * Sets the currently active render inst list. This is the list that will
-     * be used by {@param pushRenderInst} and {@param submitRenderInst}. If
-     * you use this function, please make sure to call {@see disableSimpleMode}
-     * when the GfxRenderInstManager is created, to ensure that nobody uses
-     * the "legacy" APIs. Failure to do so might cause memory leaks or other
-     * problems.
+     * be used by @param submitRenderInst}. If you use this function, please
+     * make sure to call {@see disableSimpleMode} when the GfxRenderInstManager
+     * is created, to ensure that nobody uses the "legacy" APIs. Failure to do
+     * so might cause memory leaks or other problems.
      */
     public setCurrentRenderInstList(list: GfxRenderInstList): void {
         assert(this.simpleRenderInstList === null);

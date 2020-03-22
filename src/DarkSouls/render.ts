@@ -705,13 +705,14 @@ class BatchInstance {
             if (!shouldRenderPrimitive(primitive))
                 continue;
 
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputStates[j]);
             renderInst.setMegaStateFlags(this.megaState);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;
             renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
             renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

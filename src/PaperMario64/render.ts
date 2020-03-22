@@ -195,7 +195,7 @@ export class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -216,6 +216,7 @@ export class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -411,12 +412,13 @@ class ModelTreeLeafInstance {
 
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++) {
             const drawCall = this.n64Data.rspOutput.drawCalls[i];
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
             const megaStateFlags = renderInst.getMegaStateFlags();
             megaStateFlags.cullMode = translateCullMode(drawCall.SP_GeometryMode);
 
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

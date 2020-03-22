@@ -154,7 +154,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
 
         // TODO: figure out layers
@@ -204,6 +204,8 @@ class DrawCallInstance {
         if (this.material && this.material.data.flags & (MaterialFlags.PrimLOD | MaterialFlags.Special))
             primLOD = this.material.getPrimLOD();
         offs += fillVec4(comb, offs, primLOD);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 

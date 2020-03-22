@@ -123,9 +123,10 @@ class Chunk {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawPrimitives(this.numVertices);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

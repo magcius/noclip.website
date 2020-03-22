@@ -407,8 +407,9 @@ class ShapeInstance {
 
         const nitroData = vertexData.nitroVertexData;
         for (let i = 0; i < nitroData.drawCalls.length; i++) {
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(nitroData.drawCalls[i].numIndices, nitroData.drawCalls[i].startIndex);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

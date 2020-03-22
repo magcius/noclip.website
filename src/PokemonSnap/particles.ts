@@ -952,7 +952,7 @@ class Particle {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.filterKey = SnapPass.MAIN;
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
@@ -972,5 +972,6 @@ class Particle {
 
         offs += fillVec4v(draw, offs, this.prim);
         offs += fillVec4v(draw, offs, this.env);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }

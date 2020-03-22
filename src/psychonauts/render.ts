@@ -257,7 +257,7 @@ class MeshFragInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewRenderer: Viewer.ViewerRenderInput) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.meshFragData.inputLayout, this.meshFragData.inputState);
         renderInst.drawIndexes(this.meshFragData.indexCount);
 
@@ -270,6 +270,7 @@ class MeshFragInstance {
         let offs = renderInst.allocateUniformBuffer(PsychonautsProgram.ub_MeshFragParams, 12);
         const mapped = renderInst.mapUniformBufferF32(PsychonautsProgram.ub_MeshFragParams);
         fillMatrix4x3(mapped, offs, this.computeModelMatrix(viewRenderer.camera, modelMatrix));
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

@@ -515,7 +515,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -543,6 +543,7 @@ class DrawCallInstance {
         offs += fillVec4v(comb, offs, this.drawCall.envColor); // environment color
         comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
         offs++;
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
