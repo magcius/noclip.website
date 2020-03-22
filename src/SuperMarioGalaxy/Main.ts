@@ -41,6 +41,7 @@ import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
+import { MapPartsRailGuideHolder } from './MapParts';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -818,22 +819,23 @@ class AreaObjContainer extends NameObj {
 }
 
 export const enum SceneObj {
-    SensorHitChecker      = 0x00,
-    CollisionDirector     = 0x01,
-    LightDirector         = 0x06,
-    StageSwitchContainer  = 0x0A,
-    SwitchWatcherHolder   = 0x0B,
-    SleepControllerHolder = 0x0C,
-    AreaObjContainer      = 0x0D,
-    PlanetGravityManager  = 0x32,
-    CoinRotater           = 0x38,
-    AirBubbleHolder       = 0x39,
-    SwingRopeGroup        = 0x47,
-    TrapezeRopeDrawInit   = 0x4A,
-    ElectricRailHolder    = 0x59,
-    WaterAreaHolder       = 0x62,
-    WaterPlantDrawInit    = 0x63,
-    PriorDrawAirHolder    = 0x75,
+    SensorHitChecker        = 0x00,
+    CollisionDirector       = 0x01,
+    LightDirector           = 0x06,
+    StageSwitchContainer    = 0x0A,
+    SwitchWatcherHolder     = 0x0B,
+    SleepControllerHolder   = 0x0C,
+    AreaObjContainer        = 0x0D,
+    PlanetGravityManager    = 0x32,
+    CoinRotater             = 0x38,
+    AirBubbleHolder         = 0x39,
+    SwingRopeGroup          = 0x47,
+    TrapezeRopeDrawInit     = 0x4A,
+    MapPartsRailGuideHolder = 0x56,
+    ElectricRailHolder      = 0x59,
+    WaterAreaHolder         = 0x62,
+    WaterPlantDrawInit      = 0x63,
+    PriorDrawAirHolder      = 0x75,
 }
 
 export class SceneObjHolder {
@@ -860,6 +862,7 @@ export class SceneObjHolder {
     public airBubbleHolder: AirBubbleHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
+    public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
@@ -902,6 +905,8 @@ export class SceneObjHolder {
             return this.swingRopeGroup;
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             return this.trapezeRopeDrawInit;
+        else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
+            return this.mapPartsRailGuideHolder;
         else if (sceneObj === SceneObj.WaterAreaHolder)
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
@@ -936,6 +941,8 @@ export class SceneObjHolder {
             this.swingRopeGroup = new SwingRopeGroup(this);
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
+        else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
+            this.mapPartsRailGuideHolder = new MapPartsRailGuideHolder(this);
         else if (sceneObj === SceneObj.WaterAreaHolder)
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)

@@ -35,6 +35,10 @@ export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, nam
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, -1, -1, -1);
 }
 
+export function connectToSceneMapObjNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.MAP_OBJ, -1);
+}
+
 export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x28, 0x06, DrawBufferType.NPC, -1);
 }

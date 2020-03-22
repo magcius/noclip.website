@@ -16,7 +16,7 @@ import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isGreaterEqualStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType, isDead } from './LiveActor';
-import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
+import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
 import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB } from './ActorUtil';
@@ -412,6 +412,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     private objName: string;
     protected rotator: MapPartsRotator | null = null;
     protected railMover: MapPartsRailMover | null = null;
+    protected railGuideDrawer: MapPartsRailGuideDrawer | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -453,6 +454,14 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
         if (initInfo.rotator)
             this.rotator = new MapPartsRotator(sceneObjHolder, this, infoIter);
+
+        if (connectedWithRail) {
+            const guideType = fallback(getMapPartsArgRailGuideType(this), RailGuideType.None);
+            if (guideType !== RailGuideType.None) {
+                sceneObjHolder.create(SceneObj.MapPartsRailGuideHolder);
+                this.railGuideDrawer = sceneObjHolder.mapPartsRailGuideHolder!.createRailGuide(sceneObjHolder, this, 'RailPoint', infoIter);
+            }
+        }
 
         tryStartAllAnim(this, this.objName);
         if (initInfo.colorChangeFrame !== -1) {
@@ -525,23 +534,27 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     }
 
     protected initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        // TODO(jstpierre): Switch B
     }
 
     protected initCaseNoUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 
     protected initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.startMapPartsFunctions(sceneObjHolder);
     }
 
     public isObjectName(name: string): boolean {
         return this.objName === name;
     }
 
-    public startMapPartsFunctions(): void {
+    public startMapPartsFunctions(sceneObjHolder: SceneObjHolder): void {
         if (this.rotator !== null)
             this.rotator.start();
         if (this.railMover !== null)
             this.railMover.start();
+        if (this.railGuideDrawer !== null)
+            this.railGuideDrawer.start(sceneObjHolder);
     }
 
     public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -551,6 +564,8 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.rotator.movement(sceneObjHolder, viewerInput);
         if (this.railMover !== null)
             this.railMover.movement(sceneObjHolder, viewerInput);
+        if (this.railGuideDrawer !== null)
+            this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -572,6 +587,15 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             m[14] = this.translation[2];
         } else {
             super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+
+        // Always request the rail guide if we're connected with a rail.
+        if (isConnectedWithRail(infoIter)) {
+            sceneObjHolder.modelCache.requestObjectData('RailPoint');
         }
     }
 }
@@ -643,7 +667,7 @@ export class RotateMoveObj extends MapObjActor {
         // TODO(jstpierre): Also check SwitchB
 
         if (startRotating)
-            this.startMapPartsFunctions();
+            this.startMapPartsFunctions(sceneObjHolder);
     }
 }
 
@@ -708,7 +732,7 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
 
         if (currentNerve === RailMoveObjNrv.Move) {
             if (isFirstStep(this))
-                this.startMapPartsFunctions();
+                this.startMapPartsFunctions(sceneObjHolder);
 
             const isWorking = this.railMover!.isWorking();
             if (!this.isWorking && isWorking)
@@ -2564,7 +2588,7 @@ export class AstroMapObj extends MapObjActor {
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
 
         if (this.rotator !== null)
-            this.startMapPartsFunctions();
+            this.startMapPartsFunctions(sceneObjHolder);
 
         this.setStateAlive(sceneObjHolder);
     }
@@ -7672,5 +7696,30 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
         // TODO(jstpierre)
         // if (this.railMover !== null)
         //     this.railMover.stop();
+    }
+}
+
+const enum SideSpikeMoveStepNrv { Wait }
+
+export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<SideSpikeMoveStepNrv>();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupRailMover();
+        initInfo.setupNerve(SideSpikeMoveStepNrv.Wait);
+        setupInitInfoTypical(initInfo, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // StarPointerTarget / AnimScaleController / WalkerStateBindStarPointer
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SideSpikeMoveStepNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === SideSpikeMoveStepNrv.Wait) {
+            if (isFirstStep(this))
+                this.startMapPartsFunctions(sceneObjHolder);
+        }
     }
 }

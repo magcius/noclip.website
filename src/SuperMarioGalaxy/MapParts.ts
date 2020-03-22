@@ -1,5 +1,5 @@
 
-import { LiveActor, MessageType } from './LiveActor';
+import { LiveActor, MessageType, isDead } from './LiveActor';
 import { assertExists, fallback } from '../util';
 import { Spine, isFirstStep, getStep, isGreaterStep } from './Spine';
 import { NameObj } from './NameObj';
@@ -8,7 +8,7 @@ import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7 } from './ActorUtil';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement } from './ActorUtil';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 
@@ -31,6 +31,12 @@ const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
 
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
     return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg1'), MoveStopType.Mirror);
+}
+
+export const enum RailGuideType { None, Draw, DrawForward, DrawPoints }
+
+export function getMapPartsArgRailGuideType(actor: LiveActor): RailGuideType {
+    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg2'), RailGuideType.None);
 }
 
 function getMapPartsArgMoveSpeed(actor: LiveActor): number | null {
@@ -74,6 +80,10 @@ const scratchVec3 = vec3.create();
 class MapPartsFunction<TNerve extends number> extends NameObj {
     public spine = new Spine<TNerve>();
 
+    constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, name: string) {
+        super(sceneObjHolder, name);
+    }
+
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
@@ -105,8 +115,8 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     private baseHostMtx = mat4.create();
     public mtx = mat4.create();
 
-    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, infoIter: JMapInfoIter) {
-        super(sceneObjHolder, 'MapPartsRotator');
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
+        super(sceneObjHolder, actor, 'MapPartsRotator');
 
         this.rotateAngle = assertExists(infoIter.getValueNumber('RotateSpeed'));
         this.rotateAxis = assertExists(infoIter.getValueNumber('RotateAxis'));
@@ -289,8 +299,8 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
     public translation = vec3.create();
     public mtx = mat4.create();
 
-    constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, infoIter: JMapInfoIter) {
-        super(sceneObjHolder, 'MapPartsRailMover');
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
+        super(sceneObjHolder, actor, 'MapPartsRailMover');
 
         this.passChecker = new MapPartsRailPointPassChecker(this.actor);
 
@@ -565,5 +575,104 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         } else if (this.moveStopType === MoveStopType.OnceAndVanish) {
             this.spine.setNerve(MapPartsRailMoverNrv.Vanish);
         }
+    }
+}
+
+const enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
+
+class MapPartsRailGuidePoint extends LiveActor {
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number) {
+        super(actor.zoneAndLayer, sceneObjHolder, 'MapPartsRailGuidePoint');
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        calcRailPosAtCoord(this.translation, actor, coord);
+
+        connectToSceneMapObjNoMovement(sceneObjHolder, this);
+        this.makeActorDead(sceneObjHolder);
+    }
+}
+
+export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideDrawerNrv> {
+    private guidePoints: MapPartsRailGuidePoint[] = [];
+    private guideType: RailGuideType;
+
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, private pointModelName: string, public railId: number) {
+        super(sceneObjHolder, actor, 'MapPartsRailGuideDrawer');
+
+        this.guideType = fallback(getMapPartsArgRailGuideType(this.actor), RailGuideType.None);
+
+        if (this.guideType === RailGuideType.None) {
+            this.spine.setNerve(MapPartsRailGuideDrawerNrv.HideAll);
+        } else {
+            this.initGuidePoints(sceneObjHolder);
+            if (this.guideType === RailGuideType.DrawForward)
+                this.spine.setNerve(MapPartsRailGuideDrawerNrv.DrawForward);
+            else
+                this.spine.setNerve(MapPartsRailGuideDrawerNrv.Draw);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailGuideDrawerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MapPartsRailGuideDrawerNrv.DrawForward) {
+            const coord = getRailCoord(this.actor);
+            for (let i = 0; i < this.guidePoints.length; i++) {
+                const point = this.guidePoints[i];
+                if (coord >= point.coord && !isDead(point))
+                    point.makeActorDead(sceneObjHolder);
+            }
+        }
+    }
+
+    public isWorking(): boolean {
+        for (let i = 0; i < this.guidePoints.length; i++)
+            if (!isDead(this.guidePoints[i]))
+                return true;
+        return false;
+    }
+
+    public start(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.guidePoints.length; i++)
+            this.guidePoints[i].makeActorAppeared(sceneObjHolder);
+    }
+
+    public end(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.guidePoints.length; i++)
+            this.guidePoints[i].makeActorDead(sceneObjHolder);
+    }
+
+    private initGuidePoints(sceneObjHolder: SceneObjHolder) {
+        const railLength = getRailTotalLength(this.actor);
+
+        for (let coord = 0; coord < railLength; coord += 200.0)
+            this.guidePoints.push(new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord));
+
+        if (this.guideType === RailGuideType.DrawPoints) {
+            for (let i = 0; i < this.actor.railRider!.getPointNum(); i++) {
+                const coord = this.actor.railRider!.getPointCoord(i);
+                const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord);
+                vec3.set(point.scale, 2.0, 2.0, 2.0);
+                this.guidePoints.push(point);
+            }
+        }
+    }
+}
+
+export class MapPartsRailGuideHolder extends NameObj {
+    private railDrawers: MapPartsRailGuideDrawer[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'MapPartsRailGuideHolder');
+    }
+
+    public createRailGuide(sceneObjHolder: SceneObjHolder, actor: LiveActor, pointModelName: string, infoIter: JMapInfoIter): MapPartsRailGuideDrawer {
+        const railId = assertExists(infoIter.getValueNumber('CommonPath_ID'));
+        for (let i = 0; i < this.railDrawers.length; i++)
+            if (this.railDrawers[i].railId === railId)
+                return this.railDrawers[i];
+
+        const railDrawer = new MapPartsRailGuideDrawer(sceneObjHolder, actor, pointModelName, railId);
+        this.railDrawers.push(railDrawer);
+        return railDrawer;
     }
 }
