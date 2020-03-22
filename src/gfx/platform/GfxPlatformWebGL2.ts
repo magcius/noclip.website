@@ -9,7 +9,7 @@ import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { colorEqual, colorCopy } from '../../Color';
 import { range } from '../../MathHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
-import { NormalizedViewportCoords } from '../helpers/RenderTargetHelpers';
+import { NormalizedViewportCoords, IdentityViewportCoords } from '../helpers/RenderTargetHelpers';
 
 const SHADER_DEBUG = IS_DEVELOPMENT;
 
@@ -738,13 +738,15 @@ void main() {
         }
     }
 
-    private blitFullscreenTexture(texture: GfxTexture, viewport: NormalizedViewportCoords = {x: 0, y: 0, w: 1, h: 1}): void {
+    private blitFullscreenTexture(texture: GfxTexture, viewport: NormalizedViewportCoords | null = null): void {
         const gl = this.gl;
         this._setMegaState(this._fullscreenCopyMegaState);
         this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
         gl.disable(gl.SCISSOR_TEST);
+        if (viewport === null)
+            viewport = IdentityViewportCoords;
         gl.viewport(viewport.x * this._scWidth, viewport.y * this._scHeight, viewport.w * this._scWidth, viewport.h * this._scHeight);
         this._currentTextures[0] = null;
         this._currentSamplers[0] = null;

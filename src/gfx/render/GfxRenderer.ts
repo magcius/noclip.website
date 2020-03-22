@@ -747,7 +747,7 @@ export class GfxRenderInstManager {
 
         for (let i = 0; i < this.instPool.allocCount; i++)
             if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
-                list.insertToEnd(this.instPool.pool[i]);
+                list.insertSorted(this.instPool.pool[i]);
     }
 
     /**
