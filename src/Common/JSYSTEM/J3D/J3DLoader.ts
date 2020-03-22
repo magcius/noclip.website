@@ -474,7 +474,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             attribIdx += 0x08;
         }
 
-        // TODO(jstpierre): Make sure these are compatible.
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
         const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
         const vtxLoader = compileVtxLoader(vat, vcd);
