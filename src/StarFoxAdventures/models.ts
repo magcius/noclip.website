@@ -188,7 +188,6 @@ interface DisplayListInfo {
 }
 
 function parseDisplayListInfo(data: DataView): DisplayListInfo {
-    console.log(`special bit address: 0x${data.getUint16(0x14).toString(16)}`);
     return {
         offset: data.getUint32(0x0),
         size: data.getUint16(0x4),
@@ -219,7 +218,7 @@ export class Model implements BlockRenderer {
         this.invBindMatrices = [];
 
         // Compute joint bones
-        console.log(`computing ${this.joints.length} rigid joint bones`);
+        // console.log(`computing ${this.joints.length} rigid joint bones`);
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             const parentMtx = mat4.create();
@@ -256,7 +255,7 @@ export class Model implements BlockRenderer {
         }
 
         // Compute blended bones
-        console.log(`computing ${this.weights.length} blended bones`);
+        // console.log(`computing ${this.weights.length} blended bones`);
         for (let i = 0; i < this.weights.length; i++) {
             const weight = this.weights[i];
 
@@ -470,7 +469,7 @@ export class Model implements BlockRenderer {
 
         const texOffset = blockDv.getUint32(fields.texOffset);
         const texCount = blockDv.getUint8(fields.texCount);
-        console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
+        // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
@@ -479,7 +478,7 @@ export class Model implements BlockRenderer {
 
         const posOffset = blockDv.getUint32(fields.posOffset);
         const posCount = blockDv.getUint16(fields.posCount);
-        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const vertBuffer = blockData.subarray(posOffset);
 
         let nrmBuffer = blockData;
@@ -492,19 +491,19 @@ export class Model implements BlockRenderer {
 
         const clrOffset = blockDv.getUint32(fields.clrOffset);
         const clrCount = blockDv.getUint16(fields.clrCount);
-        console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
+        // console.log(`Loading ${clrCount} colors from 0x${clrOffset.toString(16)}`);
         const clrBuffer = blockData.subarray(clrOffset);
 
         const texcoordOffset = blockDv.getUint32(fields.texcoordOffset);
         const texcoordCount = blockDv.getUint16(fields.texcoordCount);
-        console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordCount.toString(16)}`);
+        // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordCount.toString(16)}`);
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         let jointCount = 0;
         if (fields.hasBones) {
             const jointOffset = blockDv.getUint32(fields.jointOffset);
             jointCount = blockDv.getUint8(fields.jointCount);
-            console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
+            // console.log(`Loading ${jointCount} joints from offset 0x${jointOffset.toString(16)}`);
 
             this.joints = [];
             let offs = jointOffset;
@@ -520,7 +519,7 @@ export class Model implements BlockRenderer {
             if (fields.weightOffset !== undefined) {
                 const weightOffset = blockDv.getUint32(fields.weightOffset);
                 const weightCount = blockDv.getUint8(fields.weightCount);
-                console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
+                // console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
 
                 this.weights = [];
                 offs = weightOffset;
@@ -549,7 +548,7 @@ export class Model implements BlockRenderer {
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
-        console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
+        // console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
 
         const shaders: Shader[] = [];
         offs = shaderOffset;
@@ -624,7 +623,7 @@ export class Model implements BlockRenderer {
 
         const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
-        console.log(`Loading ${dlInfoCount} display lists...`);
+        // console.log(`Loading ${dlInfoCount} display lists...`);
         if (this.modelVersion === ModelVersion.Beta) {
             for (let i = 0; i < dlInfoCount; i++) {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
@@ -687,7 +686,7 @@ export class Model implements BlockRenderer {
         const self = this;
 
         function runFurBitstream(bitsOffset: number, bitAddress: number) {
-            console.log(`running fur bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
+            // console.log(`running fur bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
             bits.seekBit(bitAddress);
@@ -775,7 +774,7 @@ export class Model implements BlockRenderer {
             bits.drop(4);
             const listNum = bits.get(8);
             const dlInfo = dlInfos[listNum];
-            console.log(`Calling DL for fur #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+            // console.log(`Calling DL for fur #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);

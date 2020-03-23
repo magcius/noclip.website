@@ -134,7 +134,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.auxTexNum = -1;
     }
 
-    console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
+    // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
 
     return shader;
 }
@@ -699,12 +699,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
             return dst;
         }
 
-        if ((shader.flags & ShaderFlags.StreamingVideo) != 0) {
-            console.log(`Found streaming video surface (?)`);
-        }
-
         if ((shader.flags & ShaderFlags.Lava) != 0) {
-            console.log(`Found some lava!`);
             addTevStagesForLava();
         } else {
             addTevStagesForNonLava();
@@ -713,7 +708,6 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         if ((shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
             console.log(`TODO: skyscape reflection?`);
         } else if ((shader.flags & ShaderFlags.Water) != 0) {
-            console.log(`Found some water?`);
             addTevStagesForWater_OLD();
         } else {
             // TODO
@@ -823,8 +817,8 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     // TODO: animate waviness to make grass sway back and forth
     textures[2] = makeMaterialTexture(makeWavyTexture(device));
     const texmtx1 = mat4.fromValues(
-        0.0125, 0.0, 0.0, 0.0,
-        0.0, 0.0125, 0.0, 0.0,
+        0.0125/32, 0.0, 0.0, 0.0, // FIXME: divide by 32 doesn't belong here but it makes grass look neater...
+        0.0, 0.0125/32, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0
     );
