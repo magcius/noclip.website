@@ -28,6 +28,7 @@ const enum MotionFuncs {
     ApproachPoint   = 0x361E58,
     ResetPos        = 0x362050,
     Path            = 0x3620C8,
+    DynamicVerts    = 0x362414,
 
     VolcanoForward  = 0x2D6E14,
 }
@@ -213,6 +214,7 @@ export const enum BasicMotionKind {
     Song,
     SetSpeed,
     Loop,
+    Dynamic,
 }
 
 export interface BasicMotion {
@@ -408,6 +410,13 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                 this.blocks.push({
                     kind: "forward",
                     stopIfBlocked: false,
+                });
+            } break;
+            case MotionFuncs.DynamicVerts: {
+                this.blocks.push({
+                    kind: "basic",
+                    subtype: BasicMotionKind.Dynamic,
+                    param: this.getFloatValue(a2),
                 });
             } break;
             case StateFuncs.SplashAt:
@@ -678,6 +687,38 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
                 flags: MoveFlags.Ground | MoveFlags.SnapTurn,
             });
         } break;
+        // bulbasaur
+        case 0x802E1604: {
+            assert(blocks[0].kind === "basic" && blocks[0].subtype === BasicMotionKind.Custom);
+            blocks[0].param = 1;
+        } break;
+        // zapdos egg
+        case 0x802EC294: {
+            blocks[0] = {
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 1,
+            };
+        } break;
+        // poliwag face player in state
+        case 0x802DCA7C: {
+            blocks.push({
+                kind: "basic",
+                subtype: BasicMotionKind.Custom,
+                param: 1,
+            }, {
+                kind: "faceTarget",
+                maxTurn: .1,
+                flags: MoveFlags.FacePlayer,
+            });
+        } break;
+        // keep psyduck path from modifying y
+        // the game doesn't need this, because it treats the path as a relative offset,
+        // but I can't follow part of the logic, so we're treating it as absolute position
+        case 0x802DB5C0: {
+            assert(blocks[0].kind === "path");
+            blocks[0].flags |= MoveFlags.ConstHeight;
+        } break;
     }
 }
 
@@ -830,7 +871,7 @@ export function canHearSong(pos: vec3, globals: LevelGlobals): boolean {
     return vec3.dist(pos, globals.translation) < 2500; // game radius is 1400 for song effects
 }
 
-function stepYawTowards(euler: vec3, target: number, maxTurn: number, dt: number): boolean {
+export function stepYawTowards(euler: vec3, target: number, maxTurn: number, dt: number): boolean {
     const dist = angleDist(euler[1], target);
     euler[1] += clampRange(dist, maxTurn * dt * 30);
     return Math.abs(dist) < maxTurn * dt * 30;

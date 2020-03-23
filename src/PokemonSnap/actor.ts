@@ -1,12 +1,12 @@
 import { ModelRenderer, buildTransform } from "./render";
-import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor } from "./room";
+import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
 import { assertExists, assert, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards } from "./motion";
+import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion";
 import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp } from "../MathHelpers";
-import { getPathPoint } from "./animation";
+import { getPathPoint, getPathTangent } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
 import { ParticleManager } from "./particles";
@@ -24,7 +24,7 @@ export class LevelGlobals {
     public pesterNext = false;
 
     public fishTable: FishEntry[] = [];
-    public fishCount = 0;
+    public fishTracker = 0;
     public activeFish: Actor | null = null;
 
     public splashes: Splash[] = [];
@@ -85,7 +85,7 @@ export class LevelGlobals {
                 this.activeFish = null;
         let id = 0;
         if (this.id === '16') { // river has special logic
-            const entry = this.fishTable[this.fishCount % this.fishTable.length];
+            const entry = this.fishTable[this.fishTracker];
             if (Math.random() < entry.probability)
                 id = entry.id;
         } else { // make a weighted random choice from the table
@@ -102,7 +102,6 @@ export class LevelGlobals {
             return;
         // random yaw isn't explicit in the fish code, but seems to always be in the state logic
         this.activeFish = this.activateObject(id, pos, MathConstants.TAU * Math.random());
-        this.fishCount++;
     }
 
     public activateObject(id: number, pos: vec3, yaw: number, behavior = 0, scale = Vec3One): Actor | null {
@@ -144,6 +143,7 @@ export class LevelGlobals {
         const out: ModelRenderer[] = [];
 
         this.zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
+        this.zeroOne.setAnimation(0);
         out.push(this.zeroOne);
 
         // projectiles
@@ -218,6 +218,10 @@ export class LevelGlobals {
                 case 59: count = 3; break; // arcanine
                 case 132: count = 4; break; // ditto
                 case 1030: count = 10; break; // lava splash
+                case 80: // slowbro, and related objects
+                case 603:
+                case 1002:
+                    count = 2;
             }
             const tempIndex = defs.findIndex((d) => d.id === id);
             assert(tempIndex >= 0);
@@ -483,7 +487,7 @@ class Splash extends ModelRenderer {
         vec3.mul(scaleScratch, this.baseScale, scale);
         mat4.fromScaling(this.modelMatrix, scaleScratch);
         this.modelMatrix[12] = pos[0];
-        this.modelMatrix[13] = findGroundHeight(globals.collision, pos[0], pos[2]);
+        this.modelMatrix[13] = groundHeightAt(globals, pos);
         this.modelMatrix[14] = pos[2];
         this.setAnimation(0);
         this.renderers[this.headAnimationIndex].animator.loopCount = 0;
@@ -494,6 +498,10 @@ class Splash extends ModelRenderer {
         if (this.renderers[this.headAnimationIndex].animator.loopCount >= 1)
             this.visible = false;
     }
+}
+
+function groundHeightAt(globals: LevelGlobals, pos: vec3): number {
+    return findGroundHeight(globals.collision, pos[0], pos[2]);
 }
 
 const cameraScratch = vec3.create();
@@ -537,7 +545,7 @@ export class Actor extends ModelRenderer {
         // set transform components
         vec3.copy(this.translation, this.spawn.pos);
         if (this.def.spawn === SpawnType.GROUND)
-            this.translation[1] = findGroundHeight(globals.collision, this.spawn.pos[0], this.spawn.pos[2]);
+            this.translation[1] = groundHeightAt(globals, this.spawn.pos);
 
         vec3.copy(this.euler, this.spawn.euler);
 
@@ -589,7 +597,8 @@ export class Actor extends ModelRenderer {
                 if (!this.metEndCondition(block.wait.endCondition, globals))
                     break;
             }
-            this.endBlock(globals);
+            if (this.endBlock(state.startAddress, globals))
+                break;
             if (!this.chooseEdge(block.edges, globals)) {
                 this.currBlock++;
                 this.startBlock(globals);
@@ -597,18 +606,25 @@ export class Actor extends ModelRenderer {
         }
     }
 
-    // for actors with special state logic
     protected stateOverride(stateAddr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         return MotionResult.None;
     }
 
-    protected endBlock(globals: LevelGlobals): void { }
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        return false;
+    }
 
     protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         if (viewerInput.time - this.motionData.start > 5000)
             return MotionResult.Done;
         else
             return MotionResult.None;
+    }
+
+    protected animate(globals: LevelGlobals): void {
+        super.animate(globals);
+        if (this.renderers[0].animator.track)
+            this.updatePositions(); // collision center depends on root node position
     }
 
     protected changeState(newIndex: number, globals: LevelGlobals): boolean {
@@ -865,7 +881,10 @@ export class Actor extends ModelRenderer {
                     let nearest: Projectile | null = null;
                     let dist = 600;
                     for (let i = 0; i < globals.projectiles.length; i++) {
-                        if (globals.projectiles[i].isPester)
+                        const proj = globals.projectiles[i];
+                        // not sure what logic prevents tracking an apple that has fallen in water,
+                        // but it definitely causes broken-looking behavior
+                        if (proj.isPester || proj.landedAt === 0 || proj.inWater)
                             continue;
                         const newDist = globals.projectiles[i].distFrom(this.translation);
                         if (newDist < dist) {
@@ -927,7 +946,7 @@ export class Actor extends ModelRenderer {
                     else
                         mat4.getTranslation(splashScratch, this.renderers[block.index].modelMatrix); // use last frame model matrix, hopefully okay
                     if (block.onImpact) {
-                        const height = findGroundHeight(globals.collision, splashScratch[0], splashScratch[2]);
+                        const height = groundHeightAt(globals, splashScratch);
                         if (splashScratch[1] > height) {
                             result = MotionResult.None;
                             break;
@@ -959,6 +978,10 @@ export class Actor extends ModelRenderer {
                         } break;
                         case BasicMotionKind.Loop: {
                             this.motionData.currBlock = -1;
+                            result = MotionResult.Done;
+                        } break;
+                        case BasicMotionKind.Dynamic: {
+                            // TODO: handle dynamic vertices for eggs
                             result = MotionResult.Done;
                         } break;
                     }
@@ -1029,6 +1052,19 @@ export class Actor extends ModelRenderer {
     }
 }
 
+class Bulbasaur extends Actor {
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        switch (param) {
+            case 1: {
+                this.translation[1] = groundHeightAt(globals, this.translation) - 80;
+                return MotionResult.Update;
+            } break;
+            default:
+                return super.customMotion(param, viewerInput, globals);
+        }
+    }
+}
+
 class Charmander extends Actor {
     protected startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
@@ -1090,7 +1126,7 @@ class Squirtle extends Actor {
         if (this.currAux === 0x802CBA90) {
             if (this.motionData.auxStart < 0)
                 this.motionData.auxStart = viewerInput.time;
-            const water = findGroundHeight(globals.collision, this.translation[0], this.translation[2]);
+            const water = groundHeightAt(globals, this.translation);
             const t = (viewerInput.time - this.motionData.auxStart) / 1000;
             this.translation[1] = water + 10 * Math.sin(t / 1.5 * MathConstants.TAU) + this.depth;
             this.depth = Math.min(this.depth + 60 * viewerInput.deltaTime / 1000, -45);
@@ -1160,16 +1196,27 @@ class Pikachu extends Actor {
                 const pathStart = this.motionData.storedValues[0];
                 this.motionData.storedValues[1] = pathStart + (pathStart < 3 ? 1 : 2);
             } break;
+            case 0x802E7D04:
+            case 0x802E7E5C: {
+                if (this.currBlock === 0)
+                    this.target = globals.allActors.find((a) => a.def.id === 145) || null;
+            } break;
         }
         super.startBlock(globals);
     }
 
-    protected endBlock(globals: LevelGlobals): void {
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
         const state = this.def.stateGraph.states[this.currState];
-        switch (state.startAddress) {
+        switch (address) {
             case 0x802E8330:
                 this.motionData.storedValues[0] = this.motionData.storedValues[1]; break;
+            case 0x802E7B3C: {
+                const egg = globals.allActors.find((a) => a.def.id === 602);
+                if (egg && egg.visible && vec3.dist(egg.translation, this.translation) < 600)
+                    return this.followEdge(state.blocks[0].edges[1], globals);
+            } break;
         }
+        return false;
     }
 }
 
@@ -1190,6 +1237,130 @@ class Vulpix extends Actor {
             } break;
         }
         return MotionResult.None;
+    }
+}
+
+class Psyduck extends Actor {
+    private pathIndex = 0;
+    private oldOffset = 0;
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802DB93C) {
+            if (this.currBlock === 1) {
+                getPathPoint(this.translation, this.motionData.path!, this.motionData.path!.times[this.pathIndex]);
+                this.translation[1] = groundHeightAt(globals, this.translation);
+                this.euler[1] = Math.random() * MathConstants.TAU;
+            }
+        }
+        super.startBlock(globals);
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802DB630) {
+            if (this.motionData.auxStart < 0)
+                this.motionData.auxStart = viewerInput.time;
+            const newOffset = 7 * Math.sin((viewerInput.time - this.motionData.auxStart)/1000 * Math.PI * 4/3);
+            this.translation[1] += newOffset - this.oldOffset;
+            this.oldOffset = newOffset;
+            return MotionResult.Update;
+        }
+        return MotionResult.None;
+    }
+
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802DB78C)
+            globals.fishTracker = 2;
+        else if (address === 0x802DB93C && this.currBlock === 1) {
+            this.pathIndex++;
+            if (this.pathIndex < this.motionData.path!.length) {
+                this.currBlock = 0;
+                this.startBlock(globals);
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+class Poliwag extends Actor {
+    private startAngle = 0;
+    private amplitude = 0;
+    private endHeight = 0;
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        switch (state.startAddress) {
+            case 0x802DCBB8: this.currBlock = this.spawn.behavior - 4; break;
+            case 0x802DC5A8: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 1; break;
+            case 0x802DC05C: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 2; break;
+            case 0x802DC2F4: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 3; break;
+            case 0x802DC6BC: this.motionData.storedValues[1] = this.motionData.path!.length - 1; break;
+        }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (param === 1) {
+            this.motionData.storedValues[0] = this.motionData.storedValues[1];
+            if (this.def.stateGraph.states[this.currState].startAddress === 0x802DC60C)
+                this.motionData.currBlock++; // skip the face player block
+            return MotionResult.Done;
+        } else {
+            return super.customMotion(param, viewerInput, globals);
+        }
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux < 0x80000000 && (this.currAux & fakeAuxFlag)) {
+            this.motionData.stateFlags |= EndCondition.Pause;
+            const refState = this.def.stateGraph.states[this.currAux & 0xFF];
+            const done = this.renderers[this.headAnimationIndex].animator.loopCount >= 1;
+            switch (this.currAnimation) {
+                default: {
+                    this.setAnimation(refState.blocks[0].animation);
+                } break;
+                case refState.blocks[0].animation: {
+                    if (done)
+                        this.setAnimation(refState.blocks[1].animation);
+                } break;
+                case refState.blocks[1].animation: {
+                    if (done)
+                        this.setAnimation(refState.blocks[2].animation);
+                } break;
+                case refState.blocks[2].animation: {
+                    if (done) {
+                        this.motionData.stateFlags &= ~EndCondition.Pause;
+                        return MotionResult.Done;
+                    }
+                } break;
+            }
+        } else if (this.currAux === 0x802DC820) {
+            if (this.motionData.auxStart < 0) {
+                this.motionData.auxStart = viewerInput.time;
+                assert(this.motionData.start >= 0, 'aux before path');
+                getPathPoint(actorScratch, this.motionData.path!, 1);
+                this.endHeight = groundHeightAt(globals, actorScratch) - 330;
+                this.amplitude = this.translation[1] + 200 - this.endHeight;
+                this.startAngle = Math.asin((this.translation[1] - this.endHeight) / this.amplitude);
+            }
+            const arcDuraction = this.motionData.path!.duration * (1 - this.motionData.path!.times[this.motionData.storedValues[0]]);
+            const frac = (viewerInput.time - this.motionData.auxStart) / 1000 * 3 / arcDuraction;
+            if (frac > 1)
+                return MotionResult.Done;
+            const oldHeight = this.translation[1];
+            this.translation[1] = this.endHeight + this.amplitude * Math.sin(lerp(this.startAngle, Math.PI, frac));
+            if (oldHeight > 0 && this.translation[1] <= 0)
+                globals.createSplash(SplashType.Water, this.translation);
+            return MotionResult.Update;
+        }
+        return MotionResult.None;
+    }
+
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802DC6BC)
+            globals.fishTracker = 1;
+        return false;
     }
 }
 
@@ -1215,6 +1386,26 @@ class Victreebel extends Actor {
             this.updatePositions();
         }
         super.startBlock(globals);
+    }
+}
+
+class Slowpoke extends Actor {
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802D9A58) {
+            getPathPoint(this.motionData.destination, assertExists(this.motionData.path), 1);
+            if (vec3.dist(this.motionData.destination, this.translation) < 475)
+                if (this.receiveSignal(this, 0x1C, globals))
+                    return MotionResult.Done;
+        }
+        return MotionResult.None;
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        getPathTangent(actorScratch, assertExists(this.motionData.path), 1);
+        const targetYaw = Math.atan2(actorScratch[0], actorScratch[2]) + Math.PI;
+        if (stepYawTowards(this.euler, targetYaw, Math.PI / 90, viewerInput.deltaTime / 1000))
+            return MotionResult.Done;
+        return MotionResult.Update;
     }
 }
 
@@ -1275,7 +1466,7 @@ export class Staryu extends Actor {
     protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         switch (this.currAux) {
             case 0x802CD5D8: {
-                const refHeight = this.relativeToPlayer ? globals.translation[1] : findGroundHeight(globals.collision, this.translation[0], this.translation[2]);
+                const refHeight = this.relativeToPlayer ? globals.translation[1] : groundHeightAt(globals, this.translation);
                 const delta = refHeight + this.motionData.storedValues[0] - this.translation[1];
                 const step = 600 * viewerInput.deltaTime / 1000;
                 if (Math.abs(delta) < step)
@@ -1339,7 +1530,7 @@ export class Staryu extends Actor {
                     vec3.copy(this.motionData.destination, this.whirlpool!.translation);
                     this.relativeToPlayer = false;
                     this.motionData.storedValues[0] = 1000;
-                    this.motionData.destination[1] = findGroundHeight(globals.collision, this.whirlpool.translation[0], this.whirlpool.translation[2]) + 1000;
+                    this.motionData.destination[1] = groundHeightAt(globals, this.whirlpool.translation) + 1000;
                     return MotionResult.Done;
                 }
             } break;
@@ -1376,7 +1567,7 @@ class Jynx extends Actor {
     protected startBlock(globals: LevelGlobals): void {
         switch (this.def.stateGraph.states[this.currState].startAddress) {
             case 0x802C4EF4: {
-                this.translation[1] = findGroundHeight(globals.collision, this.translation[0], this.translation[2]) - 53.25;
+                this.translation[1] = groundHeightAt(globals, this.translation) - 53.25;
                 this.updatePositions();
             } break;
         }
@@ -1459,7 +1650,7 @@ class Porygon extends Actor {
                 this.motionData.auxStart = viewerInput.time;
                 assert(this.motionData.start >= 0, 'aux before path');
                 getPathPoint(actorScratch, this.motionData.path!, 1);
-                this.endHeight = findGroundHeight(globals.collision, actorScratch[0], actorScratch[2]);
+                this.endHeight = groundHeightAt(globals, actorScratch);
                 this.amplitude = this.translation[1] + 50 - this.endHeight;
                 this.startAngle = Math.asin((this.translation[1] - this.endHeight) / this.amplitude);
             }
@@ -1470,6 +1661,63 @@ class Porygon extends Actor {
             return MotionResult.Update;
         }
         return MotionResult.None;
+    }
+}
+
+class Zapdos extends Actor {
+    private egg: Actor | null = null;
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        const r = 100 - (viewerInput.time - this.motionData.start) / 10;
+        if (r <= 0) {
+            vec3.copy(this.translation, this.motionData.startPos);
+            return MotionResult.Done;
+        }
+        const fromPlayer = yawTowards(this.motionData.startPos, globals.translation);
+        this.translation[0] = this.motionData.startPos[0] + r * Math.sin(fromPlayer);
+        this.translation[2] = this.motionData.startPos[2] + r * Math.cos(fromPlayer);
+        return MotionResult.Update;
+    }
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currAux === 0x802EB6D0) {
+            if (!this.egg) {
+                this.egg = globals.allActors.find((a) => a.def.id === 602)!;
+                this.motionData.stateFlags |= EndCondition.Pause;
+            }
+            if (!this.egg.visible) {
+                this.motionData.stateFlags &= ~EndCondition.Pause;
+                return MotionResult.Done;
+            }
+        }
+        return MotionResult.None;
+    }
+}
+
+class ZapdosEgg extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802EC078) {
+            if (this.currBlock === 0) {
+                const zapdos = globals.allActors.find((a) => a.def.id === 145);
+                if (zapdos)
+                    vec3.copy(this.motionData.destination, zapdos.translation);
+            }
+        }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (param === 1) {
+            const delta = 300 * viewerInput.deltaTime / 1000;
+            if (this.translation[1] + delta > this.motionData.destination[1] - 120) {
+                this.translation[1] = this.motionData.destination[1] - 120;
+                return MotionResult.Done;
+            }
+            this.translation[1] += delta;
+            return MotionResult.Update;
+        } else
+            return super.customMotion(param, viewerInput, globals);
     }
 }
 
@@ -1499,9 +1747,10 @@ class MiniCrater extends Actor {
         return MotionResult.None;
     }
 
-    protected endBlock(globals: LevelGlobals): void {
-        if (this.def.stateGraph.states[this.currState].startAddress === 0x802DD7F0)
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802DD7F0)
             this.lavaSplash = assertExists(this.lastSpawn);
+        return false;
     }
 }
 
@@ -1528,6 +1777,7 @@ export function sceneActorInit(): void {
 
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
     switch (def.id) {
+        case 1: return new Bulbasaur(renderData, spawn, def, globals);
         case 4: return new Charmander(renderData, spawn, def, globals);
         case 5: return new Charmeleon(renderData, spawn, def, globals);
         case 7: return new Squirtle(renderData, spawn, def, globals);
@@ -1535,14 +1785,19 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 16: return new Pidgey(renderData, spawn, def, globals);
         case 25: return new Pikachu(renderData, spawn, def, globals);
         case 37: return new Vulpix(renderData, spawn, def, globals);
+        case 54: return new Psyduck(renderData, spawn, def, globals);
+        case 60: return new Poliwag(renderData, spawn, def, globals);
         case 70: return new Weepinbell(renderData, spawn, def, globals);
         case 71: return new Victreebel(renderData, spawn, def, globals);
+        case 79: return new Slowpoke(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
         case 120: return new Staryu(renderData, spawn, def, globals);
         case 124: return new Jynx(renderData, spawn, def, globals);
         case 129: return new Magikarp(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
+        case 145: return new Zapdos(renderData, spawn, def, globals);
+        case 602: return new ZapdosEgg(renderData, spawn, def, globals);
         case 1026: return new MiniCrater(renderData, spawn, def, globals);
         case 1027: return new Crater(renderData, spawn, def, globals);
     }
