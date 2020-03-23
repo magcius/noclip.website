@@ -32,6 +32,7 @@ export class ModelInstance {
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
     private furMaps?: FurMaps; // TODO: move this to a common location
     private furLayer: number = 0;
+    private overrideIndMtx: (mat4 | undefined)[] = [];
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -55,6 +56,14 @@ export class ModelInstance {
 
     public setFurLayer(layer: number) {
         this.furLayer = layer;
+    }
+
+    public setOverrideIndMtx(num: number, mtx?: mat4) {
+        if (mtx !== undefined) {
+            this.overrideIndMtx[num] = mat4.clone(mtx);
+        } else {
+            this.overrideIndMtx[num] = undefined;
+        }
     }
 
     private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
@@ -126,6 +135,12 @@ export class ModelInstance {
         this.computeModelView(this.modelViewMtx, viewerInput.camera, this.scratchMtx);
         this.material.setupMaterialParams(this.materialParams, viewerInput, this.modelViewMtx);
 
+        for (let i = 0; i < 3; i++) {
+            if (this.overrideIndMtx[i] !== undefined) {
+                mat4.copy(this.materialParams.u_IndTexMtx[i], this.overrideIndMtx[i]!);
+            }
+        }
+
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
@@ -173,6 +188,7 @@ interface DisplayListInfo {
 }
 
 function parseDisplayListInfo(data: DataView): DisplayListInfo {
+    console.log(`special bit address: 0x${data.getUint16(0x14).toString(16)}`);
     return {
         offset: data.getUint32(0x0),
         size: data.getUint16(0x4),
@@ -658,10 +674,128 @@ export class Model implements BlockRenderer {
 
         const pnMatrices = nArray(0x10, () => mat4.create());
 
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+        if (fields.hasNormals) {
+            vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+        }
+        vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
+        for (let t = 0; t < 8; t++) {
+            vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+        }
+
         const self = this;
 
+        function runFurBitstream(bitsOffset: number, bitAddress: number) {
+            console.log(`running fur bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
+
+            const bits = new LowBitReader(blockDv, bitsOffset);
+            bits.seekBit(bitAddress);
+
+            bits.drop(4);
+            const shaderNum = bits.get(6);
+            const shader = shaders[shaderNum];
+            const material = buildFurMaterial(device, shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+
+            bits.drop(4);
+            { // Set descriptor
+                // console.log(`Setting descriptor`);
+                vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
+                for (let i = 0; i < 8; i++) {
+                    vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
+                }
+
+                if (fields.hasBones && jointCount >= 2) {
+                    vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
+
+                    let texmtxNum = 0;
+                    if (shader.hasAuxTex0 || shader.hasAuxTex1) {
+                        if (shader.auxTexNum !== 0xffffffff) {
+                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                            texmtxNum++;
+                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                            texmtxNum++;
+                        }
+                        
+                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                        texmtxNum++;
+                    }
+
+                    texmtxNum = 7;
+                    for (let i = 0; i < texMtxCount; i++) {
+                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                        texmtxNum--;
+                    }
+                }
+
+                const posDesc = bits.get(1);
+                vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+
+                if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
+                    const nrmDesc = bits.get(1);
+                    if (nrmTypeFlags & 8) {
+                        // TODO: Enable NBT normals
+                        // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                        // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                        vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    } else {
+                        // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
+                        vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    }
+                } else {
+                    vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                }
+
+                if (shader.attrFlags & ShaderAttrFlags.CLR) {
+                    const clr0Desc = bits.get(1);
+                    vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                } else {
+                    vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
+                }
+
+                const texCoordDesc = bits.get(1);
+                if (shader.layers.length > 0) {
+                    // Note: texCoordDesc applies to all texture coordinates in the vertex
+                    for (let t = 0; t < 8; t++) {
+                        if (t < shader.layers.length) {
+                            vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                        } else {
+                            vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
+                        }
+                    }
+                }
+            }
+
+            bits.drop(4);
+            const num = bits.get(4);
+            for (let i = 0; i < num; i++) {
+                bits.drop(8);
+            }
+
+            bits.drop(4);
+            const listNum = bits.get(8);
+            const dlInfo = dlInfos[listNum];
+            console.log(`Calling DL for fur #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+            const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
+
+            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+            newModel.setMaterial(material);
+            newModel.setPnMatrices(pnMatrices);
+
+            let numFurLayers;
+            if (shader.flags & ShaderFlags.ShortFur) {
+                numFurLayers = 4;
+            } else if (shader.flags & ShaderFlags.MediumFur) {
+                numFurLayers = 8;
+            } else { // curShader.flags & ShaderFlags.LongFur
+                numFurLayers = 16;
+            }
+
+            self.furs.push({ model: newModel, numLayers: numFurLayers });
+        }
+
         function runBitstream(bitsOffset: number, drawStep: number) {
-            console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
+            // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             const models: ModelInstance[] = [];
             self.models[drawStep] = models;
 
@@ -677,7 +811,7 @@ export class Model implements BlockRenderer {
                 switch (opcode) {
                 case 1: { // Set shader
                     const shaderNum = bits.get(6);
-                    console.log(`Setting shader #${shaderNum}`);
+                    // console.log(`Setting shader #${shaderNum}`);
                     curShader = shaders[shaderNum];
                     break;
                 }
@@ -689,18 +823,8 @@ export class Model implements BlockRenderer {
                     }
 
                     const dlInfo = dlInfos[listNum];
-                    console.log(`Calling DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+                    // console.log(`Calling DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
                     const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
-    
-                    const vtxArrays: GX_Array[] = [];
-                    vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
-                    if (fields.hasNormals) {
-                        vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-                    }
-                    vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
-                    for (let t = 0; t < 8; t++) {
-                        vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
-                    }
     
                     try {
                         if ((curShader.flags & ShaderFlags.DevGeometry) != 0) {
@@ -715,21 +839,7 @@ export class Model implements BlockRenderer {
                         }
 
                         if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                            const material = buildFurMaterial(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-                            newModel.setMaterial(material);
-                            newModel.setPnMatrices(pnMatrices);
-
-                            let numFurLayers;
-                            if (curShader.flags & ShaderFlags.ShortFur) {
-                                numFurLayers = 4;
-                            } else if (curShader.flags & ShaderFlags.MediumFur) {
-                                numFurLayers = 8;
-                            } else { // curShader.flags & ShaderFlags.LongFur
-                                numFurLayers = 16;
-                            }
-
-                            self.furs.push({ model: newModel, numLayers: numFurLayers });
+                            runFurBitstream(bitsOffset, dlInfo.specialBitAddress);
                         }
                     } catch (e) {
                         console.warn(`Failed to create model and shader instance due to exception:`);
@@ -738,7 +848,7 @@ export class Model implements BlockRenderer {
                     break;
                 }
                 case 3: { // Set descriptor
-                    console.log(`Setting descriptor`);
+                    // console.log(`Setting descriptor`);
                     vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
                     for (let i = 0; i < 8; i++) {
                         vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
@@ -869,7 +979,17 @@ export class Model implements BlockRenderer {
                 mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
                 fur.model.setFurLayer(j);
+                const m00 = (j + 1) / 16 * 0.5;
+                const m11 = m00;
+                const indtexmtx = mat4.fromValues(
+                    m00, 0.0, 0.0, 0.0,
+                    0.0, m11, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0
+                );
+                fur.model.setOverrideIndMtx(0, indtexmtx);
                 fur.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+                fur.model.setOverrideIndMtx(0, undefined);
             }
         }
     }

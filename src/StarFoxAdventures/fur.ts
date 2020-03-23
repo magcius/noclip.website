@@ -91,11 +91,62 @@ export class FurMaps {
     private hairs: Hair[] = [];
 
     constructor(private device: GfxDevice) {
-        for (let i = 0; i < 50; i++) {
-            let rand = random(5, 10);
-            const hair = { numLayers: random(8, 16), x: 0.001 * random(0, 999), y: 0.001 * random(0, 999), field_0xc: 0.01 * rand, field_0x10: 0 };
-            hair.field_0x10 = hair.field_0xc * 0.01 * random(20, 50);
-            this.hairs.push(hair);
+        let try_ = 0;
+        for (let i = 0; i < 50 && try_ < 10000; i++) {
+            const newHair = {
+                numLayers: random(8, 16),
+                x: 0,
+                y: 0,
+                field_0xc: 0.01 * random(5, 10),
+                field_0x10: 0,
+            };
+            newHair.field_0x10 = newHair.field_0xc * 0.01 * random(20, 50);
+    
+            let done = false;
+            do {
+                newHair.x = 0.001 * random(0, 999);
+                newHair.y = 0.001 * random(0, 999);
+    
+                done = false;
+                let j = 0;
+                while (j < i && !done) {
+                    const cmpHair = this.hairs[j];
+    
+                    let fVar1 = Math.abs(newHair.x - cmpHair.x);
+                    let fVar2 = Math.abs(1 + newHair.x - cmpHair.x);
+                    if (fVar2 < fVar1) {
+                        fVar1 = fVar2;
+                    }
+                    fVar2 = Math.abs(newHair.x - 1 - cmpHair.x);
+                    if (fVar2 < fVar1) {
+                        fVar1 = fVar2;
+                    }
+                    fVar2 = Math.abs(newHair.y - cmpHair.y);
+                    let fVar3 = Math.abs(1 + newHair.y - cmpHair.y);
+                    if (fVar3 < fVar2) {
+                        fVar2 = fVar3;
+                    }
+                    fVar3 = Math.abs(newHair.y - 1 - cmpHair.y);
+                    if (fVar3 < fVar2) {
+                        fVar2 = fVar3;
+                    }
+    
+                    let dVar11 = Math.sqrt(fVar1 * fVar1 + fVar2 * fVar2);
+                    if (dVar11 < (newHair.field_0x10 + cmpHair.field_0xc)) {
+                        done = true;
+                    }
+    
+                    j++;
+                }
+    
+                try_++;
+            } while (done && try_ < 10000);
+    
+            if (try_ >= 10000) {
+                console.warn(`reached 10,000 tries`);
+            }
+    
+            this.hairs.push(newHair);
         }
     }
 

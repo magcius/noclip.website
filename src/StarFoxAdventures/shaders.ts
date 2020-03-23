@@ -89,7 +89,7 @@ export enum ShaderFlags {
     MediumFur = 0x8000, // 8 layers
     LongFur = 0x10000, // 16 layers
     StreamingVideo = 0x20000,
-    SkyAmbientLit = 0x40000,
+    AmbientLit = 0x40000,
     FancyWater = 0x80000000, // ???
 }
 
@@ -575,7 +575,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         } else {
             for (let i = 0; i < shader.layers.length; i++) {
                 const layer = shader.layers[i];
-                if (shader.flags & ShaderFlags.SkyAmbientLit) {
+                if (shader.flags & ShaderFlags.AmbientLit) {
                     addTevStagesForTextureWithSkyAmbient();
                 } else {
                     addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
@@ -622,7 +622,7 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
         const rot45deg = mat4.create();
         mat4.fromXRotation(rot45deg, Math.PI / 4); // TODO: which axis?
         mat4.mul(texMtx4, rot45deg, texMtx4);
-        texMtx[4] = () => texMtx4;
+        texMtx[4] = (dst: mat4) => { mat4.copy(dst, texMtx4); };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -828,7 +828,7 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
         0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0
     );
-    texMtx[1] = () => texmtx1;
+    texMtx[1] = (dst: mat4) => { mat4.copy(dst, texmtx1); };
     mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
     mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
     mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
@@ -841,14 +841,14 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
         0.0, 0.1, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0
     );
-    texMtx[0] = () => texmtx0;
+    texMtx[0] = (dst: mat4) => { mat4.copy(dst, texmtx0); };
     mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
     mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
     mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
     mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8);
     mb.setTevColorIn(1, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV, GX.CC.CPREV);
     mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
-    mb.setTevColorOp(1, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevColorOp(1, GX.TevOp.SUB, GX.TevBias.ADDHALF, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
     // Stage 2: Distance fade
@@ -870,7 +870,7 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
-    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+    mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, !!(shader.flags & ShaderFlags.AmbientLit), GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
     mb.setCullMode(GX.CullMode.BACK);
     mb.setZMode(true, GX.CompareType.LEQUAL, false);
     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
