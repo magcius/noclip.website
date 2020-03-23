@@ -86,7 +86,7 @@ function random(lo: number, hi: number) {
     return lo + (hi - lo) * Math.random();
 }
 
-export class FurMaps {
+export class FurFactory {
     private layers: SFATexture[] = [];
     private hairs: Hair[] = [];
 

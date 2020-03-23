@@ -14,11 +14,11 @@ import * as GX from '../gx/gx_enum';
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
-import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, buildMaterialFromShader, buildFurMaterial } from './shaders';
+import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
-import { FurMaps } from './fur';
+import { FurFactory } from './fur';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -30,7 +30,7 @@ export class ModelInstance {
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
-    private furMaps?: FurMaps; // TODO: move this to a common location
+    private furFactory?: FurFactory; // TODO: move this to a common location
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
 
@@ -118,10 +118,10 @@ export class ModelInstance {
                 this.materialParams.m_TextureMapping[i].height = tex.texture.height;
                 this.materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else if (tex.kind === 'fur-map') {
-                if (this.furMaps === undefined) {
-                    this.furMaps = new FurMaps(device);
+                if (this.furFactory === undefined) {
+                    this.furFactory = new FurFactory(device);
                 }
-                const furMap = this.furMaps.getLayer(this.furLayer);
+                const furMap = this.furFactory.getLayer(this.furLayer);
                 this.materialParams.m_TextureMapping[i].gfxTexture = furMap.gfxTexture;
                 this.materialParams.m_TextureMapping[i].gfxSampler = furMap.gfxSampler;
                 this.materialParams.m_TextureMapping[i].width = furMap.width;
@@ -211,6 +211,7 @@ export class Model implements BlockRenderer {
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
     public furs: Fur[] = [];
+    private materialFactory: MaterialFactory;
 
     public computeBoneMatrices() {
         this.boneMatrices = [];
@@ -275,6 +276,8 @@ export class Model implements BlockRenderer {
     }
 
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
+        this.materialFactory = new MaterialFactory(device); // TODO: move elsewhere
+
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -694,7 +697,7 @@ export class Model implements BlockRenderer {
             bits.drop(4);
             const shaderNum = bits.get(6);
             const shader = shaders[shaderNum];
-            const material = buildFurMaterial(device, shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+            const material = self.materialFactory.buildFurMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
 
             bits.drop(4);
             { // Set descriptor
@@ -831,7 +834,7 @@ export class Model implements BlockRenderer {
                             // TODO: Implement an option to view this geometry
                         } else {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                            const material = buildMaterialFromShader(device, curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                            const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
                             newModel.setMaterial(material);
                             newModel.setPnMatrices(pnMatrices);
                             models.push(newModel);

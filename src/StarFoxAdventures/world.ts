@@ -213,7 +213,7 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
 
         // Draw bones
-        const drawBones = true;
+        const drawBones = false;
         if (drawBones) {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 1; i < model.joints.length; i++) {
