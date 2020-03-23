@@ -11,6 +11,7 @@ import { SFATexture, TextureCollection } from './textures';
 import { dataSubarray } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex, computeViewMatrix } from '../Camera';
+import { FurFactory } from './fur';
 
 interface ShaderLayer {
     texId: number | null;
@@ -172,6 +173,7 @@ export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialText
 }
 
 export interface SFAMaterial {
+    factory: MaterialFactory;
     material: GXMaterial;
     textures: SFAMaterialTexture[];
     setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => void;
@@ -183,6 +185,7 @@ export class MaterialFactory {
     private rampTexture: SFATexture | null = null;
     private waterRelatedTexture: SFATexture | null = null;
     private wavyTexture: SFATexture | null = null;
+    private furFactory: FurFactory | null = null;
 
     constructor(private device: GfxDevice) {
     }
@@ -465,7 +468,6 @@ export class MaterialFactory {
             if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
                 addTevStageForTextureWithWhiteKonst(0);
                 if (shader.flags & ShaderFlags.Reflective) {
-                    console.log(`Found some reflective surfaces (special case)!`);
                     addTevStagesForReflectiveFloor();
                 }
                 addTevStagesForTextureWithMode(9);
@@ -489,7 +491,6 @@ export class MaterialFactory {
                 }
     
                 if (shader.flags & ShaderFlags.Reflective) {
-                    console.log(`Found some reflective surfaces (normal case)!`);
                     addTevStagesForReflectiveFloor();
                 }
             }
@@ -635,6 +636,7 @@ export class MaterialFactory {
         }
     
         return {
+            factory: this,
             material: mb.finish(),
             textures,
             setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
@@ -735,6 +737,7 @@ export class MaterialFactory {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
     
         return {
+            factory: this,
             material: mb.finish(),
             textures,
             setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
@@ -757,6 +760,15 @@ export class MaterialFactory {
                 }
             },
         };
+    }
+
+    public getFurFactory(): FurFactory {
+        if (this.furFactory !== null) {
+            return this.furFactory;
+        }
+
+        this.furFactory = new FurFactory(this.device);
+        return this.furFactory;
     }
     
     private getRampTexture(): SFATexture {

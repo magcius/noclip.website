@@ -23,6 +23,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16 } from './util';
 import { Model, ModelVersion } from './models';
+import { MaterialFactory } from './shaders';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -72,13 +73,13 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const modelOffs = modelTabValue & 0xffffff;
     const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     
-    window.main.downloadModel = () => {
-        const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
-        aEl.click();
-    };
+    // window.main.downloadModel = () => {
+    //     const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
+    //     aEl.click();
+    // };
     
     try {
-        return new Model(device, modelData, texColl, modelVersion);
+        return new Model(device, new MaterialFactory(device), modelData, texColl, modelVersion);
     } catch (e) {
         console.warn(`Failed to load model due to exception:`);
         console.error(e);
@@ -319,7 +320,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
-        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo);
+        const materialFactory = new MaterialFactory(device);
+        const mapSceneInfo = await loadMap(device, materialFactory, context, this.mapNum, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
 
@@ -358,7 +360,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = await objectMan.loadObject(device, fields.objType);
+            const obj = await objectMan.loadObject(device, materialFactory, fields.objType);
 
             if (obj.objClass === 201) {
                 // e.g. sharpclawGr
@@ -484,12 +486,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         }
 
         window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await objectMan.loadObject(device, objType, skipObjindex);
+            const obj = await objectMan.loadObject(device, materialFactory, objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 
         window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await earlyObjectMan.loadObject(device, objType, skipObjindex);
+            const obj = await earlyObjectMan.loadObject(device, materialFactory, objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
         };
 

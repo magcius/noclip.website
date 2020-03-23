@@ -7,6 +7,7 @@ import { Model, ModelCollection } from './models';
 import { SFATextureCollection } from './textures';
 import { loadRes } from './resource';
 import { createDownloadLink, dataSubarray } from './util';
+import { MaterialFactory } from './shaders';
 
 export class SFAObject {
     public name: string;
@@ -31,7 +32,7 @@ export class SFAObject {
         }
     }
 
-    public async create(device: GfxDevice, modelColl: ModelCollection) {
+    public async create(device: GfxDevice, materialFactory: MaterialFactory, modelColl: ModelCollection) {
         const data = this.data;
 
         const numModels = data.getUint8(0x55);
@@ -39,7 +40,7 @@ export class SFAObject {
         for (let i = 0; i < numModels; i++) {
             const modelNum = data.getUint32(modelListOffs + i * 4);
             try {
-                const model = modelColl.loadModel(device, modelNum);
+                const model = modelColl.loadModel(device, materialFactory, modelNum);
                 this.models.push(model);
             } catch (e) {
                 console.warn(`Failed to load model ${modelNum} due to exception:`);
@@ -72,13 +73,13 @@ export class ObjectManager {
         this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
     }
 
-    public async loadObject(device: GfxDevice, objType: number, skipObjindex: boolean = false): Promise<SFAObject> {
+    public async loadObject(device: GfxDevice, materialFactory: MaterialFactory, objType: number, skipObjindex: boolean = false): Promise<SFAObject> {
         if (!this.useEarlyObjects && !skipObjindex) {
             objType = this.objindexBin!.getUint16(objType * 2);
         }
         const offs = this.objectsTab.getUint32(objType * 4);
         const obj = new SFAObject(objType, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
-        await obj.create(device, this.modelColl);
+        await obj.create(device, materialFactory, this.modelColl);
         return obj;
     }
 }

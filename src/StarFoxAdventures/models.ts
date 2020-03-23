@@ -30,7 +30,6 @@ export class ModelInstance {
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
-    private furFactory?: FurFactory; // TODO: move this to a common location
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
 
@@ -118,10 +117,7 @@ export class ModelInstance {
                 this.materialParams.m_TextureMapping[i].height = tex.texture.height;
                 this.materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else if (tex.kind === 'fur-map') {
-                if (this.furFactory === undefined) {
-                    this.furFactory = new FurFactory(device);
-                }
-                const furMap = this.furFactory.getLayer(this.furLayer);
+                const furMap = this.material.factory.getFurFactory().getLayer(this.furLayer);
                 this.materialParams.m_TextureMapping[i].gfxTexture = furMap.gfxTexture;
                 this.materialParams.m_TextureMapping[i].gfxSampler = furMap.gfxSampler;
                 this.materialParams.m_TextureMapping[i].width = furMap.width;
@@ -211,73 +207,8 @@ export class Model implements BlockRenderer {
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
     public furs: Fur[] = [];
-    private materialFactory: MaterialFactory;
 
-    public computeBoneMatrices() {
-        this.boneMatrices = [];
-        this.bindMatrices = [];
-        this.invBindMatrices = [];
-
-        // Compute joint bones
-        // console.log(`computing ${this.joints.length} rigid joint bones`);
-        for (let i = 0; i < this.joints.length; i++) {
-            const joint = this.joints[i];
-            const parentMtx = mat4.create();
-            const parentWorldTrans = vec3.create();
-            if (joint.parent != 0xff) {
-                if (joint.parent >= i) {
-                    throw Error(`Bad joint hierarchy in model`);
-                }
-
-                mat4.copy(parentMtx, this.boneMatrices[joint.parent]);
-                vec3.copy(parentWorldTrans, this.joints[joint.parent].worldTranslation);
-            }
-
-            const bindTranslation = vec3.clone(joint.worldTranslation);
-            if (this.modelVersion === ModelVersion.Beta) {
-                vec3.sub(bindTranslation, bindTranslation, parentWorldTrans);
-            }
-
-            const bindMtx = mat4.create();
-            mat4.fromTranslation(bindMtx, bindTranslation);
-            this.bindMatrices.push(bindMtx);
-
-            const invBind = mat4.create();
-            mat4.invert(invBind, bindMtx);
-            this.invBindMatrices.push(invBind);
-            
-            const mtx = mat4.create();
-            mat4.fromTranslation(mtx, joint.translation);
-            mat4.mul(mtx, mtx, parentMtx);
-            if (this.modelVersion === ModelVersion.Beta) {
-                mat4.mul(mtx, mtx, invBind);
-            }
-            this.boneMatrices.push(mtx);
-        }
-
-        // Compute blended bones
-        // console.log(`computing ${this.weights.length} blended bones`);
-        for (let i = 0; i < this.weights.length; i++) {
-            const weight = this.weights[i];
-
-            const invBind0 = this.invBindMatrices[weight.joint0];
-            const invBind1 = this.invBindMatrices[weight.joint1];
-
-            const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
-            mat4.mul(mat0, mat0, invBind0);
-            const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
-            mat4.mul(mat1, mat1, invBind1);
-
-            mat4.multiplyScalar(mat0, mat0, weight.influence0);
-            mat4.multiplyScalar(mat1, mat1, weight.influence1);
-            mat4.add(mat0, mat0, mat1);
-            this.boneMatrices.push(mat0);
-        }
-    }
-
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
-        this.materialFactory = new MaterialFactory(device); // TODO: move elsewhere
-
+    constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -951,6 +882,68 @@ export class Model implements BlockRenderer {
         }
     }
 
+    public computeBoneMatrices() {
+        this.boneMatrices = [];
+        this.bindMatrices = [];
+        this.invBindMatrices = [];
+
+        // Compute joint bones
+        // console.log(`computing ${this.joints.length} rigid joint bones`);
+        for (let i = 0; i < this.joints.length; i++) {
+            const joint = this.joints[i];
+            const parentMtx = mat4.create();
+            const parentWorldTrans = vec3.create();
+            if (joint.parent != 0xff) {
+                if (joint.parent >= i) {
+                    throw Error(`Bad joint hierarchy in model`);
+                }
+
+                mat4.copy(parentMtx, this.boneMatrices[joint.parent]);
+                vec3.copy(parentWorldTrans, this.joints[joint.parent].worldTranslation);
+            }
+
+            const bindTranslation = vec3.clone(joint.worldTranslation);
+            if (this.modelVersion === ModelVersion.Beta) {
+                vec3.sub(bindTranslation, bindTranslation, parentWorldTrans);
+            }
+
+            const bindMtx = mat4.create();
+            mat4.fromTranslation(bindMtx, bindTranslation);
+            this.bindMatrices.push(bindMtx);
+
+            const invBind = mat4.create();
+            mat4.invert(invBind, bindMtx);
+            this.invBindMatrices.push(invBind);
+            
+            const mtx = mat4.create();
+            mat4.fromTranslation(mtx, joint.translation);
+            mat4.mul(mtx, mtx, parentMtx);
+            if (this.modelVersion === ModelVersion.Beta) {
+                mat4.mul(mtx, mtx, invBind);
+            }
+            this.boneMatrices.push(mtx);
+        }
+
+        // Compute blended bones
+        // console.log(`computing ${this.weights.length} blended bones`);
+        for (let i = 0; i < this.weights.length; i++) {
+            const weight = this.weights[i];
+
+            const invBind0 = this.invBindMatrices[weight.joint0];
+            const invBind1 = this.invBindMatrices[weight.joint1];
+
+            const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
+            mat4.mul(mat0, mat0, invBind0);
+            const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
+            mat4.mul(mat1, mat1, invBind1);
+
+            mat4.multiplyScalar(mat0, mat0, weight.influence0);
+            mat4.multiplyScalar(mat1, mat1, weight.influence1);
+            mat4.add(mat0, mat0, mat1);
+            this.boneMatrices.push(mat0);
+        }
+    }
+
     public getNumDrawSteps() {
         return this.models.length;
     }
@@ -1015,7 +1008,7 @@ export class ModelCollection {
         this.modelsBin = modelsBin;
     }
 
-    public loadModel(device: GfxDevice, num: number): Model {
+    public loadModel(device: GfxDevice, materialFactory: MaterialFactory, num: number): Model {
         if (this.models[num] === undefined) {
             console.log(`Loading model #${num} ...`);
     
@@ -1026,7 +1019,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, modelData, this.texColl);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texColl);
         }
 
         return this.models[num];

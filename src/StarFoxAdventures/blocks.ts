@@ -13,7 +13,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { SFAMaterial, makeMaterialTexture } from './shaders';
+import { SFAMaterial, makeMaterialTexture, MaterialFactory } from './shaders';
 import { ModelInstance, Model } from './models';
 import { LowBitReader } from './util';
 
@@ -37,7 +37,7 @@ export class BlockCollection implements IBlockCollection {
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
 
-    constructor(private mod: number, private isAncient: boolean) {
+    constructor(private mod: number, private isAncient: boolean, private materialFactory: MaterialFactory) {
     }
 
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
@@ -68,7 +68,7 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
-                this.blockRenderers[sub] = new Model(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new Model(device, this.materialFactory, uncomp, this.texColl);
             }
         }
 
@@ -337,6 +337,7 @@ export class AncientBlockRenderer implements BlockRenderer {
                     }
 
                     const material: SFAMaterial = {
+                        factory: new MaterialFactory(device),
                         material: mb.finish(),
                         textures: [makeMaterialTexture(texColl.getTexture(device, texIds[shader.tex0Num], true))],
                         setupMaterialParams: () => {},
