@@ -1,11 +1,5 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import * as GX from '../gx/gx_enum';
-import { ViewerRenderInput } from '../viewer';
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { nArray } from '../util';
 
 import { SFATexture } from './textures';
 
@@ -17,7 +11,7 @@ interface Hair {
     field_0x10: number;
 }
 
-function evaluateHair(x: number, y: number, layer: number, hairs: Hair[]): [number, number] {
+function evaluateHairs(x: number, y: number, layer: number, hairs: Hair[]): [number, number] {
     let dVar5 = 0;
     let dVar6 = 0;
 
@@ -91,8 +85,12 @@ export class FurFactory {
     private hairs: Hair[] = [];
 
     constructor(private device: GfxDevice) {
-        let try_ = 0;
-        for (let i = 0; i < 50 && try_ < 10000; i++) {
+        // Distribute 50 hairs within the fur map and ensure they aren't too
+        // densely packed.
+        const NUM_HAIRS = 50;
+        const MAX_TRIES = 10000;
+        let tries = 0;
+        for (let i = 0; i < NUM_HAIRS && tries < MAX_TRIES; i++) {
             const newHair = {
                 numLayers: random(8, 16),
                 x: 0,
@@ -102,14 +100,14 @@ export class FurFactory {
             };
             newHair.field_0x10 = newHair.field_0xc * 0.01 * random(20, 50);
     
-            let done = false;
+            let fail = false;
             do {
                 newHair.x = 0.001 * random(0, 999);
                 newHair.y = 0.001 * random(0, 999);
     
-                done = false;
+                fail = false;
                 let j = 0;
-                while (j < i && !done) {
+                while (j < i && !fail) {
                     const cmpHair = this.hairs[j];
     
                     let fVar1 = Math.abs(newHair.x - cmpHair.x);
@@ -133,17 +131,18 @@ export class FurFactory {
     
                     let dVar11 = Math.sqrt(fVar1 * fVar1 + fVar2 * fVar2);
                     if (dVar11 < (newHair.field_0x10 + cmpHair.field_0xc)) {
-                        done = true;
+                        fail = true;
                     }
     
                     j++;
                 }
     
-                try_++;
-            } while (done && try_ < 10000);
+                tries++;
+            } while (fail && tries < MAX_TRIES);
     
-            if (try_ >= 10000) {
-                console.warn(`reached 10,000 tries`);
+            if (tries >= MAX_TRIES) {
+                // This can occasionally happen
+                console.warn(`Reached ${tries} tries when placing hairs`);
             }
     
             this.hairs.push(newHair);
@@ -184,7 +183,7 @@ export class FurFactory {
     
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const [I_, A_] = evaluateHair(x / 64, y / 64, layer, this.hairs);
+                const [I_, A_] = evaluateHairs(x / 64, y / 64, layer, this.hairs);
                 const I = I_ * 0xff
                 const A = A_ * 0xff
                 plot(x, y, I, I, I, A)

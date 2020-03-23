@@ -11,7 +11,6 @@ import { ViewerRenderInput } from "../viewer";
 import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
@@ -47,7 +46,7 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-interface ObjectSphere {
+interface ObjectInstance {
     name: string;
     obj: SFAObject;
     pos: vec3;
@@ -89,11 +88,9 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
 
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
-    private objddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
-    private materialHelperObjectSphere: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectSpheres: ObjectSphere[], private models: (Model | null)[]) {
+    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
         super(device);
 
         packetParams.clear();
@@ -127,25 +124,6 @@ class WorldRenderer extends SFARenderer {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
-
-        this.objddraw.setVtxDesc(GX.Attr.POS, true);
-        this.objddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.objddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.objddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-
-        mb = new GXMaterialBuilder();
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevDirect(0);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
-        mb.setZMode(true, GX.CompareType.LEQUAL, true);
-        mb.setCullMode(GX.CullMode.NONE);
-        mb.setUsePnMtxIdx(false);
-        this.materialHelperObjectSphere = new GXMaterialHelperGfx(mb.finish('objectsphere'));
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
@@ -242,47 +220,14 @@ class WorldRenderer extends SFARenderer {
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
         // Body
+
+        // Draw all opaques
+        // TODO: depth sorting (for opaques, near-to-far is ideal)
         this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
-        this.copyToSceneTexture(device);
-        // for (let i = 0; i < this.mapInstance.getNumDrawSteps(); i++) {
-        //     this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, i, this.sceneTexture);
-        //     this.copyToSceneTexture(device);
-        // }
-
-        const ctx = getDebugOverlayCanvas2D();
-
-        let objtemplate = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(objtemplate, viewerInput, false);
-        this.objddraw.beginDraw();
-        for (let i = 0; i < this.objectSpheres.length; i++) {
-            const obj = this.objectSpheres[i];
-
-            // TODO: draw sphere
-            // XXX: radius is too big to be workable. Or sometimes it's 0. Set it to a default.
-            obj.radius = 8;
-
-            // drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined,
-            //     {font: '8pt sans-serif', outline: 2.0});
-            
-            // this.objddraw.begin(GX.Command.DRAW_QUADS);
-            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
-            // this.objddraw.position3f32(obj.pos[0] - obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
-            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] + obj.radius, obj.pos[2] - obj.radius);
-            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
-            // this.objddraw.position3f32(obj.pos[0] + obj.radius, obj.pos[1] - obj.radius, obj.pos[2] - obj.radius);
-            // this.objddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
-            // this.objddraw.end();
-        }
-        const renderInst = this.objddraw.makeRenderInst(device, renderInstManager);
-        submitScratchRenderInst(device, renderInstManager, this.materialHelperObjectSphere, renderInst, viewerInput);
-        this.objddraw.endAndUpload(device, renderInstManager);
-        renderInstManager.popTemplateRenderInst();
 
         const mtx = mat4.create();
-        for (let i = 0; i < this.objectSpheres.length; i++) {
-            const obj = this.objectSpheres[i];
+        for (let i = 0; i < this.objectInstances.length; i++) {
+            const obj = this.objectInstances[i];
             if (obj.model) {
                 mat4.fromTranslation(mtx, obj.pos);
                 mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
@@ -299,6 +244,15 @@ class WorldRenderer extends SFARenderer {
                 this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]!);
             }
         }
+        
+        // TODO: depth sorting (for translucents, far-to-near is required)
+        this.copyToSceneTexture(device);
+        for (let i = 1; i < this.mapInstance.getNumDrawSteps(); i++) {
+            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, i);
+            this.copyToSceneTexture(device);
+        }
+
+        this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
         
         // Epilog
         renderInstManager.popTemplateRenderInst();
@@ -345,7 +299,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         ]);
         const romlist = loadRes(romlistFile).createDataView();
 
-        const objectSpheres: ObjectSphere[] = [];
+        const objectInstances: ObjectInstance[] = [];
         let offs = 0;
         let i = 0;
         while (offs < romlist.byteLength) {
@@ -471,7 +425,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
             }
 
-            objectSpheres.push({
+            objectInstances.push({
                 name: obj.name,
                 obj: obj,
                 pos: vec3.fromValues(fields.x, fields.y, fields.z),
@@ -512,7 +466,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
 
-        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectSpheres, testModels);
+        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectInstances, testModels);
         return renderer;
     }
 }

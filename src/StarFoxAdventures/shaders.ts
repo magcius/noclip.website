@@ -5,12 +5,11 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
-import { nArray } from '../util';
 
 import { SFATexture, TextureCollection } from './textures';
 import { dataSubarray } from './util';
 import { mat4 } from 'gl-matrix';
-import { texProjCameraSceneTex, computeViewMatrix } from '../Camera';
+import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 
 interface ShaderLayer {

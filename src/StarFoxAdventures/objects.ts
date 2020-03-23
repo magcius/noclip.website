@@ -1,12 +1,10 @@
 import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { GameInfo } from './scenes';
 import { Model, ModelCollection } from './models';
 import { SFATextureCollection } from './textures';
-import { loadRes } from './resource';
-import { createDownloadLink, dataSubarray } from './util';
+import { dataSubarray } from './util';
 import { MaterialFactory } from './shaders';
 
 export class SFAObject {

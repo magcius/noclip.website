@@ -18,7 +18,6 @@ import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
-import { FurFactory } from './fur';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -59,7 +58,11 @@ export class ModelInstance {
 
     public setOverrideIndMtx(num: number, mtx?: mat4) {
         if (mtx !== undefined) {
-            this.overrideIndMtx[num] = mat4.clone(mtx);
+            if (this.overrideIndMtx[num] !== undefined) {
+                mat4.copy(this.overrideIndMtx[num]!, mtx);
+            } else {
+                this.overrideIndMtx[num] = mat4.clone(mtx);
+            }
         } else {
             this.overrideIndMtx[num] = undefined;
         }
@@ -949,6 +952,7 @@ export class Model implements BlockRenderer {
     }
 
     private scratchMtx = mat4.create();
+    private scratchMtx2 = mat4.create();
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
         if (drawStep < 0 || drawStep >= this.models.length) {
@@ -976,13 +980,13 @@ export class Model implements BlockRenderer {
                 fur.model.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
-                const indtexmtx = mat4.fromValues(
+                this.scratchMtx2 = mat4.fromValues(
                     m00, 0.0, 0.0, 0.0,
                     0.0, m11, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                fur.model.setOverrideIndMtx(0, indtexmtx);
+                fur.model.setOverrideIndMtx(0, this.scratchMtx2);
                 fur.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
                 fur.model.setOverrideIndMtx(0, undefined);
             }
