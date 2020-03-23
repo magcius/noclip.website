@@ -5,15 +5,15 @@ import * as GX from './gx_enum';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgramDescriptorSimple, GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { MathConstants } from '../MathHelpers';
-import { preprocessProgramObj_GLSL } from '../gfx/shaderc/GfxShaderCompiler';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
+import { DeviceProgram } from '../Program';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -344,7 +344,7 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export class GX_Program {
+export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
@@ -352,7 +352,9 @@ export class GX_Program {
     public name: string;
 
     constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
+        super();
         this.name = material.name;
+        this.generateShaders();
     }
 
     private generateFloat(v: number): string {
@@ -1161,7 +1163,7 @@ ${this.generateFogFunc(`t_Fog`)}
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    public generateShaders(device: GfxDevice): GfxProgramDescriptorSimple {
+    private generateShaders(): void {
         const bindingsDefinition = generateBindingsDefinition(this.material);
 
         const both = `
@@ -1182,7 +1184,7 @@ varying vec3 v_TexCoord6;
 varying vec3 v_TexCoord7;
 `;
 
-        const vert = `
+        this.vert = `
 ${both}
 ${this.generateVertAttributeDefs()}
 
@@ -1215,7 +1217,7 @@ ${this.generateTexGens()}
 }
 `;
 
-        const frag = `
+        this.frag = `
 ${both}
 ${this.generateTexCoordGetters()}
 
@@ -1259,8 +1261,6 @@ ${this.generateAlphaTest()}
 ${this.generateFog()}
     gl_FragColor = t_PixelOut;
 }`;
-
-        return preprocessProgramObj_GLSL(device, { vert, frag });
     }
 }
 // #endregion
