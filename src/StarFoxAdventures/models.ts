@@ -18,6 +18,7 @@ import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_
 import { LowBitReader, dataSubarray } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
+import { FurMaps } from './fur';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -29,6 +30,8 @@ export class ModelInstance {
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
+    private furMaps?: FurMaps; // TODO: move this to a common location
+    private furLayer: number = 0;
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -48,6 +51,10 @@ export class ModelInstance {
         for (let i = 0; i < mats.length; i++) {
             this.pnMatrices.push(mat4.clone(mats[i]));
         }
+    }
+
+    public setFurLayer(layer: number) {
+        this.furLayer = layer;
     }
 
     private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
@@ -100,6 +107,16 @@ export class ModelInstance {
                 this.materialParams.m_TextureMapping[i].gfxSampler = tex.texture.gfxSampler;
                 this.materialParams.m_TextureMapping[i].width = tex.texture.width;
                 this.materialParams.m_TextureMapping[i].height = tex.texture.height;
+                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
+            } else if (tex.kind === 'fur-map') {
+                if (this.furMaps === undefined) {
+                    this.furMaps = new FurMaps(device);
+                }
+                const furMap = this.furMaps.getLayer(this.furLayer);
+                this.materialParams.m_TextureMapping[i].gfxTexture = furMap.gfxTexture;
+                this.materialParams.m_TextureMapping[i].gfxSampler = furMap.gfxSampler;
+                this.materialParams.m_TextureMapping[i].width = furMap.width;
+                this.materialParams.m_TextureMapping[i].height = furMap.height;
                 this.materialParams.m_TextureMapping[i].lodBias = 0.0;
             }
         }
@@ -851,6 +868,7 @@ export class Model implements BlockRenderer {
                 mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
                 mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
+                fur.model.setFurLayer(j);
                 fur.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
             }
         }

@@ -27,7 +27,7 @@ export interface Shader {
     hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
                          // It is possibly related to projected lighting.
     auxTexNum: number;
-    furRegionsTexId: number | null;
+    furRegionsTexId: number | null; // Only used in character models, not blocks (??)
 }
 
 function parseTexId(data: DataView, offs: number, texIds: number[]): number | null {
@@ -152,10 +152,15 @@ export interface SFAMaterialTexture_FbColorDownscaled2x {
     kind: 'fb-color-downscaled-2x';
 }
 
+export interface SFAMaterialTexture_FurMap {
+    kind: 'fur-map';
+}
+
 export type SFAMaterialTexture =
     SFAMaterialTexture_Texture |
     SFAMaterialTexture_FbColorDownscaled8x |
     SFAMaterialTexture_FbColorDownscaled2x |
+    SFAMaterialTexture_FurMap |
     null;
 
 export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialTexture {
@@ -758,6 +763,44 @@ export function buildMaterialFromShader(device: GfxDevice, shader: Shader, texCo
     };
 }
 
+function makeRampTexture(device: GfxDevice): SFATexture {
+    const width = 256;
+    const height = 4;
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+    const gfxSampler = device.createSampler({
+        wrapS: GfxWrapMode.REPEAT,
+        wrapT: GfxWrapMode.REPEAT,
+        minFilter: GfxTexFilterMode.BILINEAR,
+        magFilter: GfxTexFilterMode.BILINEAR,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0,
+        maxLOD: 100,
+    });
+
+    const pixels = new Uint8Array(4 * width * height);
+
+    function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+        const idx = 4 * (y * width + x)
+        pixels[idx] = r
+        pixels[idx + 1] = g
+        pixels[idx + 2] = b
+        pixels[idx + 3] = a
+    }
+
+    for (let x = 0; x < 256; x++) {
+        const I = x;
+        for (let y = 0; y < 4; y++) {
+            plot(x, y, I, I, I, I)
+        }
+    }
+
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+    device.submitPass(hostAccessPass);
+
+    return { gfxTexture, gfxSampler, width, height }
+}
+
 export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
     const mb = new GXMaterialBuilder('FurMaterial');
     const textures = [] as SFAMaterialTexture[];
@@ -769,13 +812,59 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     // but then it replaces texmap 0 with shader layer 0 before drawing...
     textures[0] = makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, alwaysUseTex1));
     mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-
     mb.setTevDirect(0);
     mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
     mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
     mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
     mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+    textures[2] = makeMaterialTexture(makeWavyTexture(device));
+    const texmtx1 = mat4.fromValues(
+        0.0125, 0.0, 0.0, 0.0,
+        0.0, 0.0125, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0
+    );
+    texMtx[1] = () => texmtx1;
+    mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
+    mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
+    mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+
+    textures[1] = { kind: 'fur-map' };
+    const texmtx0 = mat4.fromValues(
+        0.1, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.1, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0
+    );
+    texMtx[0] = () => texmtx0;
+    mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
+    mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+    mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+    mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8);
+    mb.setTevColorIn(1, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV, GX.CC.CPREV);
+    mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+    mb.setTevColorOp(1, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    
+    textures[3] = makeMaterialTexture(makeRampTexture(device));
+    texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        mat4.set(dst,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            1/30, 0.0, 0.0, 0.0,
+            25/3, 0.0, 0.0, 0.0
+        );
+        mat4.mul(dst, modelViewMtx, dst);
+    };
+    mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
+    mb.setTevDirect(2);
+    mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO);
+    mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+    mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+    mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
     mb.setCullMode(GX.CullMode.BACK);
