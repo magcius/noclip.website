@@ -1,16 +1,12 @@
 
 import { LiveActor } from "./LiveActor";
-import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { range } from "../MathHelpers";
-
-export const enum DrawBufferFlags {
-    // TODO(jstpierre): Fill in.
-}
 
 export const enum LightType {
     None   = -1,
@@ -23,58 +19,59 @@ export const enum LightType {
 }
 
 export const enum DrawCameraType {
-    // TODO(jstpierre): Fill in.
+    DrawCameraType_3D     = 0x00,
+    DrawCameraType_2D     = 0x01,
+    DrawCameraType_Mirror = 0x02,
 }
 
 interface DrawBufferInitialTableEntry {
     DrawBufferType: DrawBufferType;
-    Flags: DrawBufferFlags;
     DrawCameraType: DrawCameraType;
     LightType: LightType;
 };
 
 // Computed from DrawBufferInitialTable -- used in SceneNameObjListExecutor::initCalcViewAndEntryList.
 export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
-    { DrawBufferType: 0x26, Flags: 0x010, LightType: LightType.None,   DrawCameraType: 0x00 },
-    { DrawBufferType: 0x04, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x1D, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x14, Flags: 0x004, LightType: LightType.Player, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x15, Flags: 0x008, LightType: LightType.Player, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x16, Flags: 0x008, LightType: LightType.Player, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x17, Flags: 0x001, LightType: LightType.Weak,   DrawCameraType: 0x00 },
-    { DrawBufferType: 0x10, Flags: 0x050, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x12, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x13, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x1F, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x00, Flags: 0x020, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x18, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x19, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x1A, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x1B, Flags: 0x010, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x28, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x11, Flags: 0x020, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0B, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0C, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0D, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0E, Flags: 0x040, LightType: LightType.Weak,   DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0F, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x08, Flags: 0x100, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x09, Flags: 0x020, LightType: LightType.Weak,   DrawCameraType: 0x00 },
-    { DrawBufferType: 0x0A, Flags: 0x040, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x27, Flags: 0x100, LightType: LightType.Planet, DrawCameraType: 0x02 },
-    { DrawBufferType: 0x20, Flags: 0x008, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x21, Flags: 0x008, LightType: LightType.Strong, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x22, Flags: 0x008, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x05, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x01, Flags: 0x004, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x02, Flags: 0x008, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x03, Flags: 0x004, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x06, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x07, Flags: 0x040, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x23, Flags: 0x001, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x1E, Flags: 0x010, LightType: LightType.Planet, DrawCameraType: 0x00 },
-    { DrawBufferType: 0x24, Flags: 0x010, LightType: LightType.None,   DrawCameraType: 0x01 },
-    { DrawBufferType: 0x25, Flags: 0x010, LightType: LightType.None,   DrawCameraType: 0x01 },
+    { DrawBufferType: 0x26,                                               LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.PLANET,                              LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.INDIRECT_PLANET,                     LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.MARIO_ACTOR,                         LightType: LightType.Player, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.TORNADO_MARIO,                       LightType: LightType.Player, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x16,                                               LightType: LightType.Player, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x17,                                               LightType: LightType.Weak,   DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NPC,                                 LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.ENEMY,                               LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.ENEMY_DECORATION,                    LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x1F,                                               LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x00,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x18,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x19,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT,       LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.INDIRECT_NPC,                        LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x28,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.RIDE,                                LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NO_SHADOWED_MAP_OBJ,                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT,    LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NO_SILHOUETTED_MAP_OBJ,              LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT,   LightType: LightType.Weak,   DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.MAP_OBJ,                             LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.MAP_OBJ_WEAK_LIGHT,                  LightType: LightType.Weak,   DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.MAP_OBJ_STRONG_LIGHT,                LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.MIRROR_MAP_OBJ,                      LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_Mirror },
+    { DrawBufferType: DrawBufferType.CRYSTAL,                             LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x21,                                               LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.GLARING_LIGHT,                       LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x05,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.SKY,                                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.AIR,                                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.SUN,                                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.ENVIRONMENT,                         LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.ENVIRONMENT_STRONG_LIGHT,            LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: 0x23,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.BLOOM_MODEL,                         LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType._3D_MODEL_FOR_2D,                    LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
+    { DrawBufferType: 0x25,                                               LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
 ];
 
 // The original drawing code's entry point (drawOpa used for example, but drawXlu also exists...)

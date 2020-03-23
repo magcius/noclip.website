@@ -57,6 +57,8 @@ export const enum DrawBufferType {
     RIDE                                = 0x11,
     ENEMY                               = 0x12,
     ENEMY_DECORATION                    = 0x13,
+    MARIO_ACTOR                         = 0x14,
+    TORNADO_MARIO                       = 0x15,
     INDIRECT_MAP_OBJ                    = 0x19,
     INDIRECT_MAP_OBJ_STRONG_LIGHT       = 0x1A,
     INDIRECT_NPC                        = 0x1B,
@@ -64,6 +66,8 @@ export const enum DrawBufferType {
     INDIRECT_PLANET                     = 0x1D,
     BLOOM_MODEL                         = 0x1E,
     CRYSTAL                             = 0x20,
+    GLARING_LIGHT                       = 0x22,
+    _3D_MODEL_FOR_2D                    = 0x24,
     MIRROR_MAP_OBJ                      = 0x27,
 }
 
