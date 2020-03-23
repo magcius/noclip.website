@@ -768,8 +768,8 @@ function makeRampTexture(device: GfxDevice): SFATexture {
     const height = 4;
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
     const gfxSampler = device.createSampler({
-        wrapS: GfxWrapMode.REPEAT,
-        wrapT: GfxWrapMode.REPEAT,
+        wrapS: GfxWrapMode.CLAMP,
+        wrapT: GfxWrapMode.CLAMP,
         minFilter: GfxTexFilterMode.BILINEAR,
         magFilter: GfxTexFilterMode.BILINEAR,
         mipFilter: GfxMipFilterMode.NO_MIP,
@@ -819,6 +819,8 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
 
+    // Ind Stage 0: Waviness
+    // TODO: animate waviness to make grass sway back and forth
     textures[2] = makeMaterialTexture(makeWavyTexture(device));
     const texmtx1 = mat4.fromValues(
         0.0125, 0.0, 0.0, 0.0,
@@ -831,6 +833,7 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
     mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
 
+    // Stage 1: Fur map
     textures[1] = { kind: 'fur-map' };
     const texmtx0 = mat4.fromValues(
         0.1, 0.0, 0.0, 0.0,
@@ -848,6 +851,7 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
     mb.setTevColorOp(1, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
+    // Stage 2: Distance fade
     textures[3] = makeMaterialTexture(makeRampTexture(device));
     texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
         mat4.set(dst,
@@ -856,7 +860,7 @@ export function buildFurMaterial(device: GfxDevice, shader: Shader, texColl: Tex
             1/30, 0.0, 0.0, 0.0,
             25/3, 0.0, 0.0, 0.0
         );
-        mat4.mul(dst, modelViewMtx, dst);
+        mat4.mul(dst, dst, modelViewMtx);
     };
     mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
     mb.setTevDirect(2);
