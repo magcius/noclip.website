@@ -13,7 +13,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { SFAMaterial, makeMaterialTexture } from './shaders';
+import { SFAMaterial, makeMaterialTexture, MaterialFactory } from './shaders';
 import { ModelInstance, Model } from './models';
 import { LowBitReader } from './util';
 
@@ -24,6 +24,7 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getNumDrawSteps(): number;
     public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
+    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
 }
 
 export interface IBlockCollection {
@@ -36,7 +37,7 @@ export class BlockCollection implements IBlockCollection {
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
 
-    constructor(private mod: number, private isAncient: boolean) {
+    constructor(private mod: number, private isAncient: boolean, private materialFactory: MaterialFactory) {
     }
 
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
@@ -48,7 +49,7 @@ export class BlockCollection implements IBlockCollection {
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             try {
-                const texColl = new SFATextureCollection(gameInfo);
+                const texColl = new SFATextureCollection(gameInfo, false); // TODO: support beta blocks (swapcircle)
                 await texColl.create(dataFetcher, subdir);
                 this.texColl = texColl;
             } catch (e) {
@@ -67,7 +68,7 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
             } else {
-                this.blockRenderers[sub] = new Model(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new Model(device, this.materialFactory, uncomp, this.texColl);
             }
         }
 
@@ -336,6 +337,7 @@ export class AncientBlockRenderer implements BlockRenderer {
                     }
 
                     const material: SFAMaterial = {
+                        factory: new MaterialFactory(device),
                         material: mb.finish(),
                         textures: [makeMaterialTexture(texColl.getTexture(device, texIds[shader.tex0Num], true))],
                         setupMaterialParams: () => {},
@@ -394,14 +396,7 @@ export class AncientBlockRenderer implements BlockRenderer {
             this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
     }
-
-    // public addToModelHolder(holder: ModelHolder, modelMatrix: mat4) {
-    //     for (let i = 0; i < this.models.length; i++) {
-    //         const trans = mat4.create();
-    //         mat4.fromTranslation(trans, [0, this.yTranslate, 0]);
-    //         const matrix = mat4.create();
-    //         mat4.mul(matrix, modelMatrix, trans);
-    //         holder.addModel(this.models[i], matrix);
-    //     }
-    // }
+    
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    }
 }

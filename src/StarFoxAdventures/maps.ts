@@ -10,6 +10,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { SFARenderer } from './render';
 import { BlockCollection, BlockRenderer, IBlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { MaterialFactory } from './shaders';
 
 export interface BlockInfo {
     mod: number;
@@ -112,6 +113,17 @@ export class MapInstance {
             const matrix = mat4.create();
             mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
             this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        for (let i = 0; i < this.models.length; i++) {
+            const matrix = mat4.create();
+            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
+            this.models[i].prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -261,7 +273,7 @@ export class MapInstance {
     }
 }
 
-export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
+export async function loadMap(device: GfxDevice, materialFactory: MaterialFactory, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
     const pathBase = gameInfo.pathBase;
     const dataFetcher = context.dataFetcher;
     const [mapsTab, mapsBin] = await Promise.all([
@@ -275,7 +287,7 @@ export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: 
         getNumCols() { return mapInfo.blockCols; },
         getNumRows() { return mapInfo.blockRows; },
         async getBlockCollection(mod: number): Promise<IBlockCollection> {
-            const blockColl = new BlockCollection(mod, isAncient);
+            const blockColl = new BlockCollection(mod, isAncient, materialFactory);
             await blockColl.create(device, context, gameInfo);
             return blockColl;
         },
@@ -311,6 +323,7 @@ class MapSceneRenderer extends SFARenderer {
 
             // Body
             this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
 
             // Epilog
             renderInstManager.popTemplateRenderInst();
@@ -332,8 +345,9 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
-        
-        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo, this.isAncient);
+
+        const materialFactory = new MaterialFactory(device);
+        const mapSceneInfo = await loadMap(device, materialFactory, context, this.mapNum, this.gameInfo, this.isAncient);
 
         const mapRenderer = new MapSceneRenderer(device);
         await mapRenderer.create(mapSceneInfo);
@@ -349,16 +363,19 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 }
 
 export class AncientMapSceneDesc implements Viewer.SceneDesc {
+    private materialFactory: MaterialFactory;
+
     constructor(public id: string, public name: string, private gameInfo: GameInfo, private mapKey: any) {
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log(`Creating scene for ${this.name} ...`);
+
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const mapsJsonBuffer = await dataFetcher.fetchData(`${pathBase}/AncientMaps.json`);
 
-        console.log(`Creating scene for ${this.name} ...`);
-
+        const materialFactory = new MaterialFactory(device);
         const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
         const map = mapsJson[this.mapKey];
@@ -386,7 +403,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             getNumCols() { return numCols; },
             getNumRows() { return numRows; },
             async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, true);
+                const blockColl = new BlockCollection(mod, true, materialFactory);
                 await blockColl.create(device, context, self.gameInfo);
                 return blockColl;
             },
@@ -416,6 +433,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for ${this.name} ...`);
 
+        const materialFactory = new MaterialFactory(device);
         const COLS = 20;
         const ROWS = 20;
         const blockTable: (BlockInfo | null)[][] = nArray(ROWS, () => nArray(COLS, () => null));
@@ -425,7 +443,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
             getNumCols() { return COLS; },
             getNumRows() { return ROWS; },
             async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, self.isAncient);
+                const blockColl = new BlockCollection(mod, self.isAncient, materialFactory);
                 await blockColl.create(device, context, self.gameInfo);
                 return blockColl;
             },
