@@ -1919,12 +1919,28 @@ export class QuestionCoin extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         sceneObjHolder.create(SceneObj.CoinRotater);
         const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
         mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        showModel(this);
+        emitEffect(sceneObjHolder, this, 'Appear');
+        emitEffect(sceneObjHolder, this, 'Light');
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
     }
 
     public makeActorDead(sceneObjHolder: SceneObjHolder): void {
