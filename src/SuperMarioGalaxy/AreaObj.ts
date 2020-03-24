@@ -3,7 +3,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
-import { computeModelMatrixR } from "../MathHelpers";
+import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
 import { vecKillElement, listenStageSwitchOnOffAppear } from "./ActorUtil";
@@ -30,9 +30,7 @@ function makeWorldMtxFromPlacement(dst: mat4, sceneObjHolder: SceneObjHolder, in
     getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
     computeModelMatrixR(dst, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
     getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
-    dst[12] = scratchVec3a[0];
-    dst[13] = scratchVec3a[1];
-    dst[14] = scratchVec3a[2];
+    setMatrixTranslation(dst, scratchVec3a);
 }
 
 function multTranspose(dst: vec3, a: vec3, m: mat4): void {

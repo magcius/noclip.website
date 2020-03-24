@@ -14,6 +14,7 @@ import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
+import { getJointMtxByName } from './ActorUtil';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -672,7 +673,7 @@ export class EffectKeeper {
 
         // registerEmitter
         if (jointName !== null) {
-            const jointMtx = assertExists(this.actor.getJointMtx(jointName));
+            const jointMtx = assertExists(getJointMtxByName(this.actor, jointName));
             m.emitterCallBack.setHostMtx(jointMtx);
         } else {
             const baseMtx = this.actor.getBaseMtx();

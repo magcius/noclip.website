@@ -157,35 +157,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel];
     }
 
-    private findBloomArea(): ObjInfo | null {
-        // TODO(jstpierre): Replace with proper bloom code.
-
-        /*
-        for (let i = 0; i < this.spawner.zones.length; i++) {
-            const zone = this.spawner.zones[i];
-            if (zone === undefined)
-                continue;
-
-            for (let j = 0; j < zone.areaObjInfo.length; j++) {
-                const area = zone.areaObjInfo[j];
-                if (area.objName === 'BloomCube' && area.objArg0 != -1)
-                    return area;
-            }
-        }
-        */
-
-        return null;
-    }
-
     private prepareBloomParameters(bloomParameters: BloomPostFXParameters): void {
         // TODO(jstpierre): Dynamically adjust based on Area.
-        const bloomArea = this.findBloomArea();
-        if (bloomArea !== null) {
-            // TODO(jstpierre): What is arg1
-            bloomParameters.intensity1 = bloomArea.objArg2 / 256;
-            bloomParameters.intensity2 = bloomArea.objArg3 / 256;
-            bloomParameters.bloomIntensity = bloomArea.objArg0 / 256;
-        } else if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
+        if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
             bloomParameters.intensity1 = 40/256;
             bloomParameters.intensity2 = 60/256;
             bloomParameters.bloomIntensity = 110/256;
@@ -1176,9 +1150,6 @@ class StageDataHolder {
         const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
         const objName = fallback(infoIter.getValueString('name'), 'Unknown');
         const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
-        const objArg1 = fallback(infoIter.getValueNumberNoInit('Obj_arg1'), -1);
-        const objArg2 = fallback(infoIter.getValueNumberNoInit('Obj_arg2'), -1);
-        const objArg3 = fallback(infoIter.getValueNumberNoInit('Obj_arg3'), -1);
         const modelMatrix = mat4.create();
 
         const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
@@ -1190,7 +1161,7 @@ class StageDataHolder {
             rotation[0], rotation[1], rotation[2],
             translation[0], translation[1], translation[2]);
 
-        return { objId, objName, objArg0, objArg1, objArg2, objArg3, modelMatrix };
+        return { objId, objName, objArg0, modelMatrix };
     }
 
     private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {

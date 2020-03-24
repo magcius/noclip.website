@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX } from '../MathHelpers';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, setTrans, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -134,6 +134,11 @@ export function isHiddenModel(actor: LiveActor): boolean {
     return !actor.visibleModel;
 }
 
+export function hideMaterial(actor: LiveActor, materialName: string): void {
+    const materialInstance = assertExists(actor.modelInstance!.materialInstances.find((m) => m.materialData.material.name === materialName));
+    materialInstance.visible = false;
+}
+
 export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
     const m = scratchMatrix;
     makeMtxTRFromActor(m, actor);
@@ -182,10 +187,6 @@ export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: 
 
 export function getJointNum(actor: LiveActor): number {
     return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray.length;
-}
-
-export function getJointMtx(actor: LiveActor, i: number): mat4 {
-    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray[i];
 }
 
 export function scaleMatrixScalar(m: mat4, s: number): void {
@@ -582,9 +583,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             if (this.railMover !== null && this.railMover.isWorking())
                 mat4.mul(m, m, this.railMover.mtx);
 
-            m[12] = this.translation[0];
-            m[13] = this.translation[1];
-            m[14] = this.translation[2];
+            setMatrixTranslation(m, this.translation);
         } else {
             super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         }
@@ -962,7 +961,7 @@ class PartsModel extends LiveActor {
     }
 
     public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName)!, localTrans);
+        this.fixedPosition = new FixedPosition(getJointMtxByName(this.parentActor, jointName)!, localTrans);
         this.transformMatrix = this.fixedPosition.transformMatrix;
     }
 
@@ -975,9 +974,7 @@ class PartsModel extends LiveActor {
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.transformMatrix !== null) {
-            this.translation[0] = this.transformMatrix[12];
-            this.translation[1] = this.transformMatrix[13];
-            this.translation[2] = this.transformMatrix[14];
+            getMatrixTranslation(this.translation, this.transformMatrix);
             mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
         } else {
             super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
@@ -3305,7 +3302,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
-        setTrans(this.modelInstance!.modelMatrix, this.translation);
+        setMatrixTranslation(this.modelInstance!.modelMatrix, this.translation);
     }
 }
 
@@ -5141,7 +5138,7 @@ export class Trapeze extends LiveActor {
     private updateStickMtx(): void {
         const point = this.swingRopePoint;
         setMtxAxisXYZ(this.stickMtx, point.axisX, point.axisY, point.axisZ);
-        setTrans(this.stickMtx, point.position);
+        setMatrixTranslation(this.stickMtx, point.position);
     }
 
     public destroy(device: GfxDevice): void {
@@ -5854,7 +5851,7 @@ export class Flag extends LiveActor {
                 this.swingPointCount = 5;
                 this.flyPerPoint = 500.0 / 5;
                 this.hoistPerPoint = 400.0 / 4;
-            } else if (flagName === 'FlagRaceA') {
+            } else if (flagName === 'FlagRaceA' || flagName === 'FlagTamakoro') {
                 // Nothing to do.
             } else {
                 throw "whoops";
@@ -7228,8 +7225,8 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WaterLeakPipe");
 
-        this.jointTop = assertExists(this.getJointMtx('Top'));
-        this.jointBottom = assertExists(this.getJointMtx('Bottom'));
+        this.jointTop = assertExists(getJointMtxByName(this, 'Top'));
+        this.jointBottom = assertExists(getJointMtxByName(this, 'Bottom'));
         this.pipeHeight = fallback(getJMapInfoArg0(infoIter), 500.0);
         this.initPipeHeight();
         connectToSceneMapObj(sceneObjHolder, this);
@@ -7247,9 +7244,7 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
     private initPipeHeight(): void {
         calcUpVec(scratchVec3, this);
         vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3, this.pipeHeight);
-        this.jointTop[12] = scratchVec3[0];
-        this.jointTop[13] = scratchVec3[1];
-        this.jointTop[14] = scratchVec3[2];
+        setMatrixTranslation(this.jointTop, scratchVec3);
         this.calcAndSetBaseMtxBase();
     }
 
@@ -7737,5 +7732,100 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
             if (isFirstStep(this))
                 this.startMapPartsFunctions(sceneObjHolder);
         }
+    }
+}
+
+export class Pole extends LiveActor {
+    private height: number = 0;
+    private useSquareEndCap: boolean = false;
+    private noModel: boolean = false;
+    private square: boolean = false;
+    private baseMtx: mat4 | null = null;
+
+    private topMtx: mat4 | null = null;
+    private bottomMtx: mat4 | null = null;
+    private axisX = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+    private topPos = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+
+        this.useSquareEndCap = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+
+        this.height = 100.0 * this.scale[1];
+        vec3.set(this.scale, 1, 1, 1);
+
+        if (this.name.includes('NoModel')) {
+            this.noModel = true;
+        } else if (this.name.includes('Square')) {
+            this.square = true;
+        }
+
+        makeMtxTRFromActor(scratchMatrix, this);
+        calcMtxAxis(this.axisX, this.axisY, this.axisZ, scratchMatrix);
+
+        if (!this.noModel) {
+            this.initModelManagerWithAnm(sceneObjHolder, this.name);
+            // initCollisionParts
+        } else {
+            this.baseMtx = mat4.clone(scratchMatrix);
+            // initCollisionPartsFromResourceHolder
+        }
+
+        if (this.name === 'Pole' || this.name === 'PoleSquare') {
+            this.topMtx = assertExists(getJointMtxByName(this, 'PoleTop'));
+            this.bottomMtx = assertExists(getJointMtxByName(this, 'PoleBottom'));
+
+            if (this.name === 'Pole' && !this.useSquareEndCap)
+                hideMaterial(this, 'PoleTopStopMat_v');
+
+            this.updateTopPos(this.height);
+        } else {
+            if (this.name === 'TreeCube')
+                this.height = 800.0;
+
+            vec3.scaleAndAdd(this.topPos, this.translation, this.axisY, this.height);
+
+            if (!this.noModel)
+                this.bottomMtx = assertExists(getJointMtxByName(this, 'world_root'));
+        }
+
+        if (!this.noModel) {
+            setMtxAxisXYZ(this.bottomMtx!, this.axisX, this.axisY, this.axisZ);
+            setMatrixTranslation(this.bottomMtx!, this.translation);
+        }
+
+        if (!this.noModel)
+            connectToSceneMapObj(sceneObjHolder, this);
+        else
+            connectToSceneMapObjMovement(sceneObjHolder, this);
+    }
+
+    private updateTopPos(height: number): void {
+        if (this.square)
+            height += 100.0;
+
+        vec3.scaleAndAdd(this.topPos, this.translation, this.axisY, height);
+
+        setMtxAxisXYZ(this.topMtx!, this.axisX, this.axisY, this.axisZ);
+        setMatrixTranslation(this.topMtx!, this.topPos);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        // updateMaterial
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const name = getObjectName(infoIter);
+        if (name === 'Pole' || name === 'PoleNoModel')
+            sceneObjHolder.modelCache.requestObjectData('Pole');
+        else if (name === 'PoleSquare' || name === 'PoleSquareNoModel')
+            sceneObjHolder.modelCache.requestObjectData('PoleSquare');
+        else if (name === 'TreeCube')
+            sceneObjHolder.modelCache.requestObjectData('TreeCube');
     }
 }

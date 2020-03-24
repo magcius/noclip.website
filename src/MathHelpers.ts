@@ -499,6 +499,12 @@ export function getMatrixTranslation(dst: vec3, m: mat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }
 
+export function setMatrixTranslation(dst: mat4, v: vec3): void {
+    dst[12] = v[0];
+    dst[13] = v[1];
+    dst[14] = v[2];
+}
+
 export const Vec3Zero  = vec3.fromValues(0, 0, 0);
 export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitX = vec3.fromValues(1, 0, 0);
