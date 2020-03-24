@@ -1287,6 +1287,7 @@ class Poliwag extends Actor {
     private startAngle = 0;
     private amplitude = 0;
     private endHeight = 0;
+    private pathIndex = 0;
 
     protected startBlock(globals: LevelGlobals): void {
         const state = this.def.stateGraph.states[this.currState];
@@ -1296,6 +1297,14 @@ class Poliwag extends Actor {
             case 0x802DC05C: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 2; break;
             case 0x802DC2F4: this.motionData.storedValues[1] = this.motionData.storedValues[0] + 3; break;
             case 0x802DC6BC: this.motionData.storedValues[1] = this.motionData.path!.length - 1; break;
+            case 0x802DCBB8: this.currBlock = this.spawn.behavior - 4; break;
+            case 0x802DCC6C: {
+                if (this.currBlock === 1) {
+                    getPathPoint(this.translation, this.motionData.path!, this.motionData.path!.times[this.pathIndex]);
+                    this.translation[1] = groundHeightAt(globals, this.translation);
+                    this.euler[1] = Math.random() * MathConstants.TAU;
+                }
+            } break;
         }
         super.startBlock(globals);
     }
@@ -1360,6 +1369,14 @@ class Poliwag extends Actor {
     protected endBlock(address: number, globals: LevelGlobals): boolean {
         if (address === 0x802DC6BC)
             globals.fishTracker = 1;
+        else if (address === 0x802DCC6C && this.currBlock === 1) {
+            this.pathIndex++;
+            if (this.pathIndex < this.motionData.path!.length) {
+                this.currBlock = 0;
+                this.startBlock(globals);
+                return true;
+            }
+        }
         return false;
     }
 }

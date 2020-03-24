@@ -2077,6 +2077,39 @@ function fixupState(state: State, animationAddresses: number[]): void {
             state.blocks[2].signals[0].condition = InteractionType.Behavior;
             state.blocks[2].signals[0].conditionParam = 2;
         } break;
+        case 0x802DC6BC: {
+            state.blocks[1].signals[0].condition = InteractionType.Behavior;
+            state.blocks[1].signals[0].conditionParam = 1;
+            state.blocks[1].signals[1].condition = InteractionType.Behavior;
+            state.blocks[1].signals[1].conditionParam = 2;
+            state.blocks[1].signals[2].condition = InteractionType.Behavior;
+            state.blocks[1].signals[2].conditionParam = 3;
+        } break;
+        // add missing transitions
+        case 0x802DCBB8: {
+            const signal = state.blocks[0].wait!.interactions[0].type;
+            const index = state.blocks[0].wait!.interactions[0].index;
+            const flagSet = state.blocks[0].flagSet;
+            const flagClear = state.blocks[0].flagClear;
+
+            state.blocks[1].wait!.interactions = [{
+                type: signal + 1,
+                index,
+                param: 0,
+                auxFunc: 0,
+            }];
+            state.blocks[1].flagSet = flagSet;
+            state.blocks[1].flagClear = flagClear;
+
+            state.blocks[2].wait!.interactions = [{
+                type: signal + 2,
+                index,
+                param: 0,
+                auxFunc: 0,
+            }];
+            state.blocks[2].flagSet = flagSet;
+            state.blocks[2].flagClear = flagClear;
+        } break;
     }
 }
 
