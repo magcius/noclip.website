@@ -739,8 +739,8 @@ export class Model implements BlockRenderer {
             self.furs.push({ model: newModel, numLayers: numFurLayers });
         }
         
-        function runFancyWaterBitstream(bitsOffset: number, bitAddress: number) {
-            // console.log(`running fancy water bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
+        function runWaterBitstream(bitsOffset: number, bitAddress: number) {
+            // console.log(`running water bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
             bits.seekBit(bitAddress);
@@ -762,7 +762,7 @@ export class Model implements BlockRenderer {
             bits.drop(4);
             const listNum = bits.get(8);
             const dlInfo = dlInfos[listNum];
-            // console.log(`Calling DL for fancy water #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+            // console.log(`Calling DL for water #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
@@ -809,8 +809,8 @@ export class Model implements BlockRenderer {
                         if (curShader.flags & ShaderFlags.DevGeometry) {
                             // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
                             // TODO: Implement an option to view this geometry
-                        } else if (curShader.flags & ShaderFlags.FancyWater) {
-                            runFancyWaterBitstream(bitsOffset, dlInfo.specialBitAddress);
+                        } else if (curShader.flags & ShaderFlags.Water) {
+                            runWaterBitstream(bitsOffset, dlInfo.specialBitAddress);
                         } else {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                             const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);

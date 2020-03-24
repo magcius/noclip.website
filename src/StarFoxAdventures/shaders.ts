@@ -1,6 +1,6 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
-import { ViewerRenderInput } from '../viewer';
+import { ViewerRenderInput, Viewer } from '../viewer';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams } from '../gx/gx_render';
@@ -82,7 +82,7 @@ export enum ShaderFlags {
     Fog = 0x4,
     CullBackface = 0x8,
     ReflectSkyscape = 0x20, // ???
-    Water = 0x40,
+    Caustic = 0x40,
     Lava = 0x80,
     Reflective = 0x100, // Occurs in Krazoa Palace reflective floors
     AlphaCompare = 0x400,
@@ -91,7 +91,7 @@ export enum ShaderFlags {
     LongFur = 0x10000, // 16 layers
     StreamingVideo = 0x20000,
     AmbientLit = 0x40000,
-    FancyWater = 0x80000000, // ???
+    Water = 0x80000000,
 }
 
 export enum ShaderAttrFlags {
@@ -185,7 +185,7 @@ type TexMtx = ((dst: mat4, viewerInput: ViewerRenderInput, modelMtx: mat4) => vo
 
 export class MaterialFactory {
     private rampTexture: SFATexture | null = null;
-    private waterRelatedTexture: SFATexture | null = null;
+    private causticTexture: SFATexture | null = null;
     private wavyTexture: SFATexture | null = null;
     private furFactory: FurFactory | null = null;
 
@@ -196,13 +196,15 @@ export class MaterialFactory {
         const mb = new GXMaterialBuilder('Material');
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
-        const postTexMtx: (mat4 | undefined)[] = [];
+        const postTexMtx: TexMtx[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
         let tevStage = 0;
         let indStageId = GX.IndTexStageID.STAGE0;
         let texcoordId = GX.TexCoordID.TEXCOORD0;
         let texmapId = GX.TexMapID.TEXMAP0;
         let texGenSrc = GX.TexGenSrc.TEX0;
+        let postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
+        let postTexMtxNum = 0;
         let cprevIsValid = false;
         let aprevIsValid = false;
 
@@ -343,15 +345,17 @@ export class MaterialFactory {
             const texture0x600 = texColl.getTexture(self.device, 0x600, false);
             textures[0] = makeMaterialTexture(texture0x600);
     
-            postTexMtx[2] = mat4.create(); // TODO: shader can reference texture matrices
+            const pttexmtx2 = mat4.create();
+            postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX2);
     
             // FIXME: Don't generate a new wavy texture every time.
             // Find a place to stash one and reuse it.
             textures[1] = makeMaterialTexture(self.makeWavyTexture());
     
-            postTexMtx[0] = mat4.create();
-            mat4.fromScaling(postTexMtx[0], [0.9, 0.9, 1.0]);
+            const pttexmtx0 = mat4.create();
+            mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
+            postTexMtx[0] = (dst: mat4) => { mat4.copy(dst, pttexmtx0); };
             // TODO: animated param
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX0);
             
@@ -360,11 +364,12 @@ export class MaterialFactory {
             // TODO: set ind tex matrices
             mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
     
-            postTexMtx[1] = mat4.create();
-            mat4.fromScaling(postTexMtx[1], [1.2, 1.2, 1.0]);
+            const pttexmtx1 = mat4.create();
+            mat4.fromScaling(pttexmtx1, [1.2, 1.2, 1.0]);
             const rot45deg = mat4.create();
             mat4.fromXRotation(rot45deg, Math.PI / 4); // FIXME: which axis?
-            mat4.mul(postTexMtx[1], rot45deg, postTexMtx[1]);
+            mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
+            postTexMtx[1] = (dst: mat4) => { mat4.copy(dst, pttexmtx1); };
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
     
             mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -406,25 +411,92 @@ export class MaterialFactory {
             indStageId = 2;
         }
     
-        function addTevStagesForWater_OLD() {
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, GX.PostTexGenMatrix.PTIDENTITY /* TODO */);
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
-            // TODO: don't generate a new water-related texture every time.
-            // Find a place to stash one and reuse it.
-            textures[texmapId] = makeMaterialTexture(self.makeWaterRelatedTexture());
-            // TODO: GXSetIndTexMtx
+        function addTevStagesForCaustic() {
+            const mapOriginX = 1.0; // TODO
+            const mapOriginZ = 1.0; // TODO
+
+            const pttexmtx0 = mat4.fromValues(
+                0.008,                   0.0,   0.0,                     0.0,
+                0.0,                     0.008, 0.0,                     0.0,
+                0.0,                     0.0,   0.008,                   0.0,
+                0.8 * 0.01 * mapOriginX, 0.0,   0.8 * 0.01 * mapOriginZ, 1.0
+            );
+            postTexMtx[postTexMtxNum] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+                const invView = mat4.create();
+                mat4.invert(invView, modelViewMtx);
+                mat4.mul(dst, pttexmtx0, invView);
+                // TODO: rotate
+                dst[0*4 + 2] = 0.0;
+                dst[1*4 + 2] = 0.0;
+                dst[2*4 + 2] = 0.0;
+                dst[3*4 + 2] = 1.0;
+            };
+            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId);
+            
+            const pttexmtx1 = mat4.fromValues(
+                0.005,                   0.0,   0.0,                     0.0,
+                0.0,                     0.005, 0.0,                     0.0,
+                0.0,                     0.0,   0.005,                   0.0,
+                0.5 * 0.01 * mapOriginX, 0.0,   0.5 * 0.01 * mapOriginZ, 1.0
+            );
+            postTexMtx[postTexMtxNum + 1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+                const invView = mat4.create();
+                mat4.invert(invView, modelViewMtx);
+                mat4.mul(dst, pttexmtx1, invView);
+                // TODO: rotate
+                dst[0*4 + 2] = 0.0;
+                dst[1*4 + 2] = 0.0;
+                dst[2*4 + 2] = 0.0;
+                dst[3*4 + 2] = 1.0;
+            };
+            mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3);
+            
+            textures[texmapId] = makeMaterialTexture(self.makeCausticTexture());
+
+            indTexMtx[1] = mat4.fromValues(
+                0.5, 0.0, 0.0, 0.0,
+                0.0, 0.5, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0
+            );
             mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
-            mb.setTevIndirect(tevStage, indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
             mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
+
+            const anim0 = 0; // TODO: animate
+            const pttexmtx2 = mat4.fromValues(
+                0.01,                       0.0,  0.0,               0.0,
+                0.0,                        0.01, 0.0,               0.0,
+                0.0,                        0.0,  0.01,              0.0,
+                0.01 * mapOriginX + anim0,  0.0,  0.01 * mapOriginZ, 1.0
+            )
+            postTexMtx[postTexMtxNum + 2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
+            mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*2);
+
+            mb.setTevIndirect(tevStage, indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+
             mb.setIndTexOrder(indStageId + 1, texcoordId + 3, texmapId + 1);
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.IDENTITY);
-            mb.setTevIndirect(tevStage + 1, indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
             mb.setIndTexScale(indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+
+            const anim1 = 0; // TODO: animate
+            const pttexmtx3 = mat4.fromValues(
+                0.01,               0.0,  0.0,                       0.0,
+                0.0,                0.01, 0.0,                       0.0,
+                0.0,                0.0,  0.01,                      0.0,
+                0.01 * mapOriginX,  0.0,  0.01 * mapOriginZ + anim1, 1.0
+            )
+            postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+                const invView = mat4.create();
+                mat4.invert(invView, modelViewMtx);
+                mat4.mul(dst, pttexmtx3, invView);
+                // TODO: rotate
+                dst[0*4 + 2] = 0.0;
+                dst[1*4 + 2] = 0.0;
+                dst[2*4 + 2] = 0.0;
+                dst[3*4 + 2] = 1.0;
+            };
+            mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*3);
+
+            mb.setTevIndirect(tevStage + 1, indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
     
             mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
             mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
@@ -446,6 +518,8 @@ export class MaterialFactory {
             texcoordId += 4;
             texmapId += 2;
             tevStage += 2;
+            postTexMtxId += 3 * 4;
+            postTexMtxNum += 4;
         }
     
         function addTevStagesForReflectiveFloor() {
@@ -521,30 +595,28 @@ export class MaterialFactory {
     
             if ((shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
                 console.log(`TODO: skyscape reflection?`);
-            } else if ((shader.flags & ShaderFlags.Water) != 0) {
-                addTevStagesForWater_OLD();
+            } else if ((shader.flags & ShaderFlags.Caustic) != 0) {
+                addTevStagesForCaustic();
             } else {
                 // TODO
             }
         }
         
-        if (!(shader.flags & ShaderFlags.FancyWater)) {
-            if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
-                mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-                mb.setZMode(true, GX.CompareType.LEQUAL, false);
-                mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
+            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+            mb.setZMode(true, GX.CompareType.LEQUAL, false);
+            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        } else {
+            mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+            mb.setZMode(true, GX.CompareType.LEQUAL, true);
+            if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
+                mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
             } else {
-                mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
-                mb.setZMode(true, GX.CompareType.LEQUAL, true);
-                if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
-                    mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-                } else {
-                    mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-                }
+                mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
             }
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
         }
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
     
         return {
             factory: this,
@@ -565,7 +637,7 @@ export class MaterialFactory {
     
                 for (let i = 0; i < 20; i++) {
                     if (postTexMtx[i] !== undefined) {
-                        mat4.copy(params.u_PostTexMtx[i], postTexMtx[i]!);
+                        postTexMtx[i]!(params.u_PostTexMtx[i], viewerInput, modelViewMtx);
                     }
                 }
             },
@@ -848,13 +920,13 @@ export class MaterialFactory {
         return this.rampTexture;
     }
     
-    private makeWaterRelatedTexture(): SFATexture {
-        // This function generates a texture with a circular pattern used for (old) water.
+    private makeCausticTexture(): SFATexture {
+        // This function generates a texture with a circular pattern used for caustics.
         // The original function to generate this texture is not customizable and
         // generates the same texture every time it is called. (?)
 
-        if (this.waterRelatedTexture !== null) {
-            return this.waterRelatedTexture;
+        if (this.causticTexture !== null) {
+            return this.causticTexture;
         }
         
         const width = 128;
@@ -908,8 +980,8 @@ export class MaterialFactory {
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
         this.device.submitPass(hostAccessPass);
 
-        this.waterRelatedTexture = { gfxTexture, gfxSampler, width, height };
-        return this.waterRelatedTexture;
+        this.causticTexture = { gfxTexture, gfxSampler, width, height };
+        return this.causticTexture;
     }
     
     private makeWavyTexture(): SFATexture {
