@@ -1116,7 +1116,7 @@ const sceneDescs = [
     new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
     new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
-    new SceneDesc("sea_T", "sea_T"),
+    new SceneDesc("sea_T", "sea_T", [0, 44]),
     new SceneDesc("sea_E", "sea_E"),
     new SceneDesc("ITest61", "ITest61"),
     new SceneDesc("ITest62", "ITest62"),

@@ -1493,6 +1493,8 @@ function emptyStateBlock(block: StateBlock): boolean {
 
 const motionParser = new MotionParser();
 
+export const fakeAuxFlag = 0x1000;
+
 const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
     public state: State;
@@ -1818,7 +1820,10 @@ class StateParser extends MIPS.NaiveInterpreter {
                             break;
                         const stateAddr = tView.getUint32(offs + 0x04);
                         const param = tView.getFloat32(offs + 0x08);
-                        const auxFunc = tView.getUint32(offs + 0x0C);
+                        let auxFunc = tView.getUint32(offs + 0x0C);
+                        // special handling for poliwag, which sets some animations in aux
+                        if (auxFunc === 0x802DCB0C)
+                            auxFunc = 0x1000 | parseStateSubgraph(this.dataMap, auxFunc, this.allStates, this.animationAddresses);
                         offs += 0x10;
                         this.currWait.interactions.push({
                             type,
@@ -1943,8 +1948,8 @@ function fixupState(state: State, animationAddresses: number[]): void {
         // switch statements
         case 0x802DBBA0: {
             state.blocks[0].edges[0].type = InteractionType.Behavior;
-            state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[0].param = 1;
+            state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[1].param = 2;
             state.blocks[0].edges[2].type = InteractionType.Behavior;
             state.blocks[0].edges[2].param = 3;
@@ -1974,9 +1979,9 @@ function fixupState(state: State, animationAddresses: number[]): void {
         // add fake handling for lapras photo interaction
         case 0x802C7F74: {
             state.blocks[0].wait!.allowInteraction = true;
-            state.blocks[0].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[0].wait!.interactions.push({ type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux });
             state.blocks[1].wait!.allowInteraction = true;
-            state.blocks[1].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[1].wait!.interactions.push({ type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux });
         } break;
         // fix second signal value (conditionals again)
         case 0x802D97B8: {
@@ -1992,7 +1997,7 @@ function fixupState(state: State, animationAddresses: number[]): void {
         } break;
         // ignore victreebel distance check
         case 0x802BFE34: {
-            assert(state.blocks.length === 3)
+            assert(state.blocks.length === 3);
             state.blocks.splice(0, 1);
         } break;
         // send signal from motion
@@ -2051,6 +2056,26 @@ function fixupState(state: State, animationAddresses: number[]): void {
         case 0x802D9C84: {
             assert(state.blocks[0].spawn !== undefined);
             state.blocks[0].spawn.id = 5;
+        } break;
+        // carry over timer from previous state
+        case 0x802E7D04: {
+            assert(state.blocks[0].wait !== null);
+            state.blocks[0].wait.duration = 6;
+        } break;
+        // add psyduck initial state
+        case 0x802DB0A0: {
+            const firstEdge = state.blocks[0].edges[0];
+            state.blocks[0].edges.splice(1, 0, {
+                param: 2,
+                type: firstEdge.type,
+                index: firstEdge.index,
+                auxFunc: firstEdge.auxFunc,
+            });
+        } break;
+        // add signal condition
+        case 0x802DB78C: {
+            state.blocks[2].signals[0].condition = InteractionType.Behavior;
+            state.blocks[2].signals[0].conditionParam = 2;
         } break;
     }
 }

@@ -122,9 +122,7 @@ class daSea_WaterHeightInfo_Mng {
 
         const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
 
-        // noclip modification: For single-room scenes, x/z are junk, so use mStayNo.
-        const isFullSea = globals.renderer.rooms.length > 1;
-        if (roomType === 7 && isFullSea) {
+        if (roomType === 7) {
             return this.height[z*9 + x];
         } else {
             return this.get_wave_max(globals, globals.mStayNo);

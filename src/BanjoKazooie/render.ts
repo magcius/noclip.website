@@ -96,7 +96,7 @@ void main() {
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
     // TODO: find and pass in lighting data
-    v_Color = vec4(vec3(.6 + .4*t_Normal.y), 1.0);
+    v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
@@ -285,7 +285,7 @@ void main() {
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
+    t_Color.rgb = vec3(t_Color.a);
     t_Color.a = 1.0;
 #endif
 

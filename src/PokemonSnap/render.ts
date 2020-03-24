@@ -325,8 +325,6 @@ export class ModelRenderer {
                 this.renderers[p].children.push(this.renderers[i]);
             }
         }
-        if (this.animations.length > 0)
-            this.setAnimation(0);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -374,8 +372,7 @@ export class ModelRenderer {
         this.headAnimationIndex = newAnim.tracks.findIndex((t) => t !== null);
         for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animator.setTrack(newAnim.tracks[i]);
-            if (newAnim.tracks[i] === null)
-                this.renderers[i].setTransfromFromNode();
+            this.renderers[i].setTransfromFromNode();
 
             if (newAnim.materialTracks.length == 0 || newAnim.materialTracks[i].length === 0)
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
@@ -391,7 +388,7 @@ export class ModelRenderer {
 
     protected motion(viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void { }
 
-    private animate(globals: LevelGlobals): void {
+    protected animate(globals: LevelGlobals): void {
         if (this.animationPaused)
             return;
         const time = this.animationController.getTimeInFrames();
