@@ -118,18 +118,18 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, actor, 'MapPartsRotator');
 
-        this.rotateAngle = assertExists(infoIter.getValueNumber('RotateSpeed'));
-        this.rotateAxis = assertExists(infoIter.getValueNumber('RotateAxis'));
-        this.rotateAccelType = assertExists(infoIter.getValueNumber('RotateAccelType'));
-        this.rotateStopTime = assertExists(infoIter.getValueNumber('RotateStopTime'));
-        this.rotateType = assertExists(infoIter.getValueNumber('RotateType'));
+        this.rotateAngle = fallback(infoIter.getValueNumberNoInit('RotateAngle'), 0.0));
+        this.rotateAxis = fallback(infoIter.getValueNumberNoInit('RotateAxis'), AxisType.X);
+        this.rotateAccelType = fallback(infoIter.getValueNumberNoInit('RotateAccelType'), AccelType.NORMAL);
+        this.rotateStopTime = fallback(infoIter.getValueNumberNoInit('RotateStopTime'), 0);
+        this.rotateType = fallback(infoIter.getValueNumberNoInit('RotateType'), 1);
         this.signMotionType = getMapPartsArgSignMotionType(infoIter);
 
         if (this.rotateAccelType === AccelType.TIMED) {
-            const rotateTime = assertExists(infoIter.getValueNumber('RotateSpeed'));
+            const rotateTime = fallback(infoIter.getValueNumberNoInit('RotateSpeed'), 0.0);
             this.rotateSpeed = this.rotateAngle / rotateTime;
         } else {
-            this.rotateSpeed = assertExists(infoIter.getValueNumber('RotateSpeed')) * 0.01;
+            this.rotateSpeed = fallback(infoIter.getValueNumberNoInit('RotateSpeed'), 0.0) * 0.01;
         }
 
         if (this.rotateSpeed !== 0) {
