@@ -674,11 +674,7 @@ export class MaterialFactory {
 
         const texmtx4 = mat4.create();
         mat4.fromScaling(texmtx4, [0.83, 0.83, 0.83]);
-
-        const rot45deg = mat4.create();
-        mat4.fromXRotation(rot45deg, Math.PI / 4); // TODO: which axis?
-
-        mat4.mul(texmtx4, rot45deg, texmtx4);
+        mat4.rotateZ(texmtx4, texmtx4, Math.PI / 4);
         texMtx[4] = (dst: mat4) => { mat4.copy(dst, texmtx4); };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
@@ -692,8 +688,8 @@ export class MaterialFactory {
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: GXSetTevKColor
-        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_7_8); // TODO: these values depend on the environment
-        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_1_8); // TODO
+        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8); // TODO: these values depend on the environment
+        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_4_8); // TODO
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
