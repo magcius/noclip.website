@@ -247,6 +247,7 @@ class WorldRenderer extends SFARenderer {
         
         // TODO: depth sorting (for translucents, far-to-near is required)
         this.copyToSceneTexture(device);
+        this.mapInstance.prepareToRenderFancyWaters(device, renderInstManager, viewerInput, this.sceneTexture);
         for (let i = 1; i < this.mapInstance.getNumDrawSteps(); i++) {
             this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, i);
             this.copyToSceneTexture(device);
@@ -466,7 +467,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
         console.log(`Loading a model (really old version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x24 / 4, ModelVersion.Beta));
+        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectInstances, testModels);
         return renderer;

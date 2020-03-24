@@ -24,6 +24,7 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getNumDrawSteps(): number;
     public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
+    public abstract prepareToRenderFancyWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
     public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
 }
 
@@ -397,6 +398,9 @@ export class AncientBlockRenderer implements BlockRenderer {
         }
     }
     
+    public prepareToRenderFancyWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    }
+
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
     }
 }
