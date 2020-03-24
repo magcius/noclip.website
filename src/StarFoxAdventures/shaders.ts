@@ -7,7 +7,7 @@ import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
-import { dataSubarray } from './util';
+import { dataSubarray, setMat4Row, mat4FromRowMajor } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
@@ -184,9 +184,10 @@ export interface SFAMaterial {
 type TexMtx = ((dst: mat4, viewerInput: ViewerRenderInput, modelMtx: mat4) => void) | undefined;
 
 export class MaterialFactory {
-    private rampTexture: SFATexture | null = null;
-    private causticTexture: SFATexture | null = null;
-    private wavyTexture: SFATexture | null = null;
+    private rampTexture: SFAMaterialTexture = null;
+    private causticTexture: SFAMaterialTexture = null;
+    private wavyTexture: SFAMaterialTexture = null;
+    private halfGrayTexture: SFAMaterialTexture = null;
     private furFactory: FurFactory | null = null;
 
     constructor(private device: GfxDevice) {
@@ -349,9 +350,7 @@ export class MaterialFactory {
             postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX2);
     
-            // FIXME: Don't generate a new wavy texture every time.
-            // Find a place to stash one and reuse it.
-            textures[1] = makeMaterialTexture(self.makeWavyTexture());
+            textures[1] = self.getWavyTexture();
     
             const pttexmtx0 = mat4.create();
             mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
@@ -426,10 +425,7 @@ export class MaterialFactory {
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx0, invView);
                 // TODO: rotate
-                dst[0*4 + 2] = 0.0;
-                dst[1*4 + 2] = 0.0;
-                dst[2*4 + 2] = 0.0;
-                dst[3*4 + 2] = 1.0;
+                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId);
             
@@ -444,30 +440,27 @@ export class MaterialFactory {
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx1, invView);
                 // TODO: rotate
-                dst[0*4 + 2] = 0.0;
-                dst[1*4 + 2] = 0.0;
-                dst[2*4 + 2] = 0.0;
-                dst[3*4 + 2] = 1.0;
+                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3);
             
-            textures[texmapId] = makeMaterialTexture(self.makeCausticTexture());
+            textures[texmapId] = self.getCausticTexture();
 
-            indTexMtx[1] = mat4.fromValues(
+            indTexMtx[1] = mat4FromRowMajor(
                 0.5, 0.0, 0.0, 0.0,
                 0.0, 0.5, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0
+                0.0, 0.0, 0.0, 1.0
             );
             mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
             mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
 
             const anim0 = 0; // TODO: animate
-            const pttexmtx2 = mat4.fromValues(
-                0.01,                       0.0,  0.0,               0.0,
-                0.0,                        0.01, 0.0,               0.0,
-                0.0,                        0.0,  0.01,              0.0,
-                0.01 * mapOriginX + anim0,  0.0,  0.01 * mapOriginZ, 1.0
+            const pttexmtx2 = mat4FromRowMajor(
+                0.01, 0.0,  0.0,  0.01 * mapOriginX + anim0,
+                0.0,  0.01, 0.0,  0.0,
+                0.0,  0.0,  0.01, 0.01 * mapOriginZ,
+                0.0,  0.0,  0.0,  1.0
             )
             postTexMtx[postTexMtxNum + 2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
             mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*2);
@@ -478,21 +471,18 @@ export class MaterialFactory {
             mb.setIndTexScale(indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
 
             const anim1 = 0; // TODO: animate
-            const pttexmtx3 = mat4.fromValues(
-                0.01,               0.0,  0.0,                       0.0,
-                0.0,                0.01, 0.0,                       0.0,
-                0.0,                0.0,  0.01,                      0.0,
-                0.01 * mapOriginX,  0.0,  0.01 * mapOriginZ + anim1, 1.0
+            const pttexmtx3 = mat4FromRowMajor(
+                0.01, 0.0,  0.0,  0.01 * mapOriginX,
+                0.0,  0.01, 0.0,  0.0,
+                0.0,  0.0,  0.01, 0.01 * mapOriginZ + anim1,
+                0.0,  0.0,  0.0,  1.0
             )
             postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
                 const invView = mat4.create();
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx3, invView);
                 // TODO: rotate
-                dst[0*4 + 2] = 0.0;
-                dst[1*4 + 2] = 0.0;
-                dst[2*4 + 2] = 0.0;
-                dst[3*4 + 2] = 1.0;
+                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*3);
 
@@ -512,7 +502,7 @@ export class MaterialFactory {
             mb.setTevSwapMode(tevStage + 1, undefined, undefined);
             mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
             mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            textures[texmapId + 1] = makeMaterialTexture(self.makeWavyTexture());
+            textures[texmapId + 1] = self.getWavyTexture();
     
             indStageId += 2;
             texcoordId += 4;
@@ -669,36 +659,41 @@ export class MaterialFactory {
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
-        textures[1] = makeMaterialTexture(this.makeWavyTexture());
+        textures[1] = this.getHalfGrayTexture(); // this.getWavyTexture();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX3); // TODO
 
-        indTexMtx[0] = mat4.create();
-        mat4.fromScaling(indTexMtx[0], [0.5, 0.5, 1.0]);
+        indTexMtx[1] = mat4FromRowMajor(
+            0.5, 0.0, 0.0, 0.0,
+            0.0, 0.5, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        )
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
         mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
         mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
 
         const texmtx4 = mat4.create();
         mat4.fromScaling(texmtx4, [0.83, 0.83, 0.83]);
+
         const rot45deg = mat4.create();
         mat4.fromXRotation(rot45deg, Math.PI / 4); // TODO: which axis?
+
         mat4.mul(texmtx4, rot45deg, texmtx4);
         texMtx[4] = (dst: mat4) => { mat4.copy(dst, texmtx4); };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
-        indTexMtx[1] = mat4.create();
-        mat4.set(indTexMtx[1],
-            0.3, -0.3, 0.0, 0.0,
-            0.3, 0.3, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
-        );
+        indTexMtx[1] = mat4FromRowMajor(
+            0.3,  0.3, 0.0, 0.0,
+            -0.3, 0.3, 0.0, 0.0,
+            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 1.0
+        )
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: GXSetTevKColor
-        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_1_8); // TODO
-        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_7_8); // TODO
+        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_7_8); // TODO: these values depend on the environment
+        mb.setTevKAlphaSel(1, GX.KonstAlphaSel.KASEL_1_8); // TODO
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -712,12 +707,11 @@ export class MaterialFactory {
         mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.DIVIDE_2, true, GX.Register.REG0); // TODO: CS_SCALE_1 is used in some cases
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
 
-        indTexMtx[2] = mat4.create();
-        mat4.set(indTexMtx[2],
-            0.0, -0.5, 0.0, 0.0,
-            0.5, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
+        indTexMtx[2] = mat4FromRowMajor(
+            0.0,  0.5, 0.0, 0.0,
+            -0.5, 0.0, 0.0, 0.0,
+            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 1.0
         );
         mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         mb.setTevIndirect(3, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._2, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
@@ -787,7 +781,7 @@ export class MaterialFactory {
     
         // Ind Stage 0: Waviness
         // TODO: animate waviness to make grass sway back and forth
-        textures[2] = makeMaterialTexture(this.makeWavyTexture());
+        textures[2] = this.getWavyTexture();
         const texmtx1 = mat4.fromValues(
             0.0125/32, 0.0, 0.0, 0.0, // FIXME: divide by 32 doesn't belong here but it makes grass look neater...
             0.0, 0.0125/32, 0.0, 0.0,
@@ -818,7 +812,7 @@ export class MaterialFactory {
         mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         
         // Stage 2: Distance fade
-        textures[3] = makeMaterialTexture(this.getRampTexture());
+        textures[3] = this.getRampTexture();
         texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
             mat4.set(dst,
                 0.0, 0.0, 0.0, 0.0,
@@ -876,8 +870,47 @@ export class MaterialFactory {
         this.furFactory = new FurFactory(this.device);
         return this.furFactory;
     }
+
+    private getHalfGrayTexture(): SFAMaterialTexture {
+        // Used to test indirect texturing
+        if (this.halfGrayTexture !== null) {
+            return this.halfGrayTexture;
+        }
+
+        const width = 1;
+        const height = 1;
+        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
+        const gfxSampler = this.device.createSampler({
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        const pixels = new Uint8Array(4 * width * height);
+
+        function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
+            const idx = 4 * (y * width + x)
+            pixels[idx] = r
+            pixels[idx + 1] = g
+            pixels[idx + 2] = b
+            pixels[idx + 3] = a
+        }
+
+        plot(0, 0, 127, 127, 127, 127);
+
+        const hostAccessPass = this.device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+        this.device.submitPass(hostAccessPass);
+
+        this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
+        return this.rampTexture;
+    }
     
-    private getRampTexture(): SFATexture {
+    private getRampTexture(): SFAMaterialTexture {
         if (this.rampTexture !== null) {
             return this.rampTexture;
         }
@@ -916,11 +949,11 @@ export class MaterialFactory {
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
         this.device.submitPass(hostAccessPass);
 
-        this.rampTexture = { gfxTexture, gfxSampler, width, height };
+        this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.rampTexture;
     }
     
-    private makeCausticTexture(): SFATexture {
+    private getCausticTexture(): SFAMaterialTexture {
         // This function generates a texture with a circular pattern used for caustics.
         // The original function to generate this texture is not customizable and
         // generates the same texture every time it is called. (?)
@@ -980,11 +1013,11 @@ export class MaterialFactory {
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
         this.device.submitPass(hostAccessPass);
 
-        this.causticTexture = { gfxTexture, gfxSampler, width, height };
+        this.causticTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.causticTexture;
     }
     
-    private makeWavyTexture(): SFATexture {
+    private getWavyTexture(): SFAMaterialTexture {
         // This function generates a texture with a wavy pattern used for water, lava and other materials.
         // The original function used to generate this texture is not customizable and
         // always generates the same texture every time it is called. (?)
@@ -1034,7 +1067,7 @@ export class MaterialFactory {
         hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
         this.device.submitPass(hostAccessPass);
 
-        this.wavyTexture = { gfxTexture, gfxSampler, width, height };
+        this.wavyTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.wavyTexture;
     }
 }
