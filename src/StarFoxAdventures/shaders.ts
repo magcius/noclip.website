@@ -635,7 +635,7 @@ export class MaterialFactory {
     }
     
     public buildWaterMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
-        const mb = new GXMaterialBuilder('FurMaterial');
+        const mb = new GXMaterialBuilder('WaterMaterial');
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
@@ -659,7 +659,7 @@ export class MaterialFactory {
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
-        textures[1] = this.getHalfGrayTexture(); // this.getWavyTexture();
+        textures[1] = this.getWavyTexture();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX3); // TODO
 
         indTexMtx[1] = mat4FromRowMajor(
