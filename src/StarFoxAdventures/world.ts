@@ -127,14 +127,8 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        // Prolog
-        const skyTemplate = this.renderHelper.pushTemplateRenderInst();
-        const oldProjection = mat4.create();
-        mat4.copy(oldProjection, viewerInput.camera.projectionMatrix);
-        mat4.identity(viewerInput.camera.projectionMatrix);
-        fillSceneParamsDataOnTemplate(skyTemplate, viewerInput, false);
+        this.beginPass(viewerInput, true);
 
-        // Body
         const atmos = this.envfxMan.atmosphere;
         const atmosTexture = atmos.textures[0]!;
 
@@ -171,25 +165,11 @@ class WorldRenderer extends SFARenderer {
 
         this.ddraw.endAndUpload(device, renderInstManager);
         
-        // Epilog
-        renderInstManager.popTemplateRenderInst();
-
-        mat4.copy(viewerInput.camera.projectionMatrix, oldProjection);
-
-        let hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        
-        renderInstManager.drawOnPassRenderer(device, this.renderPass);
-        renderInstManager.resetRenderInsts();
-        device.submitPass(this.renderPass);
+        this.endPass(device);
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
-        let modeltemplate = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(modeltemplate, viewerInput, false);
         model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
-        renderInstManager.popTemplateRenderInst();
 
         // Draw bones
         const drawBones = false;
@@ -215,13 +195,10 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        // Prolog
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        // Render opaques
 
-        // Body
-
-        // Draw all opaques
+        this.beginPass(viewerInput);
+        
         // TODO: depth sorting (for opaques, near-to-far is ideal)
         this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
 
@@ -245,26 +222,18 @@ class WorldRenderer extends SFARenderer {
             }
         }
         
+        this.endPass(device);
+
+        // Render waters and translucents
+
         // TODO: depth sorting (for translucents, far-to-near is required)
-        this.copyToSceneTexture(device);
+        this.beginPass(viewerInput);
         this.mapInstance.prepareToRenderFancyWaters(device, renderInstManager, viewerInput, this.sceneTexture);
         for (let i = 1; i < this.mapInstance.getNumDrawSteps(); i++) {
             this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, i);
-            this.copyToSceneTexture(device);
         }
-
         this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
-        
-        // Epilog
-        renderInstManager.popTemplateRenderInst();
-
-        let hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        
-        renderInstManager.drawOnPassRenderer(device, this.renderPass);
-        renderInstManager.resetRenderInsts();
-        device.submitPass(this.renderPass);
+        this.endPass(device);
     }
 }
 
@@ -464,10 +433,10 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
         // console.log(`Loading General Scales (beta version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
+        // console.log(`Loading Beta Fox....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
         // console.log(`Loading a model (really old version)....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta));
-        console.log(`Loading a model (really old version)....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
 
         const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectInstances, testModels);
         return renderer;
