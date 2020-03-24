@@ -1265,7 +1265,6 @@ ${this.generateIndTexStages()}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
-    vec4 t_TexSample;
 ${this.generateTevStages()}
 
 ${this.generateTevStagesLastMinuteFixup()}
