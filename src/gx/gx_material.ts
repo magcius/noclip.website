@@ -764,7 +764,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
-        return this.generateTextureSample(stage.texMap, `t_TexCoord`);
+        return this.generateTextureSample(stage.texMap, `t_TexCoord * TextureInvScale(${stage.texMap})`);
     }
 
     private generateComponentSwizzle(swapTable: SwapTable | undefined, channel: GX.TevColorChan): string {
@@ -919,6 +919,9 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordWrap(stage: TevStage): string {
+        if (stage.texCoordId === GX.TexCoordID.TEXCOORD_NULL || stage.texMap === GX.TexMapID.TEXMAP_NULL)
+            return ``;
+
         const lastTexGenId = this.material.texGens.length - 1;
         let texGenId = stage.texCoordId;
 
@@ -927,7 +930,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (texGenId < 0)
             return `vec2(0.0, 0.0)`;
 
-        const baseCoord = `ReadTexCoord${texGenId}()`;
+        const baseCoord = `ReadTexCoord${texGenId}() * TextureScale(${stage.texMap})`;
         if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
             return baseCoord;
         else
@@ -973,26 +976,35 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        return `(${this.generateTevTexCoordIndirectMtx(stage)} * TextureInvScale(${stage.texMap}))`;
+        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length) {
+            return `${this.generateTevTexCoordIndirectMtx(stage)}`;
+        } else {
+            return ``;
+    }
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
         const baseCoord = this.generateTevTexCoordWrap(stage);
-        if (stage.indTexMatrix !== GX.IndTexMtxID.OFF && stage.indTexStage < this.material.indTexStages.length)
-            return `${baseCoord} + ${this.generateTevTexCoordIndirectTranslation(stage)}`;
-        else
+        const indCoord = this.generateTevTexCoordIndirectTranslation(stage);
+
+        if (baseCoord !== `` && indCoord !== ``)
+            return `${baseCoord} + ${indCoord}`;
+        else if (baseCoord !== ``)
             return baseCoord;
+        else
+            return indCoord;
     }
 
     private generateTevTexCoord(stage: TevStage): string {
-        if (stage.texCoordId === GX.TexCoordID.TEXCOORD_NULL)
-            return '';
-
         const finalCoord = this.generateTevTexCoordIndirect(stage);
-        if (stage.indTexAddPrev) {
-            return `t_TexCoord += ${finalCoord};`;
+        if (finalCoord !== ``) {
+            if (stage.indTexAddPrev) {
+                return `t_TexCoord += ${finalCoord};`;
+            } else {
+                return `t_TexCoord = ${finalCoord};`;
+            }
         } else {
-            return `t_TexCoord = ${finalCoord};`;
+            return ``;
         }
     }
 
@@ -1253,6 +1265,7 @@ ${this.generateIndTexStages()}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
+    vec4 t_TexSample;
 ${this.generateTevStages()}
 
 ${this.generateTevStagesLastMinuteFixup()}
