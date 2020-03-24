@@ -339,10 +339,24 @@ export class MaterialFactory {
             tevStage++;
         }
     
-        function addTevStagesForLava() { // and other similar effects?
-            // Occurs for lava
+        function addTevStagesForLava() {
+            indTexMtx[0] = mat4FromRowMajor(
+                0.5, 0.0, 0.0, 0.0,
+                0.0, 0.5, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+
+            indTexMtx[1] = mat4FromRowMajor(
+                0.5, 0.0, 0.0, 0.0,
+                0.0, 0.5, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+
             textures[2] = makeMaterialTexture(texColl.getTexture(self.device, shader.layers[0].texId!, alwaysUseTex1));
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
             const texture0x600 = texColl.getTexture(self.device, 0x600, false);
             textures[0] = makeMaterialTexture(texture0x600);
     
@@ -360,13 +374,13 @@ export class MaterialFactory {
             
             mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
             mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-            // TODO: set ind tex matrices
+
             mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
     
             const pttexmtx1 = mat4.create();
             mat4.fromScaling(pttexmtx1, [1.2, 1.2, 1.0]);
             const rot45deg = mat4.create();
-            mat4.fromXRotation(rot45deg, Math.PI / 4); // FIXME: which axis?
+            mat4.fromZRotation(rot45deg, Math.PI / 4);
             mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
             postTexMtx[1] = (dst: mat4) => { mat4.copy(dst, pttexmtx1); };
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
