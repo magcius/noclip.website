@@ -118,7 +118,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, actor, 'MapPartsRotator');
 
-        this.rotateAngle = fallback(infoIter.getValueNumberNoInit('RotateAngle'), 0.0));
+        this.rotateAngle = fallback(infoIter.getValueNumberNoInit('RotateAngle'), 0.0);
         this.rotateAxis = fallback(infoIter.getValueNumberNoInit('RotateAxis'), AxisType.X);
         this.rotateAccelType = fallback(infoIter.getValueNumberNoInit('RotateAccelType'), AccelType.NORMAL);
         this.rotateStopTime = fallback(infoIter.getValueNumberNoInit('RotateStopTime'), 0);
