@@ -218,7 +218,7 @@ export class Model implements BlockRenderer {
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
             fields = {
-                isAncient: true,
+                isBeta: true,
                 isMapBlock: false, // TODO: support map blocks
                 alwaysUseTex1: true,
                 shaderFields: BETA_MODEL_SHADER_FIELDS,
@@ -242,6 +242,7 @@ export class Model implements BlockRenderer {
                 jointCount: 0xab,
                 // weightCount: 0xad,
                 shaderCount: 0xae,
+                texMtxCount: 0xaf,
                 dlOffsets: 0x88,
                 dlSizes: 0x8c,
                 dlInfoCount: 0xac,
@@ -497,15 +498,12 @@ export class Model implements BlockRenderer {
             offs += shaderFields.size;
         }
 
-        const vcd: GX_VtxDesc[] = [];
         const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
         for (let i = 0; i <= GX.Attr.MAX; i++) {
-            vcd[i] = { type: GX.AttrType.NONE };
             for (let j = 0; j < 8; j++) {
                 vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
             }
         }
-        vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
 
         vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
@@ -593,8 +591,8 @@ export class Model implements BlockRenderer {
 
         let texMtxCount = 0;
         if (fields.hasBones) {
-            if (fields.isAncient) {
-                texMtxCount = 1; // ??? breaks some models... where is this field?
+            if (fields.isBeta) {
+                texMtxCount = blockDv.getUint8(fields.texMtxCount);
             } else {
                 texMtxCount = blockDv.getUint8(0xfa);
             }
@@ -622,6 +620,78 @@ export class Model implements BlockRenderer {
 
         const self = this;
 
+        function readVertexDesc(bits: LowBitReader, shader: Shader): GX_VtxDesc[] {
+            // console.log(`Setting descriptor`);
+            const vcd: GX_VtxDesc[] = [];
+            for (let i = 0; i <= GX.Attr.MAX; i++) {
+                vcd[i] = { type: GX.AttrType.NONE };
+            }
+            vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
+
+            if (fields.hasBones && jointCount >= 2) {
+                vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
+
+                let texmtxNum = 0;
+
+                if (shader.hasAuxTex0 || shader.hasAuxTex1) {
+                    if (shader.hasAuxTex2) {
+                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                        texmtxNum++;
+                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                        texmtxNum++;
+                    }
+
+                    vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                    texmtxNum++;
+                }
+
+                texmtxNum = 7;
+                for (let i = 0; i < texMtxCount; i++) {
+                    vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
+                    texmtxNum--;
+                }
+            }
+
+            const posDesc = bits.get(1);
+            vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+
+            if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
+                const nrmDesc = bits.get(1);
+                if (nrmTypeFlags & 8) {
+                    // TODO: Enable NBT normals
+                    // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+                    // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                } else {
+                    // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
+                    vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                }
+            } else {
+                vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
+            }
+
+            if (shader.attrFlags & ShaderAttrFlags.CLR) {
+                const clr0Desc = bits.get(1);
+                vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+            } else {
+                vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
+            }
+
+            const texCoordDesc = bits.get(1);
+            if (shader.layers.length > 0) {
+                // Note: texCoordDesc applies to all texture coordinates in the vertex
+                for (let t = 0; t < 8; t++) {
+                    if (t < shader.layers.length) {
+                        vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+                    } else {
+                        vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
+                    }
+                }
+            }
+
+            return vcd;
+        }
+
         function runFurBitstream(bitsOffset: number, bitAddress: number) {
             // console.log(`running fur bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
@@ -634,73 +704,7 @@ export class Model implements BlockRenderer {
             const material = self.materialFactory.buildFurMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
 
             bits.drop(4);
-            { // Set descriptor
-                // console.log(`Setting descriptor`);
-                vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
-                for (let i = 0; i < 8; i++) {
-                    vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
-                }
-
-                if (fields.hasBones && jointCount >= 2) {
-                    vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
-
-                    let texmtxNum = 0;
-                    if (shader.hasAuxTex0 || shader.hasAuxTex1) {
-                        if (shader.auxTexNum !== 0xffffffff) {
-                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                            texmtxNum++;
-                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                            texmtxNum++;
-                        }
-                        
-                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                        texmtxNum++;
-                    }
-
-                    texmtxNum = 7;
-                    for (let i = 0; i < texMtxCount; i++) {
-                        vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                        texmtxNum--;
-                    }
-                }
-
-                const posDesc = bits.get(1);
-                vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-
-                if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
-                    const nrmDesc = bits.get(1);
-                    if (nrmTypeFlags & 8) {
-                        // TODO: Enable NBT normals
-                        // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                        // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                        vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                    } else {
-                        // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
-                        vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                    }
-                } else {
-                    vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                }
-
-                if (shader.attrFlags & ShaderAttrFlags.CLR) {
-                    const clr0Desc = bits.get(1);
-                    vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                } else {
-                    vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-                }
-
-                const texCoordDesc = bits.get(1);
-                if (shader.layers.length > 0) {
-                    // Note: texCoordDesc applies to all texture coordinates in the vertex
-                    for (let t = 0; t < 8; t++) {
-                        if (t < shader.layers.length) {
-                            vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                        } else {
-                            vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
-                        }
-                    }
-                }
-            }
+            const vcd = readVertexDesc(bits, shader);
 
             bits.drop(4);
             const num = bits.get(4);
@@ -740,6 +744,7 @@ export class Model implements BlockRenderer {
             }
 
             const bits = new LowBitReader(blockDv, bitsOffset);
+            let vcd: GX_VtxDesc[] = [];
             let done = false;
             let curShader = shaders[0];
             while (!done) {
@@ -784,71 +789,7 @@ export class Model implements BlockRenderer {
                     break;
                 }
                 case 3: { // Set descriptor
-                    // console.log(`Setting descriptor`);
-                    vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.NONE;
-                    for (let i = 0; i < 8; i++) {
-                        vcd[GX.Attr.TEX0MTXIDX + i].type = GX.AttrType.NONE;
-                    }
-    
-                    if (fields.hasBones && jointCount >= 2) {
-                        vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
-
-                        let texmtxNum = 0;
-                        if (curShader.hasAuxTex0 || curShader.hasAuxTex1) {
-                            if (curShader.auxTexNum !== 0xffffffff) {
-                                vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                                texmtxNum++;
-                                vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                                texmtxNum++;
-                            }
-                            
-                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                            texmtxNum++;
-                        }
-
-                        texmtxNum = 7;
-                        for (let i = 0; i < texMtxCount; i++) {
-                            vcd[GX.Attr.TEX0MTXIDX + texmtxNum].type = GX.AttrType.DIRECT;
-                            texmtxNum--;
-                        }
-                    }
-    
-                    const posDesc = bits.get(1);
-                    vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-    
-                    if (fields.hasNormals && (curShader.attrFlags & ShaderAttrFlags.NRM)) {
-                        const nrmDesc = bits.get(1);
-                        if (nrmTypeFlags & 8) {
-                            // TODO: Enable NBT normals
-                            // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                            // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                        } else {
-                            // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
-                            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                        }
-                    } else {
-                        vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                    }
-    
-                    if (curShader.attrFlags & ShaderAttrFlags.CLR) {
-                        const clr0Desc = bits.get(1);
-                        vcd[GX.Attr.CLR0].type = clr0Desc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                    } else {
-                        vcd[GX.Attr.CLR0].type = GX.AttrType.NONE;
-                    }
-    
-                    const texCoordDesc = bits.get(1);
-                    if (curShader.layers.length > 0) {
-                        // Note: texCoordDesc applies to all texture coordinates in the vertex
-                        for (let t = 0; t < 8; t++) {
-                            if (t < curShader.layers.length) {
-                                vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                            } else {
-                                vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
-                            }
-                        }
-                    }
+                    vcd = readVertexDesc(bits, curShader);
                     break;
                 }
                 case 4: // Set weights (skipped by SFA block renderer)
@@ -890,6 +831,10 @@ export class Model implements BlockRenderer {
         this.bindMatrices = [];
         this.invBindMatrices = [];
 
+        // XXX: Beta Fox (swapcircle model 0) seems to have different joint rules than other models.
+        // TODO: Find a way to auto-detect this or fix whatever is broken.
+        const isBetaFox = false;
+
         // Compute joint bones
         // console.log(`computing ${this.joints.length} rigid joint bones`);
         for (let i = 0; i < this.joints.length; i++) {
@@ -906,7 +851,7 @@ export class Model implements BlockRenderer {
             }
 
             const bindTranslation = vec3.clone(joint.worldTranslation);
-            if (this.modelVersion === ModelVersion.Beta) {
+            if (isBetaFox) {
                 vec3.sub(bindTranslation, bindTranslation, parentWorldTrans);
             }
 
@@ -921,7 +866,7 @@ export class Model implements BlockRenderer {
             const mtx = mat4.create();
             mat4.fromTranslation(mtx, joint.translation);
             mat4.mul(mtx, mtx, parentMtx);
-            if (this.modelVersion === ModelVersion.Beta) {
+            if (isBetaFox) {
                 mat4.mul(mtx, mtx, invBind);
             }
             this.boneMatrices.push(mtx);

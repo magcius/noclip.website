@@ -26,7 +26,8 @@ export interface Shader {
     hasAuxTex0: boolean;
     hasAuxTex1: boolean; // It is not known what these are for, but they are important for the vertex descriptor.
                          // It is possibly related to projected lighting.
-    auxTexNum: number;
+    hasAuxTex2: boolean;
+    auxTex2Num: number;
     furRegionsTexId: number | null; // Only used in character models, not blocks (??)
 }
 
@@ -73,7 +74,7 @@ export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
     isBeta: true,
     size: 0x38,
     numLayers: 0x36,
-    layers: 0x20, // ???
+    layers: 0x20,
 };
 
 export enum ShaderFlags {
@@ -105,7 +106,8 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         attrFlags: 0,
         hasAuxTex0: false,
         hasAuxTex1: false,
-        auxTexNum: -1,
+        hasAuxTex2: false,
+        auxTex2Num: 0xffffffff,
         furRegionsTexId: null,
     };
 
@@ -124,14 +126,16 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.attrFlags = data.getUint8(0x40);
         shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
         shader.hasAuxTex1 = data.getUint32(0x14) !== 0;
-        shader.auxTexNum = data.getUint32(0x34);
+        shader.auxTex2Num = data.getUint32(0x34);
+        shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
     } else {
         shader.attrFlags = data.getUint8(0x34);
         shader.flags = 0; // TODO: where is this field?
-        shader.hasAuxTex0 = false;
-        shader.hasAuxTex1 = false;
-        shader.auxTexNum = -1;
+        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
+        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
+        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
+        console.log(`beta shader @0x34: 0x${data.getUint32(0x34).toString(16)}`);
     }
 
     // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
