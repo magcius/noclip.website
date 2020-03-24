@@ -118,7 +118,7 @@ export class dStage_Multi_c {
         this.transZ = view.getFloat32(0x04);
         this.rotY = view.getUint16(0x08);
         this.roomNo = view.getUint8(0x0A);
-        this.waveMax = view.getUint8(0x0B);
+        this.waveMax = view.getInt8(0x0B);
         return 0x0C;
     }
 }
