@@ -228,7 +228,7 @@ class WorldRenderer extends SFARenderer {
 
         // TODO: depth sorting (for translucents, far-to-near is required)
         this.beginPass(viewerInput);
-        this.mapInstance.prepareToRenderFancyWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
         for (let i = 1; i < this.mapInstance.getNumDrawSteps(); i++) {
             this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, i);
         }

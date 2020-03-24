@@ -117,13 +117,13 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRenderFancyWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
         for (let i = 0; i < this.models.length; i++) {
             const matrix = mat4.create();
             mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRenderFancyWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            this.models[i].prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -329,7 +329,7 @@ class MapSceneRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         this.beginPass(viewerInput);
         this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
-        this.map.prepareToRenderFancyWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.map.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
         this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
         this.endPass(device);
 

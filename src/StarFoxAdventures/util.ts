@@ -5,10 +5,8 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
 }
 
 export function interpS16(n: number): number {
-    const u16 = new Uint16Array(1);
-    const s16 = new Int16Array(u16.buffer);
-    u16[0] = n & 0xffff;
-    return s16[0];
+    // Bitwise operators convert numbers to 32-bit signed integers.
+    return ((n & 0xffff) << 16) >> 16;
 }
 
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
@@ -51,17 +49,10 @@ export class LowBitReader {
     }
 
     public seekBit(bitAddr: number) {
-        // TODO: make this more efficient
-        this.offs = this.baseOffs;
+        this.offs = this.baseOffs + (bitAddr >>> 3);
         this.num = 0;
         this.buf = 0;
-        
-        let i = bitAddr;
-        while (i >= 8) {
-            this.drop(8);
-            i -= 8;
-        }
-        this.drop(i);
+        this.drop(bitAddr & 0x7);
     }
 }
 

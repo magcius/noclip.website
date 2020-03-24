@@ -199,9 +199,11 @@ interface Fur {
     numLayers: number;
 }
 
-interface FancyWater {
+interface Water {
     model: ModelInstance;
 }
+
+type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
 export class Model implements BlockRenderer {
     // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
@@ -214,7 +216,7 @@ export class Model implements BlockRenderer {
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
     public furs: Fur[] = [];
-    public fancyWaters: FancyWater[] = [];
+    public waters: Water[] = [];
 
     constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
@@ -697,8 +699,8 @@ export class Model implements BlockRenderer {
             return vcd;
         }
 
-        function runFurBitstream(bitsOffset: number, bitAddress: number) {
-            // console.log(`running fur bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
+        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc): ModelInstance {
+            // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
             bits.seekBit(bitAddress);
@@ -706,7 +708,7 @@ export class Model implements BlockRenderer {
             bits.drop(4);
             const shaderNum = bits.get(6);
             const shader = shaders[shaderNum];
-            const material = self.materialFactory.buildFurMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+            const material = buildSpecialMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
 
             bits.drop(4);
             const vcd = readVertexDesc(bits, shader);
@@ -720,56 +722,14 @@ export class Model implements BlockRenderer {
             bits.drop(4);
             const listNum = bits.get(8);
             const dlInfo = dlInfos[listNum];
-            // console.log(`Calling DL for fur #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
+            // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
             newModel.setMaterial(material);
             newModel.setPnMatrices(pnMatrices);
 
-            let numFurLayers;
-            if (shader.flags & ShaderFlags.ShortFur) {
-                numFurLayers = 4;
-            } else if (shader.flags & ShaderFlags.MediumFur) {
-                numFurLayers = 8;
-            } else { // curShader.flags & ShaderFlags.LongFur
-                numFurLayers = 16;
-            }
-
-            self.furs.push({ model: newModel, numLayers: numFurLayers });
-        }
-        
-        function runWaterBitstream(bitsOffset: number, bitAddress: number) {
-            // console.log(`running water bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
-
-            const bits = new LowBitReader(blockDv, bitsOffset);
-            bits.seekBit(bitAddress);
-
-            bits.drop(4);
-            const shaderNum = bits.get(6);
-            const shader = shaders[shaderNum];
-            const material = self.materialFactory.buildFancyWaterMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-
-            bits.drop(4);
-            const vcd = readVertexDesc(bits, shader);
-
-            bits.drop(4);
-            const num = bits.get(4);
-            for (let i = 0; i < num; i++) {
-                bits.drop(8);
-            }
-
-            bits.drop(4);
-            const listNum = bits.get(8);
-            const dlInfo = dlInfos[listNum];
-            // console.log(`Calling DL for water #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
-            const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
-
-            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-            newModel.setMaterial(material);
-            newModel.setPnMatrices(pnMatrices);
-
-            self.fancyWaters.push({ model: newModel });
+            return newModel;
         }
 
         function runBitstream(bitsOffset: number, drawStep: number) {
@@ -810,7 +770,8 @@ export class Model implements BlockRenderer {
                             // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
                             // TODO: Implement an option to view this geometry
                         } else if (curShader.flags & ShaderFlags.Water) {
-                            runWaterBitstream(bitsOffset, dlInfo.specialBitAddress);
+                            const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
+                            self.waters.push({ model: newModel });
                         } else {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
                             const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
@@ -819,7 +780,18 @@ export class Model implements BlockRenderer {
                             models.push(newModel);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                runFurBitstream(bitsOffset, dlInfo.specialBitAddress);
+                                const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory));
+
+                                let numFurLayers;
+                                if (curShader.flags & ShaderFlags.ShortFur) {
+                                    numFurLayers = 4;
+                                } else if (curShader.flags & ShaderFlags.MediumFur) {
+                                    numFurLayers = 8;
+                                } else { // curShader.flags & ShaderFlags.LongFur
+                                    numFurLayers = 16;
+                                }
+                    
+                                self.furs.push({ model: newModel, numLayers: numFurLayers });
                             }
                         }
                     } catch (e) {
@@ -953,9 +925,9 @@ export class Model implements BlockRenderer {
         }
     }
     
-    public prepareToRenderFancyWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
-        for (let i = 0; i < this.fancyWaters.length; i++) {
-            const water = this.fancyWaters[i];
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+        for (let i = 0; i < this.waters.length; i++) {
+            const water = this.waters[i];
 
             mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);

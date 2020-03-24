@@ -644,7 +644,7 @@ export class MaterialFactory {
         };
     }
     
-    public buildFancyWaterMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
+    public buildWaterMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('FurMaterial');
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
