@@ -481,7 +481,7 @@ export class MaterialFactory {
                 0.0,  0.0,  0.0,  1.0
             );
             const rot67deg = mat4.create();
-            mat4.fromXRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
+            mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
             const postRotate2 = mat4.create();
             mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
