@@ -195,12 +195,18 @@ export function transformVec3Mat4w0(dst: vec3, m: mat4, v: vec3): void {
 
 const scratchVec3 = vec3.create();
 
+function compareEpsilon(a: number, b: number) {
+    return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
+}
+
 /**
  * Returns whether matrix {@param m} has a uniform scale.
  */
 export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
-    mat4.getScaling(v, m);
-    return isNearZeroVec3(v, MathConstants.EPSILON);
+    const sx = Math.hypot(m[0], m[4], m[8]);
+    const sy = Math.hypot(m[1], m[5], m[9]);
+    const sz = Math.hypot(m[2], m[6], m[10]);
+    return compareEpsilon(sx, sy) && compareEpsilon(sx, sz);
 }
 
 export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
@@ -406,20 +412,18 @@ export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: 
 export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {
     // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
 
-    if (m[2] - 1.0 < -0.0001) {
-        if (m[2] + 1.0 > 0.0001) {
-            dst[0] = Math.atan2(m[6], m[10]);
-            dst[1] = -Math.asin(m[2]);
-            dst[2] = Math.atan2(m[1], m[0]);
-        } else {
-            dst[0] = Math.atan2(m[4], m[8]);
-            dst[1] = Math.PI / 2;
-            dst[2] = 0.0;
-        }
-    } else {
-        dst[0] = -Math.atan2(-m[4], -m[8]);
+    if (compareEpsilon(m[2], 1.0)) {
+        dst[0] = Math.atan2(-m[4], m[8]);
         dst[1] = -Math.PI / 2;
         dst[2] = 0.0;
+    } else if (compareEpsilon(m[2], -1.0)) {
+        dst[0] = Math.atan2(m[4], m[8]);
+        dst[1] = Math.PI / 2;
+        dst[2] = 0.0;
+    } else {
+        dst[0] = Math.atan2(m[6], m[10]);
+        dst[1] = -Math.asin(m[2]);
+        dst[2] = Math.atan2(m[1], m[0]);
     }
 }
 
