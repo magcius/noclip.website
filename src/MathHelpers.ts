@@ -413,7 +413,7 @@ export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void
     // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
 
     if (compareEpsilon(m[2], 1.0)) {
-        dst[0] = Math.atan2(-m[4], m[8]);
+        dst[0] = Math.atan2(-m[4], -m[8]);
         dst[1] = -Math.PI / 2;
         dst[2] = 0.0;
     } else if (compareEpsilon(m[2], -1.0)) {
