@@ -11,7 +11,6 @@ import { TexMtxProjection } from '../Common/JSYSTEM/J3D/J3DLoader';
 //import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 //import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-//import { SceneContext } from '../SceneBase';
 //import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 //import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 //import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -20,6 +19,7 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 //import { DataFetcher } from '../DataFetcher';
 //import { MathConstants } from '../MathHelpers';
 //import { CameraController } from '../Camera';
+import { ROMHandler } from './tools/extractor';
 
 const pathBase = `DonkeyKong64`;
 
@@ -43,7 +43,7 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx>{
-
+        let romHandler = new ROMHandler(context);
         const sceneRenderer = new DK64Renderer();
         return sceneRenderer;
     }
