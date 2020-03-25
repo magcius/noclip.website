@@ -329,6 +329,9 @@ class MapSceneRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         this.beginPass(viewerInput);
         this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        this.endPass(device);
+
+        this.beginPass(viewerInput);
         this.map.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
         this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
         this.endPass(device);

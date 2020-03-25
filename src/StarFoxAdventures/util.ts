@@ -10,7 +10,7 @@ export function interpS16(n: number): number {
     return ((n & 0xffff) << 16) >> 16;
 }
 
-export function setMat4Row(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
+export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
     // mat4's are Float32Arrays in column-major order
     mtx[row] = m0;
     mtx[4 + row] = m1;

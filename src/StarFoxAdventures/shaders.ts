@@ -7,7 +7,7 @@ import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
-import { dataSubarray, setMat4Row, mat4FromRowMajor } from './util';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
@@ -439,7 +439,7 @@ export class MaterialFactory {
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx0, invView);
                 // TODO: rotate
-                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
+                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId);
             
@@ -454,7 +454,7 @@ export class MaterialFactory {
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx1, invView);
                 // TODO: rotate
-                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
+                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3);
             
@@ -496,7 +496,7 @@ export class MaterialFactory {
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx3, invView);
                 // TODO: rotate
-                setMat4Row(dst, 2, 0.0, 0.0, 0.0, 1.0);
+                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*3);
 
