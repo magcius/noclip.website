@@ -406,7 +406,7 @@ export class MaterialFactory {
                 mat4SetValue(dst, 0, 3, v);
                 mat4SetValue(dst, 1, 3, v);
             };
-            
+
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
     
             mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -701,8 +701,10 @@ export class MaterialFactory {
         };
 
         const texmtx3 = mat4.create();
-        // TODO: Animate translation of texmtx3 to make water flow
-        texMtx[3] = (dst: mat4) => { mat4.copy(dst, texmtx3); }
+        texMtx[3] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, texmtx3);
+            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue0);
+        }
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
@@ -712,7 +714,7 @@ export class MaterialFactory {
         indTexMtx[1] = mat4FromRowMajor(
             0.5, 0.0, 0.0, 0.0,
             0.0, 0.5, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
@@ -721,14 +723,21 @@ export class MaterialFactory {
 
         const texmtx4 = mat4.create();
         mat4.fromScaling(texmtx4, [0.83, 0.83, 0.83]);
-        mat4.rotateZ(texmtx4, texmtx4, Math.PI / 4);
-        texMtx[4] = (dst: mat4) => { mat4.copy(dst, texmtx4); };
+        const rot45deg = mat4.create();
+        mat4.fromZRotation(rot45deg, Math.PI / 4);
+        mat4.mul(texmtx4, rot45deg, texmtx4);
+        texMtx[4] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, texmtx4);
+            mat4SetValue(dst, 0, 3, viewState.animController.envAnimValue1);
+            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue1);
+        };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
         indTexMtx[1] = mat4FromRowMajor(
             0.3,  0.3, 0.0, 0.0,
             -0.3, 0.3, 0.0, 0.0,
-            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -753,7 +762,7 @@ export class MaterialFactory {
         indTexMtx[2] = mat4FromRowMajor(
             0.0,  0.5, 0.0, 0.0,
             -0.5, 0.0, 0.0, 0.0,
-            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
         mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
