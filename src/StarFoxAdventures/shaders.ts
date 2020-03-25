@@ -849,7 +849,7 @@ export class MaterialFactory {
 
         const texmtx0 = mat4FromRowMajor(
             0.1, 0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.1, 0.0,
             0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
