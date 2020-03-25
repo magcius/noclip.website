@@ -262,8 +262,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const texColl = new SFATextureCollection(this.gameInfo, false);
         await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo, texColl, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, true);
+        const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
         const [_1, _2, _3, romlistFile] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),

@@ -8,7 +8,7 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
 }
 
 export function interpS16(n: number): number {
-    // Bitwise operators convert numbers to 32-bit signed integers.
+    // Bitwise operators automatically convert numbers to 32-bit signed integers.
     return ((n & 0xffff) << 16) >> 16;
 }
 
@@ -32,6 +32,10 @@ export function mat4FromRowMajor(
         m02, m12, m22, m32,
         m03, m13, m23, m33,
     )
+}
+
+export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
+    mtx[4 * col + row] = m;
 }
 
 // Reads bitfields. Bits are pulled from the least significant bits of each byte

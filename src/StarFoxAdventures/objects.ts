@@ -6,6 +6,7 @@ import { Model, ModelCollection } from './models';
 import { SFATextureCollection } from './textures';
 import { dataSubarray } from './util';
 import { MaterialFactory } from './shaders';
+import { SFAAnimationController } from './animation';
 
 export class SFAObject {
     public name: string;
@@ -54,12 +55,12 @@ export class ObjectManager {
     private objindexBin: DataView | null;
     private modelColl: ModelCollection;
 
-    constructor(private gameInfo: GameInfo, private texColl: SFATextureCollection, private useEarlyObjects: boolean) {
+    constructor(private gameInfo: GameInfo, private texColl: SFATextureCollection, private animController: SFAAnimationController, private useEarlyObjects: boolean) {
     }
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
         const pathBase = this.gameInfo.pathBase;
-        this.modelColl = new ModelCollection(this.texColl, this.gameInfo);
+        this.modelColl = new ModelCollection(this.texColl, this.animController, this.gameInfo);
         const [objectsTab, objectsBin, objindexBin, _] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),

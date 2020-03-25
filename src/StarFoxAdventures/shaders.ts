@@ -7,7 +7,7 @@ import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState } from './util';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
@@ -198,7 +198,7 @@ export class MaterialFactory {
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
         const postTexMtx: TexMtx[] = [];
-        const indTexMtx: (mat4 | undefined)[] = [];
+        const indTexMtx: TexMtx[] = [];
         let tevStage = 0;
         let indStageId = GX.IndTexStageID.STAGE0;
         let texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -340,25 +340,40 @@ export class MaterialFactory {
         }
     
         function addTevStagesForLava() {
-            indTexMtx[0] = mat4FromRowMajor(
-                0.5, 0.0, 0.0, 0.0,
-                0.0, 0.5, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0, 0.0, 1.0
-            );
+            const warpParam = 1.0; // TODO: is this animated?
 
-            indTexMtx[1] = mat4FromRowMajor(
-                0.5, 0.0, 0.0, 0.0,
-                0.0, 0.5, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0, 0.0, 1.0
-            );
+            indTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+                const animSin = Math.sin(3.142 * viewState.animController.envAnimValue1);
+                const scale = (0.125 * animSin + 0.75) * warpParam;
+                const cs = scale * Math.cos(3.142 * viewState.animController.envAnimValue0);
+                const sn = scale * Math.sin(3.142 * viewState.animController.envAnimValue0);
+                const itm0 = mat4FromRowMajor(
+                    cs,  sn,  0.0, 0.0,
+                    -sn, cs,  0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0
+                );
+                mat4.copy(dst, itm0);
+            };
+
+            indTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+                const animSin = Math.sin(3.142 * viewState.animController.envAnimValue0);
+                const scale = (0.125 * animSin + 0.75) * warpParam;
+                const cs = scale * Math.cos(3.142 * -viewState.animController.envAnimValue1);
+                const sn = scale * Math.sin(3.142 * -viewState.animController.envAnimValue1);
+                const itm1 = mat4FromRowMajor(
+                    cs,  sn,  0.0, 0.0,
+                    -sn, cs,  0.0, 0.0,
+                    0.0, 0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0
+                );
+                mat4.copy(dst, itm1);
+            };
 
             textures[2] = makeMaterialTexture(texColl.getTexture(self.device, shader.layers[0].texId!, alwaysUseTex1));
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
-            const texture0x600 = texColl.getTexture(self.device, 0x600, false);
-            textures[0] = makeMaterialTexture(texture0x600);
+            textures[0] = makeMaterialTexture(texColl.getTexture(self.device, 0x600, false));
     
             const pttexmtx2 = mat4.create();
             postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
@@ -368,8 +383,11 @@ export class MaterialFactory {
     
             const pttexmtx0 = mat4.create();
             mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
-            postTexMtx[0] = (dst: mat4) => { mat4.copy(dst, pttexmtx0); };
-            // TODO: animated param
+            postTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+                mat4.copy(dst, pttexmtx0);
+                mat4SetValue(dst, 1, 3, 0.125 * viewState.animController.envAnimValue1);
+            };
+
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX0);
             
             mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
@@ -382,7 +400,13 @@ export class MaterialFactory {
             const rot45deg = mat4.create();
             mat4.fromZRotation(rot45deg, Math.PI / 4);
             mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
-            postTexMtx[1] = (dst: mat4) => { mat4.copy(dst, pttexmtx1); };
+            postTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+                mat4.copy(dst, pttexmtx1);
+                const v = 0.0625 * viewState.animController.envAnimValue0;
+                mat4SetValue(dst, 0, 3, v);
+                mat4SetValue(dst, 1, 3, v);
+            };
+            
             mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
     
             mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -460,12 +484,14 @@ export class MaterialFactory {
             
             textures[texmapId] = self.getCausticTexture();
 
-            indTexMtx[1] = mat4FromRowMajor(
+            const itm1 = mat4FromRowMajor(
                 0.5, 0.0, 0.0, 0.0,
                 0.0, 0.5, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            indTexMtx[1] = (dst: mat4) => { mat4.copy(dst, itm1); };
+
             mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
             mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
 
@@ -642,7 +668,7 @@ export class MaterialFactory {
                 
                 for (let i = 0; i < 3; i++) {
                     if (indTexMtx[i] !== undefined) {
-                        mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
+                        indTexMtx[i]!(params.u_IndTexMtx[i], viewState);
                     }
                 }
     
