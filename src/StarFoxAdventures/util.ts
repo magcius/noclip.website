@@ -1,5 +1,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { ViewerRenderInput } from '../viewer';
 import { mat4 } from 'gl-matrix';
+import AnimationController from '../AnimationController';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
@@ -80,11 +82,18 @@ export class LowBitReader {
 }
 
 export function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
-    const aEl = document.createElement('a')
-    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}))
-    aEl.download = filename
+    const aEl = document.createElement('a');
+    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}));
+    aEl.download = filename;
     if (text !== undefined) {
-        aEl.append(text)
+        aEl.append(text);
     }
-    return aEl
+    return aEl;
+}
+
+export interface ViewState {
+    viewerInput: ViewerRenderInput;
+    animController: AnimationController;
+    modelViewMtx: mat4;
+    invModelViewMtx: mat4;
 }

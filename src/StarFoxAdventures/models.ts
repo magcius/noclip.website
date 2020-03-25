@@ -10,12 +10,13 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
+import AnimationController from '../AnimationController';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
-import { LowBitReader, dataSubarray } from './util';
+import { LowBitReader, dataSubarray, ViewState } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 
@@ -31,6 +32,8 @@ export class ModelInstance {
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
+    private scratchMtx = mat4.create();
+    private viewState: ViewState | undefined;
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -72,9 +75,6 @@ export class ModelInstance {
         computeViewMatrix(dst, camera);
         mat4.mul(dst, dst, modelMatrix);
     }
-
-    private scratchMtx = mat4.create();
-    private modelViewMtx = mat4.create();
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
         if (this.shapeHelper === null) {
@@ -130,9 +130,21 @@ export class ModelInstance {
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
+        if (this.viewState === undefined) {
+            this.viewState = {
+                viewerInput,
+                animController: new AnimationController(),
+                modelViewMtx: mat4.create(),
+                invModelViewMtx: mat4.create(),
+            };
+        }
+
+        this.viewState.viewerInput = viewerInput;
         mat4.mul(this.scratchMtx, this.pnMatrices[0], modelMatrix);
-        this.computeModelView(this.modelViewMtx, viewerInput.camera, this.scratchMtx);
-        this.material.setupMaterialParams(this.materialParams, viewerInput, this.modelViewMtx);
+        this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
+        mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
+
+        this.material.setupMaterialParams(this.materialParams, this.viewState);
 
         for (let i = 0; i < 3; i++) {
             if (this.overrideIndMtx[i] !== undefined) {

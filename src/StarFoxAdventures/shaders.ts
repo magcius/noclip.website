@@ -7,7 +7,7 @@ import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor } from './util';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
@@ -178,10 +178,10 @@ export interface SFAMaterial {
     factory: MaterialFactory;
     material: GXMaterial;
     textures: SFAMaterialTexture[];
-    setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => void;
+    setupMaterialParams: (params: MaterialParams, viewState: ViewState) => void;
 }
 
-type TexMtx = ((dst: mat4, viewerInput: ViewerRenderInput, modelMtx: mat4) => void) | undefined;
+type TexMtx = ((dst: mat4, viewState: ViewState) => void) | undefined;
 
 export class MaterialFactory {
     private rampTexture: SFAMaterialTexture = null;
@@ -436,10 +436,8 @@ export class MaterialFactory {
             );
             const postRotate0 = mat4.create();
             mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
-            postTexMtx[postTexMtxNum] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx0, invView);
+            postTexMtx[postTexMtxNum] = (dst: mat4, viewState: ViewState) => {
+                mat4.mul(dst, pttexmtx0, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate0, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
@@ -453,10 +451,8 @@ export class MaterialFactory {
             );
             const postRotate1 = mat4.create();
             mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
-            postTexMtx[postTexMtxNum + 1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx1, invView);
+            postTexMtx[postTexMtxNum + 1] = (dst: mat4, viewState: ViewState) => {
+                mat4.mul(dst, pttexmtx1, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate1, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
@@ -485,10 +481,8 @@ export class MaterialFactory {
             mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
             const postRotate2 = mat4.create();
             mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
-            postTexMtx[postTexMtxNum + 2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx2, invView);
+            postTexMtx[postTexMtxNum + 2] = (dst: mat4, viewState: ViewState) => {
+                mat4.mul(dst, pttexmtx2, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate2, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
@@ -508,10 +502,8 @@ export class MaterialFactory {
             )
             const postRotate3 = mat4.create();
             mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
-            postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx3, invView);
+            postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewState: ViewState) => {
+                mat4.mul(dst, pttexmtx3, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate3, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
@@ -601,10 +593,10 @@ export class MaterialFactory {
                 textures.push(makeMaterialTexture(texColl.getTexture(self.device, shader.layers[i].texId!, alwaysUseTex1)));
             }
         } else {
-            texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            texMtx[2] = (dst: mat4, viewState: ViewState) => {
                 // Flipped
-                texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
-                mat4.mul(dst, dst, modelViewMtx);
+                texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+                mat4.mul(dst, dst, viewState.modelViewMtx);
                 return dst;
             }
     
@@ -643,10 +635,10 @@ export class MaterialFactory {
             factory: this,
             material: mb.finish(),
             textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
                 for (let i = 0; i < 10; i++) {
                     if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                        texMtx[i]!(params.u_TexMtx[i], viewState);
                     }
                 }
                 
@@ -658,7 +650,7 @@ export class MaterialFactory {
     
                 for (let i = 0; i < 20; i++) {
                     if (postTexMtx[i] !== undefined) {
-                        postTexMtx[i]!(params.u_PostTexMtx[i], viewerInput, modelViewMtx);
+                        postTexMtx[i]!(params.u_PostTexMtx[i], viewState);
                     }
                 }
             },
@@ -672,16 +664,16 @@ export class MaterialFactory {
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
         
-        texMtx[0] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[0] = (dst: mat4, viewState: ViewState) => {
             // Flipped
-            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
-            mat4.mul(dst, dst, modelViewMtx);
+            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
-        texMtx[1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[1] = (dst: mat4, viewState: ViewState) => {
             // Unflipped
-            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, -1);
-            mat4.mul(dst, dst, modelViewMtx);
+            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, -1);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
         const texmtx3 = mat4.create();
@@ -766,10 +758,10 @@ export class MaterialFactory {
             factory: this,
             material: mb.finish(),
             textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
                 for (let i = 0; i < 10; i++) {
                     if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                        texMtx[i]!(params.u_TexMtx[i], viewState);
                     }
                 }
                 
@@ -840,14 +832,14 @@ export class MaterialFactory {
         
         // Stage 2: Distance fade
         textures[3] = this.getRampTexture();
-        texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[2] = (dst: mat4, viewState: ViewState) => {
             mat4.set(dst,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 1/30, 0.0, 0.0, 0.0,
                 25/3, 0.0, 0.0, 0.0 // TODO: this matrix can be tweaked to extend the draw distance, which may be desirable on high-res displays 
             );
-            mat4.mul(dst, dst, modelViewMtx);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
         mb.setTevDirect(2);
@@ -867,10 +859,10 @@ export class MaterialFactory {
             factory: this,
             material: mb.finish(),
             textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
                 for (let i = 0; i < 10; i++) {
                     if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                        texMtx[i]!(params.u_TexMtx[i], viewState);
                     }
                 }
                 
