@@ -834,26 +834,27 @@ export class MaterialFactory {
         // Ind Stage 0: Waviness
         // TODO: animate waviness to make grass sway back and forth
         textures[2] = this.getWavyTexture();
-        const texmtx1 = mat4.fromValues(
-            0.0125/32, 0.0, 0.0, 0.0, // FIXME: divide by 32 doesn't belong here but it makes grass look neater...
-            0.0, 0.0125/32, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
-        );
-        texMtx[1] = (dst: mat4) => { mat4.copy(dst, texmtx1); };
+        texMtx[1] = (dst: mat4, viewState: ViewState) => {
+            mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
+            mat4SetValue(dst, 0, 0, 0.0125);
+            mat4SetValue(dst, 1, 1, 0.0125);
+        };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
         mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
     
         // Stage 1: Fur map
         textures[1] = { kind: 'fur-map' };
-        const texmtx0 = mat4.fromValues(
+
+        const texmtx0 = mat4FromRowMajor(
             0.1, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, 0.0,
-            0.0, 0.1, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
+            0.0, 0.0, 0.0, 1.0
         );
         texMtx[0] = (dst: mat4) => { mat4.copy(dst, texmtx0); };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
         mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
@@ -1101,17 +1102,17 @@ export class MaterialFactory {
             pixels[idx + 3] = a
         }
 
-        const X_MUL = 0.39275 // Approximately pi / 8
-        const Y_MUL = 0.0981875 // Approximately pi / 32
+        const X_MUL = 0.39275; // Approximately pi / 8
+        const Y_MUL = 0.0981875; // Approximately pi / 32
         for (let y = 0; y < height; y++) {
-            const yAngle = Y_MUL * y
+            let yAngle = Y_MUL * y
             for (let x = 0; x < width; x++) {
-                const xAngle = X_MUL * x
-                const iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle)
-                const aFactor = Math.cos(X_MUL * x * xAngle)
-                const I = 127 * iFactor + 127
-                const A = 127 * iFactor * aFactor + 127
-                plot(y, x, I, I, I, A)
+                const xAngle = X_MUL * x;
+                const iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle);
+                const aFactor = Math.cos(xAngle);
+                const I = 127 * iFactor + 127;
+                const A = 127 * iFactor * aFactor + 127;
+                plot(y, x, I, I, I, A);
             }
         }
 
