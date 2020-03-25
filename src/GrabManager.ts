@@ -48,6 +48,7 @@ function containsElement(sub_: HTMLElement, searchFor: HTMLElement): boolean {
 export class GrabManager {
     private grabListener: GrabListener | null = null;
     private grabOptions: GrabOptions | null = null;
+    private currentGrabTarget: HTMLElement | null = null;
 
     private lastX: number = -1;
     private lastY: number = -1;
@@ -80,6 +81,11 @@ export class GrabManager {
         this.releaseGrab();
     };
 
+    private _onPointerLockChange = (e: Event) => {
+        if (document.pointerLockElement !== this.currentGrabTarget)
+            this.releaseGrab();
+    };
+
     public hasGrabListener(grabListener: GrabListener): boolean {
         return this.grabListener === grabListener;
     }
@@ -106,8 +112,11 @@ export class GrabManager {
         e.preventDefault();
 
         const target = e.target as HTMLElement;
-        if (grabOptions.takePointerLock && target.requestPointerLock !== undefined)
+        if (grabOptions.takePointerLock && target.requestPointerLock !== undefined) {
+            document.addEventListener('pointerlockchange', this._onPointerLockChange);
             target.requestPointerLock();
+            this.currentGrabTarget = target;
+        }
 
         document.addEventListener('mousemove', this._onMouseMove);
         if (grabOptions.releaseOnMouseUp)
@@ -121,8 +130,12 @@ export class GrabManager {
         document.removeEventListener('mouseup', this._onMouseUp);
         document.removeEventListener('mousedown', this._onMouseDown, { capture: true });
 
-        if (document.exitPointerLock !== undefined)
-            document.exitPointerLock();
+        if (this.currentGrabTarget !== null) {
+            document.removeEventListener('pointerlockchange', this._onPointerLockChange);
+
+            if (document.exitPointerLock !== undefined)
+                document.exitPointerLock();
+        }
 
         GlobalCursorOverride.setCursor(null);
 
