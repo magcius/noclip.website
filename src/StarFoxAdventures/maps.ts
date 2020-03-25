@@ -117,6 +117,17 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        for (let i = 0; i < this.models.length; i++) {
+            const matrix = mat4.create();
+            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
+            this.models[i].prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
@@ -316,26 +327,20 @@ class MapSceneRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        for (let drawStep = 0; drawStep < this.map.getNumDrawSteps(); drawStep++) {
-            // Prolog
-            const template = this.renderHelper.pushTemplateRenderInst();
-            fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        this.beginPass(viewerInput);
+        this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        this.endPass(device);
 
-            // Body
+        this.beginPass(viewerInput);
+        this.map.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.endPass(device);
+
+        for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
+            this.beginPass(viewerInput);
             this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
-            this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
-
-            // Epilog
-            renderInstManager.popTemplateRenderInst();
-    
-            let hostAccessPass = device.createHostAccessPass();
-            this.prepareToRender(device, hostAccessPass, viewerInput);
-            device.submitPass(hostAccessPass);
-            
-            renderInstManager.drawOnPassRenderer(device, this.renderPass);
-            renderInstManager.resetRenderInsts();
-            this.copyToSceneTexture(device);
-        }
+            this.endPass(device);
+        }        
     }
 }
 
