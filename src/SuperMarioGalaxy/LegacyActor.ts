@@ -5,15 +5,12 @@ import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, setBrkFrameAndStop, isBtkExist, startBtk, setBtkFrameAndStop, isBtpExist, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckRate, setBckFrameAtRandom } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj, getCamPos } from "./MiscActor";
 import { isFirstStep } from "./Spine";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
-
-// Random actor for other things that otherwise do not have their own actors.
 
 const enum SceneGraphTag {
     Skybox = 0,
@@ -22,27 +19,10 @@ const enum SceneGraphTag {
     Indirect = 3,
 };
 
-interface Point {
-    p0: vec3;
-    p1: vec3;
-    p2: vec3;
-}
-
-export interface Path {
-    l_id: number;
-    name: string;
-    type: string;
-    closed: string;
-    points: Point[];
-}
-
 export interface ObjInfo {
     objId: number;
     objName: string;
     objArg0: number;
-    objArg1: number;
-    objArg2: number;
-    objArg3: number;
     modelMatrix: mat4;
 }
 
@@ -201,24 +181,7 @@ export class NoclipLegacyActorSpawner {
                 setBckFrameAtRandom(actor);
         }
 
-        const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: JKRArchive, frame: number) => {
-            if (isBrkExist(actor, 'ColorChange')) {
-                startBrk(actor, 'ColorChange');
-                setBrkFrameAndStop(actor, frame);
-            }
-
-            if (isBtkExist(actor, 'TexChange')) {
-                startBtk(actor, 'TexChange');
-                setBtkFrameAndStop(actor, frame);
-            }
-
-            if (isBtpExist(actor, 'TexChange')) {
-                startBtp(actor, 'TexChange');
-                setBtpFrameAndStop(actor, frame);
-            }
-        };
-
-        const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, JKRArchive] | null> => {
+        const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<NoclipLegacyActor | null> => {
             const data = await modelCache.requestObjectData(arcName);
 
             if (data === null)
@@ -231,7 +194,7 @@ export class NoclipLegacyActorSpawner {
 
             actor.scenarioChanged(this.sceneObjHolder);
 
-            return [actor, actor.resourceHolder.arc];
+            return actor;
         };
 
         const spawnGraph = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
@@ -326,8 +289,8 @@ export class NoclipLegacyActorSpawner {
                 spawnGraph('TrickRabbit');
                 break;
             case 'TicoShop':
-                spawnGraph(`TicoShop`).then(([node, rarc]) => {
-                    startBva(node, 'Small0');
+                spawnGraph(`TicoShop`).then((actor) => {
+                    startBva(actor, 'Small0');
                 });
                 break;
 
@@ -337,11 +300,6 @@ export class NoclipLegacyActorSpawner {
                 spawnGraph('OtaKingMagmaBloom', SceneGraphTag.Bloom);
                 break;
 
-            case 'UFOKinoko':
-                spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
-                    bindChangeAnimation(node, rarc, objinfo.objArg0);
-                });
-                break;
             case 'PlantA':
                 spawnGraph(`PlantA${hexzero(assertExists(infoIter.getValueNumber('ShapeModelNo')), 2)}`);
                 break;
@@ -399,7 +357,7 @@ export class NoclipLegacyActorSpawner {
 
             case 'GreenStar':
             case 'PowerStar':
-                spawnGraph(`PowerStar`, SceneGraphTag.Normal, { }).then(([actor, rarc]) => {
+                spawnGraph(`PowerStar`, SceneGraphTag.Normal, { }).then((actor) => {
                     if (this.isSMG1) {
                         // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
                         const isRedStar = galaxyName === 'HeavensDoorGalaxy' && actor.objinfo.objArg0 === 2;
@@ -422,17 +380,17 @@ export class NoclipLegacyActorSpawner {
                 return;
 
             case 'GrandStar':
-                spawnGraph(name).then(([node, rarc]) => {
+                spawnGraph(name).then((actor) => {
                     // Stars in cages are rotated by BreakableCage at a hardcoded '3.0'.
                     // See BreakableCage::exeWait.
-                    node.modelInstance!.setMaterialVisible('GrandStarEmpty', false);
-                    node.setRotateSpeed(3);
+                    actor.modelInstance!.setMaterialVisible('GrandStarEmpty', false);
+                    actor.setRotateSpeed(3);
                 });
                 return;
 
             // SMG2
             case 'Moc':
-                spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([actor, rarc]) => {
+                spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then((actor) => {
                     startBva(actor, `FaceA`);
                 });
                 break;
@@ -485,20 +443,20 @@ export class NoclipLegacyActorSpawner {
                 break;
 
             case 'TicoCoin':
-                spawnGraph(name).then(([node, rarc]) => {
-                    node.modelInstance!.setMaterialVisible('TicoCoinEmpty_v', false);
+                spawnGraph(name).then((actor) => {
+                    actor.modelInstance!.setMaterialVisible('TicoCoinEmpty_v', false);
                 });
                 break;
             case 'WanwanRolling':
                 spawnGraph(name, SceneGraphTag.Normal, { });
                 break;
             case 'PhantomCandlestand':
-                spawnGraph(name).then(([node, rarc]) => {
-                    emitEffect(this.sceneObjHolder, node, 'Fire');
+                spawnGraph(name).then((actor) => {
+                    emitEffect(this.sceneObjHolder, actor, 'Fire');
                 });
             default: {
-                const node = await spawnGraphNullable(name);
-                if (node === null)
+                const actor = await spawnGraphNullable(name);
+                if (actor === null)
                     console.warn(`Unable to spawn ${name}`, zoneAndLayer, infoIter);
                 break;
             }

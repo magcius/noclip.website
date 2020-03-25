@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -145,6 +145,21 @@ export function connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObj
 
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
+}
+
+export function getJointMtx(actor: LiveActor, i: number): mat4 {
+    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray[i];
+}
+
+export function getJointMtxByName(actor: LiveActor, n: string): mat4 | null {
+    const modelInstance = actor.modelInstance;
+    if (modelInstance === null)
+        return null;    
+    const joints = modelInstance.modelData.bmd.jnt1.joints;
+    for (let i = 0; i < joints.length; i++)
+        if (joints[i].name === n)
+            return modelInstance.shapeInstanceState.jointToWorldMatrixArray[i];
+    return null;
 }
 
 export function isBckStopped(actor: LiveActor): boolean {
@@ -746,13 +761,6 @@ export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void
     }
 }
 
-export function setTrans(dst: mat4, pos: vec3): void {
-    dst[12] = pos[0];
-    dst[13] = pos[1];
-    dst[14] = pos[2];
-    dst[15] = 1.0;
-}
-
 function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
     if (attachmentFilter === null)
         attachmentFilter = nameObj;
@@ -803,7 +811,7 @@ export function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): 
     vec3.normalize(right, right);
     vec3.cross(upNorm, frontNorm, right);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
+    setMatrixTranslation(dst, pos);
 }
 
 export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
@@ -815,7 +823,7 @@ export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): 
     vec3.normalize(right, right);
     vec3.cross(frontNorm, right, upNorm);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
+    setMatrixTranslation(dst, pos);
 }
 
 export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
