@@ -23,6 +23,7 @@ import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16 } from './util';
 import { Model, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
+import { SFAAnimationController } from './animation';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -78,7 +79,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     // };
     
     try {
-        return new Model(device, new MaterialFactory(device), modelData, texColl, modelVersion);
+        return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion);
     } catch (e) {
         console.warn(`Failed to load model due to exception:`);
         console.error(e);
@@ -90,8 +91,8 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
-        super(device);
+    constructor(device: GfxDevice, animController: SFAAnimationController, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
+        super(device, animController);
 
         packetParams.clear();
 
@@ -245,7 +246,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
         const materialFactory = new MaterialFactory(device);
-        const mapSceneInfo = await loadMap(device, materialFactory, context, this.mapNum, this.gameInfo);
+        const animController = new SFAAnimationController();
+        const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
 
@@ -440,7 +442,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
 
-        const renderer = new WorldRenderer(device, envfxMan, mapInstance, objectInstances, testModels);
+        const renderer = new WorldRenderer(device, animController, envfxMan, mapInstance, objectInstances, testModels);
         return renderer;
     }
 }

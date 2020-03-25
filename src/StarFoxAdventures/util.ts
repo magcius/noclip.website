@@ -1,7 +1,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { ViewerRenderInput } from '../viewer';
+import { SFAAnimationController } from './animation';
 import { mat4 } from 'gl-matrix';
-import AnimationController from '../AnimationController';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
@@ -93,7 +93,7 @@ export function createDownloadLink(data: ArrayBufferSlice, filename: string, tex
 
 export interface ViewState {
     viewerInput: ViewerRenderInput;
-    animController: AnimationController;
+    animController: SFAAnimationController;
     modelViewMtx: mat4;
     invModelViewMtx: mat4;
 }

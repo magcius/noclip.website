@@ -10,11 +10,11 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
-import AnimationController from '../AnimationController';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
+import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
 import { LowBitReader, dataSubarray, ViewState } from './util';
 import { BlockRenderer } from './blocks';
@@ -35,7 +35,7 @@ export class ModelInstance {
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
@@ -133,7 +133,7 @@ export class ModelInstance {
         if (this.viewState === undefined) {
             this.viewState = {
                 viewerInput,
-                animController: new AnimationController(),
+                animController: this.animController,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
             };
@@ -230,7 +230,7 @@ export class Model implements BlockRenderer {
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
-    constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
+    constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -737,7 +737,7 @@ export class Model implements BlockRenderer {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
-            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
             newModel.setMaterial(material);
             newModel.setPnMatrices(pnMatrices);
 
@@ -785,7 +785,7 @@ export class Model implements BlockRenderer {
                             const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
                             self.waters.push({ model: newModel });
                         } else {
-                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
                             const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
                             newModel.setMaterial(material);
                             newModel.setPnMatrices(pnMatrices);
@@ -979,7 +979,7 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    constructor(private texColl: TextureCollection, private gameInfo: GameInfo) {
+    constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
     }
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
@@ -1003,7 +1003,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texColl);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController);
         }
 
         return this.models[num];

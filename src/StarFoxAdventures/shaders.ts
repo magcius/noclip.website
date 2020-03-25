@@ -469,19 +469,18 @@ export class MaterialFactory {
             mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
             mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
 
-            const anim0 = 0; // TODO: animate
-            const pttexmtx2 = mat4FromRowMajor(
-                0.01, 0.0,  0.0,  0.01 * mapOriginX + anim0,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ,
-                0.0,  0.0,  0.0,  1.0
-            );
             const rot67deg = mat4.create();
             mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
-            mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
             const postRotate2 = mat4.create();
             mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
             postTexMtx[postTexMtxNum + 2] = (dst: mat4, viewState: ViewState) => {
+                const pttexmtx2 = mat4FromRowMajor(
+                    0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.animController.envAnimValue0,
+                    0.0,  0.01, 0.0,  0.0,
+                    0.0,  0.0,  0.01, 0.01 * mapOriginZ,
+                    0.0,  0.0,  0.0,  1.0
+                );
+                mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
                 mat4.mul(dst, pttexmtx2, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate2, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
@@ -493,16 +492,15 @@ export class MaterialFactory {
             mb.setIndTexOrder(indStageId + 1, texcoordId + 3, texmapId + 1);
             mb.setIndTexScale(indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
 
-            const anim1 = 0; // TODO: animate
-            const pttexmtx3 = mat4FromRowMajor(
-                0.01, 0.0,  0.0,  0.01 * mapOriginX,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ + anim1,
-                0.0,  0.0,  0.0,  1.0
-            )
             const postRotate3 = mat4.create();
             mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
             postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewState: ViewState) => {
+                const pttexmtx3 = mat4FromRowMajor(
+                    0.01, 0.0,  0.0,  0.01 * mapOriginX,
+                    0.0,  0.01, 0.0,  0.0,
+                    0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.animController.envAnimValue1,
+                    0.0,  0.0,  0.0,  1.0
+                )
                 mat4.mul(dst, pttexmtx3, viewState.invModelViewMtx);
                 mat4.mul(dst, postRotate3, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);

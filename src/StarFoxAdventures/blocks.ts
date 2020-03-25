@@ -16,6 +16,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial, makeMaterialTexture, MaterialFactory } from './shaders';
 import { ModelInstance, Model } from './models';
 import { LowBitReader } from './util';
+import { SFAAnimationController } from './animation';
 
 export abstract class BlockFetcher {
     public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
@@ -38,7 +39,7 @@ export class BlockCollection implements IBlockCollection {
     blockFetcher: BlockFetcher;
     texColl: TextureCollection;
 
-    constructor(private mod: number, private isAncient: boolean, private materialFactory: MaterialFactory) {
+    constructor(private mod: number, private isAncient: boolean, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
     }
 
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
@@ -67,9 +68,9 @@ export class BlockCollection implements IBlockCollection {
             if (uncomp === null)
                 return null;
             if (this.isAncient) {
-                this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl);
+                this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl, this.animController);
             } else {
-                this.blockRenderers[sub] = new Model(device, this.materialFactory, uncomp, this.texColl);
+                this.blockRenderers[sub] = new Model(device, this.materialFactory, uncomp, this.texColl, this.animController);
             }
         }
 
@@ -85,7 +86,7 @@ export class AncientBlockRenderer implements BlockRenderer {
     public models: ModelInstance[] = [];
     public yTranslate: number = 0;
 
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -294,7 +295,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, this.animController);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);

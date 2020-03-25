@@ -11,6 +11,7 @@ import { SFARenderer } from './render';
 import { BlockCollection, BlockRenderer, IBlockCollection } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
+import { SFAAnimationController } from './animation';
 
 export interface BlockInfo {
     mod: number;
@@ -293,7 +294,7 @@ export class MapInstance {
     }
 }
 
-export async function loadMap(device: GfxDevice, materialFactory: MaterialFactory, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
+export async function loadMap(device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
     const pathBase = gameInfo.pathBase;
     const dataFetcher = context.dataFetcher;
     const [mapsTab, mapsBin] = await Promise.all([
@@ -307,7 +308,7 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
         getNumCols() { return mapInfo.blockCols; },
         getNumRows() { return mapInfo.blockRows; },
         async getBlockCollection(mod: number): Promise<IBlockCollection> {
-            const blockColl = new BlockCollection(mod, isAncient, materialFactory);
+            const blockColl = new BlockCollection(mod, isAncient, materialFactory, animController);
             await blockColl.create(device, context, gameInfo);
             return blockColl;
         },
@@ -322,10 +323,6 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
 
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
-
-    constructor(device: GfxDevice) {
-        super(device);
-    }
 
     public async create(info: MapSceneInfo): Promise<Viewer.SceneGfx> {
         this.map = new MapInstance(info);
@@ -363,10 +360,11 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
 
+        const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const mapSceneInfo = await loadMap(device, materialFactory, context, this.mapNum, this.gameInfo, this.isAncient);
+        const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo, this.isAncient);
 
-        const mapRenderer = new MapSceneRenderer(device);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         await mapRenderer.create(mapSceneInfo);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
@@ -392,6 +390,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const mapsJsonBuffer = await dataFetcher.fetchData(`${pathBase}/AncientMaps.json`);
 
+        const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
         const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
@@ -420,7 +419,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             getNumCols() { return numCols; },
             getNumRows() { return numRows; },
             async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, true, materialFactory);
+                const blockColl = new BlockCollection(mod, true, materialFactory, animController);
                 await blockColl.create(device, context, self.gameInfo);
                 return blockColl;
             },
@@ -432,7 +431,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             }
         };
 
-        const mapRenderer = new MapSceneRenderer(device);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         await mapRenderer.create(mapSceneInfo);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
@@ -454,6 +453,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
         console.log(`Creating scene for ${this.name} ...`);
 
         const materialFactory = new MaterialFactory(device);
+        const animController = new SFAAnimationController();
         const COLS = 20;
         const ROWS = 20;
         const blockTable: (BlockInfo | null)[][] = nArray(ROWS, () => nArray(COLS, () => null));
@@ -463,7 +463,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
             getNumCols() { return COLS; },
             getNumRows() { return ROWS; },
             async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, self.isAncient, materialFactory);
+                const blockColl = new BlockCollection(mod, self.isAncient, materialFactory, animController);
                 await blockColl.create(device, context, self.gameInfo);
                 return blockColl;
             },
@@ -477,7 +477,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
 
         console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
 
-        const mapRenderer = new MapSceneRenderer(device);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         await mapRenderer.create(mapSceneInfo);
         return mapRenderer;
     }

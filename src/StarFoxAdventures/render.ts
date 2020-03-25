@@ -5,6 +5,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
+import { SFAAnimationController } from './animation';
 
 // Adapted from BasicGXRendererHelper
 export abstract class SFARendererHelper implements Viewer.SceneGfx {
@@ -32,6 +33,14 @@ export class SFARenderer extends SFARendererHelper {
     protected viewport: any;
     protected sceneTexture = new ColorTexture();
     protected renderInstManager: GfxRenderInstManager;
+
+    constructor(device: GfxDevice, protected animController: SFAAnimationController) {
+        super(device);
+    }
+
+    protected update(viewerInput: Viewer.ViewerRenderInput) {
+        this.animController.update(viewerInput);
+    }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {}
 
@@ -67,6 +76,8 @@ export class SFARenderer extends SFARendererHelper {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.update(viewerInput);
+
         this.renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
