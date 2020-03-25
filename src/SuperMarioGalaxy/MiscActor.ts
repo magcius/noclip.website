@@ -2694,7 +2694,7 @@ class ChipBase extends LiveActor {
         tryStartAllAnim(this, 'Wait');
 
         if (infoIter !== null) {
-            const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
+            const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
             if (isNeedBubble) {
                 this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble");
                 tryStartAllAnim(this, "Move");
@@ -2704,7 +2704,7 @@ class ChipBase extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
+        const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
         if (isNeedBubble)
             sceneObjHolder.modelCache.requestObjectData("AirBubble");
     }
