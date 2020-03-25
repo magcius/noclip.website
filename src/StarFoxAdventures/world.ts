@@ -250,8 +250,10 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         await mapInstance.reloadBlocks();
 
         // Translate map for SFA world coordinates
+        const mapOrigin = mapSceneInfo.getOrigin();
+        // console.log(`map origin: ${mapOrigin}`);
         const mapMatrix = mat4.create();
-        mat4.fromTranslation(mapMatrix, vec3.fromValues(0, 0, -640));
+        mat4.fromTranslation(mapMatrix, vec3.fromValues(-640 * mapOrigin[0], 0, -640 * mapOrigin[1]));
         mapInstance.setMatrix(mapMatrix);
 
         const pathBase = this.gameInfo.pathBase;

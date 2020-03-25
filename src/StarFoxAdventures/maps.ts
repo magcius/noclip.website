@@ -24,6 +24,8 @@ export interface MapInfo {
     blockTableOffset: number;
     blockCols: number;
     blockRows: number;
+    originX: number;
+    originZ: number;
 }
 
 export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number): BlockInfo | null {
@@ -41,9 +43,15 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
     const offs = locationNum * 0x1c;
     const infoOffset = mapsTab.getUint32(offs + 0x0);
     const blockTableOffset = mapsTab.getUint32(offs + 0x4);
+
     const blockCols = mapsBin.getUint16(infoOffset + 0x0);
     const blockRows = mapsBin.getUint16(infoOffset + 0x2);
-    return { mapsBin, locationNum, infoOffset, blockTableOffset, blockCols, blockRows };
+
+    return {
+        mapsBin, locationNum, infoOffset, blockTableOffset, blockCols, blockRows,
+        originX: mapsBin.getInt16(infoOffset + 0x4),
+        originZ: mapsBin.getInt16(infoOffset + 0x6),
+    };
 }
 
 // Block table is addressed by blockTable[y][x].
@@ -66,6 +74,7 @@ interface MapSceneInfo {
     getNumRows(): number;
     getBlockCollection(mod: number): Promise<IBlockCollection>;
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
+    getOrigin(): number[];
 }
 
 export class MapInstance {
@@ -304,6 +313,9 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
         },
         getBlockInfoAt(col: number, row: number): BlockInfo | null {
             return blockTable[row][col];
+        },
+        getOrigin(): number[] {
+            return [mapInfo.originX, mapInfo.originZ];
         }
     };
 }
@@ -414,6 +426,9 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             },
             getBlockInfoAt(col: number, row: number): BlockInfo | null {
                 return blockTable[row][col];
+            },
+            getOrigin(): number[] {
+                return [0, 0];
             }
         };
 
@@ -454,6 +469,9 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
             },
             getBlockInfoAt(col: number, row: number): BlockInfo | null {
                 return blockTable[row][col];
+            },
+            getOrigin(): number[] {
+                return [0, 0];
             }
         };
 
