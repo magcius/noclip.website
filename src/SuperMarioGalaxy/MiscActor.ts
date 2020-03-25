@@ -4495,7 +4495,6 @@ export class StarPieceGroup extends LiveActor {
 
         for (let i = 0; i < starPieceCount; i++) {
             const starPiece = new StarPiece(zoneAndLayer, sceneObjHolder, null);
-            initDefaultPos(sceneObjHolder, starPiece, infoIter);
             this.starPieces.push(starPiece);
         }
 
@@ -4521,7 +4520,7 @@ export class StarPieceGroup extends LiveActor {
             for (let i = 0; i < this.starPieces.length; i++) {
                 const starPiece = this.starPieces[i];
                 const theta = MathConstants.TAU * (i / this.starPieces.length);
-                vec3.scaleAndAdd(starPiece.translation, starPiece.translation, scratchVec3a, Math.cos(theta) * this.radius);
+                vec3.scaleAndAdd(starPiece.translation, this.translation, scratchVec3a, Math.cos(theta) * this.radius);
                 vec3.scaleAndAdd(starPiece.translation, starPiece.translation, scratchVec3b, Math.sin(theta) * this.radius);
             }
         }
