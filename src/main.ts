@@ -20,6 +20,7 @@ import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
 import * as Scenes_DarkSoulsCollision from './DarkSoulsCollisionData/scenes';
 import * as Scenes_MetroidPrime from './metroid_prime/scenes';
+import * as Scenes_DonkeyKong64 from './DonkeyKong64/scenes';
 import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
 import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
 import * as Scenes_PaperMario_TheThousandYearDoor from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
@@ -124,6 +125,7 @@ const sceneGroups = [
     "Experimental",
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
+    Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
