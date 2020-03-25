@@ -425,35 +425,39 @@ export class MaterialFactory {
         }
     
         function addTevStagesForCaustic() {
-            const mapOriginX = 1.0; // TODO
+            const mapOriginX = 1.0; // TODO: these values exist to ensure caustics don't exhibit seams at map boundaries.
             const mapOriginZ = 1.0; // TODO
 
-            const pttexmtx0 = mat4.fromValues(
-                0.008,                   0.0,   0.0,                     0.0,
-                0.0,                     0.008, 0.0,                     0.0,
-                0.0,                     0.0,   0.008,                   0.0,
-                0.8 * 0.01 * mapOriginX, 0.0,   0.8 * 0.01 * mapOriginZ, 1.0
+            const pttexmtx0 = mat4FromRowMajor(
+                0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
+                0.0,   0.008, 0.0,   0.0,
+                0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
+                0.0,   0.0,   0.0,   0.1
             );
+            const postRotate0 = mat4.create();
+            mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
             postTexMtx[postTexMtxNum] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
                 const invView = mat4.create();
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx0, invView);
-                // TODO: rotate
+                mat4.mul(dst, postRotate0, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId);
             
-            const pttexmtx1 = mat4.fromValues(
-                0.005,                   0.0,   0.0,                     0.0,
-                0.0,                     0.005, 0.0,                     0.0,
-                0.0,                     0.0,   0.005,                   0.0,
-                0.5 * 0.01 * mapOriginX, 0.0,   0.5 * 0.01 * mapOriginZ, 1.0
+            const pttexmtx1 = mat4FromRowMajor(
+                0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
+                0.0,   0.005, 0.0,   0.0,
+                0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
+                0.0,   0.0,   0.0,   0.1
             );
+            const postRotate1 = mat4.create();
+            mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
             postTexMtx[postTexMtxNum + 1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
                 const invView = mat4.create();
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx1, invView);
-                // TODO: rotate
+                mat4.mul(dst, postRotate1, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3);
@@ -475,8 +479,19 @@ export class MaterialFactory {
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ,
                 0.0,  0.0,  0.0,  1.0
-            )
-            postTexMtx[postTexMtxNum + 2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
+            );
+            const rot67deg = mat4.create();
+            mat4.fromXRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
+            mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
+            const postRotate2 = mat4.create();
+            mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
+            postTexMtx[postTexMtxNum + 2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+                const invView = mat4.create();
+                mat4.invert(invView, modelViewMtx);
+                mat4.mul(dst, pttexmtx2, invView);
+                mat4.mul(dst, postRotate2, dst);
+                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
+            };
             mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*2);
 
             mb.setTevIndirect(tevStage, indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
@@ -491,11 +506,13 @@ export class MaterialFactory {
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ + anim1,
                 0.0,  0.0,  0.0,  1.0
             )
+            const postRotate3 = mat4.create();
+            mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
             postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
                 const invView = mat4.create();
                 mat4.invert(invView, modelViewMtx);
                 mat4.mul(dst, pttexmtx3, invView);
-                // TODO: rotate
+                mat4.mul(dst, postRotate3, dst);
                 mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
             };
             mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*3);
@@ -665,7 +682,7 @@ export class MaterialFactory {
             // Unflipped
             texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, -1);
             mat4.mul(dst, dst, modelViewMtx);
-        }
+        };
 
         const texmtx3 = mat4.create();
         // TODO: Animate translation of texmtx3 to make water flow
@@ -681,7 +698,7 @@ export class MaterialFactory {
             0.0, 0.5, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, 1.0
-        )
+        );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
         mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
         mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
@@ -697,7 +714,7 @@ export class MaterialFactory {
             -0.3, 0.3, 0.0, 0.0,
             0.0,  0.0, 1.0, 0.0,
             0.0,  0.0, 0.0, 1.0
-        )
+        );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
