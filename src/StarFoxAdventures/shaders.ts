@@ -16,7 +16,7 @@ interface ShaderLayer {
     texId: number | null;
     tevMode: number;
     enableTexChainStuff: number;
-    texmtxIndex: number;
+    scrollingTexMtx: number | undefined;
 }
 
 export interface Shader {
@@ -37,11 +37,12 @@ function parseTexId(data: DataView, offs: number, texIds: number[]): number | nu
 }
 
 function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): ShaderLayer {
+    const scrollingTexMtx = data.getUint8(0x6);
     return {
         texId: parseTexId(data, 0x0, texIds),
         tevMode: data.getUint8(0x4),
         enableTexChainStuff: data.getUint8(0x5),
-        texmtxIndex: data.getUint8(0x6),
+        scrollingTexMtx: scrollingTexMtx || undefined,
     };
 }
 
@@ -118,6 +119,7 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
     }
     for (let i = 0; i < numLayers; i++) {
         const layer = parseShaderLayer(dataSubarray(data, fields.layers + i * 8), texIds, !!fields.isBeta);
+        console.log(`scrollingTexMtx: ${layer.scrollingTexMtx}`);
         shader.layers.push(layer);
     }
 
@@ -183,12 +185,20 @@ export interface SFAMaterial {
 
 type TexMtx = ((dst: mat4, viewState: ViewState) => void) | undefined;
 
+interface ScrollingTexMtx {
+    x: number;
+    y: number;
+    dxPerFrame: number;
+    dyPerFrame: number;
+}
+
 export class MaterialFactory {
     private rampTexture: SFAMaterialTexture = null;
     private causticTexture: SFAMaterialTexture = null;
     private wavyTexture: SFAMaterialTexture = null;
     private halfGrayTexture: SFAMaterialTexture = null;
     private furFactory: FurFactory | null = null;
+    private scrollingTexMtxs: ScrollingTexMtx[] = [];
 
     constructor(private device: GfxDevice) {
     }
@@ -847,6 +857,8 @@ export class MaterialFactory {
         // Stage 1: Fur map
         textures[1] = { kind: 'fur-map' };
 
+        // This texture matrix, when combined with a POS tex-gen, creates
+        // texture coordinates that increase linearly on the model's XZ plane.
         const texmtx0 = mat4FromRowMajor(
             0.1, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.1, 0.0,

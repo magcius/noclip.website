@@ -78,14 +78,19 @@ interface MapSceneInfo {
     getOrigin(): number[];
 }
 
+interface BlockIter {
+    x: number;
+    z: number;
+    block: BlockRenderer;
+}
+
 export class MapInstance {
     private matrix: mat4 = mat4.create();
-    private models: BlockRenderer[] = [];
-    private modelMatrices: mat4[] = [];
     private numRows: number;
     private numCols: number;
-    private blockTable: (BlockInfo | null)[][] = [];
     private blockCollections: IBlockCollection[] = [];
+    private blockInfoTable: (BlockInfo | null)[][] = [];
+    private blocks: (BlockRenderer | null)[][] = [];
 
     constructor(private info: MapSceneInfo) {
         this.numRows = info.getNumRows();
@@ -93,7 +98,7 @@ export class MapInstance {
 
         for (let y = 0; y < this.numRows; y++) {
             const row: (BlockInfo | null)[] = [];
-            this.blockTable.push(row);
+            this.blockInfoTable.push(row);
             for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = info.getBlockInfoAt(x, y);
                 row.push(blockInfo);
@@ -101,9 +106,8 @@ export class MapInstance {
         }
     }
     
-    public clearModels() {
-        this.models = [];
-        this.modelMatrices = [];
+    public clearBlocks() {
+        this.blocks = [];
     }
 
     // Caution: Matrix will be referenced, not copied.
@@ -113,16 +117,27 @@ export class MapInstance {
 
     public getNumDrawSteps(): number {
         return 3;
-        // return this.modelHolders.length;
+    }
+
+    public* iterateBlocks(): Generator<BlockIter, void> {
+        for (let z = 0; z < this.blocks.length; z++) {
+            const row = this.blocks[z];
+            for (let x = 0; x < row.length; x++) {
+                if (row[x] !== null) {
+                    yield { x, z, block: row[x]! };
+                }
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        for (let i = 0; i < this.models.length; i++) {
+        for (let b of this.iterateBlocks()) {
             const matrix = mat4.create();
-            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -130,10 +145,11 @@ export class MapInstance {
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        for (let i = 0; i < this.models.length; i++) {
+        for (let b of this.iterateBlocks()) {
             const matrix = mat4.create();
-            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -141,21 +157,26 @@ export class MapInstance {
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        for (let i = 0; i < this.models.length; i++) {
+        for (let b of this.iterateBlocks()) {
             const matrix = mat4.create();
-            mat4.mul(matrix, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
         renderInstManager.popTemplateRenderInst();
     }
 
     public async reloadBlocks() {
-        this.clearModels();
-        for (let y = 0; y < this.numRows; y++) {
+        this.clearBlocks();
+        for (let z = 0; z < this.numRows; z++) {
+            const row: (BlockRenderer | null)[] = [];
+            this.blocks.push(row);
             for (let x = 0; x < this.numCols; x++) {
-                const blockInfo = this.blockTable[y][x];
-                if (blockInfo == null)
+                const blockInfo = this.blockInfoTable[z][x];
+                if (blockInfo == null) {
+                    row.push(null);
                     continue;
+                }
 
                 try {
                     if (this.blockCollections[blockInfo.mod] == undefined) {
@@ -165,13 +186,10 @@ export class MapInstance {
 
                     const blockRenderer = blockColl.getBlock(blockInfo.mod, blockInfo.sub);
                     if (blockRenderer) {
-                        const modelMatrix: mat4 = mat4.create();
-                        mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                        this.models.push(blockRenderer);
-                        this.modelMatrices.push(modelMatrix);
+                        row.push(blockRenderer);
                     }
                 } catch (e) {
-                    console.warn(`Skipping block at ${x},${y} due to exception:`);
+                    console.warn(`Skipping block at ${x},${z} due to exception:`);
                     console.error(e);
                 }
             }
@@ -190,7 +208,7 @@ export class MapInstance {
                 const row: HTMLInputElement[] = [];
                 inputs.push(row);
                 for (let x = 0; x < this.numCols; x++) {
-                    const blockInfo = this.blockTable[y][x];
+                    const blockInfo = this.blockInfoTable[y][x];
                     const inputEl = newWin.document.createElement('input');
                     inputEl.setAttribute('type', 'text');
                     inputEl.setAttribute('value', `${blockInfo != null ? `${blockInfo.mod}.${blockInfo.sub}` : -1}`);
@@ -220,7 +238,7 @@ export class MapInstance {
                 let bottomRow = -1
                 for (let row = 0; row < this.numRows; row++) {
                     for (let col = 0; col < this.numCols; col++) {
-                        const info = this.blockTable[row][col];
+                        const info = this.blockInfoTable[row][col];
                         if (info != null) {
                             if (topRow == -1) {
                                 topRow = row;
@@ -249,7 +267,7 @@ export class MapInstance {
                 let json = '[';
                 for (let row = topRow; row <= bottomRow; row++) {
                     json += row != topRow ? ',\n' : '\n';
-                    json += JSON.stringify(this.blockTable[row].slice(leftCol, rightCol + 1),
+                    json += JSON.stringify(this.blockInfoTable[row].slice(leftCol, rightCol + 1),
                         (key, value) => {
                             if (Array.isArray(value)) {
                                 return value;
@@ -277,9 +295,9 @@ export class MapInstance {
                         if (newValue.length == 2) {
                             const newMod = Number.parseInt(newValue[0]);
                             const newSub = Number.parseInt(newValue[1]);
-                            this.blockTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
+                            this.blockInfoTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
                         } else {
-                            this.blockTable[y][x] = null;
+                            this.blockInfoTable[y][x] = null;
                         }
                     }
                 }
