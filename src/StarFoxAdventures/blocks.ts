@@ -23,6 +23,7 @@ export abstract class BlockFetcher {
 }
 
 export abstract class BlockRenderer {
+    public abstract getMaterials(): (SFAMaterial | undefined)[];
     public abstract getNumDrawSteps(): number;
     public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
     public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
@@ -333,9 +334,10 @@ export class AncientBlockRenderer implements BlockRenderer {
                     const material: SFAMaterial = {
                         factory: new MaterialFactory(device),
                         shader,
-                        material: mb.finish(),
+                        gxMaterial: mb.finish(),
                         textures: [makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, true))],
                         setupMaterialParams: () => {},
+                        rebuild: () => {},
                     }
                     newModel.setMaterial(material);
 
@@ -376,6 +378,10 @@ export class AncientBlockRenderer implements BlockRenderer {
                 break;
             }
         }
+    }
+
+    public getMaterials() {
+        return [];
     }
 
     public getNumDrawSteps() {

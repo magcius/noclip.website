@@ -358,6 +358,10 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
+        super(device, animController);
+    }
+
     public async create(info: MapSceneInfo): Promise<Viewer.SceneGfx> {
         this.map = new MapInstance(info);
         await this.map.reloadBlocks();
@@ -367,6 +371,11 @@ class MapSceneRenderer extends SFARenderer {
     // Caution: Matrix will be referenced, not copied.
     public setMatrix(matrix: mat4) {
         this.map.setMatrix(matrix);
+    }
+
+    protected update(viewerInput: Viewer.ViewerRenderInput) {
+        super.update(viewerInput);
+        this.materialFactory.update(this.animController);
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -398,7 +407,7 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
         const materialFactory = new MaterialFactory(device);
         const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo, this.isAncient);
 
-        const mapRenderer = new MapSceneRenderer(device, animController);
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         await mapRenderer.create(mapSceneInfo);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
@@ -465,7 +474,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             }
         };
 
-        const mapRenderer = new MapSceneRenderer(device, animController);
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         await mapRenderer.create(mapSceneInfo);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
@@ -511,7 +520,7 @@ export class SFASandboxDesc implements Viewer.SceneDesc {
 
         console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
 
-        const mapRenderer = new MapSceneRenderer(device, animController);
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         await mapRenderer.create(mapSceneInfo);
         return mapRenderer;
     }

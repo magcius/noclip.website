@@ -91,7 +91,7 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
         super(device, animController);
 
         packetParams.clear();
@@ -125,6 +125,11 @@ class WorldRenderer extends SFARenderer {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
+    }
+
+    protected update(viewerInput: Viewer.ViewerRenderInput) {
+        super.update(viewerInput);
+        this.materialFactory.update(this.animController);
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
@@ -266,13 +271,17 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const [_1, _2, _3, romlistFile] = await Promise.all([
+        const [_1, _2, _3, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),
             earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
         const romlist = loadRes(romlistFile).createDataView();
+        const tablesTab = tablesTab_.createDataView();
+        const tablesBin = tablesBin_.createDataView();
 
         const objectInstances: ObjectInstance[] = [];
         let offs = 0;
@@ -358,14 +367,41 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
             } else if (obj.objClass === 308) {
                 // e.g. texscroll2
-                const tableIndex = objParams.getInt16(0x18);
                 const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
                 if (block === null) {
                     console.warn(`couldn't find block for texscroll2 object`);
                 } else {
                     console.info(`found block for texscroll2 object`);
+
+                    const scrollableIndex = objParams.getInt16(0x18);
+                    const speedX = objParams.getInt8(0x1e);
+                    const speedY = objParams.getInt8(0x1f);
+
+                    const tabValue = tablesTab.getUint32(0xe * 4);
+                    const targetTexId = tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                    // Note: & 0x7fff above is an artifact of how the game stores tex id's.
+                    // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
+                    console.log(`targeting texture 0x${targetTexId.toString(16)}`);
+
+                    const materials = block.getMaterials();
+                    for (let i = 0; i < materials.length; i++) {
+                        if (materials[i] !== undefined) {
+                            const mat = materials[i]!;
+                            for (let j = 0; j < mat.shader.layers.length; j++) {
+                                const layer = mat.shader.layers[j];
+                                if (layer.texId === targetTexId) {
+                                    console.info(`Found the texture! scrolling at dx ${speedX}, dy ${speedY}`);
+                                    // Found the texture! Make it scroll now.
+                                    const theTexture = texColl.getTexture(device, targetTexId, true)!;
+                                    const dxPerFrame = (speedX << 16) / theTexture.width;
+                                    const dyPerFrame = (speedY << 16) / theTexture.height;
+                                    layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
+                                    mat.rebuild();
+                                }
+                            }
+                        }
+                    }
                 }
-                
             } else if (obj.objClass === 346) {
                 // e.g. SH_BombWall
                 obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
@@ -449,16 +485,16 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         // console.log(`Loading General Scales....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
-        // console.log(`Loading SharpClaw (beta version)....`);
+        // console.log(`Loading SharpClaw (demo version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
-        // console.log(`Loading General Scales (beta version)....`);
+        // console.log(`Loading General Scales (demo version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
         // console.log(`Loading Beta Fox....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
 
-        const renderer = new WorldRenderer(device, animController, envfxMan, mapInstance, objectInstances, testModels);
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, mapInstance, objectInstances, testModels);
         return renderer;
     }
 }

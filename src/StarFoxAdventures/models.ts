@@ -19,6 +19,7 @@ import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_
 import { LowBitReader, dataSubarray, ViewState } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
+import { GXMaterial } from '../gx/gx_material';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -34,6 +35,7 @@ export class ModelInstance {
     private overrideIndMtx: (mat4 | undefined)[] = [];
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
+    private gxMaterial: GXMaterial | undefined;
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -44,8 +46,14 @@ export class ModelInstance {
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
+        this.updateMaterialHelper();
+    }
 
-        this.materialHelper = new GXMaterialHelperGfx(material.material);
+    private updateMaterialHelper() {
+        if (this.gxMaterial !== this.material.gxMaterial) {
+            this.gxMaterial = this.material.gxMaterial;
+            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
+        }
     }
 
     public setPnMatrices(mats: mat4[]) {
@@ -77,6 +85,8 @@ export class ModelInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
+        this.updateMaterialHelper();
+        
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
@@ -921,6 +931,10 @@ export class Model implements BlockRenderer {
             mat4.add(mat0, mat0, mat1);
             this.boneMatrices.push(mat0);
         }
+    }
+
+    public getMaterials() {
+        return this.materials;
     }
 
     public getNumDrawSteps() {
