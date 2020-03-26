@@ -199,7 +199,7 @@ export class Viewer {
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
-        const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession.renderState.baseLayer;
+        const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession?.renderState.baseLayer;
         if (!baseLayer) {
             return;
         }
