@@ -11,30 +11,6 @@ interface GrabOptions {
     grabElement?: HTMLElement;
 }
 
-class CursorOverride {
-    private styleElem: HTMLStyleElement;
-    private style: CSSStyleSheet;
-
-    constructor() {
-        this.styleElem = document.createElement('style');
-        document.head.appendChild(this.styleElem);
-        this.style = this.styleElem.sheet as CSSStyleSheet;
-    }
-
-    public setCursor(cursors: string[] | null): void {
-        if (this.style.cssRules.length)
-            this.style.deleteRule(0);
-
-        if (cursors) {
-            const ruleLines = cursors.map((cursor) => `cursor: ${cursor} !important;`);
-            const rule = `* { ${ruleLines.join(' ')} }`;
-            this.style.insertRule(rule, 0);
-        }
-    }
-}
-
-export const GlobalCursorOverride = new CursorOverride();
-
 function containsElement(sub_: HTMLElement, searchFor: HTMLElement): boolean {
     let sub: HTMLElement | null = sub_;
     while (sub !== null) {
@@ -102,7 +78,7 @@ export class GrabManager {
         this.grabOptions = grabOptions;
 
         if (grabOptions.useGrabbingCursor)
-            GlobalCursorOverride.setCursor(['grabbing', '-webkit-grabbing']);
+            document.body.style.cursor = 'grabbing';
 
         this.lastX = e.pageX;
         this.lastY = e.pageY;
@@ -137,7 +113,8 @@ export class GrabManager {
                 document.exitPointerLock();
         }
 
-        GlobalCursorOverride.setCursor(null);
+        if (this.grabOptions!.useGrabbingCursor)
+            document.body.style.cursor = '';
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.
