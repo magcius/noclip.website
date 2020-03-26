@@ -16,7 +16,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, g
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix, CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { TextureState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
@@ -63,9 +63,15 @@ interface UVCT_ModelPlacement {
     modelMatrix: mat4;
 }
 
+interface UVCT_Collision {
+    triFlags: Uint16Array;
+    matFlags: Uint16Array;
+}
+
 interface UVCT_Chunk {
     mesh: Mesh_Chunk;
     models: UVCT_ModelPlacement[];
+    collision: UVCT_Collision;
 }
 
 function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
@@ -95,11 +101,12 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
     }
 
     const indexData = new Uint16Array(3 * faceCount);
-    for (let i = 0; i < indexData.length;) {
+    const triFlags = new Uint16Array(faceCount);
+    for (let i = 0, j = 0; i < indexData.length;) {
         indexData[i++] = view.getUint16(offs + 0x00);
         indexData[i++] = view.getUint16(offs + 0x02);
         indexData[i++] = view.getUint16(offs + 0x04);
-        // Unknown
+        triFlags[j++] = view.getUint16(offs + 0x06);
         offs += 0x08;
     }
 
@@ -157,6 +164,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
             models.push({ modelIndex, modelMatrix: placement });
     }
 
+    const matFlags = new Uint16Array(materialCount);
     const materials: MaterialData[] = [];
     for (let i = 0; i < materialCount; i++) {
         const rspModeInfo = view.getUint16(offs + 0x00);
@@ -173,12 +181,16 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
                 offs += 0x01; // vertex load count
         }
         const indexOffset = view.getUint16(offs + 0x00) * 3;
+        const solid = view.getUint16(offs + 0x02) !== 0;
+        const subgridFlags = view.getUint16(offs + 0x04);
+        if (solid)
+            matFlags[i] = subgridFlags;
         offs += 0x18;
 
         materials.push({ rspModeInfo, textureIndex, indexOffset, triCount })
     }
 
-    return { mesh: { vertexData, indexData, materials }, models };
+    return { mesh: { vertexData, indexData, materials }, models, collision: {triFlags, matFlags} };
 }
 
 function parseUVCT(file: Pilotwings64FSFile): UVCT_Chunk {
@@ -265,6 +277,58 @@ function parseUVTR(file: Pilotwings64FSFile): UVTR {
     for (let i = 0; i < file.chunks.length; i++)
         maps.push(parseUVTR_Chunk(file.chunks[i]));
     return { maps };
+}
+
+function getTriangleHeight(contour: UVCTData, x: number, y: number, tri: number): number {
+    const mesh = contour.uvct.mesh;
+    const v0 = mesh.indexData[3 * tri + 0];
+    const v1 = mesh.indexData[3 * tri + 1];
+    const v2 = mesh.indexData[3 * tri + 2];
+    const x0 = mesh.vertexData[9 * v0];
+    const y0 = mesh.vertexData[9 * v0 + 1];
+    const x1 = mesh.vertexData[9 * v1];
+    const y1 = mesh.vertexData[9 * v1 + 1];
+    const x2 = mesh.vertexData[9 * v2];
+    const y2 = mesh.vertexData[9 * v2 + 1];
+    if ((x1 - x0) * (y - y0) < (y1 - y0) * (x - x0))
+        return NaN;
+    if ((x2 - x1) * (y - y1) < (y2 - y1) * (x - x1))
+        return NaN;
+    if ((x0 - x2) * (y - y2) < (y0 - y2) * (x - x2))
+        return NaN;
+
+    // we always align to flat ground, so just return z coord of one vertex
+    return mesh.vertexData[9 * v0 + 2];
+}
+
+function groundHeight(data: DataHolder, terra: UVTR_Chunk, x: number, y: number): number {
+    let index = -1;
+    for (let i = 0; i < terra.contourPlacements.length; i++) {
+        if (Math.abs(x - terra.contourPlacements[i].position[0]) <= terra.cellX / 2 && Math.abs(y - terra.contourPlacements[i].position[1]) <= terra.cellY / 2) {
+            index = i;
+            break;
+        }
+    }
+    if (index === -1)
+        return 0;
+    const contour = data.uvctData[terra.contourPlacements[index].contourIndex];
+    const center = terra.contourPlacements[index].position;
+    const relX = 4 * (x - center[0]) / terra.cellX + 2;
+    const relY = 4 * (y - center[1]) / terra.cellY + 2;
+    const flag = 0x8000 >>> (4 * Math.floor(relY) + Math.floor(relX));
+    for (let i = 0; i < contour.uvct.collision.matFlags.length; i++) {
+        if (!(contour.uvct.collision.matFlags[i] & flag))
+            continue;
+        const mat = contour.uvct.mesh.materials[i];
+        const firstTri = (mat.indexOffset / 3) >>> 0;
+        for (let j = 0; j < mat.triCount; j++)
+            if (contour.uvct.collision.triFlags[j + firstTri] & flag) {
+                const height = getTriangleHeight(contour, x - center[0], y - center[1], j + firstTri);
+                if (!isNaN(height))
+                    return height;
+            }
+    }
+    return 0;
 }
 
 enum F3D_GBI {
@@ -875,6 +939,9 @@ interface SimpleModelPlacement {
     position: vec3;
     scale?: vec3;
     angles?: vec3;
+
+    mapModelIndex?: number;
+    mapScale?: vec3;
 }
 
 interface UPWL {
@@ -956,6 +1023,7 @@ interface RingParams {
     angles: vec3;
     axis: RotationAxis;
     modelIndex: number;
+    mapModelIndex?: number;
 }
 
 interface TaskLabel{
@@ -986,6 +1054,14 @@ function simpleTaskName(label: TaskLabel): string {
     return `${vehicle} ${label.taskClass} ${label.taskStage}`;
 }
 
+interface TakeoffPad {
+    modelIndex: number;
+    mapModelIndex: number;
+    position: vec3;
+    angles: vec3;
+    onGround: boolean;
+}
+
 interface UPWT {
     jptx: string;
     name: string;
@@ -994,6 +1070,7 @@ interface UPWT {
     models: SimpleModelPlacement[];
     rings: RingParams[];
     landingPad?: SimpleModelPlacement;
+    takeoffPad?: TakeoffPad;
 }
 
 function isEmptyTask(task: UPWT): boolean {
@@ -1001,12 +1078,10 @@ function isEmptyTask(task: UPWT): boolean {
 }
 
 function taskSort(a: UPWT, b: UPWT): number {
-    if (a.label.taskClass !== b.label.taskClass) {
-        return a.label.taskClass - b.label.taskClass;
-    }
-    if (a.label.vehicle !== b.label.vehicle) {
+    if (a.label.vehicle !== b.label.vehicle)
         return a.label.vehicle - b.label.vehicle;
-    }
+    if (a.label.taskClass !== b.label.taskClass)
+        return a.label.taskClass - b.label.taskClass;
     return a.label.taskStage - b.label.taskStage;
 }
 
@@ -1018,13 +1093,11 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
     let rings: RingParams[] = [];
     let label!: TaskLabel;
     let landingPad: SimpleModelPlacement | undefined;
+    let takeoffPad: TakeoffPad | undefined;
     for (let i = 0; i < file.chunks.length; i++) {
         const view = file.chunks[i].buffer.createDataView();
 
         let offs = 0;
-        // ignoring TPAD and LSTP for now since they don't change display
-        // could add player models there or something
-
         if (file.chunks[i].tag === 'JPTX') {
             jptx = readString(file.chunks[i].buffer, offs + 0x00, file.chunks[i].buffer.byteLength, true);
         } else if (file.chunks[i].tag === 'INFO') {
@@ -1054,7 +1127,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
             // not actually used
             assert(vec3.equals(angles, [0, 0, 0]));
             const modelIndex = 0x102 + view.getUint8(offs + 0x2c);
-            landingPad = { modelIndex, position };
+            landingPad = { modelIndex, position, mapModelIndex: 0xC9 };
         } else if (file.chunks[i].tag === 'THER') {
             while (offs < view.byteLength - 0x28) {
                 const position = vec3.fromValues(
@@ -1065,7 +1138,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 const scale = view.getFloat32(offs + 0x0c);
                 const heightScale = view.getFloat32(offs + 0x10);
                 // other info?
-                models.push({ modelIndex: 0x101, position, scale: vec3.fromValues(scale, scale, heightScale) });
+                models.push({ modelIndex: 0x101, mapModelIndex: 0xC7, position, scale: vec3.fromValues(scale, scale, heightScale), mapScale: vec3.fromValues(1 / 125, 1 / 125, 1 / 250) });
                 offs += 0x28;
             }
         } else if (file.chunks[i].tag === 'RNGS') {
@@ -1093,6 +1166,8 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                     modelIndex = 0xf1;
                 }
                 rings.push({ position, angles, axis, modelIndex });
+                if (special !== 2)
+                    rings[rings.length - 1].mapModelIndex = 0xCA;
                 offs += 0x84;
             }
         } else if (file.chunks[i].tag === 'BALS') {
@@ -1104,7 +1179,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 );
                 const ballType = view.getUint8(offs + 0x20);
                 const scale = view.getFloat32(offs + 0x30);
-                models.push({ modelIndex: 0xf4 + ballType, position, scale: vec3.fromValues(scale, scale, scale) });
+                models.push({ modelIndex: 0xf4 + ballType, position, scale: vec3.fromValues(scale, scale, scale), mapModelIndex: -1 });
                 offs += 0x68;
             }
         } else if (file.chunks[i].tag === 'TARG') {
@@ -1124,9 +1199,104 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 models.push({ modelIndex: 0xf9 - type, position, angles });
                 offs += 0x20;
             }
+        } else if (file.chunks[i].tag === 'CNTG') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                const type = view.getUint8(offs + 0x18);
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
+                models.push({ modelIndex: 0x106 + type, mapModelIndex: 0xD0, position, angles });
+                offs += 0x20;
+            }
+        } else if (file.chunks[i].tag === 'HPAD') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
+                models.push({ modelIndex: 0xFB, position, angles });
+                offs += 0x40;
+            }
+        } else if (file.chunks[i].tag === 'LSTP') {
+            while (offs < view.byteLength) {
+                const ulCorner = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const lrCorner = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                vec3.add(ulCorner, ulCorner, lrCorner);
+                vec3.scale(ulCorner, ulCorner, .5);
+                models.push({ modelIndex: -1, position: ulCorner, mapModelIndex: 0xC9 });
+                offs += 0x28;
+            }
+        } else if (file.chunks[i].tag === 'TPAD') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                const onGround = view.getUint8(offs + 0x28) === 0;
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
+                takeoffPad = { modelIndex: -1, position, angles, onGround, mapModelIndex: 0xC8 };
+                offs += 0x30;
+            }
+        } else if (file.chunks[i].tag === 'BTGT') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
+                models.push({ modelIndex: 0xF3, position, angles, mapModelIndex: 0xD2 });
+                offs += 0x20;
+            }
+        } else if (file.chunks[i].tag === 'HOPD') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                    view.getFloat32(offs + 0x0C),
+                );
+                const scale = view.getFloat32(offs + 0x14);
+                const heightScale = view.getFloat32(offs + 0x18);
+                models.push({ modelIndex: 0x109, position, scale: vec3.fromValues(scale, scale, heightScale), mapModelIndex: 0xD2, mapScale: vec3.fromValues(1 / 10, 1 / 10, 1 / 10) });
+                offs += 0x20;
+            }
         }
     }
-    return { jptx, name, info, label, rings, models, landingPad };
+    return { jptx, name, info, label, rings, models, landingPad, takeoffPad };
 }
 
 interface UVEN {
@@ -1363,7 +1533,7 @@ function interpretPartHierarchy(partLevels: number[]): number[] {
 }
 
 class ObjectRenderer {
-    private static jointMatrixScratch = nArray(20, () => mat4.create());
+    private static jointMatrixScratch = nArray(26, () => mat4.create());
 
     public modelMatrix = mat4.create();
     public sortKeyBase: number;
@@ -1511,7 +1681,7 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     // }
     if (rspMode & (1 << 9)) {
         // build dlist from fn_221e08
-        throw "found alternate dlist: " + rspMode;
+        console.warn("found alternate dlist:", rspMode);
     }
 
     let geoMode = 0;
@@ -2386,8 +2556,15 @@ function fromTranslationScaleEuler(dst: mat4, pos: vec3, scale: number, angles?:
 }
 
 // helper for those "dynamic" objects that don't really move
-function spawnObjectAt(modelBuilder: ModelBuilder, placement: SimpleModelPlacement, task?: number): ObjectRenderer {
-    const uvmdData = modelBuilder.uvmdData[placement.modelIndex];
+function spawnObjectAt(modelBuilder: ModelBuilder, placement: SimpleModelPlacement, task?: number, isMap = false): ObjectRenderer {
+    let index = placement.modelIndex;
+    if (isMap) {
+        if (placement.mapModelIndex !== undefined)
+            index = placement.mapModelIndex
+        else
+            index = 0xCA; // default representation for task objects
+    }
+    const uvmdData = modelBuilder.uvmdData[index];
 
     const obj = new ObjectRenderer(uvmdData, modelBuilder.palette);
     if (task !== undefined) {
@@ -2399,6 +2576,13 @@ function spawnObjectAt(modelBuilder: ModelBuilder, placement: SimpleModelPlaceme
     if (placement.scale) {
         // additional scaling is relative to default model size
         mat4.scale(obj.modelMatrix, obj.modelMatrix, placement.scale);
+    }
+    if (isMap) {
+        obj.modelMatrix[12] /= 10;
+        obj.modelMatrix[13] /= 10;
+        obj.modelMatrix[14] /= 10;
+        if (placement.mapScale)
+            mat4.scale(obj.modelMatrix, obj.modelMatrix, placement.mapScale);
     }
     return obj;
 }
@@ -2676,6 +2860,8 @@ class Pilotwings64Renderer implements SceneGfx {
     public taskLabels: TaskLabel[] = [];
     public strIndexToTask: number[] = [];
 
+    public renderPassDescriptor = standardFullClearRenderPassDescriptor;
+
     private currentTaskIndex: number = -1;
     private taskSelect: SingleSelect;
 
@@ -2736,7 +2922,7 @@ class Pilotwings64Renderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const skyPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const skyPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.renderPassDescriptor);
         executeOnPass(renderInstManager, device, skyPassRenderer, PW64Pass.SKYBOX);
         device.submitPass(skyPassRenderer);
 
@@ -2793,6 +2979,8 @@ const uvlvIDList = [1, 3, 5, 10];
 
 // mapping from 2e12b4
 function envIndex(level: number, weather: number): number {
+    if (weather < 0)
+        return 23; // special map combined ocean/skybox
     const base = 2 + 5 * level + weather; // roughly 5 per level, 0 and 1 aren't used for this
     if (level === 0) {
         return weather < 3 ? base : base - 1; // skip 3
@@ -2820,6 +3008,69 @@ function paletteIndex(level: number, weather: number): number {
     return weather === 5 ? level : -1;
 }
 
+function levelMapID(level: number): number {
+    switch (level) {
+        case 0: return 0x00;
+        case 1: return 0x28;
+        case 2: return 0x51;
+        case 3: return 0xA5;
+    }
+    throw `bad level ${level}`;
+}
+
+function playerModel(vehicle: Vehicle, character: number): number {
+    switch (vehicle) {
+        case Vehicle.HangGlider: return 274 + 2 * character - (character === 0 ? 2 : 0);
+        case Vehicle.RocketBelt: return 289 + character - (character === 0 ? 3 : 0);
+        case Vehicle.Gyrocopter: return 297 + 2 * character - (character === 0 ? 2 : 0);
+        case Vehicle.Birdman: return 317 + character - (character === 0 ? 2 : 0);
+        case Vehicle.Skydiving: {
+            switch (character) {
+                case 0: return 323;
+                case 1: return 325;
+                case 2: return 326;
+                case 3: return 327;
+                case 4: return 329;
+                case 5: return 330;
+            }
+        }
+        case Vehicle.Cannonball: return 309 + character;
+        case Vehicle.JumbleHopper: return 337 + character - (character === 0 ? 1 : 0);
+    }
+}
+
+const gliderOffsets = [1.641, 1.753, 1.502, 1.567, 1.683, 1.578];
+const rocketOffsets = [.745, 1.336, 1.221, .827, 1.36, 1.076];
+
+const gyroVectors: number[][] = [
+    [1.261, -.299, -.026, -.375],
+    [1.758, -.323, -.193, -.436],
+    [1.243, -.429, -.085, -.451],
+    [1.268, -.300, -.027, -.377],
+    [1.762, -.323, -.193, -.437],
+    [1.255, -.433, -.086, -.455],
+];
+
+function alignToGround(dst: mat4, ground: number, vehicle: Vehicle, character: number): void {
+    switch (vehicle) {
+        case Vehicle.HangGlider:
+            dst[14] = ground + gliderOffsets[character]; break;
+        case Vehicle.RocketBelt:
+            dst[14] = ground + rocketOffsets[character]; break;
+        case Vehicle.Gyrocopter: {
+            const v = gyroVectors[character];
+            // does some computations with the horizontal components of two vectors
+            // including a non-orthogonal modification to the matrix?
+            const mag = Math.hypot((v[0] - v[2]), (v[1] - v[3]));
+            dst[14] = ground - ((v[0] - v[2]) * v[3] + (v[1] - v[3]) * v[2]) / mag - .05;
+        } break;
+        case Vehicle.JumbleHopper:
+            // there's actually a much more complicated system to set the position, which I couldn't follow
+            // since they both use standing models, the rocket offsets seem close enough
+            dst[14] = ground + rocketOffsets[character]; break;
+    }
+}
+
 interface ModelBuilder {
     uvmdData: ModelData[];
     palette: TexturePalette;
@@ -2839,7 +3090,7 @@ const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
     constructor(public levelID: number, public weatherConditions: number, public name: string) {
-        this.id = `${levelID}:${weatherConditions}`;
+        this.id = this.weatherConditions >= 0 ? `${levelID}:${weatherConditions}` : `${levelID}:M`;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -2858,6 +3109,8 @@ class Pilotwings64SceneDesc implements SceneDesc {
         };
 
         const renderer = new Pilotwings64Renderer(device, dataHolder, modelBuilder);
+        renderer.renderPassDescriptor = makeClearRenderPassDescriptor(true, {r: skybox.clearColor[0], g: skybox.clearColor[1], b: skybox.clearColor[2], a: 1});
+        const isMap = this.weatherConditions < 0;
 
         if (skybox.skyboxModel !== undefined) {
             const sky = spawnObject(modelBuilder, skybox.skyboxModel);
@@ -2871,36 +3124,42 @@ class Pilotwings64SceneDesc implements SceneDesc {
         if (this.levelID === 3 && this.weatherConditions === 2)
             renderer.snowRenderer = new SnowRenderer(device, 800);
 
-        for (let i = 0; i < levelData.terras.length; i++) {
-            const terraIndex = levelData.terras[i];
-            const uvtrChunk = dataHolder.uvtr[0].maps[terraIndex];
-            const uvtrRenderer = new UVTRRenderer(dataHolder, modelBuilder, uvtrChunk);
-            mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
-            renderer.uvtrRenderers.push(uvtrRenderer);
-        }
-
-        const levelDobjs = getLevelDobjs(this.levelID, modelBuilder, dataHolder);
-        for (let i = 0; i < levelDobjs.length; i++) {
-            renderer.dobjRenderers.push(levelDobjs[i]);
-        }
-
         const currUPWL = dataHolder.upwl[this.levelID];
-        for (let i = 0; i < currUPWL.windObjects.length; i++) {
-            // TODO: move these based on wind
-            renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, currUPWL.windObjects[i]));
-        }
         const landingPads: LandingPad[] = [];
-        for (let i = 0; i < currUPWL.landingPads.length; i++) {
-            const padData = dataHolder.uvmdData[currUPWL.landingPads[i].modelIndex];
-            const pad = new LandingPad(padData, modelBuilder.palette);
-            fromTranslationScaleEuler(pad.modelMatrix, currUPWL.landingPads[i].position, 1 / padData.uvmd.inverseScale, currUPWL.landingPads[i].angles)
-            renderer.dobjRenderers.push(pad);
-            landingPads.push(pad);
+
+        if (isMap)
+            renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, { modelIndex: levelMapID(this.levelID), position: vec3.create() }));
+        else {
+            for (let i = 0; i < levelData.terras.length; i++) {
+                const terraIndex = levelData.terras[i];
+                const uvtrChunk = dataHolder.uvtr[0].maps[terraIndex];
+                const uvtrRenderer = new UVTRRenderer(dataHolder, modelBuilder, uvtrChunk);
+                mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
+                renderer.uvtrRenderers.push(uvtrRenderer);
+            }
+
+            const levelDobjs = getLevelDobjs(this.levelID, modelBuilder, dataHolder);
+            for (let i = 0; i < levelDobjs.length; i++) {
+                renderer.dobjRenderers.push(levelDobjs[i]);
+            }
+
+            for (let i = 0; i < currUPWL.windObjects.length; i++) {
+                // TODO: move these based on wind
+                renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, currUPWL.windObjects[i]));
+            }
+
+            for (let i = 0; i < currUPWL.landingPads.length; i++) {
+                const padData = dataHolder.uvmdData[currUPWL.landingPads[i].modelIndex];
+                const pad = new LandingPad(padData, modelBuilder.palette);
+                fromTranslationScaleEuler(pad.modelMatrix, currUPWL.landingPads[i].position, 1 / padData.uvmd.inverseScale, currUPWL.landingPads[i].angles);
+                renderer.dobjRenderers.push(pad);
+                landingPads.push(pad);
+            }
+            const starData = dataHolder.uvmdData[0xf2];
+            const star = new BirdmanStar(starData, modelBuilder.palette);
+            fromTranslationScaleEuler(star.modelMatrix, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale);
+            renderer.dobjRenderers.push(star);
         }
-        const starData = dataHolder.uvmdData[0xf2];
-        const star = new BirdmanStar(starData, modelBuilder.palette);
-        fromTranslationScaleEuler(star.modelMatrix, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale)
-        renderer.dobjRenderers.push(star);
 
         const taskList = dataHolder.upwt[this.levelID];
         taskList.sort(taskSort);
@@ -2911,29 +3170,57 @@ class Pilotwings64SceneDesc implements SceneDesc {
             renderer.taskLabels.push(upwt.label);
             renderer.strIndexToTask.push(i);
             for (let j = 0; j < upwt.models.length; j++) {
-                renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.models[j], i));
+                if ((!isMap && upwt.models[j].modelIndex >= 0) || (isMap && upwt.models[j].mapModelIndex !== -1))
+                    renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.models[j], i, isMap));
             }
             for (let j = 0; j < upwt.rings.length; j++) {
-                const ringData = upwt.rings[j];
-                const ringModel = dataHolder.uvmdData[ringData.modelIndex];
-                const ringObj = new Ring(ringModel, modelBuilder.palette, ringData.axis);
-                ringObj.taskNumber = i;
-                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale, ringData.angles);
-                renderer.dobjRenderers.push(ringObj);
+                if (isMap) {
+                    if (upwt.rings[j].mapModelIndex !== undefined)
+                        renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.rings[j], i, isMap));
+                } else {
+                    const ringData = upwt.rings[j];
+                    const ringModel = dataHolder.uvmdData[ringData.modelIndex];
+                    const ringObj = new Ring(ringModel, modelBuilder.palette, ringData.axis);
+                    ringObj.taskNumber = i;
+                    fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale, ringData.angles);
+                    renderer.dobjRenderers.push(ringObj);
+                }
             }
             if (upwt.landingPad) {
-                for (let j = 0; j < currUPWL.landingPads.length; j++) {
-                    // when a task is chosen, the game finds a nearby inactive pad and replaces its model and flags
-                    if (vec3.distance(upwt.landingPad.position, currUPWL.landingPads[j].position) < 100) {
-                        // the UPWT pad doesn't have the real position, copy from UPWL
-                        upwt.landingPad.position = currUPWL.landingPads[j].position;
-                        upwt.landingPad.angles = currUPWL.landingPads[j].angles;
-                        const activePad = spawnObjectAt(modelBuilder, upwt.landingPad, i);
-                        renderer.dobjRenderers.push(activePad);
-                        landingPads[j].alternates.push(activePad);
-                        break;
+                if (isMap)
+                    renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.landingPad, i, isMap));
+                else
+                    for (let j = 0; j < currUPWL.landingPads.length; j++) {
+                        // when a task is chosen, the game finds a nearby inactive pad and replaces its model and flags
+                        if (vec3.distance(upwt.landingPad.position, currUPWL.landingPads[j].position) < 100) {
+                            // the UPWT pad doesn't have the real position, copy from UPWL
+                            upwt.landingPad.position = currUPWL.landingPads[j].position;
+                            upwt.landingPad.angles = currUPWL.landingPads[j].angles;
+                            const activePad = spawnObjectAt(modelBuilder, upwt.landingPad, i);
+                            renderer.dobjRenderers.push(activePad);
+                            landingPads[j].alternates.push(activePad);
+                            break;
+                        }
                     }
-                }
+            }
+            if (upwt.takeoffPad) {
+                const vehicle = upwt.label.vehicle;
+                if (!isMap) {
+                    // place a random character at the start position
+                    const character = (Math.random() * 6) >>> 0;
+                    upwt.takeoffPad.modelIndex = playerModel(vehicle, character);
+                    const player = spawnObjectAt(modelBuilder, upwt.takeoffPad, i);
+                    renderer.dobjRenderers.push(player);
+                    if (upwt.takeoffPad.onGround || vehicle === Vehicle.JumbleHopper) {
+                        let height = groundHeight(dataHolder, dataHolder.uvtr[0].maps[levelData.terras[0]], upwt.takeoffPad.position[0], upwt.takeoffPad.position[1]);
+                        const limit = vehicle === Vehicle.Cannonball ? Infinity : vehicle === Vehicle.JumbleHopper ? 50 : 1;
+                        // two tasks actually start on top of objects
+                        if (Math.abs(height - upwt.takeoffPad.position[2]) > limit)
+                            height = vehicle === Vehicle.JumbleHopper ? 107 : 179;
+                        alignToGround(player.modelMatrix, height, vehicle, character);
+                    }
+                } else if (vehicle !== Vehicle.Cannonball) // cannonball doesn't show any marker at the start
+                    renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.takeoffPad, i, isMap));
             }
         }
 
@@ -2950,12 +3237,14 @@ const sceneDescs = [
     new Pilotwings64SceneDesc(0, 2, 'Holiday Island (Cloudy)'),
     new Pilotwings64SceneDesc(0, 4, 'Holiday Island (Evening)'),
     new Pilotwings64SceneDesc(0, 5, 'Holiday Island (Starry Night)'),
+    new Pilotwings64SceneDesc(0, -1, 'Holiday Island Map'),
     'Crescent Island',
     new Pilotwings64SceneDesc(1, 0, 'Crescent Island (Sunny)'),
     new Pilotwings64SceneDesc(1, 1, 'Crescent Island (Sunny Part 2)'),
     new Pilotwings64SceneDesc(1, 2, 'Crescent Island (Cloudy)'),
     new Pilotwings64SceneDesc(1, 3, 'Crescent Island (Cloudy Night)'),
     new Pilotwings64SceneDesc(1, 5, 'Crescent Island (Starry Night)'),
+    new Pilotwings64SceneDesc(1, -1, 'Crescent Island Map'),
     'Little States',
     new Pilotwings64SceneDesc(2, 0, 'Little States (Sunny)'),
     new Pilotwings64SceneDesc(2, 1, 'Little States (Sunny Part 2)'),
@@ -2963,11 +3252,13 @@ const sceneDescs = [
     new Pilotwings64SceneDesc(2, 3, 'Little States (Cloudy Night)'),
     new Pilotwings64SceneDesc(2, 4, 'Little States (Evening)'),
     new Pilotwings64SceneDesc(2, 5, 'Little States (Starry Night)'),
+    new Pilotwings64SceneDesc(2, -1, 'Little States Map'),
     'Ever-Frost Island',
     new Pilotwings64SceneDesc(3, 0, 'Ever-Frost Island (Sunny)'),
     new Pilotwings64SceneDesc(3, 1, 'Ever-Frost Island (Sunny Part 2)'),
     new Pilotwings64SceneDesc(3, 2, 'Ever-Frost Island (Snowing)'),
     new Pilotwings64SceneDesc(3, 4, 'Ever-Frost Island (Starry Night)'),
+    new Pilotwings64SceneDesc(3, -1, 'Ever-Frost Island Map'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
