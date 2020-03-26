@@ -14,10 +14,12 @@ import * as GX from '../gx/gx_enum';
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
+import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
-import { LowBitReader, dataSubarray } from './util';
+import { LowBitReader, dataSubarray, ViewState } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
+import { GXMaterial } from '../gx/gx_material';
 
 export class ModelInstance {
     private loadedVertexLayout: LoadedVertexLayout;
@@ -31,8 +33,11 @@ export class ModelInstance {
     private pnMatrices: mat4[] = nArray(10, () => mat4.create());
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
+    private scratchMtx = mat4.create();
+    private viewState: ViewState | undefined;
+    private gxMaterial: GXMaterial | undefined;
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice) {
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
@@ -41,8 +46,14 @@ export class ModelInstance {
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
+        this.updateMaterialHelper();
+    }
 
-        this.materialHelper = new GXMaterialHelperGfx(material.material);
+    private updateMaterialHelper() {
+        if (this.gxMaterial !== this.material.gxMaterial) {
+            this.gxMaterial = this.material.gxMaterial;
+            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
+        }
     }
 
     public setPnMatrices(mats: mat4[]) {
@@ -73,10 +84,9 @@ export class ModelInstance {
         mat4.mul(dst, dst, modelMatrix);
     }
 
-    private scratchMtx = mat4.create();
-    private modelViewMtx = mat4.create();
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
+        this.updateMaterialHelper();
+
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
@@ -130,9 +140,21 @@ export class ModelInstance {
         }
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
+        if (this.viewState === undefined) {
+            this.viewState = {
+                viewerInput,
+                animController: this.animController,
+                modelViewMtx: mat4.create(),
+                invModelViewMtx: mat4.create(),
+            };
+        }
+
+        this.viewState.viewerInput = viewerInput;
         mat4.mul(this.scratchMtx, this.pnMatrices[0], modelMatrix);
-        this.computeModelView(this.modelViewMtx, viewerInput.camera, this.scratchMtx);
-        this.material.setupMaterialParams(this.materialParams, viewerInput, this.modelViewMtx);
+        this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
+        mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
+
+        this.material.setupMaterialParams(this.materialParams, this.viewState);
 
         for (let i = 0; i < 3; i++) {
             if (this.overrideIndMtx[i] !== undefined) {
@@ -215,10 +237,11 @@ export class Model implements BlockRenderer {
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
+    public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
-    constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private modelVersion: ModelVersion = ModelVersion.Final) {
+    constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -505,6 +528,8 @@ export class Model implements BlockRenderer {
             offs += shaderFields.size;
         }
 
+        this.materials = [];
+
         const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
         for (let i = 0; i <= GX.Attr.MAX; i++) {
             for (let j = 0; j < 8; j++) {
@@ -725,7 +750,7 @@ export class Model implements BlockRenderer {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
-            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
+            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
             newModel.setMaterial(material);
             newModel.setPnMatrices(pnMatrices);
 
@@ -741,17 +766,28 @@ export class Model implements BlockRenderer {
                 return;
             }
 
+            let curShader = shaders[0];
+            let curMaterial: SFAMaterial | undefined = undefined;
+            function setShader(num: number) {
+                curShader = shaders[num];
+                if (self.materials[num] === undefined) {
+                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                }
+                curMaterial = self.materials[num];
+            }
+
+            setShader(0);
+
             const bits = new LowBitReader(blockDv, bitsOffset);
             let vcd: GX_VtxDesc[] = [];
             let done = false;
-            let curShader = shaders[0];
             while (!done) {
                 const opcode = bits.get(4);
                 switch (opcode) {
                 case 1: { // Set shader
                     const shaderNum = bits.get(6);
                     // console.log(`Setting shader #${shaderNum}`);
-                    curShader = shaders[shaderNum];
+                    setShader(shaderNum);
                     break;
                 }
                 case 2: { // Call display list
@@ -773,9 +809,8 @@ export class Model implements BlockRenderer {
                             const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
                             self.waters.push({ model: newModel });
                         } else {
-                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList);
-                            const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-                            newModel.setMaterial(material);
+                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
+                            newModel.setMaterial(curMaterial!);
                             newModel.setPnMatrices(pnMatrices);
                             models.push(newModel);
 
@@ -904,6 +939,10 @@ export class Model implements BlockRenderer {
         }
     }
 
+    public getMaterials() {
+        return this.materials;
+    }
+
     public getNumDrawSteps() {
         return this.models.length;
     }
@@ -967,7 +1006,7 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    constructor(private texColl: TextureCollection, private gameInfo: GameInfo) {
+    constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
     }
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
@@ -991,7 +1030,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texColl);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController);
         }
 
         return this.models[num];

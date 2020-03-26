@@ -6,17 +6,19 @@ import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
-import { SFATexture, TextureCollection } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor } from './util';
+import { SFATexture, TextureCollection, SFATextureCollection } from './textures';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
+import { SFAAnimationController } from './animation';
+import { getDebugOverlayCanvas2D } from '../DebugJunk';
 
 interface ShaderLayer {
     texId: number | null;
     tevMode: number;
     enableTexChainStuff: number;
-    texmtxIndex: number;
+    scrollingTexMtx: number | undefined;
 }
 
 export interface Shader {
@@ -37,11 +39,12 @@ function parseTexId(data: DataView, offs: number, texIds: number[]): number | nu
 }
 
 function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): ShaderLayer {
+    const scrollingTexMtx = data.getUint8(0x6);
     return {
         texId: parseTexId(data, 0x0, texIds),
         tevMode: data.getUint8(0x4),
         enableTexChainStuff: data.getUint8(0x5),
-        texmtxIndex: data.getUint8(0x6),
+        scrollingTexMtx: scrollingTexMtx || undefined,
     };
 }
 
@@ -176,12 +179,561 @@ export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialText
 
 export interface SFAMaterial {
     factory: MaterialFactory;
-    material: GXMaterial;
+    shader: Shader;
+    gxMaterial: GXMaterial;
     textures: SFAMaterialTexture[];
-    setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelMtx: mat4) => void;
+    setupMaterialParams: (params: MaterialParams, viewState: ViewState) => void;
+    rebuild: () => void;
 }
 
-type TexMtx = ((dst: mat4, viewerInput: ViewerRenderInput, modelMtx: mat4) => void) | undefined;
+type TexMtx = ((dst: mat4, viewState: ViewState) => void) | undefined;
+
+interface ScrollingTexMtx {
+    x: number;
+    y: number;
+    dxPerFrame: number;
+    dyPerFrame: number;
+}
+
+const MAX_SCROLL = 0x100000;
+
+class StandardMaterial implements SFAMaterial {
+    public gxMaterial: GXMaterial;
+    public textures: SFAMaterialTexture[] = [];
+    private mb: GXMaterialBuilder;
+    private texMtx: TexMtx[] = [];
+    private postTexMtx: TexMtx[] = [];
+    private indTexMtx: TexMtx[] = [];
+    private tevStage = 0;
+    private indStageId = GX.IndTexStageID.STAGE0;
+    private texcoordId = GX.TexCoordID.TEXCOORD0;
+    private texmapId = GX.TexMapID.TEXMAP0;
+    private texGenSrc = GX.TexGenSrc.TEX0;
+    private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
+    private postTexMtxNum = 0;
+    private cprevIsValid = false;
+    private aprevIsValid = false;
+
+    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texColl: TextureCollection, private isMapBlock: boolean) {
+        this.rebuild();
+    }
+
+    public rebuild() {
+        this.mb = new GXMaterialBuilder('Standard');
+        this.textures = [];
+        this.texMtx = [];
+        this.postTexMtx = [];
+        this.indTexMtx = [];
+        this.tevStage = 0;
+        this.indStageId = GX.IndTexStageID.STAGE0;
+        this.texcoordId = GX.TexCoordID.TEXCOORD0;
+        this.texmapId = GX.TexMapID.TEXMAP0;
+        this.texGenSrc = GX.TexGenSrc.TEX0;
+        this.postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
+        this.postTexMtxNum = 0;
+        this.cprevIsValid = false;
+        this.aprevIsValid = false;
+        
+        if (!this.isMapBlock) {
+            // Not a map block. Just do basic texturing.
+            this.mb.setUsePnMtxIdx(true);
+            this.addTevStageForTextureWithWhiteKonst(0);
+            for (let i = 0; i < this.shader.layers.length; i++) {
+                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+            }
+        } else {
+            this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
+                // Flipped
+                texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+                mat4.mul(dst, dst, viewState.modelViewMtx);
+                return dst;
+            }
+    
+            if ((this.shader.flags & ShaderFlags.Lava) != 0) {
+                this.addTevStagesForLava();
+            } else {
+                this.addTevStagesForNonLava();
+            }
+    
+            if ((this.shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
+                console.log(`TODO: skyscape reflection?`);
+            } else if ((this.shader.flags & ShaderFlags.Caustic) != 0) {
+                this.addTevStagesForCaustic();
+            } else {
+                // TODO
+            }
+        }
+        
+        if ((this.shader.flags & 0x40000000) || (this.shader.flags & 0x20000000)) {
+            this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+            this.mb.setZMode(true, GX.CompareType.LEQUAL, false);
+            this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        } else {
+            this.mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+            this.mb.setZMode(true, GX.CompareType.LEQUAL, true);
+            if (((this.shader.flags & ShaderFlags.AlphaCompare) != 0) && ((this.shader.flags & ShaderFlags.Lava) == 0)) {
+                this.mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+            } else {
+                this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+            }
+        }
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
+
+        this.gxMaterial = this.mb.finish();
+    }
+
+    public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
+        for (let i = 0; i < 10; i++) {
+            if (this.texMtx[i] !== undefined) {
+                this.texMtx[i]!(params.u_TexMtx[i], viewState);
+            }
+        }
+        
+        for (let i = 0; i < 3; i++) {
+            if (this.indTexMtx[i] !== undefined) {
+                this.indTexMtx[i]!(params.u_IndTexMtx[i], viewState);
+            }
+        }
+
+        for (let i = 0; i < 20; i++) {
+            if (this.postTexMtx[i] !== undefined) {
+                this.postTexMtx[i]!(params.u_PostTexMtx[i], viewState);
+            }
+        }
+    }
+    
+    private addTevStagesForTextureWithSkyAmbient(scrollingTexMtx?: number) {
+        if (scrollingTexMtx !== undefined) {
+            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
+            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+                mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
+            };
+
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
+
+            this.postTexMtxNum++;
+            this.postTexMtxId += 3;
+        } else {
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+        }
+
+        // mb.setTevKColor (does not exist)
+        // TODO: The game multiplies by a sky-related ambient color
+        // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
+        // Stage 1: Multiply vertex color by ambient sky color
+        this.mb.setTevDirect(this.tevStage);
+        this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.ONE /*GX.CombineColorInput.KONST*/, GX.CC.RASC, GX.CC.ZERO);
+        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // Stage 2: Blend previous stage with vertex color by vertex alpha
+        this.mb.setTevDirect(this.tevStage + 1);
+        this.mb.setTevOrder(this.tevStage + 1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorIn(this.tevStage + 1, GX.CC.CPREV, GX.CC.RASC, GX.CC.RASA, GX.CC.ZERO);
+        this.mb.setTevAlphaIn(this.tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        this.mb.setTevColorOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // Stage 3: Multiply by texture
+        this.mb.setTevDirect(this.tevStage + 2);
+        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
+        this.mb.setTevColorIn(this.tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
+        this.mb.setTevAlphaIn(this.tevStage + 2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        this.mb.setTevColorOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        this.tevStage += 3;
+        this.texcoordId++;
+        this.texmapId++;
+        this.texGenSrc++;
+    }
+
+    private addTevStagesForTextureWithMode(mode: number, scrollingTexMtx?: number) {
+        if (scrollingTexMtx !== undefined) {
+            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
+            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+                mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
+            };
+
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
+            
+            this.postTexMtxNum++;
+            this.postTexMtxId += 3;
+        } else {
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+        }
+
+        this.mb.setTevDirect(this.tevStage);
+        this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+        // Only modes 0 and 9 occur in map blocks. Other modes
+        // occur in object and character models.
+        switch (mode) {
+        case 0:
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            break;
+        case 1: // Default case in original executable
+        this.mb.setTevColorIn(this.tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        case 9:
+            this.mb.setTevColorIn(this.tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            break;
+        default:
+            console.warn(`Unhandled tev color-in mode ${mode}`);
+            break;
+        }
+
+        if (!this.aprevIsValid) {
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+            this.aprevIsValid = true;
+        } else {
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        }
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+
+        this.tevStage++;
+        this.texcoordId++;
+        this.texmapId++;
+        this.texGenSrc++;
+    }
+
+    private addTevStageForTextureWithWhiteKonst(colorInMode: number, scrollingTexMtx?: number) {
+        // TODO: handle color. map block renderer always passes opaque white to this function.
+        
+        if (scrollingTexMtx !== undefined) {
+            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
+            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+                mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
+            };
+
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
+
+            this.postTexMtxNum++;
+            this.postTexMtxId += 3;
+        } else {
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+        }
+
+        this.mb.setTevDirect(this.tevStage);
+        this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+        switch (colorInMode) {
+        case 0:
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE /* GX.CC.KONST */, GX.CC.ZERO);
+            break;
+        default:
+            console.warn(`Unhandled colorInMode ${colorInMode}`);
+            break;
+        }
+
+        if (!this.aprevIsValid) {
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+            this.aprevIsValid = true;
+        } else {
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        }
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+
+        this.tevStage++;
+        this.texcoordId++;
+        this.texmapId++;
+        this.texGenSrc++;
+    }
+
+    private addTevStageForMultVtxColor() {
+        // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
+
+        this.mb.setTevDirect(this.tevStage);
+        this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevKAlphaSel(this.tevStage, GX.KonstAlphaSel.KASEL_1); // TODO: handle non-opaque alpha
+        if (this.tevStage === 0 || !this.cprevIsValid) {
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+        } else {
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO);
+        }
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+        this.tevStage++;
+    }
+    
+    private addTevStagesForLava() {
+        const warpParam = 1.0; // TODO: is this animated?
+
+        this.indTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+            const animSin = Math.sin(3.142 * viewState.animController.envAnimValue1);
+            const scale = (0.125 * animSin + 0.75) * warpParam;
+            const cs = scale * Math.cos(3.142 * viewState.animController.envAnimValue0);
+            const sn = scale * Math.sin(3.142 * viewState.animController.envAnimValue0);
+            const itm0 = mat4FromRowMajor(
+                cs,  sn,  0.0, 0.0,
+                -sn, cs,  0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+            mat4.copy(dst, itm0);
+        };
+
+        this.indTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+            const animSin = Math.sin(3.142 * viewState.animController.envAnimValue0);
+            const scale = (0.125 * animSin + 0.75) * warpParam;
+            const cs = scale * Math.cos(3.142 * -viewState.animController.envAnimValue1);
+            const sn = scale * Math.sin(3.142 * -viewState.animController.envAnimValue1);
+            const itm1 = mat4FromRowMajor(
+                cs,  sn,  0.0, 0.0,
+                -sn, cs,  0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+            mat4.copy(dst, itm1);
+        };
+
+        this.textures[2] = makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[0].texId!, true));
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
+        this.textures[0] = makeMaterialTexture(this.texColl.getTexture(this.device, 0x600, false));
+
+        const pttexmtx2 = mat4.create();
+        this.postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX2);
+
+        this.textures[1] = this.factory.getWavyTexture();
+
+        const pttexmtx0 = mat4.create();
+        mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
+        this.postTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, pttexmtx0);
+            mat4SetValue(dst, 1, 3, 0.125 * viewState.animController.envAnimValue1);
+        };
+
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX0);
+        
+        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
+        this.mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+
+        this.mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+
+        const pttexmtx1 = mat4.create();
+        mat4.fromScaling(pttexmtx1, [1.2, 1.2, 1.0]);
+        const rot45deg = mat4.create();
+        mat4.fromZRotation(rot45deg, Math.PI / 4);
+        mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
+        this.postTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, pttexmtx1);
+            const v = 0.0625 * viewState.animController.envAnimValue0;
+            mat4SetValue(dst, 0, 3, v);
+            mat4SetValue(dst, 1, 3, v);
+        };
+
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
+
+        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
+        this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
+        this.mb.setTevIndirect(2, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+
+        // TODO: set and use tev kcolor
+        this.mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_4_8); // TODO
+        this.mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8); // TODO
+
+        this.mb.setTevDirect(0);
+        const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R];
+        this.mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        this.mb.setTevAlphaIn(0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        this.mb.setTevSwapMode(0, undefined, swap3);
+        this.mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+
+        this.mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorIn(1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+        this.mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        this.mb.setTevSwapMode(1, undefined, undefined);
+        this.mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        this.mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
+        this.mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        this.mb.setTevSwapMode(2, undefined, undefined);
+        this.mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        this.tevStage = 3;
+        this.texGenSrc = 4;
+        this.texcoordId = 4;
+        this.texmapId = 3;
+        this.indStageId = 2;
+    }
+    
+    private addTevStagesForCaustic() {
+        const mapOriginX = 1.0; // TODO: these values exist to ensure caustics don't exhibit seams at map boundaries.
+        const mapOriginZ = 1.0; // TODO
+
+        const pttexmtx0 = mat4FromRowMajor(
+            0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
+            0.0,   0.008, 0.0,   0.0,
+            0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
+            0.0,   0.0,   0.0,   0.1
+        );
+        const postRotate0 = mat4.create();
+        mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
+        this.postTexMtx[this.postTexMtxNum] = (dst: mat4, viewState: ViewState) => {
+            mat4.mul(dst, pttexmtx0, viewState.invModelViewMtx);
+            mat4.mul(dst, postRotate0, dst);
+            mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
+        };
+        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId);
+        
+        const pttexmtx1 = mat4FromRowMajor(
+            0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
+            0.0,   0.005, 0.0,   0.0,
+            0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
+            0.0,   0.0,   0.0,   0.1
+        );
+        const postRotate1 = mat4.create();
+        mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
+        this.postTexMtx[this.postTexMtxNum + 1] = (dst: mat4, viewState: ViewState) => {
+            mat4.mul(dst, pttexmtx1, viewState.invModelViewMtx);
+            mat4.mul(dst, postRotate1, dst);
+            mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
+        };
+        this.mb.setTexCoordGen(this.texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3);
+        
+        this.textures[this.texmapId] = this.factory.getCausticTexture();
+
+        const itm1 = mat4FromRowMajor(
+            0.5, 0.0, 0.0, 0.0,
+            0.0, 0.5, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        );
+        this.indTexMtx[1] = (dst: mat4) => { mat4.copy(dst, itm1); };
+
+        this.mb.setIndTexOrder(this.indStageId, this.texcoordId + 2, this.texmapId + 1);
+        this.mb.setIndTexScale(this.indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
+
+        const rot67deg = mat4.create();
+        mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
+        const postRotate2 = mat4.create();
+        mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
+        this.postTexMtx[this.postTexMtxNum + 2] = (dst: mat4, viewState: ViewState) => {
+            const pttexmtx2 = mat4FromRowMajor(
+                0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.animController.envAnimValue0,
+                0.0,  0.01, 0.0,  0.0,
+                0.0,  0.0,  0.01, 0.01 * mapOriginZ,
+                0.0,  0.0,  0.0,  1.0
+            );
+            mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
+            mat4.mul(dst, pttexmtx2, viewState.invModelViewMtx);
+            mat4.mul(dst, postRotate2, dst);
+            mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
+        };
+        this.mb.setTexCoordGen(this.texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3*2);
+
+        this.mb.setTevIndirect(this.tevStage, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+
+        this.mb.setIndTexOrder(this.indStageId + 1, this.texcoordId + 3, this.texmapId + 1);
+        this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+
+        const postRotate3 = mat4.create();
+        mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
+        this.postTexMtx[this.postTexMtxNum + 3] = (dst: mat4, viewState: ViewState) => {
+            const pttexmtx3 = mat4FromRowMajor(
+                0.01, 0.0,  0.0,  0.01 * mapOriginX,
+                0.0,  0.01, 0.0,  0.0,
+                0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.animController.envAnimValue1,
+                0.0,  0.0,  0.0,  1.0
+            )
+            mat4.mul(dst, pttexmtx3, viewState.invModelViewMtx);
+            mat4.mul(dst, postRotate3, dst);
+            mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
+        };
+        this.mb.setTexCoordGen(this.texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3*3);
+
+        this.mb.setTevIndirect(this.tevStage + 1, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+
+        this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        this.mb.setTevSwapMode(this.tevStage, undefined, undefined);
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+
+        this.mb.setTevOrder(this.tevStage + 1, this.texcoordId + 1, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevColorIn(this.tevStage + 1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+        this.mb.setTevAlphaIn(this.tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        this.mb.setTevSwapMode(this.tevStage + 1, undefined, undefined);
+        this.mb.setTevColorOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.textures[this.texmapId + 1] = this.factory.getWavyTexture();
+
+        this.indStageId += 2;
+        this.texcoordId += 4;
+        this.texmapId += 2;
+        this.tevStage += 2;
+        this.postTexMtxId += 3 * 4;
+        this.postTexMtxNum += 4;
+    }
+
+    private addTevStagesForReflectiveFloor() {
+        this.textures[this.texmapId] = { kind: 'fb-color-downscaled-8x' };
+        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
+        this.mb.setTevDirect(this.tevStage);
+        this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_2_8);
+        this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
+        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        this.mb.setTevSwapMode(this.tevStage, undefined, undefined);
+        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.cprevIsValid = true;
+
+        this.texcoordId++;
+        this.texmapId++;
+        this.tevStage++;
+    }
+
+    private addTevStagesForNonLava() {
+        if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
+            this.addTevStageForTextureWithWhiteKonst(0, this.shader.layers[0].scrollingTexMtx);
+            if (this.shader.flags & ShaderFlags.Reflective) {
+                this.addTevStagesForReflectiveFloor();
+            }
+            this.addTevStagesForTextureWithMode(9, this.shader.layers[1].scrollingTexMtx);
+            this.addTevStageForMultVtxColor();
+
+            for (let i = 0; i < this.shader.layers.length; i++) {
+                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+            }
+        } else {
+            for (let i = 0; i < this.shader.layers.length; i++) {
+                const layer = this.shader.layers[i];
+                if (this.shader.flags & ShaderFlags.AmbientLit) {
+                    this.addTevStagesForTextureWithSkyAmbient(layer.scrollingTexMtx);
+                } else {
+                    this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, layer.scrollingTexMtx);
+                }
+            }
+
+            for (let i = 0; i < this.shader.layers.length; i++) {
+                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+            }
+
+            if (this.shader.flags & ShaderFlags.Reflective) {
+                this.addTevStagesForReflectiveFloor();
+            }
+        }
+    }
+}
 
 export class MaterialFactory {
     private rampTexture: SFAMaterialTexture = null;
@@ -189,480 +741,28 @@ export class MaterialFactory {
     private wavyTexture: SFAMaterialTexture = null;
     private halfGrayTexture: SFAMaterialTexture = null;
     private furFactory: FurFactory | null = null;
+    public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
     constructor(private device: GfxDevice) {
     }
 
+    public update(animController: SFAAnimationController) {
+        for (let i = 0; i < this.scrollingTexMtxs.length; i++) {
+            const scrollingTexMtx = this.scrollingTexMtxs[i];
+            scrollingTexMtx.x = (animController.animController.getTimeInFrames() * scrollingTexMtx.dxPerFrame) % MAX_SCROLL;
+            scrollingTexMtx.y = (animController.animController.getTimeInFrames() * scrollingTexMtx.dyPerFrame) % MAX_SCROLL;
+        }
+    }
+
+    public setupScrollingTexMtx(dxPerFrame: number, dyPerFrame: number): number {
+        this.scrollingTexMtxs.push({
+            x: 0, y: 0, dxPerFrame, dyPerFrame
+        });
+        return this.scrollingTexMtxs.length - 1;
+    }
+
     public buildMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
-        const mb = new GXMaterialBuilder('Material');
-        const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtx[] = [];
-        const postTexMtx: TexMtx[] = [];
-        const indTexMtx: (mat4 | undefined)[] = [];
-        let tevStage = 0;
-        let indStageId = GX.IndTexStageID.STAGE0;
-        let texcoordId = GX.TexCoordID.TEXCOORD0;
-        let texmapId = GX.TexMapID.TEXMAP0;
-        let texGenSrc = GX.TexGenSrc.TEX0;
-        let postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
-        let postTexMtxNum = 0;
-        let cprevIsValid = false;
-        let aprevIsValid = false;
-
-        const self = this;
-    
-        function addTevStagesForTextureWithSkyAmbient() {
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
-    
-            // mb.setTevKColor (does not exist)
-            // TODO: The game multiplies by a sky-related ambient color
-            // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
-            // Stage 1: Multiply vertex color by ambient sky color
-            mb.setTevDirect(tevStage);
-            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.ONE /*GX.CombineColorInput.KONST*/, GX.CC.RASC, GX.CC.ZERO);
-            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-            // Stage 2: Blend previous stage with vertex color by vertex alpha
-            mb.setTevDirect(tevStage + 1);
-            mb.setTevOrder(tevStage + 1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(tevStage + 1, GX.CC.CPREV, GX.CC.RASC, GX.CC.RASA, GX.CC.ZERO);
-            mb.setTevAlphaIn(tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-            mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-            // Stage 3: Multiply by texture
-            mb.setTevDirect(tevStage + 2);
-            mb.setTevOrder(tevStage + 2, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
-            mb.setTevColorIn(tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
-            mb.setTevAlphaIn(tevStage + 2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-            mb.setTevColorOp(tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-            tevStage += 3;
-            texcoordId++;
-            texmapId++;
-            texGenSrc++;
-        }
-    
-        function addTevStagesForTextureWithMode(mode: number) {
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
-    
-            mb.setTevDirect(tevStage);
-            mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
-            // Only modes 0 and 9 occur in map blocks. Other modes
-            // occur in object and character models.
-            switch (mode) {
-            case 0:
-                mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-                break;
-            case 1: // Default case in original executable
-                mb.setTevColorIn(tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
-                break;
-            case 9:
-                mb.setTevColorIn(tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
-                break;
-            default:
-                console.warn(`Unhandled tev color-in mode ${mode}`);
-                break;
-            }
-    
-            if (!aprevIsValid) {
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-                aprevIsValid = true;
-            } else {
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
-            }
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            cprevIsValid = true;
-    
-            tevStage++;
-            texcoordId++;
-            texmapId++;
-            texGenSrc++;
-        }
-    
-        function addTevStageForTextureWithWhiteKonst(colorInMode: number) {
-            // TODO: handle color. map block renderer always passes opaque white to this function.
-            
-            // TODO: set texture matrix
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
-    
-            mb.setTevDirect(tevStage);
-            mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
-            switch (colorInMode) {
-            case 0:
-                mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE /* GX.CC.KONST */, GX.CC.ZERO);
-                break;
-            default:
-                console.warn(`Unhandled colorInMode ${colorInMode}`);
-                break;
-            }
-    
-            if (!aprevIsValid) {
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-                aprevIsValid = true;
-            } else {
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
-            }
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            cprevIsValid = true;
-    
-            tevStage++;
-            texcoordId++;
-            texmapId++;
-            texGenSrc++;
-        }
-    
-        function addTevStageForMultVtxColor() {
-            // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
-    
-            mb.setTevDirect(tevStage);
-            mb.setTevOrder(tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevKAlphaSel(tevStage, GX.KonstAlphaSel.KASEL_1); // TODO: handle non-opaque alpha
-            if (tevStage === 0 || !cprevIsValid) {
-                mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
-            } else {
-                mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
-                mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO);
-            }
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            cprevIsValid = true;
-            tevStage++;
-        }
-    
-        function addTevStagesForLava() {
-            indTexMtx[0] = mat4FromRowMajor(
-                0.5, 0.0, 0.0, 0.0,
-                0.0, 0.5, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0, 0.0, 1.0
-            );
-
-            indTexMtx[1] = mat4FromRowMajor(
-                0.5, 0.0, 0.0, 0.0,
-                0.0, 0.5, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0, 0.0, 1.0
-            );
-
-            textures[2] = makeMaterialTexture(texColl.getTexture(self.device, shader.layers[0].texId!, alwaysUseTex1));
-            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-
-            const texture0x600 = texColl.getTexture(self.device, 0x600, false);
-            textures[0] = makeMaterialTexture(texture0x600);
-    
-            const pttexmtx2 = mat4.create();
-            postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
-            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX2);
-    
-            textures[1] = self.getWavyTexture();
-    
-            const pttexmtx0 = mat4.create();
-            mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
-            postTexMtx[0] = (dst: mat4) => { mat4.copy(dst, pttexmtx0); };
-            // TODO: animated param
-            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX0);
-            
-            mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
-            mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-
-            mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
-    
-            const pttexmtx1 = mat4.create();
-            mat4.fromScaling(pttexmtx1, [1.2, 1.2, 1.0]);
-            const rot45deg = mat4.create();
-            mat4.fromZRotation(rot45deg, Math.PI / 4);
-            mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
-            postTexMtx[1] = (dst: mat4) => { mat4.copy(dst, pttexmtx1); };
-            mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
-    
-            mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
-            mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
-            mb.setTevIndirect(2, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
-    
-            // TODO: set and use tev kcolor
-            mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_4_8); // TODO
-            mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8); // TODO
-    
-            mb.setTevDirect(0);
-            const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R];
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-            mb.setTevAlphaIn(0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-            mb.setTevSwapMode(0, undefined, swap3);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4, true, GX.Register.PREV);
-            cprevIsValid = true;
-    
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
-            mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-            mb.setTevSwapMode(1, undefined, undefined);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
-            mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-            mb.setTevSwapMode(2, undefined, undefined);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-            tevStage = 3;
-            texGenSrc = 4;
-            texcoordId = 4;
-            texmapId = 3;
-            indStageId = 2;
-        }
-    
-        function addTevStagesForCaustic() {
-            const mapOriginX = 1.0; // TODO: these values exist to ensure caustics don't exhibit seams at map boundaries.
-            const mapOriginZ = 1.0; // TODO
-
-            const pttexmtx0 = mat4FromRowMajor(
-                0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
-                0.0,   0.008, 0.0,   0.0,
-                0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
-                0.0,   0.0,   0.0,   0.1
-            );
-            const postRotate0 = mat4.create();
-            mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
-            postTexMtx[postTexMtxNum] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx0, invView);
-                mat4.mul(dst, postRotate0, dst);
-                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-            };
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId);
-            
-            const pttexmtx1 = mat4FromRowMajor(
-                0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
-                0.0,   0.005, 0.0,   0.0,
-                0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
-                0.0,   0.0,   0.0,   0.1
-            );
-            const postRotate1 = mat4.create();
-            mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
-            postTexMtx[postTexMtxNum + 1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx1, invView);
-                mat4.mul(dst, postRotate1, dst);
-                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-            };
-            mb.setTexCoordGen(texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3);
-            
-            textures[texmapId] = self.getCausticTexture();
-
-            indTexMtx[1] = mat4FromRowMajor(
-                0.5, 0.0, 0.0, 0.0,
-                0.0, 0.5, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 1.0
-            );
-            mb.setIndTexOrder(indStageId, texcoordId + 2, texmapId + 1);
-            mb.setIndTexScale(indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
-
-            const anim0 = 0; // TODO: animate
-            const pttexmtx2 = mat4FromRowMajor(
-                0.01, 0.0,  0.0,  0.01 * mapOriginX + anim0,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ,
-                0.0,  0.0,  0.0,  1.0
-            );
-            const rot67deg = mat4.create();
-            mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
-            mat4.mul(pttexmtx2, rot67deg, pttexmtx2);
-            const postRotate2 = mat4.create();
-            mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
-            postTexMtx[postTexMtxNum + 2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx2, invView);
-                mat4.mul(dst, postRotate2, dst);
-                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-            };
-            mb.setTexCoordGen(texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*2);
-
-            mb.setTevIndirect(tevStage, indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
-
-            mb.setIndTexOrder(indStageId + 1, texcoordId + 3, texmapId + 1);
-            mb.setIndTexScale(indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
-
-            const anim1 = 0; // TODO: animate
-            const pttexmtx3 = mat4FromRowMajor(
-                0.01, 0.0,  0.0,  0.01 * mapOriginX,
-                0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ + anim1,
-                0.0,  0.0,  0.0,  1.0
-            )
-            const postRotate3 = mat4.create();
-            mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
-            postTexMtx[postTexMtxNum + 3] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                const invView = mat4.create();
-                mat4.invert(invView, modelViewMtx);
-                mat4.mul(dst, pttexmtx3, invView);
-                mat4.mul(dst, postRotate3, dst);
-                mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-            };
-            mb.setTexCoordGen(texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, postTexMtxId + 3*3);
-
-            mb.setTevIndirect(tevStage + 1, indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
-    
-            mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
-            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-            mb.setTevSwapMode(tevStage, undefined, undefined);
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            cprevIsValid = true;
-    
-            mb.setTevOrder(tevStage + 1, texcoordId + 1, texmapId, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(tevStage + 1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
-            mb.setTevAlphaIn(tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-            mb.setTevSwapMode(tevStage + 1, undefined, undefined);
-            mb.setTevColorOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            textures[texmapId + 1] = self.getWavyTexture();
-    
-            indStageId += 2;
-            texcoordId += 4;
-            texmapId += 2;
-            tevStage += 2;
-            postTexMtxId += 3 * 4;
-            postTexMtxNum += 4;
-        }
-    
-        function addTevStagesForReflectiveFloor() {
-            textures[texmapId] = { kind: 'fb-color-downscaled-8x' };
-            mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
-            mb.setTevDirect(tevStage);
-            mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_2_8);
-            mb.setTevOrder(tevStage, texcoordId, texmapId, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
-            mb.setTevAlphaIn(tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-            mb.setTevSwapMode(tevStage, undefined, undefined);
-            mb.setTevColorOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            cprevIsValid = true;
-    
-            texcoordId++;
-            texmapId++;
-            tevStage++;
-        }
-    
-        function addTevStagesForNonLava() {
-            if (shader.layers.length === 2 && (shader.layers[1].tevMode & 0x7f) === 9) {
-                addTevStageForTextureWithWhiteKonst(0);
-                if (shader.flags & ShaderFlags.Reflective) {
-                    addTevStagesForReflectiveFloor();
-                }
-                addTevStagesForTextureWithMode(9);
-                addTevStageForMultVtxColor();
-    
-                for (let i = 0; i < shader.layers.length; i++) {
-                    textures.push(makeMaterialTexture(texColl.getTexture(self.device, shader.layers[i].texId!, alwaysUseTex1)));
-                }
-            } else {
-                for (let i = 0; i < shader.layers.length; i++) {
-                    const layer = shader.layers[i];
-                    if (shader.flags & ShaderFlags.AmbientLit) {
-                        addTevStagesForTextureWithSkyAmbient();
-                    } else {
-                        addTevStagesForTextureWithMode(layer.tevMode & 0x7f);
-                    }
-                }
-    
-                for (let i = 0; i < shader.layers.length; i++) {
-                    textures.push(makeMaterialTexture(texColl.getTexture(self.device, shader.layers[i].texId!, alwaysUseTex1)));
-                }
-    
-                if (shader.flags & ShaderFlags.Reflective) {
-                    addTevStagesForReflectiveFloor();
-                }
-            }
-        }
-    
-        if (!isMapBlock) {
-            // Not a map block. Just do basic texturing.
-            mb.setUsePnMtxIdx(true);
-            addTevStageForTextureWithWhiteKonst(0);
-            for (let i = 0; i < shader.layers.length; i++) {
-                textures.push(makeMaterialTexture(texColl.getTexture(self.device, shader.layers[i].texId!, alwaysUseTex1)));
-            }
-        } else {
-            texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                // Flipped
-                texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
-                mat4.mul(dst, dst, modelViewMtx);
-                return dst;
-            }
-    
-            if ((shader.flags & ShaderFlags.Lava) != 0) {
-                addTevStagesForLava();
-            } else {
-                addTevStagesForNonLava();
-            }
-    
-            if ((shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
-                console.log(`TODO: skyscape reflection?`);
-            } else if ((shader.flags & ShaderFlags.Caustic) != 0) {
-                addTevStagesForCaustic();
-            } else {
-                // TODO
-            }
-        }
-        
-        if ((shader.flags & 0x40000000) || (shader.flags & 0x20000000)) {
-            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-            mb.setZMode(true, GX.CompareType.LEQUAL, false);
-            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-        } else {
-            mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
-            mb.setZMode(true, GX.CompareType.LEQUAL, true);
-            if (((shader.flags & ShaderFlags.AlphaCompare) != 0) && ((shader.flags & ShaderFlags.Lava) == 0)) {
-                mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-            } else {
-                mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-            }
-        }
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setCullMode((shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
-    
-        return {
-            factory: this,
-            material: mb.finish(),
-            textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
-                for (let i = 0; i < 10; i++) {
-                    if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
-                    }
-                }
-                
-                for (let i = 0; i < 3; i++) {
-                    if (indTexMtx[i] !== undefined) {
-                        mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
-                    }
-                }
-    
-                for (let i = 0; i < 20; i++) {
-                    if (postTexMtx[i] !== undefined) {
-                        postTexMtx[i]!(params.u_PostTexMtx[i], viewerInput, modelViewMtx);
-                    }
-                }
-            },
-        };
+        return new StandardMaterial(this.device, this, shader, texColl, isMapBlock);
     }
     
     public buildWaterMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
@@ -672,21 +772,23 @@ export class MaterialFactory {
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
         
-        texMtx[0] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[0] = (dst: mat4, viewState: ViewState) => {
             // Flipped
-            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, 1);
-            mat4.mul(dst, dst, modelViewMtx);
+            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
-        texMtx[1] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[1] = (dst: mat4, viewState: ViewState) => {
             // Unflipped
-            texProjCameraSceneTex(dst, viewerInput.camera, viewerInput.viewport, -1);
-            mat4.mul(dst, dst, modelViewMtx);
+            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, -1);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
         const texmtx3 = mat4.create();
-        // TODO: Animate translation of texmtx3 to make water flow
-        texMtx[3] = (dst: mat4) => { mat4.copy(dst, texmtx3); }
+        texMtx[3] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, texmtx3);
+            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue0);
+        }
 
         textures[0] = { kind: 'fb-color-downscaled-2x' };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0); // TODO
@@ -696,7 +798,7 @@ export class MaterialFactory {
         indTexMtx[1] = mat4FromRowMajor(
             0.5, 0.0, 0.0, 0.0,
             0.0, 0.5, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
@@ -705,14 +807,21 @@ export class MaterialFactory {
 
         const texmtx4 = mat4.create();
         mat4.fromScaling(texmtx4, [0.83, 0.83, 0.83]);
-        mat4.rotateZ(texmtx4, texmtx4, Math.PI / 4);
-        texMtx[4] = (dst: mat4) => { mat4.copy(dst, texmtx4); };
+        const rot45deg = mat4.create();
+        mat4.fromZRotation(rot45deg, Math.PI / 4);
+        mat4.mul(texmtx4, rot45deg, texmtx4);
+        texMtx[4] = (dst: mat4, viewState: ViewState) => {
+            mat4.copy(dst, texmtx4);
+            mat4SetValue(dst, 0, 3, viewState.animController.envAnimValue1);
+            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue1);
+        };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4);
 
         indTexMtx[1] = mat4FromRowMajor(
             0.3,  0.3, 0.0, 0.0,
             -0.3, 0.3, 0.0, 0.0,
-            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
         mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
@@ -737,7 +846,7 @@ export class MaterialFactory {
         indTexMtx[2] = mat4FromRowMajor(
             0.0,  0.5, 0.0, 0.0,
             -0.5, 0.0, 0.0, 0.0,
-            0.0,  0.0, 1.0, 0.0,
+            0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
         mb.setTevIndirect(2, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
@@ -764,12 +873,13 @@ export class MaterialFactory {
 
         return {
             factory: this,
-            material: mb.finish(),
+            shader,
+            gxMaterial: mb.finish(),
             textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
                 for (let i = 0; i < 10; i++) {
                     if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                        texMtx[i]!(params.u_TexMtx[i], viewState);
                     }
                 }
                 
@@ -785,6 +895,9 @@ export class MaterialFactory {
                     }
                 }
             },
+            rebuild: () => {
+                throw Error(`rebuild not implemented for water shader`);
+            }
         };
     }
 
@@ -809,26 +922,29 @@ export class MaterialFactory {
         // Ind Stage 0: Waviness
         // TODO: animate waviness to make grass sway back and forth
         textures[2] = this.getWavyTexture();
-        const texmtx1 = mat4.fromValues(
-            0.0125/32, 0.0, 0.0, 0.0, // FIXME: divide by 32 doesn't belong here but it makes grass look neater...
-            0.0, 0.0125/32, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
-        );
-        texMtx[1] = (dst: mat4) => { mat4.copy(dst, texmtx1); };
+        texMtx[1] = (dst: mat4, viewState: ViewState) => {
+            mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
+            mat4SetValue(dst, 0, 0, 0.0125);
+            mat4SetValue(dst, 1, 1, 0.0125);
+        };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
         mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
     
         // Stage 1: Fur map
         textures[1] = { kind: 'fur-map' };
-        const texmtx0 = mat4.fromValues(
+
+        // This texture matrix, when combined with a POS tex-gen, creates
+        // texture coordinates that increase linearly on the model's XZ plane.
+        const texmtx0 = mat4FromRowMajor(
             0.1, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.1, 0.0,
             0.0, 0.0, 0.0, 0.0,
-            0.0, 0.1, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0
+            0.0, 0.0, 0.0, 1.0
         );
         texMtx[0] = (dst: mat4) => { mat4.copy(dst, texmtx0); };
+
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
         mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
@@ -840,14 +956,14 @@ export class MaterialFactory {
         
         // Stage 2: Distance fade
         textures[3] = this.getRampTexture();
-        texMtx[2] = (dst: mat4, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+        texMtx[2] = (dst: mat4, viewState: ViewState) => {
             mat4.set(dst,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 1/30, 0.0, 0.0, 0.0,
                 25/3, 0.0, 0.0, 0.0 // TODO: this matrix can be tweaked to extend the draw distance, which may be desirable on high-res displays 
             );
-            mat4.mul(dst, dst, modelViewMtx);
+            mat4.mul(dst, dst, viewState.modelViewMtx);
         };
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
         mb.setTevDirect(2);
@@ -865,12 +981,13 @@ export class MaterialFactory {
     
         return {
             factory: this,
-            material: mb.finish(),
+            shader,
+            gxMaterial: mb.finish(),
             textures,
-            setupMaterialParams: (params: MaterialParams, viewerInput: ViewerRenderInput, modelViewMtx: mat4) => {
+            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
                 for (let i = 0; i < 10; i++) {
                     if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewerInput, modelViewMtx);
+                        texMtx[i]!(params.u_TexMtx[i], viewState);
                     }
                 }
                 
@@ -886,6 +1003,9 @@ export class MaterialFactory {
                     }
                 }
             },
+            rebuild: () => {
+                throw Error(`rebuild not implemented for fur shader`);
+            }
         };
     }
 
@@ -898,7 +1018,7 @@ export class MaterialFactory {
         return this.furFactory;
     }
 
-    private getHalfGrayTexture(): SFAMaterialTexture {
+    public getHalfGrayTexture(): SFAMaterialTexture {
         // Used to test indirect texturing
         if (this.halfGrayTexture !== null) {
             return this.halfGrayTexture;
@@ -937,7 +1057,7 @@ export class MaterialFactory {
         return this.rampTexture;
     }
     
-    private getRampTexture(): SFAMaterialTexture {
+    public getRampTexture(): SFAMaterialTexture {
         if (this.rampTexture !== null) {
             return this.rampTexture;
         }
@@ -980,7 +1100,7 @@ export class MaterialFactory {
         return this.rampTexture;
     }
     
-    private getCausticTexture(): SFAMaterialTexture {
+    public getCausticTexture(): SFAMaterialTexture {
         // This function generates a texture with a circular pattern used for caustics.
         // The original function to generate this texture is not customizable and
         // generates the same texture every time it is called. (?)
@@ -1044,7 +1164,7 @@ export class MaterialFactory {
         return this.causticTexture;
     }
     
-    private getWavyTexture(): SFAMaterialTexture {
+    public getWavyTexture(): SFAMaterialTexture {
         // This function generates a texture with a wavy pattern used for water, lava and other materials.
         // The original function used to generate this texture is not customizable and
         // always generates the same texture every time it is called. (?)
@@ -1076,17 +1196,17 @@ export class MaterialFactory {
             pixels[idx + 3] = a
         }
 
-        const X_MUL = 0.39275 // Approximately pi / 8
-        const Y_MUL = 0.0981875 // Approximately pi / 32
+        const X_MUL = 0.39275; // Approximately pi / 8
+        const Y_MUL = 0.0981875; // Approximately pi / 32
         for (let y = 0; y < height; y++) {
-            const yAngle = Y_MUL * y
+            let yAngle = Y_MUL * y
             for (let x = 0; x < width; x++) {
-                const xAngle = X_MUL * x
-                const iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle)
-                const aFactor = Math.cos(X_MUL * x * xAngle)
-                const I = 127 * iFactor + 127
-                const A = 127 * iFactor * aFactor + 127
-                plot(y, x, I, I, I, A)
+                const xAngle = X_MUL * x;
+                const iFactor = Math.cos(0.5 * Math.sin(xAngle) + yAngle);
+                const aFactor = Math.cos(xAngle);
+                const I = 127 * iFactor + 127;
+                const A = 127 * iFactor * aFactor + 127;
+                plot(y, x, I, I, I, A);
             }
         }
 

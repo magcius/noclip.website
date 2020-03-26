@@ -1,4 +1,6 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { ViewerRenderInput } from '../viewer';
+import { SFAAnimationController } from './animation';
 import { mat4 } from 'gl-matrix';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
@@ -6,7 +8,7 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
 }
 
 export function interpS16(n: number): number {
-    // Bitwise operators convert numbers to 32-bit signed integers.
+    // Bitwise operators automatically convert numbers to 32-bit signed integers.
     return ((n & 0xffff) << 16) >> 16;
 }
 
@@ -30,6 +32,10 @@ export function mat4FromRowMajor(
         m02, m12, m22, m32,
         m03, m13, m23, m33,
     )
+}
+
+export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
+    mtx[4 * col + row] = m;
 }
 
 // Reads bitfields. Bits are pulled from the least significant bits of each byte
@@ -80,11 +86,18 @@ export class LowBitReader {
 }
 
 export function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
-    const aEl = document.createElement('a')
-    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}))
-    aEl.download = filename
+    const aEl = document.createElement('a');
+    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}));
+    aEl.download = filename;
     if (text !== undefined) {
-        aEl.append(text)
+        aEl.append(text);
     }
-    return aEl
+    return aEl;
+}
+
+export interface ViewState {
+    viewerInput: ViewerRenderInput;
+    animController: SFAAnimationController;
+    modelViewMtx: mat4;
+    invModelViewMtx: mat4;
 }
