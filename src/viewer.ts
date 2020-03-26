@@ -199,10 +199,6 @@ export class Viewer {
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
-        if (!webXRContext.views || !webXRContext.xrSession) {
-            return;
-        }
-
         const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession.renderState.baseLayer;
         if (!baseLayer) {
             return;
@@ -302,7 +298,7 @@ export class Viewer {
         this.viewerRenderInput.deltaTime += deltaTime;
         this.sceneTime += deltaTime;
 
-        if (updateInfo.webXRContext !== null) {
+        if (updateInfo.webXRContext !== null && updateInfo.webXRContext.views && updateInfo.webXRContext.xrSession) {
             this.xrCameraController.update(updateInfo.webXRContext);
             this.renderWebXR(updateInfo.webXRContext);
         } else {
