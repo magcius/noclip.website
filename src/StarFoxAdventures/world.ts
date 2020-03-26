@@ -202,12 +202,9 @@ class WorldRenderer extends SFARenderer {
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         // Render opaques
-
         this.beginPass(viewerInput);
-        
-        // TODO: depth sorting (for opaques, near-to-far is ideal)
         this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
-
+        
         const mtx = mat4.create();
         for (let i = 0; i < this.objectInstances.length; i++) {
             const obj = this.objectInstances[i];
@@ -230,16 +227,17 @@ class WorldRenderer extends SFARenderer {
         
         this.endPass(device);
 
-        // Render waters and translucents
-
-        // TODO: depth sorting (for translucents, far-to-near is required)
+        // Render waters, furs and translucents
         this.beginPass(viewerInput);
         this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-        for (let i = 1; i < this.mapInstance.getNumDrawSteps(); i++) {
-            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, i);
-        }
         this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
         this.endPass(device);
+
+        for (let drawStep = 1; drawStep < this.mapInstance.getNumDrawSteps(); drawStep++) {
+            this.beginPass(viewerInput);
+            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            this.endPass(device);
+        }    
     }
 }
 
