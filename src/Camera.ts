@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY, Vec3Zero } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY, Vec3Zero, transformVec3Mat4w1 } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
@@ -162,7 +162,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * which will clamp if the value is below 0.
  */
 export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3a): number {
-    vec3.transformMat4(v_, v, camera.viewMatrix);
+    transformVec3Mat4w1(v_, camera.viewMatrix, v);
     return -v_[2];
 }
 
@@ -178,7 +178,7 @@ export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3
  * which will clamp if the value is below 0.
  */
 export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3a): number {
-    vec3.transformMat4(v_, v, viewMatrix);
+    transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
 }
 
@@ -250,7 +250,7 @@ export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: C
 export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
     screenSpaceProjection.reset();
 
-    vec3.transformMat4(v, center, camera.viewMatrix);
+    transformVec3Mat4w1(v, camera.viewMatrix, center);
 
     v[2] = -Math.max(Math.abs(v[2] - radius), camera.frustum.near);
 

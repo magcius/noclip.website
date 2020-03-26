@@ -25,7 +25,7 @@ import { getVertexInputLocation } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0 } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
@@ -1633,14 +1633,14 @@ export class JPABaseEmitter {
         scratchMatrix[12] = this.globalTranslation[0];
         scratchMatrix[13] = this.globalTranslation[1];
         scratchMatrix[14] = this.globalTranslation[2];
-        vec3.transformMat4(workData.emitterGlobalSRT, this.emitterTrs, scratchMatrix);
+        transformVec3Mat4w1(workData.emitterGlobalSRT, scratchMatrix, this.emitterTrs);
     }
 
     private calcWorkData_d(workData: JPAEmitterWorkData): void {
         // Set up the work data for drawing.
         JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
         mat4.mul(workData.emitterGlobalRot, this.globalRotation, scratchMatrix);
-        vec3.transformMat4(workData.emitterGlobalDir, this.emitterDir, workData.emitterGlobalRot);
+        transformVec3Mat4w0(workData.emitterGlobalDir, workData.emitterGlobalRot, this.emitterDir);
 
         if (!SORT_PARTICLES) {
             this.calcEmitterGlobalPosition(scratchVec3a);
@@ -1723,7 +1723,7 @@ export class JPABaseEmitter {
         scratchMatrix[12] += this.globalTranslation[0];
         scratchMatrix[13] += this.globalTranslation[1];
         scratchMatrix[14] += this.globalTranslation[2];
-        vec3.transformMat4(v, this.emitterTrs, scratchMatrix);
+        transformVec3Mat4w1(v, scratchMatrix, this.emitterTrs);
     }
 
     private drawStripe(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, particleList: JPABaseParticle[], sp1: CommonShapeTypeFields): void {
@@ -1812,7 +1812,7 @@ export class JPABaseEmitter {
             }
 
             for (let j = 0; j < numPoints; j++)
-                vec3.transformMat4(scratchVec3Points[j], scratchVec3Points[j], scratchMatrix);
+                transformVec3Mat4w0(scratchVec3Points[j], scratchMatrix, scratchVec3Points[j]);
 
             const texT = i / (particleCount - 1);
             entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][0] + p.position[0];
@@ -2204,7 +2204,7 @@ export class JPABaseParticle {
 
         const lifeTimeRandom = get_rndm_f(baseEmitter.random);
         this.lifeTime = baseEmitter.lifeTime * (1.0 - lifeTimeRandom * bem1.lifeTimeRndm);
-        vec3.transformMat4(this.localPosition, workData.volumePos, workData.emitterGlobalSR);
+        transformVec3Mat4w0(this.localPosition, workData.emitterGlobalSR, workData.volumePos);
 
         if (!!(bem1.flags & 0x08))
             this.flags = this.flags | 0x20;
@@ -2251,7 +2251,7 @@ export class JPABaseParticle {
             this.baseVel[2] *= baseEmitter.emitterScl[2];
         }
 
-        vec3.transformMat4(this.baseVel, this.baseVel, workData.emitterGlobalRot);
+        transformVec3Mat4w0(this.baseVel, workData.emitterGlobalRot, this.baseVel);
 
         vec3.copy(this.accel, this.baseVel);
         const accel = bem1.accel * (1.0 + (get_r_zp(baseEmitter.random) * bem1.accelRndm));
@@ -2432,7 +2432,7 @@ export class JPABaseParticle {
         if (!!(field.sttFlag & 0x02)) {
             vec3.scale(scratchVec3a, field.dir, field.mag);
         } else {
-            vec3.transformMat4(scratchVec3a, field.dir, workData.globalRotation);
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, field.dir);
             vec3.scale(scratchVec3a, scratchVec3a, field.mag);
         }
 
@@ -2446,7 +2446,7 @@ export class JPABaseParticle {
         if (!!(field.sttFlag & 0x02)) {
             vec3.scale(scratchVec3a, scratchVec3a, field.mag);
         } else {
-            vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
+            transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
             vec3.scale(scratchVec3a, scratchVec3a, field.mag);
         }
 
@@ -2459,7 +2459,7 @@ export class JPABaseParticle {
 
         // Convert to emitter space.
         vec3.sub(scratchVec3a, field.pos, workData.emitterTrs);
-        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
+        transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         // Calc
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
@@ -2472,7 +2472,7 @@ export class JPABaseParticle {
 
         // Convert to emitter space.
         vec3.sub(scratchVec3a, field.pos, workData.emitterTrs);
-        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
+        transformVec3Mat4w0(scratchVec3a, workData.globalRotation, scratchVec3a);
 
         const power = 10 * field.mag;
         const refDistanceSq = field.refDistanceSq;
@@ -2495,7 +2495,7 @@ export class JPABaseParticle {
         const forceDir = scratchVec3a;
         const forceVec = scratchVec3b;
 
-        vec3.transformMat4(forceDir, field.dir, workData.emitterGlobalRot);
+        transformVec3Mat4w0(forceDir, workData.globalRotation, field.dir);
         vec3.normalize(forceDir, forceDir);
 
         const distance = field.pos[2];
@@ -2568,9 +2568,9 @@ export class JPABaseParticle {
         vec3.cross(scratchVec3c, field.pos, field.dir);
         vec3.cross(scratchVec3a, field.dir, scratchVec3c);
 
-        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.emitterGlobalRot);
-        vec3.transformMat4(scratchVec3b, field.dir, workData.emitterGlobalRot);
-        vec3.transformMat4(scratchVec3c, scratchVec3c, workData.emitterGlobalRot);
+        transformVec3Mat4w0(scratchVec3a, workData.emitterGlobalRot, scratchVec3a);
+        transformVec3Mat4w0(scratchVec3b, workData.emitterGlobalRot, field.dir);
+        transformVec3Mat4w0(scratchVec3c, workData.emitterGlobalRot, scratchVec3c);
         vec3.normalize(scratchVec3a, scratchVec3a);
         vec3.normalize(scratchVec3b, scratchVec3b);
         vec3.normalize(scratchVec3c, scratchVec3c);
@@ -2599,13 +2599,13 @@ export class JPABaseParticle {
 
     private calcFieldSpin(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        vec3.transformMat4(scratchVec3a, field.dir, workData.emitterGlobalRot);
+        transformVec3Mat4w0(scratchVec3a, workData.emitterGlobalRot, field.dir);
         vec3.normalize(scratchVec3a, scratchVec3a);
         mat4.identity(scratchMatrix);
         mat4.rotate(scratchMatrix, scratchMatrix, field.innerSpeed, scratchVec3a);
 
         // Calc
-        vec3.transformMat4(scratchVec3a, this.localPosition, scratchMatrix);
+        transformVec3Mat4w0(scratchVec3a, scratchMatrix, this.localPosition);
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
         this.calcFieldAffect(scratchVec3a, field);
     }
@@ -3058,7 +3058,7 @@ export class JPABaseParticle {
 
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
-            vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
+            transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
             computeModelMatrixSRT(packetParams.u_PosMtx[0],
                 this.scale[0] * workData.globalScale2D[0],
                 this.scale[1] * workData.globalScale2D[1],
@@ -3143,9 +3143,8 @@ export class JPABaseParticle {
             vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
-            computeMatrixWithoutTranslation(scratchMatrix, workData.posCamMtx);
-            vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
-            vec3.transformMat4(scratchVec3b, this.position, workData.posCamMtx);
+            transformVec3Mat4w0(scratchVec3a, workData.posCamMtx, scratchVec3a);
+            transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
 
             const scaleX = workData.globalScale2D[0] * this.scale[0];
             const scaleY = workData.globalScale2D[1] * this.scale[1];
@@ -3174,7 +3173,7 @@ export class JPABaseParticle {
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
-            vec3.transformMat4(scratchVec3b, this.position, workData.posCamMtx);
+            transformVec3Mat4w1(scratchVec3b, workData.posCamMtx, this.position);
             const dst = packetParams.u_PosMtx[0];
 
             const scaleX = workData.globalScale2D[0] * this.scale[0];

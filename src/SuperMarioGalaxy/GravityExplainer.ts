@@ -13,7 +13,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector } from './ActorUtil';
 import { DrawType } from './NameObj';
 import { ViewerRenderInput } from '../viewer';
-import { invlerp, computeMatrixWithoutTranslation, Vec3Zero } from '../MathHelpers';
+import { invlerp, computeMatrixWithoutTranslation, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
@@ -166,9 +166,8 @@ export class GravityExplainer extends LiveActor {
         vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
         vec3.normalize(scratchVec3a, scratchVec3a);
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewMtx);
-        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
-        vec3.transformMat4(scratchVec3b, arrow.pos, viewMtx);
+        transformVec3Mat4w0(scratchVec3a, viewMtx, scratchVec3a);
+        transformVec3Mat4w1(scratchVec3b, viewMtx, arrow.pos);
 
         const scaleX = arrow.scale;
         const scaleY = arrow.scale;

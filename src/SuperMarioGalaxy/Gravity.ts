@@ -4,8 +4,8 @@ import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, transformVec3Mat4w1, setMatrixTranslation } from "../MathHelpers";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation } from "../MathHelpers";
+import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -40,8 +40,10 @@ export class PlanetGravityManager extends NameObj {
         for (let i = 0; i < this.gravities.length; i++) {
             const gravity = this.gravities[i];
 
-            // TODO(jstpierre): Check gravity alive-ness
             // TODO(jstpierre): Check gravity attachment
+
+            if (!gravity.alive || !gravity.switchActive)
+                continue;
 
             if (!(gravity.typeMask & gravityTypeMask))
                 continue;
@@ -99,13 +101,15 @@ export const enum GravityTypeMask {
 const enum GravityPower { Light, Normal, Heavy }
 
 abstract class PlanetGravity {
-    public range: number = -1.0;
-    public distant: number = 0.0;
-    public priority: number = 0.0;
-    public id: number = -1;
-    public typeMask: GravityTypeMask = GravityTypeMask.Normal;
-    public power: GravityPower = GravityPower.Normal;
-    public inverse: boolean = false;
+    public range = -1.0;
+    public distant = 0.0;
+    public priority = 0.0;
+    public id = -1;
+    public typeMask = GravityTypeMask.Normal;
+    public power = GravityPower.Normal;
+    public inverse = false;
+    public alive = false;
+    public switchActive = true;
 
     public calcGravity(dst: vec3, coord: vec3): boolean {
         let distance = this.calcOwnGravityVector(dst, coord);
@@ -1097,15 +1101,45 @@ class ConeGravity extends PlanetGravity {
 export class GlobalGravityObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        // connectToSceneMapObjMovement(sceneObjHolder, this);
+        // 
+
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+
+        if (isValidSwitchA(this) || isValidSwitchB(this)) {
+            connectToSceneMapObjMovement(sceneObjHolder, this);
+        }
+
+        // addBaseMatrixFollowerGravity
+
+        this.makeActorAppeared(sceneObjHolder);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
     }
 
-    /*
+    private updateSwitch(sceneObjHolder: SceneObjHolder): void {
+        if (isValidSwitchA(this) || isValidSwitchB(this)) {
+            const activeSwitchA = isValidSwitchA(this) && isOnSwitchA(sceneObjHolder, this);
+            const activeSwitchB = isValidSwitchB(this) && !isOnSwitchB(sceneObjHolder, this);
+
+            this.gravity.switchActive = activeSwitchA && activeSwitchB;
+        }
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) {
         super.movement(sceneObjHolder, viewerInput);
-        this.gravity.drawDebug(sceneObjHolder, viewerInput);
+        this.updateSwitch(sceneObjHolder);
     }
-    */
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.gravity.alive = true;
+        this.updateSwitch(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        this.gravity.alive = false;
+    }
 }
 
 function makeMtxTR(dst: mat4, translation: vec3, rotation: vec3): void {

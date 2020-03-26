@@ -518,18 +518,11 @@ export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => n
 
 export class GfxRenderInstList {
     public renderInsts: GfxRenderInst[] = [];
-    private needsSort = false;
 
     constructor(
         public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
         public executionOrder = GfxRenderInstExecutionOrder.Forwards,
     ) {
-    }
-
-    private flushSort(): void {
-        if (this.needsSort && this.compareFunction !== null)
-            this.renderInsts.sort(this.compareFunction);
-        this.needsSort = false;
     }
 
     /**
@@ -538,25 +531,12 @@ export class GfxRenderInstList {
      * fully constructed at this point.
      */
     public insertSorted(renderInst: GfxRenderInst): void {
-        this.flushSort();
         if (this.compareFunction !== null) {
             const idx = bisectRight(this.renderInsts, renderInst, this.compareFunction);
             this.renderInsts.splice(idx, 0, renderInst);
         } else {
             this.renderInsts.push(renderInst);
         }
-    }
-
-    /**
-     * Insert a render inst to the list. This will mark the list for sorting, so the
-     * render inst does not need to be fully constructed at this time.
-     *
-     * {@deprecated}
-     */
-    public insertToEnd(renderInst: GfxRenderInst): void {
-        this.renderInsts.push(renderInst);
-        if (this.compareFunction !== null)
-            this.needsSort = true;
     }
 
     /**
@@ -567,8 +547,6 @@ export class GfxRenderInstList {
     public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.renderInsts.length === 0)
             return;
-
-        this.flushSort();
 
         // TODO(jstpierre): Remove this?
         if (state === null) {
@@ -776,9 +754,9 @@ export class GfxRenderInstManager {
 /**
  * {@deprecated}
  */
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, sort: boolean = true): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, resetState: boolean = true): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer);
+    renderInstManager.drawOnPassRenderer(device, passRenderer, resetState ? null : defaultTransientState);
 }
 
 /**
