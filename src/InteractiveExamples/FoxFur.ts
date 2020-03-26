@@ -344,7 +344,7 @@ class FurObj {
         template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
 
         for (let i = 0; i < this.numLayers; i++) {
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             const isRootLayer = (i === 0);
             const linearRate = (i + 1) / (this.numLayers | 0);
             const a = Math.pow(linearRate, this.pow);
@@ -389,6 +389,7 @@ class FurObj {
             }
 
             renderInst.drawIndexes(this.indexCount);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

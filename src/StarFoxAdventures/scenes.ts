@@ -1,17 +1,11 @@
-
 import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { mat4 } from 'gl-matrix';
 
-import { SFAMapDesc, AncientMapDesc } from './maps';
-import { SFABlockRenderer, AncientBlockRenderer, BlockFetcher } from './blocks';
+import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
+import { BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
-import { SFARenderer } from './render';
-import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
-import { SFAWorldDesc } from './world';
+import { SFAWorldSceneDesc } from './world';
 
 export interface GameInfo {
     pathBase: string;
@@ -262,7 +256,7 @@ class AncientBlockFetcher implements BlockFetcher {
     }
 }
 
-const SFADEMO_GAME_INFO: GameInfo = {
+export const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
     makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
         const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
@@ -407,75 +401,6 @@ class BlockExhibitFetcher implements BlockFetcher {
     }
 }
 
-class SFABlockExhibitDesc implements Viewer.SceneDesc {
-    public id: string;
-    texColl: TextureCollection;
-
-    constructor(public subdir: string, public fileName: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private useCompression: boolean = true, private useAncientBlocks = false, private useAncientTextures = false) {
-        this.id = `${subdir}blocks`;
-    }
-    
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const pathBase = this.gameInfo.pathBase;
-        const directory = `${pathBase}${this.subdir != '' ? '/' : ''}${this.subdir}`;
-        const dataFetcher = context.dataFetcher;
-        console.log(`Creating block exhibit for ${directory}/${this.fileName} ...`);
-
-        if (this.useAncientTextures) {
-            this.texColl = new FakeTextureCollection();
-        } else {
-            const [tex1Tab, tex1Bin] = await Promise.all([
-                dataFetcher.fetchData(`${directory}/TEX1.tab`),
-                dataFetcher.fetchData(`${directory}/TEX1.bin`),
-            ]);
-            this.texColl = new SFATextureCollection(tex1Tab, tex1Bin);
-        }
-        const blockFetcher = new BlockExhibitFetcher(this.useCompression);
-        await blockFetcher.create(dataFetcher, directory, `${this.fileName}.tab`, `${this.fileName}${this.useCompression ? '.zlb' : ''}.bin`);
-
-        const sfaRenderer = new SFARenderer(device);
-        const X_BLOCKS = 10;
-        const Y_BLOCKS = 10;
-        const FIRST_BLOCK = 0;
-        let done = false;
-        for (let y = 0; y < Y_BLOCKS && !done; y++) {
-            for (let x = 0; x < X_BLOCKS && !done; x++) {
-                const blockNum = FIRST_BLOCK + y * X_BLOCKS + x;
-                if (blockNum >= blockFetcher.blockOffsets.length) {
-                    done = true;
-                    continue;
-                }
-                try {
-                    const blockData = blockFetcher.getBlock(blockNum);
-                    if (!blockData) {
-                        console.warn(`Failed to load data for block ${blockNum}`);
-                        continue;
-                    }
-                    let blockRenderer;
-                    if (this.useAncientBlocks) {
-                        blockRenderer = new AncientBlockRenderer(device, blockData, this.texColl);
-                    } else {
-                        blockRenderer = new SFABlockRenderer(device, blockData, this.texColl);
-                    }
-                    if (!blockRenderer) {
-                        console.warn(`Block ${blockNum} not found`);
-                        continue;
-                    }
-
-                    const modelMatrix: mat4 = mat4.create();
-                    mat4.fromTranslation(modelMatrix, [960 * x, 0, 960 * y]);
-                    blockRenderer.addToRenderer(sfaRenderer, modelMatrix);
-                } catch (e) {
-                    console.warn(`Skipped block at ${x},${y} due to exception:`);
-                    console.error(e);
-                }
-            }
-        }
-
-        return sfaRenderer;
-    }
-}
-
 const sceneDescs = [
     'Maps',
     // Dinosaur Planet contains many maps. During the transition to the GameCube
@@ -483,79 +408,79 @@ const sceneDescs = [
     // dropped. Their data remains, but it references missing and/or broken data
     // and thus cannot be loaded.
     // new SFAMapDesc(1, 'loc1', 'Location 1'),
-    new SFAMapDesc(2, 'loc2', 'Dragon Rock'),
+    new SFAMapSceneDesc(2, 'loc2', 'Dragon Rock'),
     // new SFAMapDesc(3, 'loc3', 'Location'),
-    new SFAMapDesc(4, 'loc4', 'Volcano Force Point Temple'),
+    new SFAMapSceneDesc(4, 'loc4', 'Volcano Force Point Temple'),
     // new SFAMapDesc(5, 'loc5', 'Location'),
     // new SFAMapDesc(6, 'loc6', 'Location'), // dfalls
-    new SFAMapDesc(7, 'loc7', 'ThornTail Hollow'),
-    new SFAMapDesc(8, 'loc8', 'ThornTail Hollow Well'),
-    new SFAMapDesc(9, 'loc9', 'Cheat Token Maze'),
-    new SFAMapDesc(10, 'loc10', 'SnowHorn Wastes'),
-    new SFAMapDesc(11, 'loc11', 'Krazoa Palace'),
-    new SFAMapDesc(12, 'loc12', 'CloudRunner Fortress'),
-    new SFAMapDesc(13, 'loc13', 'Walled City'),
-    new SFAMapDesc(14, 'loc14', 'LightFoot Village'),
+    new SFAMapSceneDesc(7, 'loc7', 'ThornTail Hollow'),
+    new SFAMapSceneDesc(8, 'loc8', 'ThornTail Hollow Well'),
+    new SFAMapSceneDesc(9, 'loc9', 'Cheat Token Maze'),
+    new SFAMapSceneDesc(10, 'loc10', 'SnowHorn Wastes'),
+    new SFAMapSceneDesc(11, 'loc11', 'Krazoa Palace'),
+    new SFAMapSceneDesc(12, 'loc12', 'CloudRunner Fortress'),
+    new SFAMapSceneDesc(13, 'loc13', 'Walled City'),
+    new SFAMapSceneDesc(14, 'loc14', 'LightFoot Village'),
     // new SFAMapDesc(15, 'loc15', 'Location'),
-    new SFAMapDesc(16, 'loc16', 'CloudRunner Fortress Dungeon'),
+    new SFAMapSceneDesc(16, 'loc16', 'CloudRunner Fortress Dungeon'),
     // new SFAMapDesc(17, 'loc17', 'Location'),
-    new SFAMapDesc(18, 'loc18', 'Moon Mountain Pass'),
-    new SFAMapDesc(19, 'loc19', 'DarkIce Mines Exterior'),
+    new SFAMapSceneDesc(18, 'loc18', 'Moon Mountain Pass'),
+    new SFAMapSceneDesc(19, 'loc19', 'DarkIce Mines Exterior'),
     // new SFAMapDesc(20, 'loc20', 'Location 20'),
-    new SFAMapDesc(21, 'loc21', 'Ocean Force Point Temple Interior'),
+    new SFAMapSceneDesc(21, 'loc21', 'Ocean Force Point Temple Interior'),
     // new SFAMapDesc(22, 'loc22', 'Location'),
-    new SFAMapDesc(23, 'loc23', 'Ice Mountain'),
+    new SFAMapSceneDesc(23, 'loc23', 'Ice Mountain'),
     // new SFAMapDesc(24, 'loc24', 'Location'),
     // new SFAMapDesc(25, 'loc25', 'Location'),
-    new SFAMapDesc(26, 'loc26', 'Test Map (animtest)'),
-    new SFAMapDesc(27, 'loc27', 'DarkIce Mines Interior'),
-    new SFAMapDesc(28, 'loc28', 'DarkIce Mines Boss (Galdon)'),
-    new SFAMapDesc(29, 'loc29', 'Cape Claw'),
+    new SFAMapSceneDesc(26, 'loc26', 'Test Map (animtest)'),
+    new SFAMapSceneDesc(27, 'loc27', 'DarkIce Mines Interior'),
+    new SFAMapSceneDesc(28, 'loc28', 'DarkIce Mines Boss (Galdon)'),
+    new SFAMapSceneDesc(29, 'loc29', 'Cape Claw'),
     // new SFAMapDesc(30, 'loc30', 'Location 30'),
-    new SFAMapDesc(31, 'loc31', 'Krazoa Shrine (Test of Combat)'),
-    new SFAMapDesc(32, 'loc32', 'Krazoa Shrine (Test of Fear)'),
-    new SFAMapDesc(33, 'loc33', 'Krazoa Shrine (Test of Observation)'),
-    new SFAMapDesc(34, 'loc34', 'Krazoa Shrine (Test of Knowledge)'),
+    new SFAMapSceneDesc(31, 'loc31', 'Krazoa Shrine (Test of Combat)'),
+    new SFAMapSceneDesc(32, 'loc32', 'Krazoa Shrine (Test of Fear)'),
+    new SFAMapSceneDesc(33, 'loc33', 'Krazoa Shrine (Test of Observation)'),
+    new SFAMapSceneDesc(34, 'loc34', 'Krazoa Shrine (Test of Knowledge)'),
     // new SFAMapDesc(35, 'loc35', 'Location'),
     // new SFAMapDesc(36, 'loc36', 'Location'),
     // new SFAMapDesc(37, 'loc37', 'Location'),
     // new SFAMapDesc(38, 'loc38', 'Location'),
-    new SFAMapDesc(39, 'loc39', 'Krazoa Shrine (Test of Strength)'),
-    new SFAMapDesc(40, 'loc40', 'Krazoa Shrine (Scales Encounter)'),
+    new SFAMapSceneDesc(39, 'loc39', 'Krazoa Shrine (Test of Strength)'),
+    new SFAMapSceneDesc(40, 'loc40', 'Krazoa Shrine (Scales Encounter)'),
     // new SFAMapDesc(41, 'loc41', 'Location'),
     // new SFAMapDesc(42, 'loc42', 'Location'),
-    new SFAMapDesc(43, 'loc43', 'CloudRunner Fortress Race'),
-    new SFAMapDesc(44, 'loc44', 'Dragon Rock Boss (Drakor)'),
-    new SFAMapDesc(45, 'loc45', 'SnowHorn Wastes Area'),
+    new SFAMapSceneDesc(43, 'loc43', 'CloudRunner Fortress Race'),
+    new SFAMapSceneDesc(44, 'loc44', 'Dragon Rock Boss (Drakor)'),
+    new SFAMapSceneDesc(45, 'loc45', 'SnowHorn Wastes Area'),
     // new SFAMapDesc(46, 'loc46', 'Location'),
     // new SFAMapDesc(47, 'loc47', 'Location'),
-    new SFAMapDesc(48, 'loc48', 'Walled City Boss (RedEye King)'),
+    new SFAMapSceneDesc(48, 'loc48', 'Walled City Boss (RedEye King)'),
     // new SFAMapDesc(49, 'loc49', 'Location'),
-    new SFAMapDesc(50, 'loc50', 'Ocean Force Point Temple Exterior'),
-    new SFAMapDesc(51, 'loc51', 'Thorntail Shop'),
+    new SFAMapSceneDesc(50, 'loc50', 'Ocean Force Point Temple Exterior'),
+    new SFAMapSceneDesc(51, 'loc51', 'ThornTail Shop'),
     // new SFAMapDesc(52, 'loc52', 'Location'),
     // new SFAMapDesc(53, 'loc53', 'Location'),
-    new SFAMapDesc(54, 'loc54', 'Magic Cave'),
-    new SFAMapDesc(55, 'loc55', 'Ice Mountain Link'),
-    new SFAMapDesc(56, 'loc56', 'Ice Mountain Link 2'),
+    new SFAMapSceneDesc(54, 'loc54', 'Magic Cave'),
+    new SFAMapSceneDesc(55, 'loc55', 'Ice Mountain Link'),
+    new SFAMapSceneDesc(56, 'loc56', 'Ice Mountain Link 2'),
     // new SFAMapDesc(57, 'loc57', 'Location'),
-    new SFAMapDesc(58, 'loc58', 'Arwing Flight (Main Planet)'),
-    new SFAMapDesc(59, 'loc59', 'Arwing Flight (DarkIce Mines)'),
-    new SFAMapDesc(60, 'loc60', 'Arwing Flight (CloudRunner Fortress)'),
-    new SFAMapDesc(61, 'loc61', 'Arwing Flight (Walled City)'),
-    new SFAMapDesc(62, 'loc62', 'Arwing Flight (Dragon Rock)'),
-    new SFAMapDesc(63, 'loc63', 'Great Fox'),
+    new SFAMapSceneDesc(58, 'loc58', 'Arwing Flight (Main Planet)'),
+    new SFAMapSceneDesc(59, 'loc59', 'Arwing Flight (DarkIce Mines)'),
+    new SFAMapSceneDesc(60, 'loc60', 'Arwing Flight (CloudRunner Fortress)'),
+    new SFAMapSceneDesc(61, 'loc61', 'Arwing Flight (Walled City)'),
+    new SFAMapSceneDesc(62, 'loc62', 'Arwing Flight (Dragon Rock)'),
+    new SFAMapSceneDesc(63, 'loc63', 'Great Fox'),
     // new SFAMapDesc(64, 'loc64', 'Location'),
-    new SFAMapDesc(65, 'loc65', 'Great Fox 2'),
+    new SFAMapSceneDesc(65, 'loc65', 'Great Fox 2'),
     // new SFAMapDesc(66, 'loc66', 'Location'), // Black space
-    new SFAMapDesc(67, 'loc67', 'SnowHorn Wastes Link'),
-    new SFAMapDesc(68, 'loc68', 'DarkIce Mines Mineshaft'),
-    new SFAMapDesc(69, 'loc69', 'Moon Mountain Pass Link'),
-    new SFAMapDesc(70, 'loc70', 'Volcano Force Point Link'),
-    new SFAMapDesc(71, 'loc71', 'LightFoot Village Link'),
-    new SFAMapDesc(72, 'loc72', 'Cape Claw Link'),
-    new SFAMapDesc(73, 'loc73', 'Ocean Force Point Link'),
-    new SFAMapDesc(74, 'loc74', 'CloudRunner Fortress 2?'),
+    new SFAMapSceneDesc(67, 'loc67', 'SnowHorn Wastes Link'),
+    new SFAMapSceneDesc(68, 'loc68', 'DarkIce Mines Mineshaft'),
+    new SFAMapSceneDesc(69, 'loc69', 'Moon Mountain Pass Link'),
+    new SFAMapSceneDesc(70, 'loc70', 'Volcano Force Point Link'),
+    new SFAMapSceneDesc(71, 'loc71', 'LightFoot Village Link'),
+    new SFAMapSceneDesc(72, 'loc72', 'Cape Claw Link'),
+    new SFAMapSceneDesc(73, 'loc73', 'Ocean Force Point Link'),
+    new SFAMapSceneDesc(74, 'loc74', 'CloudRunner Fortress 2?'),
     // new SFAMapDesc(75, 'loc75', 'Location'),
     // new SFAMapDesc(76, 'loc76', 'Location'),
     // new SFAMapDesc(77, 'loc77', 'Location'),
@@ -601,58 +526,11 @@ const sceneDescs = [
     // new SFAMapDesc(116, 'loc116', 'Location'), 
     // (end)
 
-    // 'Full Scenes',
-    // new SFAWorldDesc('hollow', 'ThornTail Hollow'),
-
-    // 'Block Exhibits',
-    // new SFABlockExhibitDesc('animtest', 'mod6', 'Animation Test Blocks'),
-    // new SFABlockExhibitDesc('arwing', 'mod3', 'Arwing Blocks'),
-    // new SFABlockExhibitDesc('arwingcity', 'mod60', 'Arwing To City Blocks'),
-    // new SFABlockExhibitDesc('arwingcloud', 'mod59', 'Arwing To Cloud Blocks'),
-    // new SFABlockExhibitDesc('arwingdarkice', 'mod58', 'Arwing To Dark Ice Blocks'),
-    // new SFABlockExhibitDesc('arwingdragon', 'mod61', 'Arwing To Dragon Blocks'),
-    // new SFABlockExhibitDesc('arwingtoplanet', 'mod57', 'Arwing To Planet Blocks'),
-    // new SFABlockExhibitDesc('bossdrakor', 'mod52', 'Boss Drakor Blocks'),
-    // new SFABlockExhibitDesc('bossgaldon', 'mod36', 'Boss Galdon Blocks'),
-    // new SFABlockExhibitDesc('bosstrex', 'mod54', 'Boss T-rex Blocks'),
-    // new SFABlockExhibitDesc('capeclaw', 'mod48', 'Cape Claw Blocks'),
-    // new SFABlockExhibitDesc('cloudrace', 'mod51', 'Cloud Race Blocks'),
-    // new SFABlockExhibitDesc('clouddungeon', 'mod25', 'Cloud Dungeon Blocks'),
-    // new SFABlockExhibitDesc('crfort', 'mod19', 'Cloudrunner Fort Blocks'),
-    // new SFABlockExhibitDesc('darkicemines', 'mod27', 'Dark Ice Mines Blocks'),
-    // new SFABlockExhibitDesc('darkicemines2', 'mod35', 'Dark Ice Mines 2 Blocks'),
-    // new SFABlockExhibitDesc('dbshrine', 'mod44', 'DB Shrine Blocks'),
-    // new SFABlockExhibitDesc('desert', 'mod29', 'Desert Blocks'),
-    // new SFABlockExhibitDesc('dfptop', 'mod7', 'DFP Top Blocks'),
-    // new SFABlockExhibitDesc('dfshrine', 'mod40', 'DF Shrine Blocks'),
-    // new SFABlockExhibitDesc('dragrock', 'mod4', 'Drag Rock Blocks'),
-    // new SFABlockExhibitDesc('dragrockbot', 'mod11', 'Drag Rock Bottom Blocks'),
-    // new SFABlockExhibitDesc('greatfox', 'mod64', 'Great Fox Blocks'),
-    // new SFABlockExhibitDesc('icemountain', 'mod31', 'Ice Mountain Blocks'),
-    // new SFABlockExhibitDesc('lightfoot', 'mod22', 'Lightfoot Blocks'),
-    // new SFABlockExhibitDesc('linka', 'mod65', 'Link A Blocks'),
-    // new SFABlockExhibitDesc('linkb', 'mod55', 'Link B Blocks'),
-    // new SFABlockExhibitDesc('linkc', 'mod66', 'Link C Blocks'),
-    // new SFABlockExhibitDesc('linkd', 'mod67', 'Link D Blocks'),
-    // new SFABlockExhibitDesc('linke', 'mod68', 'Link E Blocks'),
-    // new SFABlockExhibitDesc('linkf', 'mod69', 'Link F Blocks'),
-    // new SFABlockExhibitDesc('linkg', 'mod70', 'Link G Blocks'),
-    // new SFABlockExhibitDesc('linkh', 'mod71', 'Link H Blocks'),
-    // new SFABlockExhibitDesc('linki', 'mod73', 'Link I Blocks'),
-    // new SFABlockExhibitDesc('linkj', 'mod72', 'Link J Blocks'),
-    // new SFABlockExhibitDesc('worldmap', 'mod46', 'World Map Blocks'),
-    // new SFABlockExhibitDesc('nwshrine', 'mod45', 'NW Shrine Blocks'),
-    // new SFABlockExhibitDesc('magiccave', 'mod39', 'Magic Cave Blocks'),
-    // new SFABlockExhibitDesc('mazecave', 'mod10', 'Maze Cave Blocks'),
-    // new SFABlockExhibitDesc('mmpass', 'mod26', 'MM Pass Blocks'),
-    // new SFABlockExhibitDesc('nwastes', 'mod15', 'N Wastes Blocks'),
-    // new SFABlockExhibitDesc('shipbattle', 'mod14', 'Ship Battle Blocks'),
-    // new SFABlockExhibitDesc('shop', 'mod17', 'Shop Blocks'),
-    // new SFABlockExhibitDesc('swaphol', 'mod13', 'Swaphol Blocks'),
-    // new SFABlockExhibitDesc('swapholbot', 'mod20', 'Swaphol Bottom Blocks'),
-    // new SFABlockExhibitDesc('volcano', 'mod8', 'Volcano Blocks'),
-    // new SFABlockExhibitDesc('wallcity', 'mod21', 'Wall City Blocks'),
-    // new SFABlockExhibitDesc('warlock', 'mod16', 'Warlock Blocks'),
+    'Full Scenes (HIGHLY EXPERIMENTAL)',
+    new SFAWorldSceneDesc('warlock', 'warlock', 11, 'Krazoa Palace'),
+    new SFAWorldSceneDesc('hollow', 'swaphol', 7, 'ThornTail Hollow'),
+    new SFAWorldSceneDesc('moonpass', 'mmpass', 18, 'Moon Mountain Pass'),
+    new SFAWorldSceneDesc('capeclaw', 'capeclaw', 29, 'Cape Claw'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
@@ -749,22 +627,22 @@ const sceneDescs = [
     // new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),
 
     'Ancient Maps',
-    new AncientMapDesc('ancient0', "Ancient Unknown Pit Room", ANCIENT_DP_GAME_INFO, 0),
-    new AncientMapDesc('ancient1', "Ancient Dragon Rock", ANCIENT_DP_GAME_INFO, 1),
-    new AncientMapDesc('ancient2', "Ancient Unknown Mine Room", ANCIENT_DP_GAME_INFO, 2),
-    new AncientMapDesc('ancient3', "Ancient ThornTail Hollow", ANCIENT_DP_GAME_INFO, 3),
-    new AncientMapDesc('ancient4', "Ancient Northern Wastes", ANCIENT_DP_GAME_INFO, 4),
-    new AncientMapDesc('ancient5', "Ancient Warlock Mountain", ANCIENT_DP_GAME_INFO, 5),
-    new AncientMapDesc('ancient6', "Ancient Shop", ANCIENT_DP_GAME_INFO, 6),
-    new AncientMapDesc('ancient7', "Ancient CloudRunner Fortress", ANCIENT_DP_GAME_INFO, 7),
-    new AncientMapDesc('ancient8', "Ancient DarkIce Mines Exterior", ANCIENT_DP_GAME_INFO, 8),
-    new AncientMapDesc('ancient9', "Ancient Ice Mountain Track 1", ANCIENT_DP_GAME_INFO, 9),
-    new AncientMapDesc('ancient10', "Ancient Ice Mountain Track 2", ANCIENT_DP_GAME_INFO, 10),
-    new AncientMapDesc('ancient11', "Ancient Ice Mountain Track 3", ANCIENT_DP_GAME_INFO, 11),
-    new AncientMapDesc('ancient12', "Ancient DarkIce Mines Interior", ANCIENT_DP_GAME_INFO, 12),
-    new AncientMapDesc('ancient13', "Ancient DarkIce Mines Boss Room", ANCIENT_DP_GAME_INFO, 13),
-    new AncientMapDesc('ancient14', "Ancient CloudRunner Fortress Race", ANCIENT_DP_GAME_INFO, 14),
-    new AncientMapDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
+    new AncientMapSceneDesc('ancient0', "Ancient Unknown Pit Room", ANCIENT_DP_GAME_INFO, 0),
+    new AncientMapSceneDesc('ancient1', "Ancient Dragon Rock", ANCIENT_DP_GAME_INFO, 1),
+    new AncientMapSceneDesc('ancient2', "Ancient Unknown Mine Room", ANCIENT_DP_GAME_INFO, 2),
+    new AncientMapSceneDesc('ancient3', "Ancient ThornTail Hollow", ANCIENT_DP_GAME_INFO, 3),
+    new AncientMapSceneDesc('ancient4', "Ancient Northern Wastes", ANCIENT_DP_GAME_INFO, 4),
+    new AncientMapSceneDesc('ancient5', "Ancient Warlock Mountain", ANCIENT_DP_GAME_INFO, 5),
+    new AncientMapSceneDesc('ancient6', "Ancient Shop", ANCIENT_DP_GAME_INFO, 6),
+    new AncientMapSceneDesc('ancient7', "Ancient CloudRunner Fortress", ANCIENT_DP_GAME_INFO, 7),
+    new AncientMapSceneDesc('ancient8', "Ancient DarkIce Mines Exterior", ANCIENT_DP_GAME_INFO, 8),
+    new AncientMapSceneDesc('ancient9', "Ancient Ice Mountain Track 1", ANCIENT_DP_GAME_INFO, 9),
+    new AncientMapSceneDesc('ancient10', "Ancient Ice Mountain Track 2", ANCIENT_DP_GAME_INFO, 10),
+    new AncientMapSceneDesc('ancient11', "Ancient Ice Mountain Track 3", ANCIENT_DP_GAME_INFO, 11),
+    new AncientMapSceneDesc('ancient12', "Ancient DarkIce Mines Interior", ANCIENT_DP_GAME_INFO, 12),
+    new AncientMapSceneDesc('ancient13', "Ancient DarkIce Mines Boss Room", ANCIENT_DP_GAME_INFO, 13),
+    new AncientMapSceneDesc('ancient14', "Ancient CloudRunner Fortress Race", ANCIENT_DP_GAME_INFO, 14),
+    new AncientMapSceneDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
     // new SFASandboxDesc('ancientdp', 'Ancient Map Sandbox', ANCIENT_DP_GAME_INFO, true),
 ];
 

@@ -1,10 +1,9 @@
-import { GfxDevice } from "./gfx/platform/GfxPlatform";
 
-export function IsWebXRSupported() {
-    return !!window.navigator.xr && navigator.xr.isSessionSupported('immersive-vr');
-}
+import { GfxSwapChain } from "./gfx/platform/GfxPlatform";
+import { assertExists } from "./util";
 
 // TODO WebXR: Known issues
+    // Should have the option to not render to the main view if in WebXR. This can be a simple check box
     // Typescript complains about missing types on compile
     // Sprites and billboards assume axis aligned view, so will rotate with your head. (e.g trees in Mario 64 DS)
     // View based effects like lens flare should be based on view space, as one lens may be affected by lens flare and one might not be, based on positional differences (e.g. Wind Waker lens flare, wind waker stars)
@@ -21,54 +20,83 @@ export function IsWebXRSupported() {
     // Scaling up and going close causes cross eye. Probably need to move the near plane out
 
 export class WebXRContext {
-    public xrSession: XrSession;
-    public xrViewSpace: XrReferenceSpace;
-    public xrLocalSpace: XrReferenceSpace;
+    public xrSession: XRSession | null = null;
+    public xrViewSpace: XRReferenceSpace;
+    public xrLocalSpace: XRReferenceSpace;
 
-    public views: XrView[];
+    public views: XRView[];
 
-    public onSessionStarted: ()=>void = ()=>{};
-    public onFrame: (time: number)=>void = ()=>{};
+    public onframe: ((time: number) => void) | null = null;
+    public onsupportedchanged: (() => void) | null = null;
+    public onstart: (() => void) | null = null;
+    public onend: (() => void) | null = null;
 
-    public currentFrame: XrFrame;
+    public currentFrame: XRFrame;
 
-    constructor(private gfxDevice: GfxDevice) {}
+    public isSupported = false;
+
+    constructor(private swapChain: GfxSwapChain) {
+        this.checkIsSupported();
+    }
+
+    private async checkIsSupported() {
+        const navigator = window.navigator as any;
+        if (navigator.xr === undefined)
+            return;
+        const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
+        if (this.isSupported !== isSupported) {
+            this.isSupported = isSupported;
+            if (this.onsupportedchanged !== null)
+                this.onsupportedchanged();
+        }
+    }
 
     public async start() {
-        this.xrSession = await navigator.xr.requestSession('immersive-vr', {
+        const navigator = window.navigator as any;
+        const xr = assertExists(navigator.xr);
+
+        this.xrSession = await xr.requestSession('immersive-vr', {
             requiredFeatures: [],
             optionalFeatures: ['viewer', 'local']
         });
 
+        // TODO(jstpierre): I think we should just error here instead?
+        if (!this.xrSession)
+            return;
+
         this.xrViewSpace = await this.xrSession.requestReferenceSpace('viewer');
         this.xrLocalSpace = await this.xrSession.requestReferenceSpace('local');
 
-        let glLayer = this.gfxDevice.createWebXRLayer(this.xrSession);
+        const glLayer = this.swapChain.createWebXRLayer(this.xrSession);
         this.xrSession.updateRenderState({ baseLayer: glLayer, depthNear: 5, depthFar: 1000000.0 });
 
-        this.onSessionStarted();
-        this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
+        if (this.onstart !== null)
+            this.onstart();
+
+        this.xrSession.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 
     public end() {
-        if (this.xrSession) {
+        if (this.xrSession)
             this.xrSession.end();
-        }
         this.xrSession = null;
+
+        if (this.onend !== null)
+            this.onend();
     }
 
-    private onXRFrame(time: number, frame: XrFrame) {
-        let session = frame.session;
-        let pose = frame.getViewerPose(this.xrLocalSpace);
+    private _onRequestAnimationFrame = (time: number, frame: XRFrame): void => {
+        const session = frame.session;
+        const pose = frame.getViewerPose(this.xrLocalSpace);
 
         this.currentFrame = frame;
 
-        if (pose) {
+        if (pose)
             this.views = pose.views;
-        }
 
-        this.onFrame(time);
+        if (this.onframe !== null)
+            this.onframe(time);
 
-        session.requestAnimationFrame(this.onXRFrame.bind(this));
+        session.requestAnimationFrame(this._onRequestAnimationFrame);
     }
 }

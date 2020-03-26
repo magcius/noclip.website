@@ -4,7 +4,7 @@ import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
-import { GFXNode, AnimationData, ObjectDef, MaterialFlags, CollisionTree } from './room';
+import { GFXNode, AnimationData, MaterialFlags } from './room';
 import { Animator, AObjOP, ModelField, getPathPoint, Material, ColorField } from './animation';
 import { vec4, mat4, vec3 } from 'gl-matrix';
 import { DeviceProgram } from '../Program';
@@ -15,8 +15,9 @@ import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, Vec3One } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { LevelGlobals } from './actor';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -64,7 +65,7 @@ class DrawCallInstance {
         const tiles: RDP.TileState[] = [];
         for (let i = 0; i < this.textureEntry.length; i++)
             tiles.push(this.textureEntry[i].tile);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, 8/255, tiles);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, 8 / 255, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -153,7 +154,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
 
         // TODO: figure out layers
@@ -203,14 +204,9 @@ class DrawCallInstance {
         if (this.material && this.material.data.flags & (MaterialFlags.PrimLOD | MaterialFlags.Special))
             primLOD = this.material.getPrimLOD();
         offs += fillVec4(comb, offs, primLOD);
-    }
-}
 
-export interface LevelGlobals {
-    collision: CollisionTree | null;
-    currentSong: number;
-    songStart: number;
-    lastPesterBall: number;
+        renderInstManager.submitRenderInst(renderInst);
+    }
 }
 
 export function buildTransform(dst: mat4, pos: vec3, euler: vec3, scale: vec3): void {
@@ -238,7 +234,7 @@ export class NodeRenderer {
 
     public translation = vec3.create();
     public euler = vec3.create();
-    public scale = vec3.fromValues(1, 1, 1);
+    public scale = vec3.clone(Vec3One);
 
     public animator = new Animator();
     public materials: Material[] = [];
@@ -275,7 +271,7 @@ export class NodeRenderer {
                     case ModelField.Roll: this.euler[2] = value; break;
                     case ModelField.Path: {
                         const path = assertExists(this.animator.interpolators[i].path);
-                        getPathPoint(this.translation, path, clamp(value, 0, 1));
+                        getPathPoint(this.translation, path, clamp(value, 0, 1), true /* use raw path */);
                     } break;
                     case ModelField.X: this.translation[0] = value; break;
                     case ModelField.Y: this.translation[1] = value; break;
@@ -307,7 +303,11 @@ export class NodeRenderer {
 }
 
 export class ModelRenderer {
-    private visible = true;
+    public visible = true;
+
+    // run logic, but don't render
+    public hidden = false;
+    public animationPaused = false;
 
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
@@ -325,8 +325,6 @@ export class ModelRenderer {
                 this.renderers[p].children.push(this.renderers[i]);
             }
         }
-        if (this.animations.length > 0)
-            this.setAnimation(0);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -359,15 +357,22 @@ export class ModelRenderer {
                 this.renderers[i].drawCalls[j].setAlphaVisualizerEnabled(v);
     }
 
+    public forceLoop(): void {
+        for (let i = 0; i < this.renderers.length; i++) {
+            this.renderers[i].animator.forceLoop = true;
+            for (let j = 0; j < this.renderers[i].materials.length; j++)
+                this.renderers[i].materials[j].forceLoop();
+        }
+    }
+
     public setAnimation(index: number): void {
         this.currAnimation = index;
-        this.animationController.adjust(this.animations[index].fps);
+        this.animationController.init(this.animations[index].fps);
         const newAnim = this.animations[index];
         this.headAnimationIndex = newAnim.tracks.findIndex((t) => t !== null);
         for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animator.setTrack(newAnim.tracks[i]);
-            if (newAnim.tracks[i] === null)
-                this.renderers[i].setTransfromFromNode();
+            this.renderers[i].setTransfromFromNode();
 
             if (newAnim.materialTracks.length == 0 || newAnim.materialTracks[i].length === 0)
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
@@ -375,15 +380,30 @@ export class ModelRenderer {
             else
                 for (let j = 0; j < this.renderers[i].materials.length; j++)
                     this.renderers[i].materials[j].setTrack(newAnim.materialTracks[i][j]);
+            // force matrix update
+            this.renderers[i].animate(0);
+            mat4.mul(this.renderers[i].modelMatrix, this.renderers[i].parent, this.renderers[i].transform);
         }
     }
 
-    protected motion(viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void {}
+    protected motion(viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void { }
 
-    private animate(): void {
+    protected animate(globals: LevelGlobals): void {
+        if (this.animationPaused)
+            return;
         const time = this.animationController.getTimeInFrames();
-        for (let i = 0; i < this.renderers.length; i++)
+        for (let i = 0; i < this.renderers.length; i++) {
             this.renderers[i].animate(time);
+            if (this.renderers[i].animator.lastFunction >= 0 && i > 0) {
+                // function calls from anything but the root are particle effects
+                const arg = this.renderers[i].animator.lastFunction;
+                const category = arg >>> 8; // there are 8 categories, but only 0 and 3 are used
+                const index = (arg & 0xFF) - 1;
+                if (index >= 0)
+                    globals.particles.createEmitter(category === 3, index, this.renderers[i].modelMatrix);
+                this.renderers[i].animator.lastFunction = -1;
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, globals: LevelGlobals): void {
@@ -392,7 +412,9 @@ export class ModelRenderer {
 
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.motion(viewerInput, globals);
-        this.animate();
+        this.animate(globals);
+        if (this.hidden)
+            return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);

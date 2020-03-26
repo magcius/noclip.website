@@ -9,19 +9,20 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
 import { assert, nArray } from '../util';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -349,8 +350,7 @@ export class GXMaterialHelperGfx {
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
         if (this.gfxProgram === null) {
-            const descriptor = this.program.generateShaders(device);
-            this.gfxProgram = cache.createProgramSimple(device, descriptor);
+            this.gfxProgram = cache.createProgram(device, this.program);
             this.programKey = this.gfxProgram.ResourceUniqueId;
         }
     }
@@ -393,18 +393,23 @@ export class GXMaterialHelperGfx {
     }
 }
 
+export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
+    let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
+    if (en)
+        colorWriteMask |= bits;
+    else
+        colorWriteMask &= ~bits;
+    setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
+}
+
 export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout, wantZeroBuffer: boolean = true): GfxInputLayout {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
     let usesZeroBuffer = false;
-    for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
-        const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-
-        if (attribLocation === -1)
-            continue;
-
-        const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
-        const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+    for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+        const attribLocation = GX_Material.getVertexInputLocation(attrInput);
+        const attribGenDef = GX_Material.getVertexInputGenDef(attrInput);
+        const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
 
         if (attrib !== undefined) {
             const bufferByteOffset = attrib.bufferOffset;
@@ -448,13 +453,8 @@ export class GXShapeHelperGfx {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         let usesZeroBuffer = false;
-        for (let vtxAttrib: GX.Attr = 0; vtxAttrib <= GX.Attr.MAX; vtxAttrib++) {
-            const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
-    
-            if (attribLocation === -1)
-                continue;
-    
-            const attrib = loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
+        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
             if (attrib === undefined) {
                 usesZeroBuffer = true;
                 break;

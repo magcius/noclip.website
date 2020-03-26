@@ -1,6 +1,6 @@
 
 // Nintendo Yaz0 format.
-
+//
 // Header (8 bytes):
 //   Magic: "Yaz0" (4 bytes)
 //   Uncompressed size (4 bytes, big endian)

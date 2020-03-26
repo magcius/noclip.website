@@ -1,11 +1,12 @@
 // Misc utilities to help me debug various issues. Mostly garbage.
 
 import { AABB } from "./Geometry";
-import { Color, Magenta, colorToCSS } from "./Color";
+import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
-import { vec4, vec3 } from "gl-matrix";
+import { vec4, vec3, mat4 } from "gl-matrix";
 import { nArray, assert, assertExists } from "./util";
 import { UI, Slider } from "./ui";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ } from "./MathHelpers";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -188,6 +189,21 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.stroke();
 }
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, camera: Camera, m: mat4, mag: number = 100, thickness = 2): void {
+    getMatrixTranslation(scratchVec3a, m);
+
+    getMatrixAxisX(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Red, thickness);
+
+    getMatrixAxisY(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Green, thickness);
+
+    getMatrixAxisZ(scratchVec3b, m);
+    drawWorldSpaceVector(ctx, camera, scratchVec3a, scratchVec3b, mag, Blue, thickness);
+}
+
 export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, camera: Camera, pos: vec3, dir: vec3, mag: number, color: Color = Magenta, thickness = 2): void {
     vec4.set(p[0], pos[0], pos[1], pos[2], 1.0);
     vec4.set(p[1], pos[0] + dir[0] * mag, pos[1] + dir[1] * mag, pos[2] + dir[2] * mag, 1.0);
@@ -249,7 +265,14 @@ export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camer
     drawViewportSpacePoint(ctx, x, y, color, size);
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta): void {
+interface TextOptions {
+    font?: string;
+    shadowColor?: string;
+    shadowBlur?: number;
+    outline?: number;
+}
+
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);
@@ -258,11 +281,24 @@ export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera
 
     const x = ( p[0][0] + 1) * cw / 2;
     const y = (-p[0][1] + 1) * ch / 2;
+
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'start';
-    ctx.font = '14pt monospace';
+    ctx.font = options.font ?? '14pt monospace';
+
+    if (options.outline) {
+        const oldLineWidth = ctx.lineWidth;
+        ctx.lineWidth = options.outline;
+        ctx.strokeText(text, x, y + offsY);
+        ctx.lineWidth = oldLineWidth;
+    }
+
+    ctx.shadowColor = options.shadowColor ?? 'black';
+    ctx.shadowBlur = options.shadowBlur ?? 0;
     ctx.fillText(text, x, y + offsY);
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 0;
 }
 
 export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {

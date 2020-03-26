@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController, XRCameraController } from './Camera';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -15,7 +15,6 @@ import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
-import { WebXRContext } from './WebXR';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -260,11 +259,15 @@ export abstract class ScrollSelect implements Widget {
 
         this.scrollContainer = document.createElement('div');
         this.setHeight(`200px`);
+        this.setTextSelectable(false);
         this.scrollContainer.style.overflow = 'auto';
-        this.scrollContainer.style.userSelect = 'none';
         this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
+    }
+
+    public setTextSelectable(v: boolean): void {
+        this.scrollContainer.style.userSelect = v ? '' : 'none'
     }
 
     public setHeight(height: string): void {
@@ -1631,57 +1634,62 @@ class ViewerSettings extends Panel {
 }
 
 class XRSettings extends Panel {
-    private EnableXRCheckBox: Checkbox;
+    public onWebXRStateRequested: (state: boolean)=>void = (state: boolean) => {};
+
+    public enableXRCheckBox: Checkbox;
     private scaleSlider: Slider;
 
-    constructor(private ui: UI, private viewer: Viewer.Viewer, private webXRContext: WebXRContext) {
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(VR_ICON, 'VR Settings');
 
         this.contents.style.lineHeight = '36px';
 
-        this.EnableXRCheckBox = new Checkbox('Enable VR');
-        this.contents.appendChild(this.EnableXRCheckBox.elem);
-        this.EnableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+        this.contents.innerHTML += `
+        <div id="About">
+        <p>To enable VR in Chrome, make sure you go to <font color="aqua">chrome://flags/</font> and change the following settings:</p>
+        <ul>
+            <li> WebXR Device API - <font color="green"><strong>Enabled</strong></font></li>
+            <li>OpenXR support - <font color="green"><strong>Enabled</strong></font></li>
+            <li>OpenVR hardware support - <font color="green"><strong>Enabled</strong></font></li>
+            <li>Oculus hardware support - <font color="green"><strong>Enabled</strong></font></li>
+            <li>XR device sandboxing - <font color="red"><strong>Disabled</strong></font></li>
+        </ul>
+        <p>Click on the <strong>Enable VR</strong> checkbox to go in VR mode.</p>
+        <p>Press the <strong>Trigger</strong> to go up, and use the <strong>Grab Button</strong> to go down.
+        You can move horizontally by using the <strong>Joystick</strong>.
+        </div>
+        `;
 
-        let displayScaleValue = (value: Number) => {
+        this.enableXRCheckBox = new Checkbox('Enable VR');
+        this.contents.appendChild(this.enableXRCheckBox.elem);
+        this.enableXRCheckBox.onchanged = this.enableXRChecked.bind(this);
+
+        const displayScaleValue = (value: Number) => {
             return value.toPrecision(5).toString();
         };
 
-        let GetSliderLabel = () => {
-            return "VR World Scale: " + displayScaleValue(this.viewer.xrCameraController.worldScale);
+        const getSliderLabel = () => {
+            return `VR World Scale: ${displayScaleValue(this.viewer.xrCameraController.worldScale)}`;
         };
 
         this.scaleSlider = new Slider();
-        this.scaleSlider.setLabel(GetSliderLabel());
+        this.scaleSlider.setLabel(getSliderLabel());
         this.scaleSlider.setRange(10, 10000);
         this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
         this.scaleSlider.onvalue = () => {
             this.viewer.xrCameraController.worldScale = this.scaleSlider.getValue();
             this.scaleSlider.setValue(this.viewer.xrCameraController.worldScale);
-            this.scaleSlider.setLabel(GetSliderLabel());
+            this.scaleSlider.setLabel(getSliderLabel());
         };
         this.contents.appendChild(this.scaleSlider.elem);
     }
 
     private async enableXRChecked(saveManager: SaveManager, key: string) {
-        const enableXR = this.EnableXRCheckBox.checked;
-        this.EnableXRCheckBox.setChecked(enableXR);
-
-        if (this.EnableXRCheckBox.checked) {
-            try {
-                await this.webXRContext.start();
-                this.webXRContext.xrSession.addEventListener('end', () => {
-                    this.EnableXRCheckBox.setChecked(false);
-                });
-            } catch {
-                console.error("Failed to start XR");
-                this.EnableXRCheckBox.setChecked(false);
-            }
-        } else {
-            this.webXRContext.end();
-        }
+        const enableXR = this.enableXRCheckBox.checked;
+        this.enableXRCheckBox.setChecked(enableXR);
+        this.onWebXRStateRequested(enableXR);
     }
 }
 
@@ -2556,7 +2564,7 @@ export class UI {
     public sceneSelect: SceneSelect;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
-    public xrSettings?: XRSettings;
+    public xrSettings: XRSettings;
     public statisticsPanel: StatisticsPanel;
     public panels: Panel[];
     private about: About;
@@ -2574,7 +2582,7 @@ export class UI {
 
     public isPlaying: boolean = true;
 
-    constructor(public viewer: Viewer.Viewer, public webXRContext?: WebXRContext) {
+    constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
 
         this.sceneUIContainer = document.createElement('div');
@@ -2633,9 +2641,7 @@ export class UI {
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
-        if (webXRContext) {
-            this.xrSettings = new XRSettings(this, viewer, webXRContext);
-        }
+        this.xrSettings = new XRSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
@@ -2665,6 +2671,10 @@ export class UI {
     public togglePlayPause(shouldBePlaying: boolean = !this.isPlaying): void {
         this.isPlaying = shouldBePlaying;
         this.playPauseButton.setIsPlaying(this.isPlaying);
+    }
+
+    public toggleWebXRCheckbox(shouldBeChecked: boolean = !this.xrSettings.enableXRCheckBox.checked) {
+        this.xrSettings.enableXRCheckBox.setChecked(shouldBeChecked);
     }
 
     public setMouseActive(): void {
@@ -2714,13 +2724,8 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null) {
-            if (this.xrSettings) {
-                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
-            } else {
-                this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.statisticsPanel, this.about]);
-            }
-        }
-        else {
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
+        } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
     }

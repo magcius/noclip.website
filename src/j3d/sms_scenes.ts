@@ -343,7 +343,6 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, sunshineClearDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
@@ -353,7 +352,6 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         let lastPassRenderer: GfxRenderPass;
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.INDIRECT);
         if (renderInstManager.hasAnyVisible()) {
-            opaquePassRenderer.endPass();
             device.submitPass(opaquePassRenderer);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);

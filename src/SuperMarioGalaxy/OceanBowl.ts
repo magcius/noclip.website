@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, getObjectName } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
@@ -9,7 +9,7 @@ import AnimationController from "../AnimationController";
 import { colorFromRGBA8 } from "../Color";
 import { assert } from "../util";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { getVertexAttribLocation } from "../gx/gx_material";
+import { getVertexInputLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
@@ -21,6 +21,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
+import { VertexAttributeInput } from "../gx/gx_displaylist";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -85,10 +86,13 @@ export class OceanBowl extends LiveActor {
         this.water = loadBTIData(sceneObjHolder, waterWaveArc, `Water.bti`);
         this.waterIndirect = loadBTIData(sceneObjHolder, waterWaveArc, `WaterIndirect.bti`);
         this.mask = loadBTIData(sceneObjHolder, waterWaveArc, `Mask.bti`);
+
+        sceneObjHolder.create(SceneObj.WaterAreaHolder);
+        sceneObjHolder.waterAreaHolder!.entryOceanBowl(this);
     }
 
     public isInWater(v: vec3): boolean {
-        vec3.sub(scratchVec3, this.translation, v);
+        vec3.sub(scratchVec3, v, this.translation);
 
         const mag = vec3.squaredLength(scratchVec3);
         const radius = this.scale[0] * 100;
@@ -185,12 +189,9 @@ export class OceanBowl extends LiveActor {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX1), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -215,10 +216,10 @@ export class OceanBowl extends LiveActor {
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.TEXMTX1);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX2, GX.TexGenMatrix.TEXMTX2);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX2);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS,  GX.TexGenMatrix.TEXMTX3);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD4, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX3, GX.TexGenMatrix.TEXMTX4, true);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD4, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4, true);
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -331,7 +332,7 @@ export class OceanBowl extends LiveActor {
         materialParams.u_TexMtx[4][13] = (-normPosX * scale4) + 0.5;
 
         // Now create our draw instance.
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
 
@@ -346,6 +347,8 @@ export class OceanBowl extends LiveActor {
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

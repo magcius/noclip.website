@@ -73,6 +73,8 @@ class Main {
     private fsButton: FsButton;
     private destroyablePool: Destroyable[] = [];
 
+    private updateInfo: Viewer.ViewerUpdateInfo;
+
     constructor() {
         this.init();
     }
@@ -106,11 +108,17 @@ class Main {
         this.onResize();
 
         this.loadFromHash();
+
+        this.updateInfo = {
+            time: 0,
+            webXRContext: null,
+        };
         this._updateLoop(0);
     }
 
     private _updateLoop = (time: number) => {
-        this.viewer.update(time);
+        this.updateInfo.time = time;
+        this.viewer.update(this.updateInfo);
         window.requestAnimationFrame(this._updateLoop);
     };
 
@@ -138,6 +146,7 @@ class Main {
         const progressMeter = { setProgress: () => {} };
         const destroyablePool = this.destroyablePool;
         const dataFetcher = new DataFetcher(progressMeter);
+        await dataFetcher.init();
         const dataShare = new DataShare();
         const uiContainer = document.createElement('div');
         this.sceneUIContainer.appendChild(uiContainer);

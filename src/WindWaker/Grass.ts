@@ -3,7 +3,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { dGlobals } from './zww_scenes';
 import { Endianness } from '../endian';
 
@@ -12,7 +12,7 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByte
 import { parseMaterial, GXMaterial } from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ColorKind, PacketParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { ColorKind, PacketParams, MaterialParams, loadedDataCoalescerComboGfx, setChanWriteEnabled } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -26,7 +26,9 @@ function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
     material.ropInfo.fogType = GX.FogType.PERSP_LIN;
     material.ropInfo.fogAdjEnabled = true;
     material.hasFogBlock = true;
-    return new GXMaterialHelperGfx(material);
+    const materialHelper = new GXMaterialHelperGfx(material);
+    setChanWriteEnabled(materialHelper, GfxColorWriteMask.ALPHA, false);
+    return materialHelper;
 }
 
 function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {

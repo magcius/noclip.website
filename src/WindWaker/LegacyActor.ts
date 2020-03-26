@@ -7,7 +7,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { assertExists, hexzero, leftPad, assert } from '../util';
+import { assertExists, hexzero, leftPad } from '../util';
 import { ResType, ResEntry, ResAssetType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
@@ -19,11 +19,16 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB }
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { cBgS_GndChk } from './d_bg';
+import { initModelForZelda } from './d_a';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 
-function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
+function animFrame(frame: number): AnimationController {
+    const a = new AnimationController();
+    a.setTimeInFrames(frame);
+    return a;
+}
 
 function computeActorModelMatrix(m: mat4, actor: fopAcM_prm_class): void {
     const rotationY = actor.rot![1] / 0x7FFF * Math.PI;
@@ -94,9 +99,9 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         return resEntry.res;
     }
 
-    function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
-        const model = getResData(ResType.Model, rarc, modelPath);
+    function buildChildModelRes(model: J3DModelData): BMDObjectRenderer {
         const modelInstance = new J3DModelInstanceSimple(model);
+        initModelForZelda(modelInstance);
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actorName!;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -104,6 +109,11 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
         objectRenderer.layer = actor.layer;
         return objectRenderer;
+    }
+
+    function buildChildModel(rarc: RARC.JKRArchive, modelPath: string): BMDObjectRenderer {
+        const model = getResData(ResType.Model, rarc, modelPath);
+        return buildChildModelRes(model);
     }
 
     function setModelMatrix(m: mat4): void {
@@ -117,13 +127,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         return objectRenderer;
     }
 
-    function buildModelRes(context: WindWakerRenderer, modelData: J3DModelData, actor: fopAcM_prm_class): BMDObjectRenderer {
-        const modelInstance = new J3DModelInstanceSimple(modelData);
-        context.extraTextures.fillExtraTextures(modelInstance);
-        modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-        const objectRenderer = new BMDObjectRenderer(modelInstance);
-        dKy_tevstr_init(objectRenderer.tevstr, actor.roomNo);
-        objectRenderer.layer = actor.layer;
+    function buildModelRes(modelData: J3DModelData): BMDObjectRenderer {
+        const objectRenderer = buildChildModelRes(modelData);
         setModelMatrix(objectRenderer.modelMatrix);
         legacy.objectRenderers.push(objectRenderer);
         return objectRenderer;
@@ -185,22 +190,22 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         if (type === 0) {
             // Light Wood
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0E);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else if (type === 1) {
             // Dark Wood
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x0F);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else if (type === 2) {
             // Metal
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x10);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
             const b = globals.resCtrl.getObjectRes(ResType.Brk, `Dalways`, 0x1D);
             b.loopMode = LoopMode.ONCE;
             m.bindTRK1(b);
         } else if (type === 3) {
             // Big Key
             const res = globals.resCtrl.getObjectRes(ResType.Model, `Dalways`, 0x14);
-            const m = buildModelRes(globals.renderer, res, actor);
+            const m = buildModelRes(res);
         } else {
             // Might be something else, not sure.
             console.warn(`Unknown chest type: ${actorName} / Room ${actor.roomNo} Layer ${actor.layer} / ${hexzero(actor.parameters, 8)}`);

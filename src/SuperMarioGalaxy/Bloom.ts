@@ -10,6 +10,7 @@ import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { MathConstants } from "../MathHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -19,9 +20,10 @@ uniform sampler2D u_Texture;
 layout(std140) uniform ub_Params {
     vec4 u_Misc0;
 };
-#define u_BlurStrength         (u_Misc0.x)
-#define u_BokehStrength        (u_Misc0.y)
-#define u_BokehCombineStrength (u_Misc0.z)
+#define u_Threshold      (u_Misc0.x)
+#define u_Intensity1     (u_Misc0.y)
+#define u_Intensity2     (u_Misc0.z)
+#define u_BloomIntensity (u_Misc0.w)
 `;
 
     public vert: string = `
@@ -52,111 +54,85 @@ void main() {
 `;
 }
 
-class BloomPassBlurProgram extends BloomPassBaseProgram {
+class BloomPassThresholdPipeline extends BloomPassBaseProgram {
     public frag: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
 
 in vec2 v_TexCoord;
 
-vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+float Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
+}
+
 void main() {
-    // Nintendo does this in two separate draws. We combine into one here...
-    vec3 c = vec3(0.0);
-    // Pass 1.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
-    // Pass 2.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * u_BlurStrength);
-    gl_FragColor = vec4(c.rgb, 1.0);
+    vec4 c = texture(u_Texture, v_TexCoord);
+    gl_FragColor = (Monochrome(c.rgb) > u_Threshold) ? c : vec4(0.0);
 }
 `;
 }
 
-class BloomPassBokehProgram extends BloomPassBaseProgram {
-    public frag: string = `
+abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
+    constructor(radiusL: number[], ofsL: number[], count: number, intensityVar: string) {
+        super();
+
+        assert(radiusL.length === ofsL.length);
+
+        this.frag = `
 ${BloomPassBaseProgram.BindingsDefinition}
 
 in vec2 v_TexCoord;
 
-vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
+float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
+vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
 void main() {
-    vec3 f = vec3(0.0);
     vec3 c;
+    vec3 f = vec3(0.0);
+`;
 
-    // TODO(jstpierre): Double-check these passes. It seems weighted towards the top left. IS IT THE BLUR???
+        const aspect = 16/9;
+        const invAspect = 1/aspect;
+        for (let i = 0; i < radiusL.length; i++) {
+            const radius = radiusL[i], ofs = ofsL[i];
+            this.frag += `
+    // Pass ${i + 1}
+    c = vec3(0.0);`;
+            for (let j = 0; j < count; j++) {
+                const theta = ofs + (MathConstants.TAU * (j / count));
+                const x = invAspect * radius * Math.cos(theta), y = radius * Math.sin(theta);
+                this.frag += `
+    c += (texture(u_Texture, v_TexCoord + vec2(${x.toFixed(5)}, -1.0 * ${y.toFixed(5)})).rgb * ${intensityVar});`;
+            }
+            this.frag += `
+    f += TevOverflow(c);`;
+        }
+    }
+}
 
-    // Pass 1.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 2.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 3.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 4.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 5.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 6.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-
+class BloomPassBlur1Program extends BloomPassBlurProgram {
+    constructor() {
+        super([0.01, 0.02], [0.00, 0.52], 6, 'u_Intensity1');
+        this.frag += `
     f = clamp(f, 0.0, 1.0);
-
-    // Combine pass.
-    vec3 g;
-    g = (texture(u_Texture, v_TexCoord).rgb * u_BokehCombineStrength);
-    g += f * u_BokehCombineStrength;
-
-    gl_FragColor = vec4(g, 1.0);
+    gl_FragColor = vec4(f.rgb, 1.0);
 }
 `;
+    }
 }
 
+class BloomPassBlur2Program extends BloomPassBlurProgram {
+    constructor() {
+        super([0.04, 0.07, 0.09], [0.00, 0.00, 0.00], 12, 'u_Intensity2');
+        this.frag += `
+    f = clamp(f, 0.0, 1.0);
+    // Combine pass.
+    f += texture(u_Texture, v_TexCoord).rgb;
+    f *= u_BloomIntensity;
+    gl_FragColor = vec4(f, 1.0);
+}
+`;
+    }
+}
 
 export class WeirdFancyRenderTarget {
     public colorAttachment = new ColorAttachment();
@@ -198,9 +174,10 @@ const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
 };
 
 export class BloomPostFXParameters {
-    public blurStrength: number = 50/256;
-    public bokehStrength: number = 25/256;
-    public bokehCombineStrength: number = 25/256;
+    public threshold: number = 0/256;
+    public intensity1: number = 50/256;
+    public intensity2: number = 25/256;
+    public bloomIntensity: number = 25/256;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
@@ -218,10 +195,10 @@ function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, progra
 }
 
 export class BloomPostFXRenderer {
-    private fullscreenCopyPipeline: GfxRenderPipeline;
-    private blurPipeline: GfxRenderPipeline;
-    private bokehPipeline: GfxRenderPipeline;
-    private fullscreenCombinePipeline: GfxRenderPipeline;
+    private thresholdPipeline: GfxRenderPipeline;
+    private blur1Pipeline: GfxRenderPipeline;
+    private blur2Pipeline: GfxRenderPipeline;
+    private combinePipeline: GfxRenderPipeline;
 
     private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -246,10 +223,10 @@ export class BloomPostFXRenderer {
 
         this.bloomObjectsTarget = new WeirdFancyRenderTarget(mainRenderTarget.depthStencilAttachment);
 
-        this.fullscreenCopyPipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram());
-        this.blurPipeline = makeFullscreenPipeline(device, cache, new BloomPassBlurProgram());
-        this.bokehPipeline = makeFullscreenPipeline(device, cache, new BloomPassBokehProgram());
-        this.fullscreenCombinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState(setAttachmentStateSimple({}, {
+        this.thresholdPipeline = makeFullscreenPipeline(device, cache, new BloomPassThresholdPipeline());
+        this.blur1Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur1Program());
+        this.blur2Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur2Program());
+        this.combinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState(setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.ONE,
             blendDstFactor: GfxBlendFactor.ONE,
@@ -262,19 +239,19 @@ export class BloomPostFXRenderer {
         const d = uniformBuffer.mapBufferF32(parameterBufferOffs, 4);
         
         let offs = parameterBufferOffs;
-        offs += fillVec4(d, offs, bloomParameters.blurStrength, bloomParameters.bokehStrength, bloomParameters.bokehCombineStrength);
+        offs += fillVec4(d, offs, bloomParameters.threshold, bloomParameters.intensity1, bloomParameters.intensity2, bloomParameters.bloomIntensity);
 
         return parameterBufferOffs;
     }
 
     public pipelinesReady(device: GfxDevice): boolean {
-        if (!device.queryPipelineReady(this.fullscreenCopyPipeline))
+        if (!device.queryPipelineReady(this.thresholdPipeline))
             return false;
-        if (!device.queryPipelineReady(this.blurPipeline))
+        if (!device.queryPipelineReady(this.blur1Pipeline))
             return false;
-        if (!device.queryPipelineReady(this.bokehPipeline))
+        if (!device.queryPipelineReady(this.blur2Pipeline))
             return false;
-        if (!device.queryPipelineReady(this.fullscreenCombinePipeline))
+        if (!device.queryPipelineReady(this.combinePipeline))
             return false;
         return true;
     }
@@ -288,7 +265,6 @@ export class BloomPostFXRenderer {
     }
 
     public renderEndObjects(device: GfxDevice, objectsPassRenderer: GfxRenderPass, renderInstManager: GfxRenderInstManager, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput, template: GfxRenderInst, parameterBufferOffs: number): GfxRenderPass {
-        objectsPassRenderer.endPass();
         device.submitPass(objectsPassRenderer);
 
         // Downsample.
@@ -300,54 +276,51 @@ export class BloomPostFXRenderer {
         downsampleColorTarget.setParameters(device, targetWidth, targetHeight, 1);
         downsampleColorTexture.setParameters(device, targetWidth, targetHeight);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setFromTemplate(template);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setUniformBufferOffset(0, parameterBufferOffs, 4);
         renderInst.drawPrimitives(3);
 
-        // Downsample.
+        // Downsample and threshold.
         const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, downsampleColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline);
+        renderInst.setGfxRenderPipeline(this.thresholdPipeline);
         this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, downsamplePassRenderer);
-        downsamplePassRenderer.endPass();
         device.submitPass(downsamplePassRenderer);
 
-        // Blur.
-        const blurColorTarget = this.scratch2ColorTarget;
-        const blurColorTexture = this.scratch2ColorTexture;
-        blurColorTarget.setParameters(device, targetWidth, targetHeight, 1);
-        blurColorTexture.setParameters(device, targetWidth, targetHeight);
-        const blurPassRenderer = blurColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, blurColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.blurPipeline);
+        // Blur L1.
+        const blur1ColorTarget = this.scratch2ColorTarget;
+        const blur1ColorTexture = this.scratch2ColorTexture;
+        blur1ColorTarget.setParameters(device, targetWidth, targetHeight, 1);
+        blur1ColorTexture.setParameters(device, targetWidth, targetHeight);
+        const blur1PassRenderer = blur1ColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, blur1ColorTexture.gfxTexture);
+        renderInst.setGfxRenderPipeline(this.blur1Pipeline);
         this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blurPassRenderer);
-        blurPassRenderer.endPass();
-        device.submitPass(blurPassRenderer);
+        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blur1PassRenderer);
+        device.submitPass(blur1PassRenderer);
 
         // TODO(jstpierre): Downsample blur / bokeh as well.
 
-        // Bokeh-ify.
+        // Blur L2.
         // We can ditch the second render target now, so just reuse it.
-        const bokehColorTarget = this.scratch1ColorTarget;
-        const bokehColorTexture = this.scratch1ColorTexture;
-        const bokehPassRenderer = bokehColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, bokehColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.bokehPipeline);
-        this.textureMapping[0].gfxTexture = blurColorTexture.gfxTexture!;
+        const blur2ColorTarget = this.scratch1ColorTarget;
+        const blur2ColorTexture = this.scratch1ColorTexture;
+        const blur2PassRenderer = blur2ColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, blur2ColorTexture.gfxTexture);
+        renderInst.setGfxRenderPipeline(this.blur2Pipeline);
+        this.textureMapping[0].gfxTexture = blur1ColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, bokehPassRenderer);
-        bokehPassRenderer.endPass();
-        device.submitPass(bokehPassRenderer);
+        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blur2PassRenderer);
+        device.submitPass(blur2PassRenderer);
 
         // Combine.
         const combinePassRenderer = mainRenderTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor);
         setScissorOnRenderPass(combinePassRenderer, viewerInput.viewport, mainRenderTarget.colorAttachment);
-        renderInst.setGfxRenderPipeline(this.fullscreenCombinePipeline);
-        this.textureMapping[0].gfxTexture = bokehColorTexture.gfxTexture!;
+        renderInst.setGfxRenderPipeline(this.combinePipeline);
+        this.textureMapping[0].gfxTexture = blur2ColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, combinePassRenderer);
 

@@ -20,25 +20,28 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { LightDataHolder, LightDirector } from './LightData';
+import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder } from './MiscActor';
-import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
-import { WaterAreaHolder } from './MiscMap';
+import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
-import { GravityExplainer } from './GravityExplainer';
+import { AreaObjMgr, AreaObj } from './AreaObj';
+import { CollisionDirector } from './Collision';
+import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
+import { MapPartsRailGuideHolder } from './MapParts';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -55,6 +58,13 @@ export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): numbe
 
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
+}
+
+function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
+    if (sceneObjHolder.priorDrawAirHolder !== null)
+        return sceneObjHolder.priorDrawAirHolder.isExistValidDrawAir();
+    else
+        return false;
 }
 
 export class SMGRenderer implements Viewer.SceneGfx {
@@ -147,42 +157,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel];
     }
 
-    private findBloomArea(): ObjInfo | null {
-        // TODO(jstpierre): Replace with proper bloom code.
-
-        /*
-        for (let i = 0; i < this.spawner.zones.length; i++) {
-            const zone = this.spawner.zones[i];
-            if (zone === undefined)
-                continue;
-
-            for (let j = 0; j < zone.areaObjInfo.length; j++) {
-                const area = zone.areaObjInfo[j];
-                if (area.objName === 'BloomCube' && area.objArg0 != -1)
-                    return area;
-            }
-        }
-        */
-
-        return null;
-    }
-
     private prepareBloomParameters(bloomParameters: BloomPostFXParameters): void {
         // TODO(jstpierre): Dynamically adjust based on Area.
-        const bloomArea = this.findBloomArea();
-        if (bloomArea !== null) {
-            // TODO(jstpierre): What is arg1
-            bloomParameters.blurStrength = bloomArea.objArg2 / 256;
-            bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
-            bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
-        } else if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
-            bloomParameters.blurStrength = 40/256;
-            bloomParameters.bokehStrength = 60/256;
-            bloomParameters.bokehCombineStrength = 110/256;
+        if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
+            bloomParameters.intensity1 = 40/256;
+            bloomParameters.intensity2 = 60/256;
+            bloomParameters.bloomIntensity = 110/256;
         } else {
-            bloomParameters.blurStrength = 25/256;
-            bloomParameters.bokehStrength = 25/256;
-            bloomParameters.bokehCombineStrength = 50/256;
+            bloomParameters.intensity1 = 25/256;
+            bloomParameters.intensity2 = 25/256;
+            bloomParameters.bloomIntensity = 50/256;
         }
     }
 
@@ -209,16 +193,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
+    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType), resetState);
     }
 
-    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
+    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType), resetState);
     }
 
-    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
+    private execute(passRenderer: GfxRenderPass, drawType: DrawType, resetState: boolean = false): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType), resetState);
     }
 
     private isNormalBloomOn(): boolean {
@@ -228,6 +212,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.sceneObjHolder.viewerInput = viewerInput;
+
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
         const camera = viewerInput.camera;
 
@@ -289,23 +275,27 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
-        // if (isExistPriorDrawAir())
-        // We assume that prior airs are drawing.
-        this.drawOpa(passRenderer, DrawBufferType.SKY);
-        this.drawOpa(passRenderer, DrawBufferType.AIR);
-        this.drawOpa(passRenderer, DrawBufferType.SUN);
-        this.drawXlu(passRenderer, DrawBufferType.SKY);
-        this.drawXlu(passRenderer, DrawBufferType.AIR);
-        this.drawXlu(passRenderer, DrawBufferType.SUN);
+        let resetTransientState = true;
+
+        if (isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY, resetTransientState);
+            resetTransientState = false;
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
+
         // if (isDrawSpinDriverPathAtOpa())
         //     execute(0x12);
 
         // Clear depth buffer.
-        passRenderer.endPass();
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
-        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
+        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL, resetTransientState);
+        resetTransientState = false;
         this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
 
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
@@ -338,7 +328,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.ENEMY);
         this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
         this.drawOpa(passRenderer, 0x15);
-        // if not PriorDrawAir, they would go here...
+        if (!isExistPriorDrawAir(this.sceneObjHolder)) {
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
+            this.drawOpa(passRenderer, DrawBufferType.AIR);
+            this.drawOpa(passRenderer, DrawBufferType.SUN);
+            this.drawXlu(passRenderer, DrawBufferType.SKY);
+            this.drawXlu(passRenderer, DrawBufferType.AIR);
+            this.drawXlu(passRenderer, DrawBufferType.SUN);
+        }
 
         // executeDrawListOpa();
         this.execute(passRenderer, DrawType.OCEAN_RING_OUTSIDE);
@@ -380,7 +377,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
         // So, end our pass here and do indirect.
         // execute(0x2d);
-        passRenderer.endPass();
         device.submitPass(passRenderer);
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
@@ -410,7 +406,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // executeDrawImageEffect()
         if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
-            passRenderer.endPass();
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
@@ -418,9 +413,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
+
+            resetTransientState = true;
         }
 
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT, resetTransientState);
+        resetTransientState = false;
         this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -463,15 +461,14 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
 
     const buffer = new Uint8Array(vertexCount * bufferStride);
     loadedVertexLayout.vertexBufferStrides[1] = bufferStride;
-    loadedVertexData.vertexBuffers[1] = buffer;
+    loadedVertexData.vertexBuffers[1] = buffer.buffer;
 
     const view = new DataView(loadedVertexData.vertexBuffers[0]);
-    const pnmtxidxLayout = assertExists(loadedVertexLayout.vertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.Attr.PNMTXIDX));
-    let offs = pnmtxidxLayout.bufferOffset;
     const loadedStride = loadedVertexLayout.vertexBufferStrides[0];
+    let offs = loadedVertexLayout.vertexAttributeOffsets[GX.Attr.PNMTXIDX];
 
     for (let i = 0; i < vertexCount; i++) {
-        const p = view.getUint8(offs + 0x00);
+        const p = view.getFloat32(offs, true);
         for (let j = 0; j < bufferStride; j++) {
             if (texMtxIdxBaseOffsets[j] >= 0)
                 buffer[i*bufferStride + j] = p + texMtxIdxBaseOffsets[j];
@@ -549,9 +546,9 @@ function patchBMD(bmd: BMD): void {
             }
 
             if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX0123MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 0 });
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
-                shape.loadedVertexLayout.vertexAttributeLayouts.push({ vtxAttrib: GX.Attr.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
+                shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }
@@ -780,15 +777,46 @@ class CaptureSceneDirector {
     }
 }
 
+class AreaObjContainer extends NameObj {
+    private managers: AreaObjMgr<AreaObj>[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'AreaObjContainer');
+        this.managers.push(new LightAreaHolder(sceneObjHolder));
+        this.managers.push(new WaterAreaMgr(sceneObjHolder));
+    }
+
+    public getManager(managerName: string): AreaObjMgr<AreaObj> {
+        for (let i = 0; i < this.managers.length; i++)
+            if (this.managers[i].name === managerName)
+                return this.managers[i];
+        throw "whoops";
+    }
+
+    public getAreaObj<T extends AreaObj>(managerName: string, position: vec3): T | null {
+        const mgr = this.getManager(managerName);
+        return mgr.find_in(position) as (T | null);
+    }
+}
+
 export const enum SceneObj {
-    SensorHitChecked     = 0x00,
-    PlanetGravityManager = 0x32,
-    AirBubbleHolder      = 0x39,
-    SwingRopeGroup       = 0x47,
-    TrapezeRopeDrawInit  = 0x4A,
-    ElectricRailHolder   = 0x59,
-    WaterAreaHolder      = 0x62,
-    WaterPlantDrawInit   = 0x63,
+    SensorHitChecker        = 0x00,
+    CollisionDirector       = 0x01,
+    LightDirector           = 0x06,
+    StageSwitchContainer    = 0x0A,
+    SwitchWatcherHolder     = 0x0B,
+    SleepControllerHolder   = 0x0C,
+    AreaObjContainer        = 0x0D,
+    PlanetGravityManager    = 0x32,
+    CoinRotater             = 0x38,
+    AirBubbleHolder         = 0x39,
+    SwingRopeGroup          = 0x47,
+    TrapezeRopeDrawInit     = 0x4A,
+    MapPartsRailGuideHolder = 0x56,
+    ElectricRailHolder      = 0x59,
+    WaterAreaHolder         = 0x62,
+    WaterPlantDrawInit      = 0x63,
+    PriorDrawAirHolder      = 0x75,
 }
 
 export class SceneObjHolder {
@@ -805,13 +833,21 @@ export class SceneObjHolder {
     public messageDataHolder: MessageDataHolder | null = null;
 
     public sensorHitChecker: SensorHitChecker | null = null;
+    public collisionDirector: CollisionDirector | null = null;
+    public stageSwitchContainer: StageSwitchContainer | null = null;
+    public switchWatcherHolder: SwitchWatcherHolder | null = null;
+    public sleepControllerHolder: SleepControllerHolder | null = null;
+    public areaObjContainer: AreaObjContainer | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
+    public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
+    public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
 
@@ -820,48 +856,82 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
+    public viewerInput: Viewer.ViewerRenderInput;
+
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
             this.newEachObj(sceneObj);
     }
 
     public getObj(sceneObj: SceneObj): NameObj | null {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             return this.sensorHitChecker;
+        else if (sceneObj === SceneObj.CollisionDirector)
+            return this.collisionDirector;
+        else if (sceneObj === SceneObj.StageSwitchContainer)
+            return this.stageSwitchContainer;
+        else if (sceneObj === SceneObj.SwitchWatcherHolder)
+            return this.switchWatcherHolder;
+        else if (sceneObj === SceneObj.SleepControllerHolder)
+            return this.sleepControllerHolder;
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.CoinRotater)
+            return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
             return this.swingRopeGroup;
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             return this.trapezeRopeDrawInit;
+        else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
+            return this.mapPartsRailGuideHolder;
         else if (sceneObj === SceneObj.WaterAreaHolder)
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
         else if (sceneObj === SceneObj.ElectricRailHolder)
             return this.electricRailHolder;
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            return this.priorDrawAirHolder;
         return null;
     }
 
     private newEachObj(sceneObj: SceneObj): void {
-        if (sceneObj === SceneObj.SensorHitChecked)
+        if (sceneObj === SceneObj.SensorHitChecker)
             this.sensorHitChecker = new SensorHitChecker(this);
+        else if (sceneObj === SceneObj.CollisionDirector)
+            this.collisionDirector = new CollisionDirector(this);
+        else if (sceneObj === SceneObj.StageSwitchContainer)
+            this.stageSwitchContainer = new StageSwitchContainer(this);
+        else if (sceneObj === SceneObj.SwitchWatcherHolder)
+            this.switchWatcherHolder = new SwitchWatcherHolder(this);
+        else if (sceneObj === SceneObj.SleepControllerHolder)
+            this.sleepControllerHolder = new SleepControllerHolder(this);
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.CoinRotater)
+            this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)
             this.swingRopeGroup = new SwingRopeGroup(this);
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
+        else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
+            this.mapPartsRailGuideHolder = new MapPartsRailGuideHolder(this);
         else if (sceneObj === SceneObj.WaterAreaHolder)
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
         else if (sceneObj === SceneObj.ElectricRailHolder)
             this.electricRailHolder = new ElectricRailHolder(this);
+        else if (sceneObj === SceneObj.PriorDrawAirHolder)
+            this.priorDrawAirHolder = new PriorDrawAirHolder(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -913,17 +983,25 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
 
     private legacySpawner: NoclipLegacyActorSpawner;
+    private gameBit: GameBits;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
+
+        if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy')
+            this.gameBit = GameBits.SMG1;
+        else if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2')
+            this.gameBit = GameBits.SMG2;
+        else
+            throw "whoops";
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const actorTableEntry = getNameObjFactoryTableEntry(objName);
+        const actorTableEntry = getNameObjFactoryTableEntry(objName, this.gameBit);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
-        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName);
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, this.gameBit);
         if (planetTableEntry !== null)
             return planetTableEntry;
 
@@ -1079,9 +1157,6 @@ class StageDataHolder {
         const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
         const objName = fallback(infoIter.getValueString('name'), 'Unknown');
         const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
-        const objArg1 = fallback(infoIter.getValueNumberNoInit('Obj_arg1'), -1);
-        const objArg2 = fallback(infoIter.getValueNumberNoInit('Obj_arg2'), -1);
-        const objArg3 = fallback(infoIter.getValueNumberNoInit('Obj_arg3'), -1);
         const modelMatrix = mat4.create();
 
         const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
@@ -1093,7 +1168,7 @@ class StageDataHolder {
             rotation[0], rotation[1], rotation[2],
             translation[0], translation[1], translation[2]);
 
-        return { objId, objName, objArg0, objArg1, objArg2, objArg3, modelMatrix };
+        return { objId, objName, objArg0, modelMatrix };
     }
 
     private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
@@ -1330,6 +1405,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         this.placeExtra(sceneObjHolder);
 
         spawner.place();
+
+        // GameScene::init()
+        initSyncSleepController(sceneObjHolder);
 
         const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
         this.patchRenderer(renderer);

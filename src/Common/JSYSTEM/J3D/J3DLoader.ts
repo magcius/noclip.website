@@ -474,7 +474,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             attribIdx += 0x08;
         }
 
-        // TODO(jstpierre): Make sure these are compatible.
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
         const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
         const vtxLoader = compileVtxLoader(vat, vcd);
@@ -570,6 +569,7 @@ export interface TexMtx {
 export interface MaterialEntry {
     index: number;
     name: string;
+    materialMode: number;
     translucent: boolean;
     textureIndexes: number[];
     gxMaterial: GX_Material.GXMaterial;
@@ -595,11 +595,11 @@ export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rota
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
-    dst[12] = translationS + centerS + scaleS * (sinR * centerT - cosR * centerS);
+    dst[12] = translationS + centerS - (dst[0] * centerS + dst[4] * centerT);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + centerT + -scaleT * (-sinR * centerS + cosR * centerT);
+    dst[13] = translationT + centerT - (dst[1] * centerS + dst[5] * centerT);
 }
 
 export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -670,7 +670,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const index = i;
         const name = nameTable[i];
         const materialEntryIdx = materialEntryTableOffs + (0x014C * remapTable[i]);
-        const flags = view.getUint8(materialEntryIdx + 0x00);
+        const materialMode = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
         const colorChanCountIndex = view.getUint8(materialEntryIdx + 0x02);
         const texGenCountIndex = view.getUint8(materialEntryIdx + 0x03);
@@ -968,12 +968,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         fogBlock.AdjTable.set(fogAdjTable);
         fogBlock.AdjCenter = fogAdjCenter;
 
+        const translucent = !(materialMode & 0x03);
+
         const ropInfo: GX_Material.RopInfo = {
             fogType, fogAdjEnabled,
             blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
             depthTest, depthFunc, depthWrite,
         };
-        const translucent = !(flags & 0x03);
 
         const gxMaterial: GX_Material.GXMaterial = {
             name,
@@ -990,7 +991,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
         materialEntries.push({
             index, name,
-            translucent,
+            materialMode, translucent,
             textureIndexes,
             texMatrices,
             gxMaterial,

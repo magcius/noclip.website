@@ -176,9 +176,8 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
             this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {

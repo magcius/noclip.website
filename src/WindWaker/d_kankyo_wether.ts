@@ -18,8 +18,8 @@ import { Camera, divideByW } from "../Camera";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
-import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind, setChanWriteEnabled } from "../gx/gx_render";
+import { GfxDevice, GfxCompareMode, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
@@ -167,6 +167,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
     mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
     fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+    renderInstManager.submitRenderInst(renderInst);
 }
 
 export class dKankyo__CommonTextures {
@@ -254,9 +255,11 @@ export class dKankyo_sun_Packet {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSunMoon = new GXMaterialHelperGfx(mb.finish('dKankyo_sun_packet'));
+        setChanWriteEnabled(this.materialHelperSunMoon, GfxColorWriteMask.ALPHA, false);
 
         mb.setZMode(false, GX.CompareType.LEQUAL, false);
         this.materialHelperLenzflare = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet textured'));
+        setChanWriteEnabled(this.materialHelperLenzflare, GfxColorWriteMask.ALPHA, false);
 
         mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
@@ -265,6 +268,7 @@ export class dKankyo_sun_Packet {
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A0);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         this.materialHelperLenzflareSolid = new GXMaterialHelperGfx(mb.finish('dKankyo_lenzflare_packet solid'));
+        setChanWriteEnabled(this.materialHelperLenzflareSolid, GfxColorWriteMask.ALPHA, false);
     }
 
     private drawSquare(ddraw: TDDraw, mtx: mat4, basePos: vec3, size1: number, scaleX: number, texCoordScale: number, size2: number = size1): void {
@@ -624,6 +628,7 @@ export class dKankyo_vrkumo_Packet {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_vrkumo_packet'));
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, false);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -819,9 +824,11 @@ export class dKankyo_rain_Packet {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelperRain = new GXMaterialHelperGfx(mb.finish('dKankyo_rain_packet'));
+        setChanWriteEnabled(this.materialHelperRain, GfxColorWriteMask.ALPHA, false);
 
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         this.materialHelperSibuki = new GXMaterialHelperGfx(mb.finish('dKankyo_rain_packet sibuki'));
+        setChanWriteEnabled(this.materialHelperSibuki, GfxColorWriteMask.ALPHA, false);
     }
 
     private drawRain(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1062,6 +1069,7 @@ export class dKankyo_wave_Packet {
         mb.setUsePnMtxIdx(false);
         mb.setFog(GX.FogType.PERSP_LIN, true);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_wave_Packet'));
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, false);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1209,6 +1217,7 @@ export class dKankyo_star_Packet {
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish('dKankyo_star_Packet'));
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, false);
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

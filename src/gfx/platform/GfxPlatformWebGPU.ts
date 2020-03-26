@@ -461,9 +461,6 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
         this.renderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
     }
 
-    public endPass(): void {
-    }
-
     public finish(): GPUCommandBuffer {
         this.renderPassEncoder!.endPass();
         this.renderPassEncoder = null;
@@ -769,7 +766,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return o;
     }
     
-    public createWebXRLayer(webXRSession: XrSession): XrWebGLLayer {
+    public createWebXRLayer(webXRSession: XRSession): XRWebGLLayer {
         // TODO WebXR: currently now way to use WebGPU with WebXR.
         // This method should never be called.
         throw "createWebXRLayer not implemented on WebGPU";

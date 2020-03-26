@@ -279,6 +279,7 @@ export interface GfxSwapChain {
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
     present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void;
+    createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 
 export interface GfxHostAccessPass {
@@ -300,9 +301,6 @@ export interface GfxRenderPass {
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
-
-    // TODO(jstpierre): Remove this. It does nothing.
-    endPass(): void;
 };
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
@@ -320,7 +318,6 @@ export interface GfxDevice {
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
     createReadback(elemCount: number): GfxReadback;
-    createWebXRLayer(webXRSession: XrSession): XrWebGLLayer;
 
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;

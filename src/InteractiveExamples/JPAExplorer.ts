@@ -478,7 +478,6 @@ export class Explorer implements SceneGfx {
 
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass, this.opaqueSceneTexture.gfxTexture);
         executeOnPass(renderInstManager, device, mainPassRenderer, Pass.MAIN);
-        mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
 
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);

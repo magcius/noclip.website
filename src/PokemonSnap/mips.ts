@@ -1,9 +1,9 @@
-import { nArray, hexzero, assert } from '../util'
+import { nArray, assert } from '../util'
 
 export const enum Opcode {
     NOP     = 0x00,
 
-    JAL     = 0X03,
+    JAL     = 0x03,
     BEQ     = 0x04,
     BNE     = 0x05,
     ADDIU   = 0x09,
@@ -14,24 +14,41 @@ export const enum Opcode {
     XORI    = 0x0E,
     LUI     = 0x0F,
 
-    BEQL    = 0X14,
-    BNEL    = 0X15,
+    COP0    = 0x10,
+    COP1    = 0x11,
 
-    LB      = 0X20,
-    LH      = 0X21,
+    BEQL    = 0x14,
+    BNEL    = 0x15,
+
+    LB      = 0x20,
+    LH      = 0x21,
     LW      = 0x23,
     LBU     = 0x24,
     LHU     = 0x25,
     SB      = 0x28,
     SH      = 0x29,
     SW      = 0x2B,
+    LWC1    = 0x31,
+    SWC1    = 0x39,
 
     // register opcode block
-    REG     = 0x100,
+    REGOP   = 0x100,
     JR      = 0x108,
     ADDU    = 0x121,
     AND     = 0x124,
     OR      = 0x125,
+
+    // coprocessor 1 opcode block
+    COPOP   = 0x200,
+    MFC1    = 0x200,
+    MTC1    = 0x204,
+
+    // float (single) opcode block
+    FLOATOP = 0x300,
+    ADDS    = 0x300,
+    SUBS    = 0x301,
+    MULS    = 0x302,
+    MOVS    = 0x306,
 }
 
 export const enum RegName {
@@ -68,6 +85,7 @@ export interface BranchInfo {
 // is made to handle loops, nested conditionals, or most register modification
 export class NaiveInterpreter {
     public regs: Register[] = nArray(32, () => ({ value: 0, lastOp: Opcode.NOP } as Register));
+    public fregs: Register[] = nArray(32, () => ({ value: 0, lastOp: Opcode.NOP } as Register));
     public stackArgs: Register[] = nArray(10, () => ({ value: 0, lastOp: Opcode.NOP } as Register));
 
     protected done = false;
@@ -78,6 +96,10 @@ export class NaiveInterpreter {
         for (let i = 0; i < this.regs.length; i++) {
             this.regs[i].value = 0;
             this.regs[i].lastOp = Opcode.NOP;
+        }
+        for (let i = 0; i < this.fregs.length; i++) {
+            this.fregs[i].value = 0;
+            this.fregs[i].lastOp = Opcode.NOP;
         }
         for (let i = 0; i < this.stackArgs.length; i++) {
             this.stackArgs[i].value = 0;
@@ -103,18 +125,25 @@ export class NaiveInterpreter {
             this.lastInstr = instr;
 
             let op: Opcode = instr >>> 26;
+            const rs = (instr >>> 21) & 0x1F;
             if (op === Opcode.NOP && instr !== 0)
-                op = (instr & 0x3F) | Opcode.REG;
-            const rs = (instr >>> 21) & 0x1f;
-            const rt = (instr >>> 16) & 0x1f;
-            const rd = (instr >>> 11) & 0x1f;
+                op = (instr & 0x3F) | Opcode.REGOP;
+            else if (op === Opcode.COP1) {
+                if (rs === Opcode.COP0 || rs === Opcode.COP1)
+                    op = Opcode.FLOATOP | (instr & 0x3F);
+                else
+                    op = Opcode.COPOP | rs;
+            }
+            const rt = (instr >>> 16) & 0x1F;
+            const rd = (instr >>> 11) & 0x1F;
+            const frd = (instr >>> 6) & 0x1F;
             const imm = view.getInt16(offs + 0x02);
-            const u_imm = (instr >>> 0) & 0xffff;
+            const u_imm = (instr >>> 0) & 0xFFFF;
             switch (op) {
                 case Opcode.NOP:
                     break;
                 case Opcode.BEQ:
-                    if (rs === 0 && rt === 0) {
+                    if (rs === 0 && rt === 0 && imm > 0) {
                         nextMeet = Math.max(nextMeet, offs + 4 * (imm + 1));
                         if (currBranch !== null) {
                             assert(!this.valid || currBranch.end === -1 || currBranch.end === offs + 8, "unconditional branch in the middle of if block");
@@ -125,8 +154,11 @@ export class NaiveInterpreter {
                 case Opcode.BNE:
                 case Opcode.BNEL:
                 case Opcode.BEQL: {
-                    if (imm <= 0 || currBranch !== null) {
-                        // don't handle loops or nested conditionals
+                    // don't try to track loops or nested conditionals
+                    if (imm <= 0) {
+                        this.handleLoop(op, this.regs[rs], this.regs[rt], imm);
+                        break;
+                    } else if (currBranch !== null) {
                         this.handleUnknown(op);
                         break;
                     }
@@ -163,6 +195,17 @@ export class NaiveInterpreter {
                         }
                     }
                 } break;
+                case Opcode.SWC1: {
+                    if (rs !== RegName.SP)
+                        this.handleStore(op, this.fregs[rt], this.regs[rs], imm);
+                    else {
+                        const stackOffset = (u_imm >>> 2) - 4;
+                        if (stackOffset >= 0 && stackOffset < this.stackArgs.length) {
+                            this.stackArgs[stackOffset].lastOp = this.fregs[rt].lastOp;
+                            this.stackArgs[stackOffset].value = this.fregs[rt].value;
+                        }
+                    }
+                } break;
 
                 // attempt to retrieve a value from the stack
                 case Opcode.LW:
@@ -179,15 +222,17 @@ export class NaiveInterpreter {
                 case Opcode.LB:
                 case Opcode.LBU:
                 case Opcode.LH:
-                case Opcode.LHU: {
+                case Opcode.LHU:
+                case Opcode.LWC1: {
+                    const target = op === Opcode.LWC1 ? this.fregs[rt] : this.regs[rt];
                     if (imm === 0)
-                        this.regs[rt].value = this.guessValue(rs);
+                        target.value = this.guessValue(rs);
                     else if ((this.regs[rs].value & 0xFFFF) === 0)
-                        this.regs[rt].value = this.guessValue(rs) + imm;
+                        target.value = this.guessValue(rs) + imm;
                     else
-                        this.regs[rt].value = imm;
+                        target.value = imm;
 
-                    this.regs[rt].lastOp = op;
+                    target.lastOp = op;
                 } break;
 
                 case Opcode.ADDU: {
@@ -196,6 +241,9 @@ export class NaiveInterpreter {
                 } break;
                 case Opcode.AND: {
                     this.regs[rd].value = this.guessValue(rs, rt);
+                    // if multiple flag operations happened, try to get the one used for AND
+                    if (this.regs[rs].lastOp === Opcode.OR || this.regs[rs].lastOp === Opcode.ORI)
+                        this.regs[rd].value = this.guessValue(rt);
                     this.regs[rd].lastOp = op;
                 } break;
                 case Opcode.OR: {
@@ -229,11 +277,34 @@ export class NaiveInterpreter {
                 case Opcode.JAL:
                     func = (instr & 0xFFFFFF) << 2;
                     break;
-                case Opcode.JR:
-                    if (rs === RegName.RA)
+                case Opcode.JR: {
+                    if (rs === RegName.RA) {
+                        this.finish();
                         return this.valid;
+                    }
                     // a switch statement, beyond the scope of this interpreter
                     this.handleUnknown(op);
+                } break;
+                case Opcode.MFC1: {
+                    this.regs[rt].lastOp = this.fregs[rd].lastOp;
+                    this.regs[rt].value = this.fregs[rd].value;
+                } break;
+                case Opcode.MTC1: {
+                    this.fregs[rd].lastOp = this.regs[rt].lastOp;
+                    this.fregs[rd].value = this.regs[rt].value;
+                } break;
+                case Opcode.SUBS:
+                case Opcode.ADDS:
+                case Opcode.MULS: {
+                    this.fregs[frd].lastOp = op;
+                    this.fregs[frd].value = this.fregs[rd].value;
+                    if (this.fregs[rd].value === 0 || (this.fregs[rd].lastOp === Opcode.LWC1 && this.fregs[rd].value < 0x80000000))
+                        this.fregs[frd].value = this.fregs[rt].value;
+                } break;
+                case Opcode.MOVS: {
+                    this.fregs[frd].lastOp = this.fregs[rd].lastOp;
+                } break;
+
                 default:
                     // unhandled instruction, return invalid
                     this.handleUnknown(op);
@@ -244,6 +315,8 @@ export class NaiveInterpreter {
                 const v0 = this.handleFunction(func, this.regs[RegName.A0], this.regs[RegName.A1], this.regs[RegName.A2], this.regs[RegName.A3], this.stackArgs, currBranch);
                 this.regs[RegName.V0].lastOp = Opcode.JAL;
                 this.regs[RegName.V0].value = v0;
+                this.fregs[0].lastOp = Opcode.JAL;
+                this.fregs[0].value = v0;
                 func = 0;
             }
             offs += 4;
@@ -259,6 +332,7 @@ export class NaiveInterpreter {
                 }
             }
         }
+        this.finish();
         return this.valid;
     }
 
@@ -293,10 +367,14 @@ export class NaiveInterpreter {
 
     protected handleStore(op: Opcode, value: Register, target: Register, offset: number): void { }
 
-    // handler for unknown instructions, by default mark invalid and abort
+    // handler for unknown instructions, by default just mark invalid
     protected handleUnknown(op: Opcode): void {
-        this.done = true;
         this.valid = false;
     }
 
+    protected handleLoop(op: Opcode, left: Register, right: Register, offset: number): void {
+        this.valid = false;
+    }
+
+    protected finish(): void { }
 }

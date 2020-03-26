@@ -149,7 +149,7 @@ class SurfaceInstance {
         else
             computeViewMatrix(viewMatrix, viewerInput.camera);
 
-        const renderInst = renderHelper.renderInstManager.pushRenderInst();
+        const renderInst = renderHelper.renderInstManager.newRenderInst();
         this.surfaceData.shapeHelper.setOnRenderInst(renderInst);
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 

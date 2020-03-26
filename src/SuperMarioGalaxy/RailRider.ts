@@ -544,6 +544,10 @@ export class RailRider {
         return this.bezierRail.getRailPosCoord(this.currentPointId);
     }
 
+    public getPointCoord(i: number): number {
+        return this.bezierRail.getRailPosCoord(i);
+    }
+
     public getNextPointNo(): number {
         const delta = (this.direction === RailDirection.TOWARDS_END) ? 1 : -1;
         const numParts = this.bezierRail.railParts.length;

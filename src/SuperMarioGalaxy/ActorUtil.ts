@@ -11,12 +11,14 @@ import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
-import { HitSensor } from "./HitSensor";
+import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
+import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
+import { addSleepControlForLiveActor, isExistStageSwitchAppear, SwitchFunctorEventListener, getSwitchWatcherHolder, SwitchCallback, isExistStageSwitchA, isExistStageSwitchB, isExistStageSwitchDead } from "./Switch";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -31,6 +33,10 @@ export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj,
 
 export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, -1, -1, -1);
+}
+
+export function connectToSceneMapObjNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.MAP_OBJ, -1);
 }
 
 export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -89,6 +95,10 @@ export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: Sce
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
+export function connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT, -1);
+}
+
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x24, 0x05, DrawBufferType.SKY, -1);
 }
@@ -125,14 +135,35 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x2A, -1, -1, -1);
 }
 
+export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+}
+
+export function connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x1F, 0x03, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
 
+export function getJointMtx(actor: LiveActor, i: number): mat4 {
+    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray[i];
+}
+
+export function getJointMtxByName(actor: LiveActor, n: string): mat4 | null {
+    const modelInstance = actor.modelInstance;
+    if (modelInstance === null)
+        return null;    
+    const joints = modelInstance.modelData.bmd.jnt1.joints;
+    for (let i = 0; i < joints.length; i++)
+        if (joints[i].name === n)
+            return modelInstance.shapeInstanceState.jointToWorldMatrixArray[i];
+    return null;
+}
+
 export function isBckStopped(actor: LiveActor): boolean {
-    const bckCtrl = actor.modelManager!.getBckCtrl();
-    // TODO(jstpierre): Add stopped flags?
-    return bckCtrl.speedInFrames === 0.0;
+    return actor.modelManager!.isBckStopped();
 }
 
 export function getBckFrameMax(actor: LiveActor): number {
@@ -213,6 +244,12 @@ export function startBck(actor: LiveActor, name: string): void {
 
 export function startBckWithInterpole(actor: LiveActor, name: string, interpole: number): void {
     actor.modelManager!.startBckWithInterpole(name, interpole);
+    if (actor.effectKeeper !== null)
+        actor.effectKeeper.changeBck();
+}
+
+export function startBckNoInterpole(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBckWithInterpole(name, 0.0);
     if (actor.effectKeeper !== null)
         actor.effectKeeper.changeBck();
 }
@@ -333,6 +370,11 @@ export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function setBvaRate(actor: LiveActor, rate: number): void {
+    const ctrl = actor.modelManager!.getBvaCtrl();
+    ctrl.speedInFrames = rate;
+}
+
 export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
     // TODO(jstpierre): Support stopped flag?
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
@@ -364,6 +406,23 @@ export function isBpkPlaying(actor: LiveActor, name: string): boolean {
 
 export function isBvaPlaying(actor: LiveActor, name: string): boolean {
     return actor.modelManager!.isBvaPlaying(name);
+}
+
+export function isAnyAnimStopped(actor: LiveActor, name: string): boolean {
+    // TODO(jstpierre): I can't figure out what actually checks that the animation *was* playing. Weird.
+    if (!isBckExist(actor, name) || !actor.modelManager!.isBckStopped())
+        return false;
+    if (!isBtkExist(actor, name) || !actor.modelManager!.isBtkStopped())
+        return false;
+    if (!isBpkExist(actor, name) || !actor.modelManager!.isBpkStopped())
+        return false;
+    if (!isBtpExist(actor, name) || !actor.modelManager!.isBtpStopped())
+        return false;
+    if (!isBrkExist(actor, name) || !actor.modelManager!.isBrkStopped())
+        return false;
+    if (!isBvaExist(actor, name) || !actor.modelManager!.isBvaStopped())
+        return false;
+    return true;
 }
 
 export function isActionStart(actor: LiveActor, action: string): boolean {
@@ -405,16 +464,57 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
+export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
+}
+
+export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
+}
+
 export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, 0x05, pairwiseCapacity, radius, actor, offset);
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
-export function receiveMessage(thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
-    return thisSensor.actor.receiveMessage(messageType, thisSensor, otherSensor);
+export function receiveMessage(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
+    return thisSensor.actor.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
 }
 
-export function sendArbitraryMsg(messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
-    return receiveMessage(otherSensor, messageType, thisSensor);
+export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+    return receiveMessage(sceneObjHolder, otherSensor, messageType, thisSensor);
+}
+
+function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
+    mat4.copy(dst, assertExists(actor.getBaseMtx()));
+    const scaleX = actor.scale[0];
+    vec3.set(scratchVec3, scaleX, scaleX, scaleX);
+    mat4.scale(dst, dst, scratchVec3);
+}
+
+export function resetAllCollisionMtx(actor: LiveActor): void {
+    const parts = actor.collisionParts!;
+    if (parts.hostMtx !== null) {
+        parts.resetAllMtxFromHost();
+    } else {
+        calcCollisionMtx(scratchMatrix, actor);
+        parts.resetAllMtx(scratchMatrix);
+    }
+}
+
+export function validateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    validateCollisionParts(sceneObjHolder, parts);
+    // parts.updateBoundingSphereRange();
+    resetAllCollisionMtx(actor);
+}
+
+export function invalidateCollisionPartsForActor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const parts = assertExists(actor.collisionParts);
+    invalidateCollisionParts(sceneObjHolder, parts);
+}
+
+export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, null, hostMtx, CollisionScaleType.AutoScale);
 }
 
 export function getRailTotalLength(actor: LiveActor): number {
@@ -461,6 +561,11 @@ export function isLoopRail(actor: LiveActor): boolean {
     return actor.railRider!.isLoop();
 }
 
+export function moveCoordToRailPoint(actor: LiveActor, i: number): void {
+    const coord = actor.railRider!.getPointCoord(i);
+    actor.railRider!.setCoord(coord);
+}
+
 export function moveCoordToStartPos(actor: LiveActor): void {
     actor.railRider!.setCoord(0);
 }
@@ -488,6 +593,10 @@ export function adjustmentRailCoordSpeed(actor: LiveActor, target: number, maxSp
     actor.railRider!.setSpeed(target);
 }
 
+export function moveCoordToNearestPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(actor.translation);
+}
+
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     actor.railRider!.moveToNearestPos(actor.translation);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
@@ -513,8 +622,32 @@ export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
+export function moveTransToCurrentRailPos(actor: LiveActor): void {
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
 export function getCurrentRailPointNo(actor: LiveActor): number {
     return actor.railRider!.currentPointId;
+}
+
+export function getCurrentRailPointArg0(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg0');
+}
+
+export function getCurrentRailPointArg1(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg1');
+}
+
+export function getCurrentRailPointArg5(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg5');
+}
+
+export function getCurrentRailPointArg7(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg7');
+}
+
+export function getNextRailPointNo(actor: LiveActor): number {
+    return actor.railRider!.getNextPointNo();
 }
 
 export function getRailPartLength(actor: LiveActor, partIdx: number): number {
@@ -531,6 +664,11 @@ export function getRailPos(v: vec3, actor: LiveActor): void {
 
 export function setRailCoord(actor: LiveActor, coord: number): void {
     actor.railRider!.setCoord(coord);
+}
+
+export function setRailDirectionToEnd(actor: LiveActor): void {
+    if (actor.railRider!.direction === RailDirection.TOWARDS_START)
+        actor.railRider!.reverse();
 }
 
 export function moveRailRider(actor: LiveActor): void {
@@ -623,13 +761,6 @@ export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void
     }
 }
 
-export function setTrans(dst: mat4, pos: vec3): void {
-    dst[12] = pos[0];
-    dst[13] = pos[1];
-    dst[14] = pos[2];
-    dst[15] = 1.0;
-}
-
 function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
     if (attachmentFilter === null)
         attachmentFilter = nameObj;
@@ -680,7 +811,7 @@ export function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): 
     vec3.normalize(right, right);
     vec3.cross(upNorm, frontNorm, right);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
+    setMatrixTranslation(dst, pos);
 }
 
 export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
@@ -692,7 +823,7 @@ export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): 
     vec3.normalize(right, right);
     vec3.cross(frontNorm, right, upNorm);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
-    setTrans(dst, pos);
+    setMatrixTranslation(dst, pos);
 }
 
 export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
@@ -701,16 +832,16 @@ export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
     quat.normalize(dst, dst);
 }
 
-export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number, scratch = scratchVec3): void {
+export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number = 1.0, scratch = scratchVec3): void {
     // v0 and v1 are normalized.
 
     // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
-    vec3.cross(scratchVec3, v0, v1);
-    const sin = vec3.length(scratchVec3);
+    vec3.cross(scratch, v0, v1);
+    const sin = vec3.length(scratch);
     if (sin > MathConstants.EPSILON) {
         const cos = vec3.dot(v0, v1);
         const theta = Math.atan2(sin, cos);
-        quat.setAxisAngle(q, scratchVec3, theta * t);
+        quat.setAxisAngle(q, scratch, theta * t);
     } else {
         quat.identity(q);
     }
@@ -798,4 +929,144 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
+}
+
+export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+    const m = vec3.dot(a, b);
+    dst[0] = a[0] - b[0]*m;
+    dst[1] = a[1] - b[1]*m;
+    dst[2] = a[2] - b[2]*m;
+    return m;
+}
+
+function getMaxAbsElementIndex(v: vec3): number {
+    const x = Math.abs(v[0]);
+    const y = Math.abs(v[1]);
+    const z = Math.abs(v[2]);
+    if (x > z && y > z)
+        return 0;
+    else if (y > z)
+        return 1;
+    else
+        return 2;
+}
+
+export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
+    const max = getMaxAbsElementIndex(up);
+    const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
+    makeMtxUpFrontPos(dst, up, front, pos);
+}
+
+export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
+    return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
+}
+
+export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
+    addSleepControlForLiveActor(sceneObjHolder, actor, infoIter);
+}
+
+export function useStageSwitchWriteA(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchA(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchWriteB(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchB(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchWriteDead(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchDead(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function useStageSwitchReadAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): boolean {
+    if (infoIter === null)
+        return false;
+
+    if (!isExistStageSwitchAppear(infoIter))
+        return false;
+
+    if (actor.stageSwitchCtrl === null)
+        actor.initStageSwitch(sceneObjHolder, infoIter);
+    return true;
+}
+
+export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    // TODO(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
+
+    // NOTE(jstpierre): ActorAppearSwitchListener is calls appear/kill vfunc instead, but
+    // I can't see the motivation behind these two different vfuncs tbqh.
+
+    // Also, ActorAppearSwitchListener can turn off one or both of these vfuncs, but syncStageSwitchAppear
+    // does never do that, so we emulate it with a functor listener.
+    const switchOn = (sceneObjHolder: SceneObjHolder) => actor.makeActorAppeared(sceneObjHolder);
+    const switchOff = (sceneObjHolder: SceneObjHolder) => actor.makeActorDead(sceneObjHolder);
+    const eventListener = new SwitchFunctorEventListener(switchOn, switchOff);
+
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function listenStageSwitchOnOffA(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerA(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function listenStageSwitchOnOffB(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerB(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+    const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
+    getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
+}
+
+export function isValidSwitchA(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchA();
+}
+
+export function isValidSwitchB(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchB();
+}
+
+export function isValidSwitchAppear(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchAppear();
+}
+
+export function isValidSwitchDead(actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isValidSwitchDead();
+}
+
+export function isOnSwitchA(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchA(sceneObjHolder);
+}
+
+export function isOnSwitchB(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchB(sceneObjHolder);
+}
+
+export function isOnSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchAppear(sceneObjHolder);
 }

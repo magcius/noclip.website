@@ -161,6 +161,7 @@ export class dScnKy_env_light_c {
     public starPacket: dKankyo_star_Packet | null = null;
 
     public eventNightStop: boolean = false;
+    public forceTimePass: boolean = false;
 }
 
 export class LIGHT_INFLUENCE {
@@ -689,7 +690,7 @@ export function dKy_pship_existence_chk(globals: dGlobals): boolean {
 }
 
 function GetTimePass(globals: dGlobals): boolean {
-    return globals.dStage_dt.rtbl[globals.mStayNo].isTimePass;
+    return globals.g_env_light.forceTimePass || globals.dStage_dt.rtbl[globals.mStayNo].isTimePass;
 }
 
 function dice_rain_minus(envLight: dScnKy_env_light_c): void {

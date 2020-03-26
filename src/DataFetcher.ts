@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import { assert } from './util';
+import { assert, assertExists } from './util';
 import { IS_DEVELOPMENT } from './BuildVersion';
 import { ProgressMeter } from './SceneBase';
 
@@ -8,16 +8,16 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
 }
 
-function getDataStorageBaseURL(): string {
-    if (IS_DEVELOPMENT)
+function getDataStorageBaseURL(isDevelopment: boolean): string {
+    if (isDevelopment)
         return `/data`;
     else
         return `https://gznoclip1.b-cdn.net`;
 }
 
-export function getDataURLForPath(url: string): string {
+export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
     assert(!url.startsWith(`data/`));
-    return `${getDataStorageBaseURL()}/${url}`;
+    return `${getDataStorageBaseURL(isDevelopment)}/${url}`;
 }
 
 export const enum DataFetcherFlags {
@@ -61,11 +61,6 @@ class DataFetcherRequest {
 
         // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
         if (request.status === 0)
-            return true;
-
-        // This check is for development purposes, as Parcel will return the index page for non-existent data.
-        const contentType = request.getResponseHeader('Content-Type');
-        if (contentType !== null && contentType.startsWith('text/html'))
             return true;
 
         return false;
@@ -153,8 +148,24 @@ export class DataFetcher {
     public doneRequestCount: number = 0;
     public maxParallelRequests: number = 2;
     public aborted: boolean = false;
+    public useDevelopmentStorage: boolean | null = null;
 
     constructor(public progressMeter: ProgressMeter) {
+    }
+
+    public async init() {
+        if (IS_DEVELOPMENT) {
+            // Check for the existence of a /data directory.
+            const url = getDataURLForPath('', true);
+            try {
+                await this.fetchURL(url);
+                this.useDevelopmentStorage = true;
+            } catch(e) {
+                this.useDevelopmentStorage = false;
+            }
+        } else {
+            this.useDevelopmentStorage = false;
+        }
     }
 
     public abort(): void {
@@ -214,7 +225,7 @@ export class DataFetcher {
     }
 
     public fetchData(path: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
-        const url = getDataURLForPath(path);
+        const url = getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
         return this.fetchURL(url, flags, abortedCallback);
     }
 }

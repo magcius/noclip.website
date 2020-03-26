@@ -162,14 +162,51 @@ export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean
     }
 }
 
+/**
+ * Transforms the vector {@param v} by the 4x3 matrix {@param m}, assuming that the implied W component is 1.
+ * This is similar to {@see vec3.transformMat4}, except a bit faster as it assumes an affine matrix.
+ *
+ * Note that this assumes an affine (4x3) matrix, the projective components are simply ignored.
+ * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
+ * matrices just fine, including the divide by W.
+ */
+export function transformVec3Mat4w1(dst: vec3, m: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] = m[0] * x + m[4] * y + m[8]  * z + m[12];
+    dst[1] = m[1] * x + m[5] * y + m[9]  * z + m[13];
+    dst[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+}
+
+/**
+ * Transforms the vector {@param v} by the 4x3 matrix {@param m}, assuming that the implied W component is 0.
+ * This is similar to {@see vec3.transformMat4}, except that translation is ignored, as a consequence of assuming
+ * the W component is 0.
+ *
+ * Note that this assumes an affine (4x3) matrix, the projective components are simply ignored.
+ * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
+ * matrices just fine, including the divide by W.
+ */
+export function transformVec3Mat4w0(dst: vec3, m: mat4, v: vec3): void {
+    const x = v[0], y = v[1], z = v[2];
+    dst[0] = m[0] * x + m[4] * y + m[8] * z;
+    dst[1] = m[1] * x + m[5] * y + m[9] * z;
+    dst[2] = m[2] * x + m[6] * y + m[10] * z;
+}
+
 const scratchVec3 = vec3.create();
+
+function compareEpsilon(a: number, b: number) {
+    return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
+}
 
 /**
  * Returns whether matrix {@param m} has a uniform scale.
  */
 export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
-    mat4.getScaling(v, m);
-    return isNearZeroVec3(v, MathConstants.EPSILON);
+    const sx = Math.hypot(m[0], m[4], m[8]);
+    const sy = Math.hypot(m[1], m[5], m[9]);
+    const sz = Math.hypot(m[2], m[6], m[10]);
+    return compareEpsilon(sx, sy) && compareEpsilon(sx, sz);
 }
 
 export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
@@ -375,20 +412,18 @@ export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: 
 export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {
     // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
 
-    if (m[2] - 1.0 < -0.0001) {
-        if (m[2] + 1.0 > 0.0001) {
-            dst[0] = Math.atan2(m[6], m[10]);
-            dst[1] = -Math.asin(m[2]);
-            dst[2] = Math.atan2(m[1], m[0]);
-        } else {
-            dst[0] = Math.atan2(m[4], m[8]);
-            dst[1] = Math.PI / 2;
-            dst[2] = 0.0;
-        }
-    } else {
-        dst[0] = -Math.atan2(-m[4], -m[8]);
+    if (compareEpsilon(m[2], 1.0)) {
+        dst[0] = Math.atan2(-m[4], -m[8]);
         dst[1] = -Math.PI / 2;
         dst[2] = 0.0;
+    } else if (compareEpsilon(m[2], -1.0)) {
+        dst[0] = Math.atan2(m[4], m[8]);
+        dst[1] = Math.PI / 2;
+        dst[2] = 0.0;
+    } else {
+        dst[0] = Math.atan2(m[6], m[10]);
+        dst[1] = -Math.asin(m[2]);
+        dst[2] = Math.atan2(m[1], m[0]);
     }
 }
 
@@ -468,8 +503,28 @@ export function getMatrixTranslation(dst: vec3, m: mat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }
 
+export function setMatrixTranslation(dst: mat4, v: vec3): void {
+    dst[12] = v[0];
+    dst[13] = v[1];
+    dst[14] = v[2];
+}
+
 export const Vec3Zero  = vec3.fromValues(0, 0, 0);
 export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitX = vec3.fromValues(1, 0, 0);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);
 export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
+
+const baseBuffer = new ArrayBuffer(4);
+const asFloat32 = new Float32Array(baseBuffer);
+const asUint32 = new Uint32Array(baseBuffer);
+export function bitsAsFloat32(x: number): number {
+    asUint32[0] = (x >>> 0) & 0xFFFFFFFF;
+    return asFloat32[0];
+}
+
+// assumes normal is normalized
+export function reflectVec3(dst: vec3, source: vec3, normal: vec3): void {
+    const dot = -2*vec3.dot(source, normal);
+    vec3.scaleAndAdd(dst, source, normal, dot);
+}

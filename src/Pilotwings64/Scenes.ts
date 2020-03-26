@@ -1700,7 +1700,7 @@ class MaterialInstance {
         if (!this.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(this.stateFlags);
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 2 * 8);
         const d = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
@@ -1764,6 +1764,7 @@ class MaterialInstance {
         const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         renderInst.setGfxProgram(gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -2272,7 +2273,7 @@ class SnowRenderer {
         if (!this.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.filterKey = PW64Pass.SNOW;
 
         renderInst.setBindingLayouts(snowBindingLayouts);
@@ -2305,6 +2306,7 @@ class SnowRenderer {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));
         renderInst.drawIndexes(6 * this.flakeCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -2684,9 +2686,8 @@ class Pilotwings64Renderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(128/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
@@ -2740,7 +2741,6 @@ class Pilotwings64Renderer implements SceneGfx {
 
         const skyPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyPassRenderer, PW64Pass.SKYBOX);
-        skyPassRenderer.endPass();
         device.submitPass(skyPassRenderer);
 
         const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);

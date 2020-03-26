@@ -14,7 +14,7 @@ import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
@@ -96,7 +96,7 @@ void main() {
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
     // TODO: find and pass in lighting data
-    v_Color = vec4(vec3(.6 + .4*t_Normal.y), 1.0);
+    v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
@@ -285,7 +285,7 @@ void main() {
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
+    t_Color.rgb = vec3(t_Color.a);
     t_Color.a = 1.0;
 #endif
 
@@ -311,19 +311,6 @@ export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
-}
-
-const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
-    }
 }
 
 function makeVertexBufferData(v: Vertex[]): Float32Array {
@@ -479,8 +466,8 @@ export class RenderData {
         const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
-            this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, cache, tex));
+            this.textures.push(RDP.translateToGfxTexture(device, tex));
+            this.samplers.push(RDP.translateSampler(device, cache, tex));
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
@@ -509,29 +496,6 @@ export class RenderData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
-    }
-
-    private translateTexture(device: GfxDevice, texture: RDP.Texture): GfxTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-        return gfxTexture;
-    }
-
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: RDP.Texture): GfxSampler {
-        return cache.createSampler(device, {
-            // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
-            // it should repeat within the coordinate range, and clamp outside
-            // then ignore clamping here, and handle it in the shader
-            wrapS: translateCM(RDP.getMaskedCMS(texture.tile)),
-            wrapT: translateCM(RDP.getMaskedCMT(texture.tile)),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
     }
 
     public destroy(device: GfxDevice): void {
@@ -670,7 +634,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         if (this.textureAnimator !== null) {
             for (let i = 0; i < this.drawCall.textureIndices.length && i < this.textureMappings.length; i++) {
@@ -708,6 +672,7 @@ class DrawCallInstance {
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -889,14 +854,18 @@ export class AdjustableAnimationController {
     }
 
     public getTimeInFrames(): number {
+        if (!this.initialized)
+            return this.phaseFrames;
         return this.time*this.fps + this.phaseFrames;
     }
 
     public getTimeInSeconds(): number {
         if (this.fps === 0)
             return 0; // not sure what this should mean
-        else
+        else if (this.initialized)
             return this.time + this.phaseFrames/this.fps;
+        else
+            return this.phaseFrames/this.fps;
     }
 
     public resetPhase(): void {
@@ -1107,8 +1076,6 @@ const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -1430,7 +1397,7 @@ export class GeometryRenderer {
             mat4.getTranslation(lookatScratch, this.modelMatrix);
             vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
             offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
@@ -1673,7 +1640,7 @@ export class FlipbookRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -1710,5 +1677,6 @@ export class FlipbookRenderer {
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }

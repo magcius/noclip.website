@@ -1,7 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
-import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -57,6 +56,7 @@ export default class InputManager {
     private dTouchX: number = 0;
     private dTouchY: number = 0;
     private dPinchDist: number = 0;
+    private releaseOnMouseUp: boolean = true;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -74,7 +74,7 @@ export default class InputManager {
             if (!this.isInteractive)
                 return;
             this.button = e.button;
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: true });
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
         });

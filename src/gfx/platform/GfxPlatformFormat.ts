@@ -146,3 +146,11 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
     return typeByteSize * componentCount;
 }
+
+export function setFormatFlags(fmt: GfxFormat, flags: FormatFlags): GfxFormat {
+    return (fmt & 0xFFFFFF00) | flags;
+}
+
+export function setFormatComponentCount(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
+    return (fmt & 0xFFFF00FF) | (compFlags << 8);
+}

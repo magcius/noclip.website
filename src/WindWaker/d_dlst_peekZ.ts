@@ -219,7 +219,6 @@ void main() {
         this.resolveRenderPassDescriptor.depthStencilAttachment = depthStencilAttachment;
         this.resolveRenderPassDescriptor.depthStencilResolveTo = this.depthTexture.gfxTexture;
         renderPass = device.createRenderPass(this.resolveRenderPassDescriptor);
-        renderPass.endPass();
         device.submitPass(renderPass);
 
         // Resolve depth texture to color texture.
@@ -232,7 +231,6 @@ void main() {
         renderPass.setBindings(0, this.fullscreenCopyBindings!, []);
         renderPass.setInputState(null);
         renderPass.draw(3, 0);
-        renderPass.endPass();
         device.submitPass(renderPass);
 
         // Now go through and start submitting readbacks on our texture.

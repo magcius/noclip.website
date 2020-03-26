@@ -133,3 +133,10 @@ export function arrayRemove<T>(L: T[], n: T): number {
     L.splice(idx, 1);
     return idx;
 }
+
+export function arrayRemoveIfExist<T>(L: T[], n: T): number {
+    const idx = L.indexOf(n);
+    if (idx >= 0)
+        L.splice(idx, 1);
+    return idx;
+}

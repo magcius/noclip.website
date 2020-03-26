@@ -8,7 +8,7 @@ import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilter
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -515,7 +515,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -543,6 +543,7 @@ class DrawCallInstance {
         offs += fillVec4v(comb, offs, this.drawCall.envColor); // environment color
         comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
         offs++;
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

@@ -509,7 +509,7 @@ class DrawCallInstance {
         if (!this.drawCall.layer!.visible) {
             return;
         }
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
         renderInst.sortKey = this.drawCallIndex;
         if (this.gfxProgram === null) {
@@ -532,6 +532,7 @@ class DrawCallInstance {
             mapped[offs++] = 0;
             mapped[offs++] = 0;
         }
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public setVertexColorsEnabled(v: boolean): void {

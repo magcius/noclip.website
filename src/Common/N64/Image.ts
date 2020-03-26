@@ -24,7 +24,7 @@ export const enum TextureLUT {
 }
 
 export const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
+    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
 }
 
 export const enum TextFilt {

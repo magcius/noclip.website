@@ -618,7 +618,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.executeListSet(device, renderInstManager, skyboxPassRenderer, dlst.sky);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
 
         // Now do main pass.
@@ -627,7 +626,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
-        mainPassRenderer.endPass();
         device.submitPass(mainPassRenderer);
 
         // Execute PeekZ.
@@ -638,7 +636,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Indirect]);
 
-        indirectPassRenderer.endPass();
         device.submitPass(indirectPassRenderer);
 
         dlst.reset();
@@ -1119,7 +1116,7 @@ const sceneDescs = [
     new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
     new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
-    new SceneDesc("sea_T", "sea_T"),
+    new SceneDesc("sea_T", "sea_T", [0, 44]),
     new SceneDesc("sea_E", "sea_E"),
     new SceneDesc("ITest61", "ITest61"),
     new SceneDesc("ITest62", "ITest62"),

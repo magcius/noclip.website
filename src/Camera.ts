@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY, Vec3Zero, transformVec3Mat4w1 } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
@@ -24,6 +24,9 @@ export class Camera {
 
     // Combined view/projection matrix, using our new naming convention.
     public clipFromWorldMatrix = mat4.create();
+
+    // Camera's linear (aka positional) velocity. Instantaneous for the frame.
+    public linearVelocity = vec3.create();
 
     public frustum = new Frustum();
     public fovY: number;
@@ -129,7 +132,13 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
+const scratchVec3f = vec3.create();
 const scratchVec4 = vec4.create();
+const scratchMat4 = mat4.create();
+const scratchQuat = quat.create();
 
 /**
  * Computes a view-space depth given @param camera and @param aabb in world-space.
@@ -153,7 +162,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * which will clamp if the value is below 0.
  */
 export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3a): number {
-    vec3.transformMat4(v_, v, camera.viewMatrix);
+    transformVec3Mat4w1(v_, camera.viewMatrix, v);
     return -v_[2];
 }
 
@@ -169,7 +178,7 @@ export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3
  * which will clamp if the value is below 0.
  */
 export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3a): number {
-    vec3.transformMat4(v_, v, viewMatrix);
+    transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
 }
 
@@ -241,7 +250,7 @@ export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: C
 export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
     screenSpaceProjection.reset();
 
-    vec3.transformMat4(v, center, camera.viewMatrix);
+    transformVec3Mat4w1(v, camera.viewMatrix, center);
 
     v[2] = -Math.max(Math.abs(v[2] - radius), camera.frustum.near);
 
@@ -394,8 +403,11 @@ export class FPSCameraController implements CameraController {
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
             vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+            vec3.copy(camera.linearVelocity, finalMovement);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
+        } else {
+            vec3.copy(camera.linearVelocity, Vec3Zero);
         }
 
         const mouseMoveLowSpeedCap = 0.0001;
@@ -458,22 +470,25 @@ export class XRCameraController {
 
     public update(webXRContext: WebXRContext): boolean {
         let updated = false;
-        
-        let inputSources = webXRContext.xrSession.inputSources;
+
+        if (!webXRContext.xrSession)
+            return false;
+
+        const inputSources = webXRContext.xrSession.inputSources;
 
         const cameraMoveSpeed = this.worldScale;
         const keyMovement = vec3.create();
         if (inputSources.length > 0) {
             for (let i = 0; i < inputSources.length; i++) {
                 const gamepad = inputSources[i].gamepad;
-                if (gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
+                if (gamepad && gamepad.axes.length >= 3 && gamepad.buttons.length >= 1) {
                     keyMovement[0] = gamepad.axes[2] * cameraMoveSpeed;
                     keyMovement[1] = (gamepad.buttons[0].value - gamepad.buttons[1].value) * cameraMoveSpeed;
                     keyMovement[2] = gamepad.axes[3] * cameraMoveSpeed;
                 }
             }
         }
-               
+
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {            
             const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
@@ -489,29 +504,35 @@ export class XRCameraController {
             updated = true;
         }
 
+        // Ensure the number of XR cameras matches the number of views
+        if (webXRContext.views.length !== this.cameras.length) {
+            for (let i = this.cameras.length; i < webXRContext.views.length; i++)
+                this.cameras.push(new Camera());
+            this.cameras.length = webXRContext.views.length;
+        }
+
         assert(this.cameras.length === webXRContext.views.length);
         for (let i = 0; i < this.cameras.length; i++) {
             const camera = this.cameras[i];
             const xrView = webXRContext.views[i];
 
-            const cameraWorldMatrix = mat4.create();
+            const cameraWorldMatrix = scratchMat4;
             cameraWorldMatrix.set(xrView.transform.matrix);
-            const cameraWorldMatrixTranslation = vec3.create();
+            const cameraWorldMatrixTranslation = scratchVec3c;
             mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
-            const originalViewTranslation = vec3.create();
+            const originalViewTranslation = scratchVec3d;
             mat4.getTranslation(originalViewTranslation, cameraWorldMatrix);
 
             // Scale up view position and add offset
-            const cameraScale = vec3.create();
-            const cameraOrientation = quat.create();
+            const cameraScale = scratchVec3e;
+            const cameraOrientation = scratchQuat;
             mat4.getScaling(cameraScale, cameraWorldMatrix);
             mat4.getRotation(cameraOrientation, cameraWorldMatrix);
 
-            const cameraAdditionalOffset = vec3.create();
+            const cameraAdditionalOffset = scratchVec3f;
             cameraAdditionalOffset.set(this.offset);
             vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
-            vec3.scale(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, this.worldScale);
-            vec3.add(cameraWorldMatrixTranslation, cameraWorldMatrixTranslation, cameraAdditionalOffset);
+            vec3.scaleAndAdd(cameraWorldMatrixTranslation, cameraAdditionalOffset, cameraWorldMatrixTranslation, this.worldScale);
 
             mat4.fromRotationTranslationScale(cameraWorldMatrix, cameraOrientation, cameraWorldMatrixTranslation, cameraScale);
             
@@ -544,7 +565,7 @@ export class XRCameraController {
             reverseDepthForPerspectiveProjectionMatrix(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();
-        
+
             updated = true;
         }
 
@@ -712,7 +733,7 @@ export class OrthoCameraController implements CameraController {
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
     private farPlane = 100000;
-    private nearPlane = 0;
+    private nearPlane = -this.farPlane;
 
     constructor() {
     }

@@ -16,9 +16,10 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
 import { getImageFormatString } from "../BanjoKazooie/f3dex";
-import { TexCM, TextFilt } from '../Common/N64/Image';
+import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import { translateCM } from '../Common/N64/RDP';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -133,14 +134,6 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     }
 }
 
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    }
-}
-
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
@@ -202,7 +195,7 @@ export class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -223,6 +216,7 @@ export class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -333,8 +327,6 @@ class ModelTreeLeafInstance {
         mat4.identity(dst);
 
         // tileMatrix[tileId] is specified in pixel units, so we need to convert to abstract space.
-        dst[0] = 1 / image.width;
-        dst[5] = 1 / image.height;
         if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
             mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
 
@@ -360,6 +352,11 @@ class ModelTreeLeafInstance {
         dst[5] *= scaleT;
         dst[12] += offsetS;
         dst[13] += offsetT;
+
+        dst[0] *= 1 / image.width;
+        dst[5] *= 1 / image.height;
+        dst[12] *= 1 / image.width;
+        dst[13] *= 1 / image.height;
     }
 
     public setTexAnimEnabled(enabled: boolean): void {
@@ -415,12 +412,13 @@ class ModelTreeLeafInstance {
 
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++) {
             const drawCall = this.n64Data.rspOutput.drawCalls[i];
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
             const megaStateFlags = renderInst.getMegaStateFlags();
             megaStateFlags.cullMode = translateCullMode(drawCall.SP_GeometryMode);
 
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

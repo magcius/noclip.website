@@ -1,7 +1,12 @@
+
+// Common utilities for the N64 Reality Display Processor (RDP).
+
 import { assert, hexzero } from "../../util";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4 } from "./Image";
+import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM } from "./Image";
+import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -249,4 +254,36 @@ export class TextureCache {
             return index;
         }
     }
+}
+
+export function translateToGfxTexture(device: GfxDevice, texture: Texture): GfxTexture {
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
+    device.setResourceName(gfxTexture, texture.name);
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
+    device.submitPass(hostAccessPass);
+    return gfxTexture;
+}
+
+export function translateCM(cm: TexCM): GfxWrapMode {
+    switch (cm) {
+    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
+    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
+    }
+}
+
+export function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
+    return cache.createSampler(device, {
+        // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
+        // it should repeat within the coordinate range, and clamp outside
+        // then ignore clamping here, and handle it in the shader
+        wrapS: translateCM(getMaskedCMS(texture.tile)),
+        wrapT: translateCM(getMaskedCMT(texture.tile)),
+        minFilter: GfxTexFilterMode.POINT,
+        magFilter: GfxTexFilterMode.POINT,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0, maxLOD: 0,
+    });
 }

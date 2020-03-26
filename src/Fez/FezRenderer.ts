@@ -183,9 +183,8 @@ export class FezRenderer implements Viewer.SceneGfx {
         this.levelRenderData.baseAmbient = level.baseAmbient;
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
@@ -265,7 +264,7 @@ export class FezObjectRenderer {
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -284,6 +283,7 @@ export class FezObjectRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.geometryData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -355,7 +355,7 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -378,6 +378,7 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.staticData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

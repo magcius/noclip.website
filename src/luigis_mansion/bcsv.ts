@@ -148,7 +148,7 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
             let value;
             switch (field.type) {
             case BcsvFieldType.S32:
-                value = (view.getUint32(fieldOffs, littleEndian) >> field.shift) & field.bitmask;
+                value = (view.getInt32(fieldOffs, littleEndian) & field.bitmask) >> field.shift;
                 break;
             case BcsvFieldType.STRING:
                 value = readString(buffer, fieldOffs, 0x20, true);
@@ -157,10 +157,10 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
                 value = view.getFloat32(fieldOffs, littleEndian);
                 break;
             case BcsvFieldType.S16:
-                value = (view.getUint16(fieldOffs, littleEndian) >> field.shift) & field.bitmask;
+                value = (view.getInt16(fieldOffs, littleEndian) & field.bitmask) >> field.shift;
                 break;
             case BcsvFieldType.S8:
-                value = (view.getUint8(fieldOffs) >> field.shift) & field.bitmask;
+                value = (view.getInt8(fieldOffs) & field.bitmask) >> field.shift;
                 break;
             case BcsvFieldType.SJIS: {
                 const strOffs = strTableOffs + view.getUint32(fieldOffs, littleEndian);
@@ -182,7 +182,10 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
 }
 
 export function getFieldIndexFromHash(bcsv: Bcsv, nameHash: number): number {
-    return bcsv.fields.findIndex((field) => field.nameHash === nameHash);
+    for (let i = 0; i < bcsv.fields.length; i++)
+        if (bcsv.fields[i].nameHash === nameHash)
+            return i;
+    return -1;
 }
 
 export function getFieldIndexFromName(bcsv: Bcsv, name: string): number {

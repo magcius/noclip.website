@@ -1,10 +1,12 @@
+
 import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt, decodeTex_I8, decodeTex_I4, decodeTex_IA16 } from "../Common/N64/Image";
+import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextFilt } from "../Common/N64/Image";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { loadVertexFromView } from '../Common/N64/RSP';
 
 // Interpreter for N64 F3DEX microcode.
 
@@ -64,17 +66,7 @@ export class StagingVertex extends Vertex {
 
     public setFromView(view: DataView, offs: number): void {
         this.outputIndex = -1;
-
-        this.x = view.getInt16(offs + 0x00);
-        this.y = view.getInt16(offs + 0x02);
-        this.z = view.getInt16(offs + 0x04);
-        // flag (unused)
-        this.tx = (view.getInt16(offs + 0x08) / 0x20) + 0.5;
-        this.ty = (view.getInt16(offs + 0x0A) / 0x20) + 0.5;
-        this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
-        this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
-        this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
-        this.a = view.getUint8(offs + 0x0F) / 0xFF;
+        loadVertexFromView(this, view, offs);
     }
 }
 

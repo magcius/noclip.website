@@ -740,7 +740,7 @@ class SepdData {
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer));
+            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer).buffer);
             perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
         }
 
@@ -824,7 +824,7 @@ class ShapeInstance {
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
             const prmsData = this.sepdData.prmsData[i];
             const prms = prmsData.prms;
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(prms.prm.count, prmsData.indexBufferOffset);
 
             let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12+4*2);
@@ -849,6 +849,8 @@ class ShapeInstance {
 
             offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
             offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0);
+
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

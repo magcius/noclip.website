@@ -38,9 +38,8 @@ class MKDDRenderer implements Viewer.SceneGfx {
         }
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(200/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {

@@ -13,7 +13,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector } from './ActorUtil';
 import { DrawType } from './NameObj';
 import { ViewerRenderInput } from '../viewer';
-import { invlerp, computeMatrixWithoutTranslation, Vec3Zero } from '../MathHelpers';
+import { invlerp, computeMatrixWithoutTranslation, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
@@ -90,11 +90,14 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            const count = 100;
+            if (grav.constructor.name !== 'DiskGravity')
+                continue;
+
+            const count = 50;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
-                arrow.scale = 0.5;
+                arrow.scale = 0.1;
 
                 grav.generateRandomPoint(arrow.coord);
                 vec3.copy(arrow.pos, arrow.coord);
@@ -121,7 +124,7 @@ export class GravityExplainer extends LiveActor {
             calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
             vec3.normalize(arrow.gravityVec, arrow.gravityVec);
 
-            vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
+            // vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
             arrow.time += deltaTimeFrames;
 
             if (arrow.time >= arrow.lifetime) {
@@ -137,6 +140,8 @@ export class GravityExplainer extends LiveActor {
                 arrow.color.a = invlerp(arrow.lifetime, fadeOutTime, arrow.time);
             else
                 arrow.color.a = 1.0;
+
+            arrow.color.a = 1.0;
         }
     }
 
@@ -161,9 +166,8 @@ export class GravityExplainer extends LiveActor {
         vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
         vec3.normalize(scratchVec3a, scratchVec3a);
 
-        computeMatrixWithoutTranslation(scratchMatrix, viewMtx);
-        vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
-        vec3.transformMat4(scratchVec3b, arrow.pos, viewMtx);
+        transformVec3Mat4w0(scratchVec3a, viewMtx, scratchVec3a);
+        transformVec3Mat4w1(scratchVec3b, viewMtx, arrow.pos);
 
         const scaleX = arrow.scale;
         const scaleY = arrow.scale;
@@ -232,7 +236,8 @@ export class GravityExplainer extends LiveActor {
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)
             this.drawArrow(this.arrows[i], this.ddraw, viewerInput.camera);
-        this.ddraw.endDraw(device, renderInstManager);
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        renderInstManager.submitRenderInst(renderInst);
 
         renderInstManager.popTemplateRenderInst();
     }

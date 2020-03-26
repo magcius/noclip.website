@@ -1,11 +1,12 @@
 import * as RDP from '../Common/N64/RDP';
 
 import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
-import { nArray, assert, assertExists, hexzero } from "../util";
+import { nArray, assert } from "../util";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Rom } from "./zelview0";
 import { vec4, mat4 } from "gl-matrix";
+import { loadVertexFromView } from '../Common/N64/RSP';
 
 export class Vertex {
     public x: number = 0;
@@ -33,17 +34,7 @@ class StagingVertex extends Vertex {
 
     public setFromView(view: DataView, offs: number): void {
         this.outputIndex = -1;
-
-        this.x = view.getInt16(offs + 0x00);
-        this.y = view.getInt16(offs + 0x02);
-        this.z = view.getInt16(offs + 0x04);
-        // flag (unused)
-        this.tx = view.getInt16(offs + 0x08) / 32; // Convert from 11.5 fixed-point format
-        this.ty = view.getInt16(offs + 0x0A) / 32;
-        this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
-        this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
-        this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
-        this.a = view.getUint8(offs + 0x0F) / 0xFF;
+        loadVertexFromView(this, view, offs);
     }
 }
 
@@ -470,15 +461,6 @@ export class RSPSharedOutput {
     public vertices: Vertex[] = [];
     public indices: number[] = [];
 
-    public setVertexBufferFromData(vertexData: DataView): void {
-        const scratchVertex = new StagingVertex();
-
-        for (let offs = 0; offs < vertexData.byteLength; offs += 0x10) {
-            scratchVertex.setFromView(vertexData, offs);
-            this.loadVertex(scratchVertex);
-        }
-    }
-
     public loadVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {
             const n = new Vertex();
@@ -713,8 +695,6 @@ export class RSPState {
     }
 
     public gSPTri(i0: number, i1: number, i2: number): void {
-        if (window.debug)
-            console.log('EXEC TRI');
         this._flushDrawCall();
 
         this.sharedOutput.loadVertex(this.vertexCache[i0]);

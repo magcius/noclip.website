@@ -4,8 +4,8 @@ import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRe
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
 import { NameObj } from './NameObj';
-import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength } from './ActorUtil';
-import { TicoRail, vecKillElement } from './MiscActor';
+import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
+import { TicoRail } from './MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
@@ -154,7 +154,7 @@ const name = "Super Mario Galaxy";
 const sceneDescs = [
     "Observatory",
     new SMG1SceneDesc("Comet Observatory", "AstroGalaxy"),
-    new SMG1SceneDesc("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
+    new SMG1SceneDesc("Peach's Castle Gardens", "PeachCastleGardenGalaxy"),
     new SMG1SceneDesc("Gateway Galaxy", "HeavensDoorGalaxy"),
     new SMG1SceneDesc("Boo's Boneyard Galaxy", "TeresaMario2DGalaxy"),
     "Terrace",
