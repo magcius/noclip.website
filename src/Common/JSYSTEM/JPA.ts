@@ -117,17 +117,17 @@ const enum DirType {
 }
 
 const enum RotType {
-    Y        = 0,
-    X        = 1,
-    Z        = 2,
-    XYZ      = 3,
-    Y_JIGGLE = 4,
+    Y       = 0x00,
+    X       = 0x01,
+    Z       = 0x02,
+    XYZ     = 0x03,
+    YJiggle = 0x04,
 }
 
 const enum PlaneType {
-    XY = 0,
-    XZ = 1,
-    X  = 2,
+    XY = 0x00,
+    XZ = 0x01,
+    X  = 0x02,
 }
 
 interface CommonShapeTypeFields {
@@ -258,7 +258,9 @@ interface JPAExtraShapeBlock {
 }
 
 const enum IndTextureMode {
-    OFF, NORMAL, SUB,
+    Off    = 0x00,
+    Normal = 0x01,
+    Sub    = 0x02,
 }
 
 interface JPAExTexBlock {
@@ -313,8 +315,8 @@ const enum FieldType {
 }
 
 const enum FieldVelType {
-    FieldAccel = 0x00,
-    BaseVelocity = 0x01,
+    FieldAccel    = 0x00,
+    BaseVelocity  = 0x01,
     FieldVelocity = 0x02,
 }
 
@@ -480,9 +482,9 @@ export class JPAResourceData {
         }
 
         if (etx1 !== null) {
-            if (etx1.indTextureMode !== IndTextureMode.OFF) {
+            if (etx1.indTextureMode !== IndTextureMode.Off) {
                 this.ensureTextureFromTDB1Index(device, cache, etx1.indTextureID, texIdBase);
-                if (etx1.indTextureMode === IndTextureMode.SUB)
+                if (etx1.indTextureMode === IndTextureMode.Sub)
                     this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID, texIdBase);
             }
 
@@ -540,7 +542,7 @@ export class JPAResourceData {
 
         // ETX1 properties are read in JPAResource::setPTev()
         if (etx1 !== null) {
-            if (etx1.indTextureMode !== IndTextureMode.OFF) {
+            if (etx1.indTextureMode !== IndTextureMode.Off) {
                 const indTexCoordId = texCoordId++;
                 mb.setTexCoordGen(indTexCoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
                 mb.setIndTexOrder(GX.IndTexStageID.STAGE0, indTexCoordId, GX.TexMapID.TEXMAP2);
@@ -1892,7 +1894,7 @@ export class JPABaseEmitter {
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
 
         if (etx1 !== null) {
-            if (etx1.indTextureMode === IndTextureMode.NORMAL) {
+            if (etx1.indTextureMode === IndTextureMode.Normal) {
                 this.resData.fillTextureMapping(materialParams.m_TextureMapping[2], etx1.indTextureID);
                 fillIndTexMtx(materialParams.u_IndTexMtx[0], etx1.indTextureMtx);
                 // TODO(jstpierre): Subtextures, a JPA1 feature, in JPADrawSetupTev::setupTev.
@@ -2985,7 +2987,7 @@ export class JPABaseParticle {
             dst[6] = b;
             dst[10] = a;
             dst[14] = 0;
-        } else if (rotType === RotType.Y_JIGGLE) {
+        } else if (rotType === RotType.YJiggle) {
             // Seems to be a 12deg rotation.
             const jiggleSin = 0.207912;
             const jiggleCos = 0.978148;
