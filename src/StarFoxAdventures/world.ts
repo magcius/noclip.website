@@ -252,10 +252,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         await mapInstance.reloadBlocks();
 
         // Translate map for SFA world coordinates
-        const mapOrigin = mapSceneInfo.getOrigin();
-        // console.log(`map origin: ${mapOrigin}`);
+        const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
         const mapMatrix = mat4.create();
-        mat4.fromTranslation(mapMatrix, vec3.fromValues(-640 * mapOrigin[0], 0, -640 * mapOrigin[1]));
+        const mapTrans = vec3.clone(objectOrigin);
+        vec3.negate(mapTrans, mapTrans);
+        mat4.fromTranslation(mapMatrix, mapTrans);
         mapInstance.setMatrix(mapMatrix);
 
         const pathBase = this.gameInfo.pathBase;
@@ -281,10 +282,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 objType: romlist.getUint16(offs + 0x0),
                 entrySize: romlist.getUint8(offs + 0x2),
                 radius: 8 * romlist.getUint8(offs + 0x6),
-                x: romlist.getFloat32(offs + 0x8),
-                y: romlist.getFloat32(offs + 0xc),
-                z: romlist.getFloat32(offs + 0x10),
+                pos: vec3.fromValues(
+                    romlist.getFloat32(offs + 0x8),
+                    romlist.getFloat32(offs + 0xc),
+                    romlist.getFloat32(offs + 0x10)
+                ),
             };
+
+            const posInMap = vec3.clone(fields.pos);
+            vec3.add(posInMap, posInMap, objectOrigin);
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
@@ -350,6 +356,16 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
                 obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 308) {
+                // e.g. texscroll2
+                const tableIndex = objParams.getInt16(0x18);
+                const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
+                if (block === null) {
+                    console.warn(`couldn't find block for texscroll2 object`);
+                } else {
+                    console.info(`found block for texscroll2 object`);
+                }
+                
             } else if (obj.objClass === 346) {
                 // e.g. SH_BombWall
                 obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
@@ -402,7 +418,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             objectInstances.push({
                 name: obj.name,
                 obj: obj,
-                pos: vec3.fromValues(fields.x, fields.y, fields.z),
+                pos: fields.pos,
                 radius: fields.radius,
                 model: obj.models[0],
             });

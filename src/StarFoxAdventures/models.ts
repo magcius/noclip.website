@@ -227,6 +227,7 @@ export class Model implements BlockRenderer {
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
+    public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
@@ -517,6 +518,8 @@ export class Model implements BlockRenderer {
             offs += shaderFields.size;
         }
 
+        this.materials = [];
+
         const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
         for (let i = 0; i <= GX.Attr.MAX; i++) {
             for (let j = 0; j < 8; j++) {
@@ -757,6 +760,7 @@ export class Model implements BlockRenderer {
             let vcd: GX_VtxDesc[] = [];
             let done = false;
             let curShader = shaders[0];
+            let curMaterial: SFAMaterial | undefined = undefined;
             while (!done) {
                 const opcode = bits.get(4);
                 switch (opcode) {
@@ -764,6 +768,10 @@ export class Model implements BlockRenderer {
                     const shaderNum = bits.get(6);
                     // console.log(`Setting shader #${shaderNum}`);
                     curShader = shaders[shaderNum];
+                    if (self.materials[shaderNum] === undefined) {
+                        self.materials[shaderNum] = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                    }
+                    curMaterial = self.materials[shaderNum];
                     break;
                 }
                 case 2: { // Call display list
@@ -786,8 +794,7 @@ export class Model implements BlockRenderer {
                             self.waters.push({ model: newModel });
                         } else {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
-                            const material = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-                            newModel.setMaterial(material);
+                            newModel.setMaterial(curMaterial!);
                             newModel.setPnMatrices(pnMatrices);
                             models.push(newModel);
 

@@ -13,7 +13,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
-import { SFAMaterial, makeMaterialTexture, MaterialFactory } from './shaders';
+import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
 import { ModelInstance, Model } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
@@ -152,35 +152,27 @@ export class AncientBlockRenderer implements BlockRenderer {
         const shaderCount = blockDv.getUint8(fields.shaderCount);
         // console.log(`Loading ${polyCount} polytypes from 0x${polyOffset.toString(16)}`);
 
-        interface Shader {
-            numLayers: number;
-            tex0Num: number;
-            tex1Num: number;
-            hasTexCoord: boolean[];
-            enableCull: boolean;
-            flags: number;
-        }
-
         const shaders: Shader[] = [];
         offs = shaderOffset;
         for (let i = 0; i < shaderCount; i++) {
-            const shader = {
-                numLayers: 0,
-                hasTexCoord: nArray(8, () => false),
-                tex0Num: -1,
-                tex1Num: -1,
-                enableCull: false,
-                flags: 0,
+            const shader: Shader = {
+                layers: [{ // 1 layer (fake)
+                    texId: texIds[blockDv.getUint32(offs + 0x24)], // ???
+                    tevMode: 0,
+                    enableTexChainStuff: 0,
+                    scrollingTexMtx: undefined,
+                }],
+                flags: ShaderFlags.CullBackface,
+                attrFlags: ShaderAttrFlags.CLR,
+                hasAuxTex0: false,
+                hasAuxTex1: false,
+                hasAuxTex2: false,
+                auxTex2Num: -1,
+                furRegionsTexId: -1,
             };
             
-            shader.numLayers = 1;
-            for (let j = 0; j < shader.numLayers; j++) {
-                shader.hasTexCoord[j] = true;
-            }
-            shader.tex0Num = blockDv.getUint32(offs + 0x24); // ???
-            shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
+            // shader.tex1Num = blockDv.getUint32(offs + 0x24 + 8); // ???
             shader.flags = blockDv.getUint32(offs + 0x3c);
-            shader.enableCull = true; // FIXME
             
             shaders.push(shader);
             offs += fields.shaderSize;
@@ -301,12 +293,12 @@ export class AncientBlockRenderer implements BlockRenderer {
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
                     mb.setZMode(true, GX.CompareType.LESS, true);
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-                    mb.setCullMode(shader.enableCull ? GX.CullMode.BACK : GX.CullMode.NONE);
+                    mb.setCullMode((shader.flags & ShaderFlags.CullBackface) ? GX.CullMode.BACK : GX.CullMode.NONE);
                     let tevStage = 0;
                     let texcoordId = GX.TexCoordID.TEXCOORD0;
                     let texmapId = GX.TexMapID.TEXMAP0;
                     let texGenSrc = GX.TexGenSrc.TEX0;
-                    for (let i = 0; i < shader.numLayers; i++) {
+                    for (let i = 0; i < shader.layers.length; i++) {
                         mb.setTexCoordGen(texcoordId, GX.TexGenType.MTX2x4, texGenSrc, GX.TexGenMatrix.IDENTITY);
 
                         // mb.setTevKColor (does not exist)
@@ -340,8 +332,9 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                     const material: SFAMaterial = {
                         factory: new MaterialFactory(device),
+                        shader,
                         material: mb.finish(),
-                        textures: [makeMaterialTexture(texColl.getTexture(device, texIds[shader.tex0Num], true))],
+                        textures: [makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, true))],
                         setupMaterialParams: () => {},
                     }
                     newModel.setMaterial(material);
@@ -358,10 +351,10 @@ export class AncientBlockRenderer implements BlockRenderer {
                 vcd[GX.Attr.POS].type = posDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                 vcd[GX.Attr.NRM].type = GX.AttrType.NONE; // Normal is not used in Star Fox Adventures (?)
                 vcd[GX.Attr.CLR0].type = colorDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                if (shaders[curShader].hasTexCoord[0]) {
+                if (shaders[curShader].layers[0] !== undefined) {
                     // Note: texCoordDesc applies to all texture coordinates in the vertex
                     for (let t = 0; t < 8; t++) {
-                        if (shaders[curShader].hasTexCoord[t]) {
+                        if (shaders[curShader].layers[t] !== undefined) {
                             vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
                         } else {
                             vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;

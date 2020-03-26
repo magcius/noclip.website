@@ -89,8 +89,8 @@ export class MapInstance {
     private numRows: number;
     private numCols: number;
     private blockCollections: IBlockCollection[] = [];
-    private blockInfoTable: (BlockInfo | null)[][] = [];
-    private blocks: (BlockRenderer | null)[][] = [];
+    private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
+    private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
 
     constructor(private info: MapSceneInfo) {
         this.numRows = info.getNumRows();
@@ -130,39 +130,55 @@ export class MapInstance {
         }
     }
 
+    public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
+        const bx = Math.floor(x / 640);
+        const bz = Math.floor(z / 640);
+        const block = this.blocks[bz][bx];
+        if (block === undefined) {
+            return null;
+        }
+        return block;
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+        const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
-            const matrix = mat4.create();
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+        const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
-            const matrix = mat4.create();
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
+
+        const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
-            const matrix = mat4.create();
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 

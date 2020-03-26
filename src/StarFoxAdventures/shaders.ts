@@ -178,6 +178,7 @@ export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialText
 
 export interface SFAMaterial {
     factory: MaterialFactory;
+    shader: Shader;
     material: GXMaterial;
     textures: SFAMaterialTexture[];
     setupMaterialParams: (params: MaterialParams, viewState: ViewState) => void;
@@ -667,6 +668,7 @@ export class MaterialFactory {
     
         return {
             factory: this,
+            shader,
             material: mb.finish(),
             textures,
             setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
@@ -799,6 +801,7 @@ export class MaterialFactory {
 
         return {
             factory: this,
+            shader,
             material: mb.finish(),
             textures,
             setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
@@ -903,6 +906,7 @@ export class MaterialFactory {
     
         return {
             factory: this,
+            shader,
             material: mb.finish(),
             textures,
             setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
