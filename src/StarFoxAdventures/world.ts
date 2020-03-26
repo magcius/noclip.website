@@ -369,10 +369,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 // e.g. texscroll2
                 const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
                 if (block === null) {
-                    console.warn(`couldn't find block for texscroll2 object`);
+                    console.warn(`couldn't find block for texscroll object`);
                 } else {
-                    console.info(`found block for texscroll2 object`);
-
                     const scrollableIndex = objParams.getInt16(0x18);
                     const speedX = objParams.getInt8(0x1e);
                     const speedY = objParams.getInt8(0x1f);
@@ -381,7 +379,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                     const targetTexId = tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
                     // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                     // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
-                    console.log(`targeting texture 0x${targetTexId.toString(16)}`);
 
                     const materials = block.getMaterials();
                     for (let i = 0; i < materials.length; i++) {
@@ -390,7 +387,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                             for (let j = 0; j < mat.shader.layers.length; j++) {
                                 const layer = mat.shader.layers[j];
                                 if (layer.texId === targetTexId) {
-                                    console.info(`Found the texture! scrolling at dx ${speedX}, dy ${speedY}`);
                                     // Found the texture! Make it scroll now.
                                     const theTexture = texColl.getTexture(device, targetTexId, true)!;
                                     const dxPerFrame = (speedX << 16) / theTexture.width;

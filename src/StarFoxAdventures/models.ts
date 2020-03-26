@@ -86,7 +86,7 @@ export class ModelInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
         this.updateMaterialHelper();
-        
+
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
@@ -766,22 +766,28 @@ export class Model implements BlockRenderer {
                 return;
             }
 
+            let curShader = shaders[0];
+            let curMaterial: SFAMaterial | undefined = undefined;
+            function setShader(num: number) {
+                curShader = shaders[num];
+                if (self.materials[num] === undefined) {
+                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                }
+                curMaterial = self.materials[num];
+            }
+
+            setShader(0);
+
             const bits = new LowBitReader(blockDv, bitsOffset);
             let vcd: GX_VtxDesc[] = [];
             let done = false;
-            let curShader = shaders[0];
-            let curMaterial: SFAMaterial | undefined = undefined;
             while (!done) {
                 const opcode = bits.get(4);
                 switch (opcode) {
                 case 1: { // Set shader
                     const shaderNum = bits.get(6);
                     // console.log(`Setting shader #${shaderNum}`);
-                    curShader = shaders[shaderNum];
-                    if (self.materials[shaderNum] === undefined) {
-                        self.materials[shaderNum] = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
-                    }
-                    curMaterial = self.materials[shaderNum];
+                    setShader(shaderNum);
                     break;
                 }
                 case 2: { // Call display list
