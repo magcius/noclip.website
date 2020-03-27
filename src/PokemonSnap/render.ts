@@ -60,12 +60,10 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const combParams = vec4.create();
-        RDP.fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
         const tiles: RDP.TileState[] = [];
         for (let i = 0; i < this.textureEntry.length; i++)
             tiles.push(this.textureEntry[i].tile);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams, 8 / 255, tiles);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine, 8 / 255, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)

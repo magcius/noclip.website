@@ -517,7 +517,7 @@ export class XRCameraController {
             const xrView = webXRContext.views[i];
 
             const cameraWorldMatrix = scratchMat4;
-            cameraWorldMatrix.set(xrView.transform.matrix);
+            mat4.copy(cameraWorldMatrix, xrView.transform.matrix);
             const cameraWorldMatrixTranslation = scratchVec3c;
             mat4.getTranslation(cameraWorldMatrixTranslation, cameraWorldMatrix);
             const originalViewTranslation = scratchVec3d;
@@ -530,7 +530,7 @@ export class XRCameraController {
             mat4.getRotation(cameraOrientation, cameraWorldMatrix);
 
             const cameraAdditionalOffset = scratchVec3f;
-            cameraAdditionalOffset.set(this.offset);
+            vec3.copy(cameraAdditionalOffset, this.offset);
             vec3.sub(cameraAdditionalOffset, cameraAdditionalOffset, originalViewTranslation);
             vec3.scaleAndAdd(cameraWorldMatrixTranslation, cameraAdditionalOffset, cameraWorldMatrixTranslation, this.worldScale);
 
@@ -538,13 +538,13 @@ export class XRCameraController {
             
             camera.isOrthographic = false;
 
-            camera.worldMatrix.set(cameraWorldMatrix);
+            mat4.copy(camera.worldMatrix, cameraWorldMatrix);
             mat4.invert(camera.viewMatrix, camera.worldMatrix);
             camera.worldMatrixUpdated();
 
             // Unpack the projection matrix to get required parameters for setting clip / frustrum etc...
             const cameraProjectionMatrix = xrView.projectionMatrix;
-            camera.projectionMatrix.set(cameraProjectionMatrix);
+            mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
             const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
             const shearX = cameraProjectionMatrix[8];
@@ -561,7 +561,7 @@ export class XRCameraController {
 
             // TODO WebXR: We do this to restore the components removed by setClipPlanes.
             // The camera class ideally should generate the projection matrix taking these components into account
-            camera.projectionMatrix.set(cameraProjectionMatrix);
+            mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
             reverseDepthForPerspectiveProjectionMatrix(camera.projectionMatrix);
 
             camera.worldMatrixUpdated();

@@ -1681,15 +1681,12 @@ class MaterialInstance {
             }
             this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
             const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            const comb = vec4.create();
-            RDP.fillCombineParams(comb, 0, chosenCombine);
-            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode, comb);
+            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode, chosenCombine);
         } else {
             this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);
-            //const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            const comb = vec4.create(); // FIXME: No combine info is available here. What should the default be?
-            //fillCombineParams(comb, 0, chosenCombine);
-            this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode, comb);
+            // const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
+            const chosenCombine = RDP.decodeCombineParams(0, 0);
+            this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode, chosenCombine);
         }
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');

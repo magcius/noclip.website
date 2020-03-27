@@ -162,19 +162,17 @@ export class MapData {
                 return;
             }
             for (let i = 0; i < submesh.vtx.length; i++) {
-                const texScaleOffs = vec4.create();
-                texScaleOffs.set([1, 1, 0, 0]);
+                const texScaleOffs = vec4.fromValues(1, 1, 0, 0);
                 const atlasPos = bin.mapTextureAtlas.getTextureBlockPos(submesh.textureBlock);
                 if (atlasPos) {
-                    texScaleOffs.set([
+                    vec4.set(texScaleOffs,
                         submesh.textureBlock.width / bin.mapTextureAtlas.width,
                         submesh.textureBlock.height / bin.mapTextureAtlas.height,
                         atlasPos[0] * 256 / bin.mapTextureAtlas.width,
                         atlasPos[1] * 256 / bin.mapTextureAtlas.height,
-                    ]);
+                    );
                 }
                 const texture = submesh.textureBlock.textures[submesh.textureIndex];
-                const texClip = vec4.create();
                 let clipRight = texture.clipRight;
                 let clipBottom = texture.clipBottom;
                 const spriteAnim = submesh.textureBlock.textures[submesh.textureIndex].spriteAnim;
@@ -182,17 +180,16 @@ export class MapData {
                     clipRight = texture.clipLeft + spriteAnim.spriteWidth - 1;
                     clipBottom = texture.clipTop + spriteAnim.spriteHeight - 1;
                 }
-                texClip.set([
+                const texClip = vec4.fromValues(
                     (texture.clipLeft + 0.5) / submesh.textureBlock.width,
                     (clipRight + 0.5) / submesh.textureBlock.width,
                     (texture.clipTop + 0.5) / submesh.textureBlock.height,
                     (clipBottom + 0.5) / submesh.textureBlock.height,
-                ]);
-                const texRepeat = vec2.create();
-                texRepeat.set([
+                );
+                const texRepeat = vec2.fromValues(
                     texture.tiledU ? submesh.textureBlock.width / (texture.width()) : 0.5,
                     texture.tiledV ? submesh.textureBlock.height / (texture.height()) : 0.5
-                ]);
+                );
                 vBuf[vBufIndex++] = submesh.vtx[i][0];
                 vBuf[vBufIndex++] = submesh.vtx[i][1];
                 vBuf[vBufIndex++] = submesh.vtx[i][2];

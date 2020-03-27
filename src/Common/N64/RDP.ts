@@ -82,7 +82,7 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
     const Ad1 = (w1 >>> 0) & 0x07;
 
     // CCMUX.ONE only applies to params a and d, the others are not implemented
-    assert(b0 != CCMUX.ONE && c0 != CCMUX.ONE && b1 != CCMUX.ONE && c1 != CCMUX.ONE);
+    assert(b0 !== CCMUX.ONE && c0 !== CCMUX.ONE && b1 !== CCMUX.ONE && c1 !== CCMUX.ONE);
 
     return {
         c0: { a: a0, b: b0, c: c0, d: d0 },
@@ -91,19 +91,6 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
         a1: { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
     };
 }
-
-function packParams(params: ColorCombinePass | AlphaCombinePass): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
-}
-
-export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    const cc0 = packParams(params.c0);
-    const cc1 = packParams(params.c1);
-    const ac0 = packParams(params.a0);
-    const ac1 = packParams(params.a1);
-    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
-}
-
 
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
     return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||

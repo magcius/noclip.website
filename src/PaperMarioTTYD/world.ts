@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
 import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout } from '../gx/gx_displaylist';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
@@ -159,9 +159,9 @@ interface MaterialAnimationTrackKeyframe {
 
 const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale = mat4.create();
 
-const _t: number[] = [0, 0, 0];
+const _t = vec3.create();
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
-    function t(x: number, y: number, z: number = 0): number[] { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
+    function t(x: number, y: number, z: number = 0): vec3 { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
     mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
     mat4.fromZRotation(rot, MathConstants.DEG_TO_RAD * -rotation);
     mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));

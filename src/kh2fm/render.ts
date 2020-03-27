@@ -371,34 +371,32 @@ export class MapData {
                 continue;
             }
             const texScaleOffs = vec4.create();
-            const texClip = vec4.create();
-            const texRepeat = vec2.create();
             const texture = assertExists(mesh.texture);
             if (texture.textureAnim) {
-                texScaleOffs.set([
+                vec4.set(texScaleOffs,
                     mesh.textureBlock.width / texture.textureAnim.sheetWidth,
                     mesh.textureBlock.height / texture.textureAnim.sheetHeight,
                     -texture.clipLeft / texture.textureAnim.sheetWidth,
                     -texture.clipTop / texture.textureAnim.sheetHeight
-                ]);
+                );
             } else {
-                texScaleOffs.set([
+                vec4.set(texScaleOffs,
                     mesh.textureBlock.width / this.atlasWidth,
                     mesh.textureBlock.height / this.atlasHeight,
                     mesh.textureBlock.atlasX / this.atlasWidth,
                     mesh.textureBlock.atlasY / this.atlasHeight
-                ]);
+                );
             }
-            texClip.set([
+            const texClip = vec4.fromValues(
                 (texture.clipLeft + 0.5) / mesh.textureBlock.width,
                 (texture.clipRight + 0.5) / mesh.textureBlock.width,
                 (texture.clipTop + 0.5) / mesh.textureBlock.height,
                 (texture.clipBottom + 0.5) / mesh.textureBlock.height
-            ]);
-            texRepeat.set([
+            );
+            const texRepeat = vec2.fromValues(
                 texture.tiledU ? mesh.textureBlock.width / texture.width() : 0.5,
                 texture.tiledV ? mesh.textureBlock.height / texture.height() : 0.5
-            ]);
+            );
             for (let i = 0; i < mesh.vtx.length; i++) {
                 vBuffer[vBufferIndex++] = mesh.vtx[i][0];
                 vBuffer[vBufferIndex++] = mesh.vtx[i][1];

@@ -8,7 +8,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
 import { assert, assertExists } from '../util';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -139,7 +139,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         return new ObjectData(bmd, btx, bta, btp);
     }
 
-    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: number[] | null = null): MDL0Renderer {
+    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: vec3 | null = null): MDL0Renderer {
         const scaleFactor = 1/16;
         const renderer = new MDL0Renderer(device, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
         if (position !== null)
@@ -228,7 +228,7 @@ class ObjectData {
 }
 
 interface IWorldMapObj {
-    type: WorldMapObjType, position: number[];
+    type: WorldMapObjType, position: vec3;
 }
 
 const worldMapDescs: IWorldMapObj[][] = [

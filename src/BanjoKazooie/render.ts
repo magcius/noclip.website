@@ -1,9 +1,9 @@
 import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import {ACMUX, CCMUX, CombineParams, fillCombineParams} from '../Common/N64/RDP';
+import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
 import { getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, OtherModeH_Layout } from "./f3dex";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
@@ -116,7 +116,7 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
         super();
         if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
@@ -171,7 +171,7 @@ void main() {
         }
     }
 
-    private generateFrag(combParams: vec4): string {
+    private generateFrag(combParams: CombineParams): string {
         const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
@@ -205,20 +205,6 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
         ];
 
-        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
-            return {
-                x: (params >>> 12) & 0xf,
-                y: (params >>> 8) & 0xf,
-                z: (params >>> 4) & 0xf,
-                w: (params >>> 0) & 0xf
-            }
-        }
-
-        const px = unpackParams(combParams[0]);
-        const py = unpackParams(combParams[1]);
-        const pz = unpackParams(combParams[2]);
-        const pw = unpackParams(combParams[3]);
-
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
     return texture(t_Texture, t_TexCoord);
@@ -244,19 +230,19 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
 vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
+    return (${colorInputs[combParams.c0.a]} - ${colorInputs[combParams.c0.b]}) * ${multInputs[combParams.c0.c]} + ${colorInputs[combParams.c0.d]};
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaMultInputs[py.z]} + ${alphaInputs[py.w]};
+    return (${alphaInputs[combParams.a0.a]} - ${alphaInputs[combParams.a0.b]}) * ${alphaMultInputs[combParams.a0.c]} + ${alphaInputs[combParams.a0.d]};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+    return (${colorInputs[combParams.c1.a]} - ${colorInputs[combParams.c1.b]}) * ${multInputs[combParams.c1.c]} + ${colorInputs[combParams.c1.d]};
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaMultInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return (${alphaInputs[combParams.a1.a]} - ${alphaInputs[combParams.a1.b]}) * ${alphaMultInputs[combParams.a1.c]} + ${alphaInputs[combParams.a1.d]};
 }
 
 void main() {
@@ -558,8 +544,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const combParams = vec4.create();
-        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -1549,10 +1534,8 @@ export class FlipbookRenderer {
         let otherModeL = baseFlipbookOtherModeL;
         if (this.mode === FlipbookMode.AlphaTest)
             otherModeL |= 1; // alpha test against blend
-        const comb = vec4.create();
         const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
-        fillCombineParams(comb, 0, combine);
-        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
+        const program = new F3DEX_Program(otherModeH, otherModeL, combine);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 

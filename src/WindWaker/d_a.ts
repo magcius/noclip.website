@@ -84,7 +84,7 @@ class d_a_grass extends fopAc_ac_c {
         { group: 6, count: 5 },
     ];
     
-    static kSpawnOffsets = [
+    static kSpawnOffsets: vec3[][] = [
         [
             [0, 0, 0],
             [3, 0, -50],
