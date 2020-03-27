@@ -313,27 +313,58 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 // e.g. sharpclawGr
                 obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
             } else if (obj.objClass === 222 ||
+                obj.objClass === 227 ||
                 obj.objClass === 233 ||
                 obj.objClass === 234 ||
                 obj.objClass === 235 ||
                 obj.objClass === 280 ||
                 obj.objClass === 283 ||
                 obj.objClass === 291 ||
+                obj.objClass === 304 ||
                 obj.objClass === 312 ||
                 obj.objClass === 313 ||
+                obj.objClass === 316 ||
+                obj.objClass === 319 ||
+                obj.objClass === 343 ||
+                obj.objClass === 344 ||
+                obj.objClass === 387 ||
+                obj.objClass === 389 ||
                 obj.objClass === 423 ||
                 obj.objClass === 424 ||
                 obj.objClass === 437 ||
                 obj.objClass === 442 ||
-                obj.objClass === 666
+                obj.objClass === 487 ||
+                obj.objClass === 509 ||
+                obj.objClass === 533 ||
+                obj.objClass === 576 ||
+                obj.objClass === 642 ||
+                obj.objClass === 666 ||
+                obj.objClass === 691
             ) {
                 // e.g. setuppoint
                 // Do nothing
+            } else if (obj.objClass === 207) {
+                // e.g. CannonClawO
+                obj.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
+            } else if (obj.objClass === 213) {
+                // e.g. Kaldachom
+                obj.scale = 0.5 + objParams.getInt8(0x28) / 15;
+            } else if (obj.objClass === 231) {
+                // e.g. BurnableVin
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+                obj.scale = 5 * objParams.getInt16(0x1a) / 32767;
+                if (obj.scale < 0.05) {
+                    obj.scale = 0.05;
+                }
             } else if (obj.objClass === 237) {
                 // e.g. SH_LargeSca
                 obj.yaw = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x22) << 8) * Math.PI / 32768;
                 obj.roll = (objParams.getInt8(0x23) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 239) {
+                // e.g. CCboulder
+                obj.yaw = angle16ToRads(objParams.getUint8(0x22) << 8);
+                fields.pos[1] += 0.5;
             } else if (obj.objClass === 249) {
                 // e.g. ProjectileS
                 obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
@@ -342,21 +373,49 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 if (objScale !== 0) {
                     obj.scale *= objScale / 64;
                 }
-            } else if (obj.objClass === 251) {
+            } else if (obj.objClass === 250) {
+                // e.g. InvisibleHi
+                const scaleParam = objParams.getUint8(0x1d);
+                if (scaleParam !== 0) {
+                    obj.scale *= scaleParam / 64;
+                }
+            } else if (obj.objClass === 251 ||
+                obj.objClass === 393 ||
+                obj.objClass === 445 ||
+                obj.objClass === 579 ||
+                obj.objClass === 510 ||
+                obj.objClass === 513 ||
+                obj.objClass === 525 ||
+                obj.objClass === 609 ||
+                obj.objClass === 617 ||
+                obj.objClass === 650
+            ) {
                 // e.g. SC_Pressure
                 obj.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
             } else if (obj.objClass === 254) {
                 // e.g. MagicPlant
                 obj.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 256) {
+            } else if (obj.objClass === 256 ||
+                obj.objClass === 391 ||
+                obj.objClass === 392 ||
+                obj.objClass === 394
+            ) {
                 // e.g. TrickyWarp
-                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
+                obj.yaw = angle16ToRads(objParams.getInt8(0x1a) << 8);
+            } else if (obj.objClass === 259) {
+                // e.g. CurveFish
+                obj.scale *= objParams.getUint8(0x18) / 100;
             } else if (obj.objClass === 240 ||
                 obj.objClass === 260 ||
                 obj.objClass === 261
             ) {
                 // e.g. WarpPoint, SmallBasket, LargeCrate
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            } else if (obj.objClass === 269) {
+                // e.g. PortalSpell
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+                obj.pitch = angle16ToRads(objParams.getInt16(0x1c) << 8); // Yes, getInt16 is correct.
+                obj.scale = 3.15;
             } else if (obj.objClass === 272) {
                 // e.g. SH_Portcull
                 obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
@@ -366,13 +425,21 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 } else {
                     obj.scale *= objScale;
                 }
-            } else if (obj.objClass === 275) {
+            } else if (obj.objClass === 274 ||
+                obj.objClass === 275
+            ) {
                 // e.g. SH_newseqob
-                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 284 || obj.objClass === 289) {
+                obj.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
+            } else if (obj.objClass === 284 ||
+                obj.objClass === 289 ||
+                obj.objClass === 300
+            ) {
                 // e.g. StaffBoulde
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
                 // TODO: scale depends on subtype param
+            } else if (obj.objClass === 287) {
+                // e.g. MagicCaveTo
+                obj.yaw = angle16ToRads(objParams.getUint8(0x23) << 8);
             } else if (obj.objClass === 288) {
                 // e.g. TrickyGuard
                 obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -384,6 +451,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             } else if (obj.objClass === 294 && obj.objType === 77) {
                 obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 298 && [888, 889].includes(obj.objType)) {
+                // e.g. WM_krazoast
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            } else if (obj.objClass === 299) {
+                // e.g. FXEmit
+                obj.scale = 0.1;
+                obj.yaw = angle16ToRads(objParams.getInt8(0x24) << 8);
+                obj.pitch = angle16ToRads(objParams.getInt8(0x23) << 8);
+                obj.roll = angle16ToRads(objParams.getInt8(0x22) << 8);
             } else if (obj.objClass === 306) {
                 // e.g. WaterFallSp
                 obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
@@ -422,6 +498,16 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                         }
                     }
                 }
+            } else if (obj.objClass === 329) {
+                // e.g. CFTreasWind
+                const scaleParam = objParams.getInt8(0x19);
+                let objScale;
+                if (scaleParam === 0) {
+                    objScale = 90;
+                } else {
+                    objScale = 4 * scaleParam;
+                }
+                obj.scale *= objScale / 90;
             } else if (obj.objClass === 346) {
                 // e.g. SH_BombWall
                 obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
@@ -432,6 +518,26 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                     objScale = 20;
                 }
                 obj.scale *= objScale / 20;
+            } else if (obj.objClass === 372) {
+                // e.g. CCriverflow
+                obj.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
+                obj.scale += objParams.getUint8(0x19) / 512;
+            } else if (obj.objClass === 383) {
+                // e.g. MSVine
+                obj.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
+                const scaleParam = objParams.getUint8(0x21);
+                if (scaleParam !== 0) {
+                    obj.scale *= scaleParam / 64;
+                }
+            } else if (obj.objClass === 385) {
+                // e.g. MMP_trenchF
+                obj.roll = angle16ToRads(objParams.getInt8(0x19) << 8);
+                obj.pitch = angle16ToRads(objParams.getInt8(0x1a) << 8);
+                obj.yaw = angle16ToRads(objParams.getInt8(0x1b) << 8);
+                obj.scale = 0.1;
+            } else if (obj.objClass === 390) {
+                // e.g. CCgasvent
+                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
             } else if (obj.objClass === 429) {
                 // e.g. ThornTail
                 obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -445,6 +551,9 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             } else if (obj.objClass === 440) {
                 // e.g. SC_totempol
                 obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+            } else if (obj.objClass === 454 && obj.objType !== 0x1d6) {
+                // e.g. DIMCannon
+                obj.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
             } else if (obj.objClass === 518) {
                 // e.g. PoleFlame
                 obj.yaw = angle16ToRads((objParams.getUint8(0x18) & 0x3f) << 10);
@@ -454,16 +563,44 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 } else {
                     obj.scale = objScale / 8192;
                 }
-            } else if (obj.objClass === 579) {
-                // e.g. DBHoleContr
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
+            } else if (obj.objClass === 524) {
+                // e.g. WM_spiritpl
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+                obj.pitch = angle16ToRads(objParams.getInt16(0x1a) << 8); // Yes, getInt16 is correct.
+            } else if (obj.objClass === 538) {
+                // e.g. VFP_statueb
+                const scaleParam = objParams.getInt16(0x1c);
+                if (scaleParam > 1) {
+                    obj.scale *= scaleParam;
+                }
+            } else if (obj.objClass === 602) {
+                // e.g. StaticCamer
+                obj.yaw = angle16ToRads(-objParams.getInt16(0x1c));
+                obj.pitch = angle16ToRads(-objParams.getInt16(0x1e));
+                obj.roll = angle16ToRads(-objParams.getInt16(0x20));
+            } else if (obj.objClass === 425 ||
+                obj.objClass === 603
+            ) {
+                // e.g. MSPlantingS
+                obj.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
+            } else if (obj.objClass === 627) {
+                // e.g. FlameMuzzle
+                const scaleParam = objParams.getInt16(0x1c);
+                if (scaleParam != 0) {
+                    obj.scale *= 0.1 * scaleParam;
+                }
+                obj.roll = 0;
+                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+                obj.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
             } else if (obj.objClass === 683) {
                 // e.g. LGTProjecte
                 obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
                 obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
                 obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 273 ||
-                obj.objClass === 689
+            } else if (obj.objClass === 214 ||
+                obj.objClass === 273 ||
+                obj.objClass === 689 ||
+                obj.objClass === 690
             ) {
                 // e.g. CmbSrc
                 obj.roll = angle16ToRads(objParams.getUint8(0x18) << 8);
@@ -483,6 +620,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 const scaleParam = objParams.getUint8(0x1b);
                 if (scaleParam !== 0) {
                     obj.scale *= scaleParam / 255;
+                }
+            } else if (obj.objClass === 694) {
+                // e.g. CNThitObjec
+                if (objParams.getInt8(0x19) === 2) {
+                    obj.yaw = angle16ToRads(objParams.getInt16(0x1c));
                 }
             } else {
                 console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
