@@ -3,7 +3,7 @@ import * as GX from '../gx/gx_enum';
 import { ViewerRenderInput, Viewer } from '../viewer';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams } from '../gx/gx_render';
+import { MaterialParams, ColorKind } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureCollection, SFATextureCollection } from './textures';
@@ -13,6 +13,7 @@ import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { getDebugOverlayCanvas2D } from '../DebugJunk';
+import { colorFromRGBA } from '../Color';
 
 interface ShaderLayer {
     texId: number | null;
@@ -92,6 +93,7 @@ export enum ShaderFlags {
     ShortFur = 0x4000, // 4 layers
     MediumFur = 0x8000, // 8 layers
     LongFur = 0x10000, // 16 layers
+    DisableChan0 = 0x40000,
     StreamingVideo = 0x20000,
     AmbientLit = 0x40000,
     Water = 0x80000000,
@@ -277,7 +279,23 @@ class StandardMaterial implements SFAMaterial {
                 this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
             }
         }
-        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        if (this.shader.flags & ShaderFlags.DisableChan0) {
+            // TODO: AMB0 = solid white is enforced here
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            // TODO: AMB0 = solid white is enforced here
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            // TODO: Set AMB0 to sky/environment ambient color
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        // FIXME: Objects have different rules for color-channels than map blocks
+        if (this.isMapBlock) {
+            this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
         this.gxMaterial = this.mb.finish();
@@ -301,6 +319,10 @@ class StandardMaterial implements SFAMaterial {
                 this.postTexMtx[i]!(params.u_PostTexMtx[i], viewState);
             }
         }
+
+        // TODO: use sky/environment ambient lighting
+        colorFromRGBA(params.u_Color[ColorKind.AMB0], 1.0, 1.0, 1.0, 1.0);
+        colorFromRGBA(params.u_Color[ColorKind.AMB1], 1.0, 1.0, 1.0, 1.0);
     }
     
     private addTevStagesForTextureWithSkyAmbient(scrollingTexMtx?: number) {
@@ -894,6 +916,8 @@ export class MaterialFactory {
                         mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
                     }
                 }
+
+                // TODO: color register C0 controls underwater visibility and water color
             },
             rebuild: () => {
                 throw Error(`rebuild not implemented for water shader`);

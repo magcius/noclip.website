@@ -527,10 +527,18 @@ const sceneDescs = [
     // (end)
 
     'Full Scenes (HIGHLY EXPERIMENTAL)',
+    // new SFAWorldSceneDesc('gamefront', 'gamefront', 63, 'Great Fox'),
     new SFAWorldSceneDesc('warlock', 'warlock', 11, 'Krazoa Palace'),
     new SFAWorldSceneDesc('hollow', 'swaphol', 7, 'ThornTail Hollow'),
     new SFAWorldSceneDesc('moonpass', 'mmpass', 18, 'Moon Mountain Pass'),
+    // new SFAWorldSceneDesc('newicemount', 'icemountain', 23, 'Ice Mountain'),
     new SFAWorldSceneDesc('capeclaw', 'capeclaw', 29, 'Cape Claw'),
+    // new SFAWorldSceneDesc('swapcircle', 'lightfoot', 14, 'LightFoot Village'),
+    // new SFAWorldSceneDesc('fortress', 'crfort', 12, 'CloudRunner Fortress'),
+    // new SFAWorldSceneDesc('animtest', 'animtest', 26, 'Test Map (animtest)'),
+    // new SFAWorldSceneDesc('snowmines', 'darkicemines', 19, 'DarkIce Mines'),
+    // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
+    // new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
