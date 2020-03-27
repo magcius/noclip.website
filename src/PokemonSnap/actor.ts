@@ -1582,16 +1582,42 @@ export class Staryu extends Actor {
 }
 
 class Jynx extends Actor {
-    private static flags = 0;
-
+    private static baseOffset = -53.25;
     protected startBlock(globals: LevelGlobals): void {
         switch (this.def.stateGraph.states[this.currState].startAddress) {
             case 0x802C4EF4: {
-                this.translation[1] = groundHeightAt(globals, this.translation) - 53.25;
+                this.motionData.storedValues[0] = this.euler[1];
+                this.motionData.storedValues[1] = Jynx.baseOffset;
+                this.translation[1] = groundHeightAt(globals, this.translation) + Jynx.baseOffset;
                 this.updatePositions();
             } break;
         }
         super.startBlock(globals);
+    }
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (param === 0) {
+            if (this.motionData.storedValues[1] === 0)
+                return MotionResult.Done;
+            this.motionData.storedValues[1] -= Jynx.baseOffset * viewerInput.deltaTime / 1000;
+            if (this.motionData.storedValues[1] > 0)
+                this.motionData.storedValues[1] = 0;
+            this.translation[1] = groundHeightAt(globals, this.translation) + this.motionData.storedValues[1];
+            this.euler[1] += MathConstants.TAU * viewerInput.deltaTime / 1000;
+            if (this.euler[1] >= this.motionData.storedValues[0] + MathConstants.TAU)
+                this.euler[1] = this.motionData.storedValues[0] + MathConstants.TAU;
+            return MotionResult.Update;
+        } else {
+            if (this.motionData.storedValues[1] === Jynx.baseOffset)
+                return MotionResult.Done;
+            this.motionData.storedValues[1] += Jynx.baseOffset * viewerInput.deltaTime / 1000;
+            if (this.motionData.storedValues[1] < Jynx.baseOffset)
+                this.motionData.storedValues[1] = Jynx.baseOffset;
+            this.translation[1] = groundHeightAt(globals, this.translation) + this.motionData.storedValues[1];
+            this.euler[1] -= MathConstants.TAU * viewerInput.deltaTime / 1000;
+            if (this.euler[1] < this.motionData.storedValues[0])
+                this.euler[1] = this.motionData.storedValues[0];
+            return MotionResult.Update;
+        }
     }
 }
 
@@ -1684,6 +1710,16 @@ class Porygon extends Actor {
     }
 }
 
+class Articuno extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        if (this.def.stateGraph.states[this.currState].startAddress === 0x802C46F0) {
+            if (this.currBlock === 0)
+                vec3.copy(this.translation, this.target!.translation);
+        }
+        super.startBlock(globals);
+    }
+}
+
 class Zapdos extends Actor {
     private egg: Actor | null = null;
 
@@ -1711,6 +1747,47 @@ class Zapdos extends Actor {
             }
         }
         return MotionResult.None;
+    }
+}
+
+class ArticunoEgg extends Actor {
+    private currFPS = 30;
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802C4B04) {
+            if (this.currBlock === 0)
+                this.currFPS = 30;
+        }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currFPS >= 120) {
+            this.motionData.stateFlags |= EndCondition.Misc;
+            return MotionResult.Done;
+        }
+        if (!canHearSong(this.translation, globals)) {
+            this.motionData.stateFlags &= ~EndCondition.Misc;
+            return MotionResult.Done;
+        }
+        const currPhase = this.animationController.getTimeInFrames();
+        this.currFPS += 15 * viewerInput.deltaTime / 1000;
+        this.animationController.adjust(this.currFPS, currPhase);
+        return MotionResult.None;
+    }
+
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802C4B04) {
+            if (this.currBlock === 0) {
+                const currPhase = this.animationController.getTimeInFrames();
+                this.animationController.adjust(30, currPhase);
+                const articuno = globals.allActors.find((a) => a.def.id === 144);
+                if (articuno)
+                    this.motionData.storedValues[0] = articuno.translation[1] - 250;
+            }
+        }
+        return false;
     }
 }
 
@@ -1816,7 +1893,9 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 129: return new Magikarp(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
+        case 144: return new Articuno(renderData, spawn, def, globals);
         case 145: return new Zapdos(renderData, spawn, def, globals);
+        case 601: return new ArticunoEgg(renderData, spawn, def, globals);
         case 602: return new ZapdosEgg(renderData, spawn, def, globals);
         case 1026: return new MiniCrater(renderData, spawn, def, globals);
         case 1027: return new Crater(renderData, spawn, def, globals);
