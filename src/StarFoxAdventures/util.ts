@@ -12,6 +12,10 @@ export function interpS16(n: number): number {
     return ((n & 0xffff) << 16) >> 16;
 }
 
+export function angle16ToRads(a: number): number {
+    return interpS16(a) * Math.PI / 32768;
+}
+
 export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
     // mat4's are Float32Arrays in column-major order
     mtx[row] = m0;
