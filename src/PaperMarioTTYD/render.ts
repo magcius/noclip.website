@@ -161,11 +161,14 @@ class MaterialInstance {
     }
 
     private fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+        for (let i = 0; i < 8; i++)
+            materialParams.m_TextureMapping[i].reset();
+
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
 
             const texMapping = materialParams.m_TextureMapping[i];
-            textureHolder.fillTextureMapping(texMapping, sampler.textureName);
+            assert(textureHolder.fillTextureMapping(texMapping, sampler.textureName));
             texMapping.gfxSampler = this.gfxSamplers[i];
 
             if (this.materialAnimators[i]) {
