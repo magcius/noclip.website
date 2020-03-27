@@ -13,6 +13,8 @@ import { ParticleManager } from "./particles";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
+    public throwBalls = true;
+
     public collision: CollisionTree | null = null;
     public currentSong = 0;
     public songStart = 0;
@@ -49,7 +51,7 @@ export class LevelGlobals {
         if (this.lastThrow < 0)
             this.lastThrow = viewerInput.time + 2000; // extra wait before the first throw
 
-        if (viewerInput.time > this.lastThrow + 2500) {
+        if (this.throwBalls && (viewerInput.time > this.lastThrow + 2500)) {
             let didThrow = false;
             // if we're above ground, throw the next type of projectile
             if (this.translation[1] > findGroundHeight(this.collision, this.translation[0], this.translation[2]) + 20) {
@@ -71,8 +73,9 @@ export class LevelGlobals {
             if (didThrow) {
                 this.lastThrow = viewerInput.time;
                 this.pesterNext = !this.pesterNext; // alternate apple and pester ball
-            } else
+            } else {
                 this.lastThrow += 500; // wait a bit, then try again
+            }
         }
     }
 
