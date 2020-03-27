@@ -256,6 +256,9 @@ void main() {
     t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
 #endif
 
+#ifdef ONLY_VERTEX_COLOR
+    t_Color.rgba = v_Color.rgba;
+#else
     t_Color = vec4(
         CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
         CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
@@ -267,9 +270,6 @@ void main() {
         CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
     );
 #endif
-
-#ifdef ONLY_VERTEX_COLOR
-    t_Color.rgba = v_Color.rgba;
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER

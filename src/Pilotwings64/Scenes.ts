@@ -3,7 +3,7 @@ import * as RDP from '../Common/N64/RDP';
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -1614,10 +1614,11 @@ class MeshRenderer {
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-
         template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
+        // compute common model view matrix
+        mat4.mul(MeshRenderer.scratchMatrix, viewerInput.camera.viewMatrix, jointMatrix);
         for (let i = 0; i < this.materials.length; i++)
-            this.materials[i].prepareToRender(device, renderInstManager, viewerInput, jointMatrix);
+            this.materials[i].prepareToRender(device, renderInstManager, viewerInput, MeshRenderer.scratchMatrix);
         renderInstManager.popTemplateRenderInst();
     }
 }
@@ -1828,6 +1829,7 @@ class MaterialInstance {
     private decodedMaterial: DecodeMaterialResult;
     private stateFlags: Partial<GfxMegaStateDescriptor>;
     private visible = true;
+    private gfxProgram: GfxProgram | null = null;
 
     constructor(private materialData: MaterialData, texturePalette: TexturePalette, isEnv?: boolean, private isBillboard?: boolean) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
@@ -1861,6 +1863,10 @@ class MaterialInstance {
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
         this.program.defines.set('BONE_MATRIX_COUNT', '1');
         this.program.defines.set("USE_VERTEX_COLOR", "1");
+        if (this.hasTexture)
+            this.program.defines.set('USE_TEXTURE', '1');
+        else // game actually sets 2 cycle mode for some reason, and enables shading
+            this.program.defines.set('ONLY_VERTEX_COLOR', '1');
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
@@ -1872,21 +1878,19 @@ class MaterialInstance {
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 2 * 8);
         const d = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
-        computeViewMatrix(scratchMatrix, viewerInput.camera);
-        mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
-
         // TODO: look further into game logic for this
         if (!!(getSortKeyLayer(renderInst.sortKey) & GfxRendererLayer.TRANSLUCENT)) {
-            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -scratchMatrix[14]);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -modelMatrix[14]);
         }
 
         // note that the game actually rotates the model placement matrix, allowing for a model
         // with multiple parts to face towards the camera overall, while individual parts might not
         // however, every billboard in the game has only one part, so we ignore this detail
-        if (this.isBillboard)
-            calcZBBoardMtx(scratchMatrix, scratchMatrix);
-
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
+        if (this.isBillboard) {
+            calcZBBoardMtx(scratchMatrix, modelMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMatrix);
+        } else
+            offs += fillMatrix4x3(d, offs, modelMatrix);
 
         if (this.hasTexture) {
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
@@ -1904,7 +1908,6 @@ class MaterialInstance {
                 scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.uvScroll)
             }
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
-            this.program.defines.set('USE_TEXTURE', '1');
 
             if (this.hasPairedTexture) {
                 const scaleS1 = calcScaleForShift(this.uvtx.levels[1].shiftS);
@@ -1923,13 +1926,11 @@ class MaterialInstance {
                 fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
             if (this.uvtx.environment)
                 fillVec4v(comb, offs + 0x04, this.uvtx.environment);
-        } else {
-            // game actually sets 2 cycle mode for some reason, and enables shading
-            this.program.defines.set('ONLY_VERTEX_COLOR', '1');
         }
 
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
-        renderInst.setGfxProgram(gfxProgram);
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+        renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -2612,11 +2613,7 @@ class UVCTRenderer {
             return;
 
         mat4.mul(UVCTRenderer.scratchMatrix, parentModelMatrix, this.modelMatrix);
-
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         this.meshRenderer.prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
-        renderInstManager.popTemplateRenderInst();
 
         for (let i = 0; i < this.sobjRenderers.length; i++)
             this.sobjRenderers[i].prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
@@ -2639,8 +2636,11 @@ class UVTRRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         for (let i = 0; i < this.uvctRenderers.length; i++)
             this.uvctRenderers[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
