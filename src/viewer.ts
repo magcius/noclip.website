@@ -199,10 +199,12 @@ export class Viewer {
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
-        const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession?.renderState.baseLayer;
-        if (!baseLayer) {
+        if (webXRContext.xrSession === null)
             return;
-        }
+
+        const baseLayer = webXRContext.xrSession.renderState.baseLayer;
+        if (baseLayer === undefined)
+            return;
 
         const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
         const fbw: number = baseLayer.framebufferWidth;
