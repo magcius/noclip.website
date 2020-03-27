@@ -1,9 +1,8 @@
 
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
-import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -13,257 +12,8 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-
-export class F3DZEX_Program extends DeviceProgram {
-    public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_TexCoord = 2;
-
-    public static ub_SceneParams = 0;
-    public static ub_DrawParams = 1;
-    public static ub_CombineParams = 2;
-
-    public both = `
-precision mediump float;
-
-layout(row_major, std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-#ifdef TEXTURE_GEN
-    vec4 u_LookAtVectors[2];
-#endif
-};
-
-layout(row_major, std140) uniform ub_DrawParams {
-    Mat4x3 u_ModelView;
-    Mat4x2 u_TexMatrix[2];
-};
-
-uniform ub_CombineParameters {
-    vec4 u_PrimColor;
-    vec4 u_EnvColor;
-    float u_Lighting;
-};
-
-uniform sampler2D u_Texture[2];
-
-varying vec4 v_Color;
-varying vec4 v_TexCoord;
-
-const vec4 t_Zero = vec4(0.0);
-const vec4 t_One = vec4(1.0);
-`;
-
-    public vert = `
-layout(location = ${F3DZEX_Program.a_Position}) in vec4 a_Position;
-layout(location = ${F3DZEX_Program.a_Color}) in vec4 a_Color;
-layout(location = ${F3DZEX_Program.a_TexCoord}) in vec2 a_TexCoord;
-
-vec3 Monochrome(vec3 t_Color) {
-    // NTSC primaries.
-    return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
-}
-
-void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position.xyz, 1.0)));
-    v_Color = t_One;
-
-#ifdef USE_VERTEX_COLOR
-    v_Color = a_Color;
-#endif
-
-#ifdef USE_MONOCHROME_VERTEX_COLOR
-    v_Color.rgb = Monochrome(v_Color.rgb);
-#endif
-
-    if (u_Lighting != 0.0) {
-        // convert (unsigned) colors to normal vector components
-        vec3 t_Normal = 2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb);
-        t_Normal = normalize(t_Normal);
-        // TODO: If the model matrix is non-identity, the normal must be transformed by the normal matrix:
-        // normalMatrix = transpose(inverse(modelMatrix))
-        // We don't use a model matrix right now, so the normal matrix is omitted.
-
-        vec3 lightDirection = normalize(vec3(1, 1, 1));
-        float intensity = max(0.0, dot(t_Normal, lightDirection));
-        vec3 ambient = vec3(0.25, 0.25, 0.25);
-        vec3 lightColor = vec3(1.0, 1.0, 1.0);
-        v_Color.rgb = ambient + intensity * lightColor;
-    }
-
-    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
-    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
-
-#ifdef TEXTURE_GEN
-    // generate texture coordinates based on the vertex normal in screen space
-
-    // convert (unsigned) colors to normal vector components
-    vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
-    t_Normal = normalize(t_Normal);
-    t_Normal.xy = vec2(dot(t_Normal, u_LookAtVectors[0]), dot(t_Normal, u_LookAtVectors[1]));
-
-    // shift and rescale to tex coordinates - straight towards the camera is the center
-#   ifdef TEXTURE_GEN_LINEAR
-        v_TexCoord.xy = acos(t_Normal.xy)/radians(180.0);
-#   else
-        v_TexCoord.xy = (t_Normal.xy + vec2(1.0))/2.0;
-#   endif
-
-    v_TexCoord.zw = v_TexCoord.xy;
-#endif
-}
-`;
-
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, private DP_Combine: RDP.CombineParams) {
-        super();
-        if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
-            this.defines.set("TWO_CYCLE", "1");
-        this.frag = this.generateFrag();
-    }
-
-    private generateAlphaTest(): string {
-        const alphaCompare = (this.DP_OtherModeL >>> 0) & 0x03;
-        const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
-        let alphaThreshold = 0;
-        if (alphaCompare === 0x01) {
-            alphaThreshold = 0.5; // actually blend color, seems to always be 0.5
-        } else if (alphaCompare != 0x00) {
-            alphaThreshold = .0125; // should be dither
-        } else if (cvgXAlpha != 0x00) {
-            // this line is taken from GlideN64, but here's some rationale:
-            // With this bit set, the pixel coverage value is multiplied by alpha
-            // before being sent to the blender. While coverage mostly matters for
-            // the n64 antialiasing, a pixel with zero coverage will be ignored.
-            // Since coverage is really an integer from 0 to 8, we assume anything
-            // less than 1 would be truncated to 0, leading to the value below.
-            alphaThreshold = 0.125;
-        }
-
-        if (alphaThreshold > 0) {
-            return `
-    if (t_Color.a < ${alphaThreshold})
-        discard;
-`;
-        } else {
-            return "";
-        }
-    }
-
-    private generateFrag(): string {
-        const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
-        let texFiltStr: string;
-        if (textFilt === TextFilt.G_TF_POINT)
-            texFiltStr = 'Point';
-        else if (textFilt === TextFilt.G_TF_AVERAGE)
-            texFiltStr = 'Average';
-        else if (textFilt === TextFilt.G_TF_BILERP)
-            texFiltStr = 'Bilerp';
-        else
-            throw "whoops";
-
-        const colorInputs: string[] = [
-            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
-            'v_Color.rgb', 'u_EnvColor.rgb', 't_One.rgb', 't_Zero.rgb'
-        ];
-
-        const multInputs: string[] = [
-            't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
-            'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
-            't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
-            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
-        ];
-
-        const alphaInputs: string[] = [
-            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
-            'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
-        ];
-
-        function generateColorCombine(c: RDP.ColorCombinePass) {
-            return `((${colorInputs[c.a]} - ${colorInputs[c.b]}) * ${multInputs[c.c]} + ${colorInputs[c.d]})`;
-        }
-
-        function generateAlphaCombine(a: RDP.AlphaCombinePass) {
-            return `((${alphaInputs[a.a]} - ${alphaInputs[a.b]}) * ${alphaInputs[a.c]} + ${alphaInputs[a.d]})`;
-        }
-
-        return `
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
-    return texture(t_Texture, t_TexCoord);
-}
-
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
-    // Unimplemented.
-    return texture(t_Texture, t_TexCoord);
-}
-
-// Implements N64-style "triangle bilienar filtering" with three taps.
-// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
-    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
-    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
-    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
-}
-
-#define Texture2D_N64 Texture2D_N64_${texFiltStr}
-
-vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return ${generateColorCombine(this.DP_Combine.c0)};
-}
-
-float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return ${generateAlphaCombine(this.DP_Combine.a0)};
-}
-
-vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return ${generateColorCombine(this.DP_Combine.c1)};
-}
-
-float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return ${generateAlphaCombine(this.DP_Combine.a1)};
-}
-
-void main() {
-    vec4 t_Color = t_One;
-    vec4 t_Tex0 = t_One, t_Tex1 = t_One;
-
-#ifdef USE_TEXTURE
-    t_Tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
-    t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
-#endif
-
-    t_Color = vec4(
-        CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
-        CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
-    );
-
-#ifdef TWO_CYCLE
-    t_Color = vec4(
-        CombineColorCycle1(t_Color, t_Tex0, t_Tex1),
-        CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
-    );
-#endif
-
-#ifdef ONLY_VERTEX_COLOR
-    t_Color.rgba = v_Color.rgba;
-#endif
-
-#ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
-    t_Color.a = 1.0;
-#endif
-
-${this.generateAlphaTest()}
-
-    gl_FragColor = t_Color;
-}
-`;
-    }
-}
+import { F3DEX_Program } from '../BanjoKazooie/render';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -362,9 +112,9 @@ export class RenderData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DZEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
-            { location: F3DZEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
-            { location: F3DZEX_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
+            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
+            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
+            { location: F3DEX_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -442,10 +192,14 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DZEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
+        program.defines.set('BONE_MATRIX_COUNT', '1');
 
         if (this.texturesEnabled && this.textureEntry.length)
             program.defines.set('USE_TEXTURE', '1');
+
+        if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
+            program.defines.set('LIGHTING', '1');
 
         // FIXME: Levels disable the SHADE flags. wtf?
         const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
@@ -521,8 +275,8 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_DrawParams, 12 + 8*2);
-        const mappedF32 = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2);
+        const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         if (isSkybox)
             computeViewMatrixSkybox(viewMatrixScratch, viewerInput.camera);
@@ -537,12 +291,10 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[1]
 
-        offs = renderInst.allocateUniformBuffer(F3DZEX_Program.ub_CombineParams, 9);
-        const comb = renderInst.mapUniformBufferF32(F3DZEX_Program.ub_CombineParams);
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
+        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.drawCall.primColor); // primitive color
         offs += fillVec4v(comb, offs, this.drawCall.envColor); // environment color
-        comb[offs] = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING) ? 1.0 : 0.0; // Lighting flag
-        offs++;
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -697,8 +449,8 @@ export class RootMeshRenderer {
         const computeLookAt = false; // FIXME: or true?
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
 
-        let offs = template.allocateUniformBuffer(F3DZEX_Program.ub_SceneParams, sceneParamsSize);
-        const mappedF32 = template.mapUniformBufferF32(F3DZEX_Program.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, sceneParamsSize);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         if (computeLookAt) {

@@ -50,6 +50,8 @@ uniform ub_CombineParameters {
     vec4 u_EnvColor;
 #ifdef EXTRA_COMBINE
     vec4 u_MiscComb;
+#else
+    #define u_MiscComb (vec4(0))
 #endif
 };
 
