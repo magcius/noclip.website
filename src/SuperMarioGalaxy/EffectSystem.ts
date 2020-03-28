@@ -15,6 +15,7 @@ import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
 import { getJointMtxByName } from './ActorUtil';
+import { Viewer, Texture } from '../viewer';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -53,9 +54,29 @@ export class ParticleResourceHolder {
             const cache = sceneObjHolder.modelCache.cache;
             const resData = new JPA.JPAResourceData(device, cache, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
+            this.addTexturesForResource(sceneObjHolder, resData);
             this.resourceDatas.set(idx, resData);
         }
+
         return this.resourceDatas.get(idx)!;
+    }
+
+    private addTexturesForResource(sceneObjHolder: SceneObjHolder, resData: JPA.JPAResourceData): void {
+        const viewerTextures: Texture[] = [];
+        for (let i = 0; i < resData.textureIds.length; i++) {
+            const textureId = resData.textureIds[i];
+            if (textureId === undefined)
+                continue;
+            const viewerTexture = this.jpacData.texData[textureId].viewerTexture;
+
+            if (!viewerTexture.extraInfo!.has('Category')) {
+                viewerTexture.extraInfo!.set('Category', 'JPA');
+                viewerTexture.name = `ParticleData/${viewerTexture.name}`;
+            }
+
+            viewerTextures.push(this.jpacData.texData[textureId].viewerTexture);
+        }
+        sceneObjHolder.modelCache.textureListHolder.addTextures(viewerTextures);
     }
 
     public getTextureMappingReference(name: string): TextureMapping | null {

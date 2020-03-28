@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, align, nArray, fallback, nullify } from '../util';
+import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
@@ -690,8 +690,15 @@ class TextureListHolder {
     public onnewtextures: (() => void) | null = null;
 
     public addTextures(textures: Viewer.Texture[]): void {
-        this.viewerTextures.push(...textures);
-        if (this.onnewtextures !== null)
+        let changed = false;
+        for (let i = 0; i < textures.length; i++) {
+            if (!this.viewerTextures.includes(textures[i])) {
+                spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
+                changed = true;
+            }
+        }
+
+        if (changed && this.onnewtextures !== null)
             this.onnewtextures();
     }
 }
@@ -720,7 +727,8 @@ export class ModelCache {
         }
 
         const decompressed = await Yaz0.decompress(buffer);
-        const rarc = RARC.parse(decompressed);
+        const archiveName = archivePath.split('/').pop()!.split('.')[0];
+        const rarc = RARC.parse(decompressed, archiveName);
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }

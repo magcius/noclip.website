@@ -197,7 +197,9 @@ export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: JKRArchive, fil
     const cache = sceneObjHolder.modelCache.cache;
 
     const buffer = arc.findFileData(filename);
-    const btiData = new BTIData(device, cache, BTI.parse(buffer!, filename).texture);
+    const textureName = `${arc.name}/${filename}`;
+    const btiData = new BTIData(device, cache, BTI.parse(buffer!, textureName).texture);
+    sceneObjHolder.modelCache.textureListHolder.addTextures([btiData.viewerTexture]);
     return btiData;
 }
 
