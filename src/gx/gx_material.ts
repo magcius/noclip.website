@@ -614,16 +614,36 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
-    private generateTexGen(texCoordGenIndex: number) {
-        const texCoordGen = this.material.texGens[texCoordGenIndex];
+    private generateTexGen(i: number) {
+        const tg = this.material.texGens[i];
+
+        let suffix: string;
+        if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
+            suffix = `.xy`;
+        else if (tg.type === GX.TexGenType.MTX3x4)
+            suffix = `.xyz`;
+        else
+            throw "whoops";
+
         return `
-    // TexGen ${texCoordGenIndex} Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
-    v_TexCoord${texCoordGenIndex} = ${this.generateTexGenPost(texCoordGenIndex)};`;
+    // TexGen ${i} Type: ${tg.type} Source: ${tg.source} Matrix: ${tg.matrix}
+    v_TexCoord${i} = ${this.generateTexGenPost(i)}${suffix};`;
     }
 
     private generateTexGens(): string {
         return this.material.texGens.map((tg, i) => {
             return this.generateTexGen(i);
+        }).join('');
+    }
+
+    private generateTexCoordVaryings(): string {
+        return this.material.texGens.map((tg, i) => {
+            if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
+                return `varying vec2 v_TexCoord${i};\n`;
+            else if (tg.type === GX.TexGenType.MTX3x4)
+                return `varying vec3 v_TexCoord${i};\n`;
+            else
+                throw "whoops";
         }).join('');
     }
 
@@ -1186,14 +1206,7 @@ ${bindingsDefinition}
 varying vec3 v_Position;
 varying vec4 v_Color0;
 varying vec4 v_Color1;
-varying vec3 v_TexCoord0;
-varying vec3 v_TexCoord1;
-varying vec3 v_TexCoord2;
-varying vec3 v_TexCoord3;
-varying vec3 v_TexCoord4;
-varying vec3 v_TexCoord5;
-varying vec3 v_TexCoord6;
-varying vec3 v_TexCoord7;
+${this.generateTexCoordVaryings()}
 `;
 
         this.vert = `
