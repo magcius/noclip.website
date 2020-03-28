@@ -38,7 +38,7 @@ export interface ViewerRenderInput {
 }
 
 export interface SceneGfx {
-    textureHolder?: TextureHolder<any>;
+    textureHolder?: UI.TextureListHolder;
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;

@@ -23,7 +23,7 @@ import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
@@ -79,10 +79,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private scenarioNoToIndex: number[] = [];
 
     public onstatechanged!: () => void;
+    public textureHolder: TextureListHolder;
 
     public isInteractive = true;
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
+        this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
 
         this.applyCurrentScenario();
@@ -582,7 +584,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
     }
 }
 
-function patchBMDModel(bmdModel: J3DModelData): void {
+function patchModelData(bmdModel: J3DModelData): void {
     // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
     // of its own sort, which needs to be RE'd.
     for (let i = 0; i < bmdModel.shapeData.length; i++)
@@ -611,17 +613,19 @@ export class ResourceHolder {
     public brkTable = new Map<string, TRK1>();
     public bvaTable = new Map<string, VAF1>();
     public banmtTable = new Map<string, BckCtrl>();
+    public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.JKRArchive) {
-        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
+    constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: RARC.JKRArchive) {
+        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
-            const bmdModel = new J3DModelData(device, cache, bmd);
-            patchBMDModel(bmdModel);
-            return bmdModel;
+            const modelData = new J3DModelData(device, cache, bmd);
+            patchModelData(modelData);
+            this.addTEX1(modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
+            return modelData;
         });
 
-        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (ext, file) => {
+        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (file, ext) => {
             if (ext === '.bca')
                 debugger;
 
@@ -629,14 +633,28 @@ export class ResourceHolder {
         });
 
         // .blk
-        this.initEachResTable(this.btkTable, ['.btk'], (ext, file) => BTK.parse(file.buffer));
-        this.initEachResTable(this.bpkTable, ['.bpk'], (ext, file) => BPK.parse(file.buffer));
-        this.initEachResTable(this.btpTable, ['.btp'], (ext, file) => BTP.parse(file.buffer));
-        this.initEachResTable(this.brkTable, ['.brk'], (ext, file) => BRK.parse(file.buffer));
+        this.initEachResTable(this.btkTable, ['.btk'], (file) => BTK.parse(file.buffer));
+        this.initEachResTable(this.bpkTable, ['.bpk'], (file) => BPK.parse(file.buffer));
+        this.initEachResTable(this.btpTable, ['.btp'], (file) => BTP.parse(file.buffer));
+        this.initEachResTable(this.brkTable, ['.brk'], (file) => BRK.parse(file.buffer));
         // .bas
         // .bmt
-        this.initEachResTable(this.bvaTable, ['.bva'], (ext, file) => BVA.parse(file.buffer));
-        this.initEachResTable(this.banmtTable, ['.banmt'], (ext, file) => BckCtrl.parse(file.buffer));
+        this.initEachResTable(this.bvaTable, ['.bva'], (file) => BVA.parse(file.buffer));
+        this.initEachResTable(this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
+    }
+
+    private addTEX1(tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
+        if (tex1Data === null)
+            return;
+
+        const prefix = (filenameWithoutExtension.toLowerCase() === objectName.toLowerCase()) ? objectName : `${objectName}/${filenameWithoutExtension}`;
+        for (let i = 0; i < tex1Data.viewerTextures.length; i++) {
+            const texture = tex1Data.viewerTextures[i];
+            if (texture === null) 
+                continue;
+            texture.name = `${prefix}/${texture.name}`;
+            this.viewerTextures.push(texture);
+        }
     }
 
     public getModel(name: string): J3DModelData {
@@ -647,7 +665,7 @@ export class ResourceHolder {
         return nullify(table.get(name.toLowerCase()));
     }
 
-    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (ext: string, file: RARC.RARCFile) => T): void {
+    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (file: RARC.RARCFile, ext: string, filenameWithoutExtension: string) => T): void {
         for (let i = 0; i < this.arc.files.length; i++) {
             const file = this.arc.files[i];
 
@@ -655,7 +673,7 @@ export class ResourceHolder {
                 const ext = extensions[j];
                 if (file.name.endsWith(ext)) {
                     const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
-                    table.set(filenameWithoutExtension, constructor(ext, file));
+                    table.set(filenameWithoutExtension, constructor(file, ext, filenameWithoutExtension));
                 }
             }
         }
@@ -667,11 +685,23 @@ export class ResourceHolder {
     }
 }
 
+class TextureListHolder {
+    public viewerTextures: Viewer.Texture[] = [];
+    public onnewtextures: (() => void) | null = null;
+
+    public addTextures(textures: Viewer.Texture[]): void {
+        this.viewerTextures.push(...textures);
+        if (this.onnewtextures !== null)
+            this.onnewtextures();
+    }
+}
+
 export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.JKRArchive | null>>();
     public archiveCache = new Map<string, RARC.JKRArchive | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
     public cache = new GfxRenderCache();
+    public textureListHolder = new TextureListHolder();
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
@@ -727,7 +757,8 @@ export class ModelCache {
             return this.archiveResourceHolder.get(objectName)!;
 
         const arc = this.getObjectData(objectName);
-        const resourceHolder = new ResourceHolder(this.device, this.cache, arc);
+        const resourceHolder = new ResourceHolder(this.device, this.cache, objectName, arc);
+        this.textureListHolder.addTextures(resourceHolder.viewerTextures);
         this.archiveResourceHolder.set(objectName, resourceHolder);
         return resourceHolder;
     }
