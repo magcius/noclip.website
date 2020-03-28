@@ -193,16 +193,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType), resetState);
+    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
     }
 
-    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType), resetState);
+    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
     }
 
-    private execute(passRenderer: GfxRenderPass, drawType: DrawType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType), resetState);
+    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
     }
 
     private isNormalBloomOn(): boolean {
@@ -275,11 +275,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
-        let resetTransientState = true;
-
         if (isExistPriorDrawAir(this.sceneObjHolder)) {
-            this.drawOpa(passRenderer, DrawBufferType.SKY, resetTransientState);
-            resetTransientState = false;
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
             this.drawOpa(passRenderer, DrawBufferType.AIR);
             this.drawOpa(passRenderer, DrawBufferType.SUN);
             this.drawXlu(passRenderer, DrawBufferType.SKY);
@@ -294,8 +291,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
-        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL, resetTransientState);
-        resetTransientState = false;
+        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
         this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
 
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
@@ -413,12 +409,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
-
-            resetTransientState = true;
         }
 
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT, resetTransientState);
-        resetTransientState = false;
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
         this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
