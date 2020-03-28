@@ -3,7 +3,7 @@ import * as RDP from "../Common/N64/RDP";
 import * as MIPS from "./mips";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
+import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType, StagingVertex } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
@@ -12,6 +12,10 @@ import { findNewTextures } from "./animation";
 import { MotionParser, Motion, Splash, Direction } from "./motion";
 import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
 import {parseParticles, ParticleSystem } from "./particles";
+import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { RenderData } from "../BanjoKazooie/render";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { EggProgram } from "./render";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -24,6 +28,7 @@ export interface Level {
     fishTable: FishEntry[];
     levelParticles: ParticleSystem;
     pesterParticles: ParticleSystem;
+    eggData?: Float32Array;
 }
 
 export interface Room {
@@ -316,7 +321,9 @@ export function parseLevel(archives: LevelArchive[]): Level {
     const levelParticles = parseParticles(archives[0].ParticleData, false);
     const pesterParticles = parseParticles(archives[1].ParticleData, true);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles };
+    const eggData = buildEggData(dataMap, level.Name);
+
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles, eggData };
 }
 
 function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: ObjectDef[]): void {
@@ -2237,4 +2244,67 @@ function parseFishTable(dataMap: DataMap, id: number): FishEntry[] {
     for (let i = 0; i < fish.length; i++)
         fish[i].probability /= total;
     return fish;
+}
+
+function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
+    let start = 0;
+    let count = 0;
+    if (id === 18) {
+        start = 0x8018A6F0;
+        count = 0x154;
+    } else if (id === 20) {
+        start = 0x8017C090;
+        count = 0x148;
+    } else
+        return undefined;
+    const data = new Float32Array(count * 6);
+    const view = dataMap.getView(start);
+    const dummyVertex = new StagingVertex();
+    let j = 0;
+    // add all of the end position vertices in order
+    // in principle we would have to be careful about matching the order of the original buffer, filtered through our processing,
+    // but it turns out all the triangles are just drawn in order, since there aren't shared vertices
+    for (let i = 0; i < count; i++) {
+        dummyVertex.setFromView(view, i << 4);
+        data[j++] = dummyVertex.x;
+        data[j++] = dummyVertex.y;
+        data[j++] = dummyVertex.z;
+        data[j++] = dummyVertex.c0;
+        data[j++] = dummyVertex.c1;
+        data[j++] = dummyVertex.c2;
+    }
+    return data;
+}
+
+export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Float32Array): void {
+    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertices.buffer);
+    data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
+
+    // clear existing input objects, but leave the buffers
+    device.destroyInputLayout(data.inputLayout);
+    device.destroyInputState(data.inputState);
+
+    const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+        { location: EggProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+        { location: EggProgram.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
+        { location: EggProgram.a_EndPosition, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_EndColor, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x04, },
+    ];
+
+    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+        { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+    ];
+
+    data.inputLayout = device.createInputLayout({
+        indexBufferFormat: GfxFormat.U32_R,
+        vertexBufferDescriptors,
+        vertexAttributeDescriptors,
+    });
+
+    data.inputState = device.createInputState(data.inputLayout, [
+        { buffer: data.vertexBuffer, byteOffset: 0 },
+        { buffer: eggBuffer, byteOffset: 0 }
+    ], { buffer: data.indexBuffer, byteOffset: 0 });
 }

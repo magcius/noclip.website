@@ -8,7 +8,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SnapPass, ModelRenderer, buildTransform } from './render';
-import { LevelArchive, parseLevel, isActor } from './room';
+import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
@@ -172,6 +172,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
                 const data = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.objectInfo[i].sharedOutput);
+                if (level.objectInfo[i].id === 601 || level.objectInfo[i].id === 602) // replace egg vertex buffers
+                    eggInputSetup(device, data, level.eggData!);
                 objectDatas.push(data);
                 sceneRenderer.renderData.push(data);
                 for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)

@@ -1,4 +1,4 @@
-import { ModelRenderer, buildTransform } from "./render";
+import { ModelRenderer, buildTransform, EggDrawCall } from "./render";
 import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room";
 import { RenderData } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
@@ -530,8 +530,8 @@ export class Actor extends ModelRenderer {
     public tangible = true;
     public globalPointer = 0;
 
-    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals) {
-        super(renderData, def.nodes, def.stateGraph.animations);
+    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals, isEgg = false) {
+        super(renderData, def.nodes, def.stateGraph.animations, false, isEgg);
         this.motionData.path = spawn.path;
         this.globalPointer = def.globalPointer;
         this.reset(globals);
@@ -984,8 +984,13 @@ export class Actor extends ModelRenderer {
                             result = MotionResult.Done;
                         } break;
                         case BasicMotionKind.Dynamic: {
-                            // TODO: handle dynamic vertices for eggs
-                            result = MotionResult.Done;
+                            const eggDC = this.renderers[1].drawCalls[0] as EggDrawCall;
+                            eggDC.separation += block.param * dt * 30;
+                            if (eggDC.separation >= 1) {
+                                eggDC.separation = 1;
+                                result = MotionResult.Done;
+                            } else
+                                result = MotionResult.None;
                         } break;
                     }
                 } break;
@@ -1895,8 +1900,8 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 137: return new Porygon(renderData, spawn, def, globals);
         case 144: return new Articuno(renderData, spawn, def, globals);
         case 145: return new Zapdos(renderData, spawn, def, globals);
-        case 601: return new ArticunoEgg(renderData, spawn, def, globals);
-        case 602: return new ZapdosEgg(renderData, spawn, def, globals);
+        case 601: return new ArticunoEgg(renderData, spawn, def, globals, true);
+        case 602: return new ZapdosEgg(renderData, spawn, def, globals, true);
         case 1026: return new MiniCrater(renderData, spawn, def, globals);
         case 1027: return new Crater(renderData, spawn, def, globals);
     }
