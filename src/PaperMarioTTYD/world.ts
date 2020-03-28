@@ -453,7 +453,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             tevMode = view.getUint8(tevConfigOffs + 0x00);
         }
 
-        const tevStages: GX_Material.TevStage[] = [];
         if (samplerEntryTableCount === 0) {
             // rgba = ras.rgba
             mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);

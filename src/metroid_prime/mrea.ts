@@ -1402,7 +1402,6 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             passIndex++;
         }
 
-        const index = i;
         const name = `Prime3Gen_${i}`;
 
         const cullMode = GX.CullMode.FRONT;

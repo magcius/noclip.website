@@ -25,6 +25,8 @@ export const enum DrawType {
     WARP_POD_PATH                  = 0x18,
     WATER_PLANT                    = 0x1B,
     FLAG                           = 0x1D,
+    ASTRO_DOME_SKY_CLEAR           = 0x1E,
+    ASTRO_DOME_ORBIT               = 0x1F,
     WATER_CAMERA_FILTER            = 0x3A,
 
     EFFECT_DRAW_3D                 = 0x47,
@@ -67,6 +69,7 @@ export const enum DrawBufferType {
     BLOOM_MODEL                         = 0x1E,
     CRYSTAL                             = 0x20,
     GLARING_LIGHT                       = 0x22,
+    ASTRO_DOME_SKY                      = 0x23,
     _3D_MODEL_FOR_2D                    = 0x24,
     MIRROR_MAP_OBJ                      = 0x27,
 }

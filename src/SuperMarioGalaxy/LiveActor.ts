@@ -388,10 +388,12 @@ export interface ZoneAndLayer {
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
 
 export const enum MessageType {
-    TicoRail_StartTalk = 0xCE,
-    MapPartsRailMover_TryRotate = 0xCB,
+    TicoRail_StartTalk                       = 0xCE,
+    MapPartsRailMover_TryRotate              = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
-    MapPartsRailMover_Vanish = 0xCF,
+    MapPartsRailMover_Vanish                 = 0xCF,
+    SphereSelector_SelectStart               = 0xE0,
+    SphereSelector_SelectEnd                 = 0xE1,
 }
 
 const scratchVec3a = vec3.create();
