@@ -936,9 +936,9 @@ export class Model implements BlockRenderer {
                 }
 
                 const jointTrans = vec3.clone(joint.translation);
-                if (this.isBetaFox) {
-                    vec3.sub(jointTrans, jointTrans, parentJointTrans);
-                }
+                // if (this.isBetaFox) {
+                //     vec3.sub(jointTrans, jointTrans, parentJointTrans);
+                // }
 
                 // if (this.isBetaFox) {
                 //     mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
@@ -965,11 +965,11 @@ export class Model implements BlockRenderer {
 
             let jointWalker = joint;
             while (true) {
-                mat4.mul(boneMtx, this.jointTfMatrices[jointWalker.boneNum], boneMtx);
                 mat4.mul(boneMtx, this.poseMatrices[jointWalker.boneNum], boneMtx);
-                // if (this.isBetaFox) {
-                //     mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
-                // }
+                mat4.mul(boneMtx, this.jointTfMatrices[jointWalker.boneNum], boneMtx);
+                if (this.isBetaFox) {
+                    mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
+                }
                 if (jointWalker.parent === 0xff) {
                     break;
                 }
