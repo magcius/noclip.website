@@ -603,7 +603,6 @@ class ImageEffectDirector extends NameObj {
         if (this.currentEffect === effect)
             return;
         this.currentEffect = effect;
-        console.log('changing effect', effect);
     }
 
     private updateAuto(sceneObjHolder: SceneObjHolder): void {
