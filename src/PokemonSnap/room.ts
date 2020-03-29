@@ -2054,6 +2054,9 @@ function fixupState(state: State, animationAddresses: number[]): void {
         case 0x802D9074: {
             state.blocks[0].edges[0].type = InteractionType.Unknown;
         } break;
+        case 0x802E4434: {
+            state.blocks[1].signals[0].condition = InteractionType.Unknown;
+        } break;
         // these spawns look like they were copied from elsewhere, without changing the ID
         // they work in game, but break our simple detection logic
         case 0x802D9B8C: {

@@ -272,7 +272,7 @@ export class NodeRenderer {
         buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
 
-    public animate(time: number): void {
+    public animate(time: number, matTime = time): void {
         if (this.animator.update(time)) {
             for (let i = ModelField.Pitch; i <= ModelField.ScaleZ; i++) {
                 if (this.animator.interpolators[i].op === AObjOP.NOP)
@@ -297,7 +297,7 @@ export class NodeRenderer {
             buildTransform(this.transform, this.translation, this.euler, this.scale);
         }
         for (let i = 0; i < this.materials.length; i++)
-            this.materials[i].update(time);
+            this.materials[i].update(matTime);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -325,6 +325,7 @@ export class ModelRenderer {
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
     public animationController = new AdjustableAnimationController(30);
+    public materialController?: AdjustableAnimationController;
     public currAnimation = -1;
     public headAnimationIndex = -1;
 
@@ -405,8 +406,9 @@ export class ModelRenderer {
         if (this.animationPaused)
             return;
         const time = this.animationController.getTimeInFrames();
+        const matTime = this.materialController ? this.materialController.getTimeInFrames() : time;
         for (let i = 0; i < this.renderers.length; i++) {
-            this.renderers[i].animate(time);
+            this.renderers[i].animate(time, matTime);
             if (this.renderers[i].animator.lastFunction >= 0 && i > 0) {
                 // function calls from anything but the root are particle effects
                 const arg = this.renderers[i].animator.lastFunction;
@@ -424,6 +426,8 @@ export class ModelRenderer {
             return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
+        if (this.materialController)
+            this.materialController.setTimeFromViewerInput(viewerInput);
         this.motion(viewerInput, globals);
         this.animate(globals);
         if (this.hidden)

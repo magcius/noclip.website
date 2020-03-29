@@ -188,6 +188,16 @@ export function getMaskedCMT(tile: TileState): number {
     return tile.cmt;
 }
 
+export function texturePadWidth(siz: ImageSize, line: number, width: number): number {
+    if (line === 0)
+        return 0;
+    const padTexels = (line << (4 - siz)) - width;
+    if (siz === ImageSize.G_IM_SIZ_4b)
+        return padTexels >>> 1;
+    else
+        return padTexels << (siz - 1);
+}
+
 export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
     if (tile.fmt === ImageFormat.G_IM_FMT_CI)

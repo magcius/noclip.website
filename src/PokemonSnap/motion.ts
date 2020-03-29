@@ -23,6 +23,7 @@ const enum MotionFuncs {
     FaceTarget      = 0x36148C,
     WalkToTarget    = 0x361748,
     WalkFromTarget  = 0x36194C,
+    WalkFromTarget2 = 0x361B20,
     SetTarget       = 0x361B50,
     StepToPoint     = 0x361B68,
     ApproachPoint   = 0x361E58,
@@ -368,6 +369,15 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     maxTurn: this.getFloatValue(a2),
                     flags: a3.value | MoveFlags.Ground,
                     away: func === MotionFuncs.WalkFromTarget,
+                });
+            } break;
+            case MotionFuncs.WalkFromTarget2: {
+                this.blocks.push({
+                    kind: "walkToTarget",
+                    radius: this.getFloatValue(a1),
+                    maxTurn: 0.1,
+                    flags: MoveFlags.Ground,
+                    away: true,
                 });
             } break;
             case MotionFuncs.FaceTarget: {
