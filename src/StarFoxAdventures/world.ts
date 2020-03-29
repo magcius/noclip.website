@@ -201,7 +201,7 @@ class WorldRenderer extends SFARenderer {
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         // Give Fox a pose
-        const animateFox = false;
+        const animateFox = true;
         if (animateFox && this.models[0] !== undefined) {
             const model = this.models[0]!;
             const keyframe = this.anim.keyframes[0];
