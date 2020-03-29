@@ -246,6 +246,7 @@ export class Model implements BlockRenderer {
     public joints: Joint[] = [];
     public weights: Weight[] = [];
     public poseMatrices: mat4[] = [];
+    private jointTfMatrices: mat4[] = [];
     public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
     public bindMatrices: mat4[] = [];
     public invBindMatrices: mat4[] = [];
@@ -254,6 +255,10 @@ export class Model implements BlockRenderer {
     public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
+
+    // XXX: Beta Fox (swapcircle model 0) seems to have different joint rules than other models.
+    // TODO: Find a way to auto-detect this or fix whatever is broken.
+    private isBetaFox: boolean = false;
 
     constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
@@ -897,9 +902,35 @@ export class Model implements BlockRenderer {
         const numBones = this.joints.length + this.weights.length;
         if (numBones !== 0) {
             this.boneMatrices = nArray(numBones, () => mat4.create());
+            this.jointTfMatrices = nArray(this.joints.length, () => mat4.create());
             this.poseMatrices = nArray(this.joints.length, () => mat4.create());
             this.bindMatrices = nArray(this.joints.length, () => mat4.create());
             this.invBindMatrices = nArray(this.joints.length, () => mat4.create());
+
+            for (let i = 0; i < this.joints.length; i++) {
+                const joint = this.joints[i];
+                if (joint.boneNum !== i) {
+                    throw Error(`wtf, dst bone num doesn't match index...`);
+                }
+
+                const parentBindTrans = vec3.create();
+                if (joint.parent != 0xff) {
+                    if (joint.parent >= i) {
+                        throw Error(`Bad joint hierarchy in model`);
+                    }
+                    vec3.copy(parentBindTrans, this.joints[joint.parent].bindTranslation);
+                }
+
+                const bindTranslation = vec3.clone(joint.bindTranslation);
+                if (this.isBetaFox) {
+                    vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
+                }
+
+                mat4.fromTranslation(this.jointTfMatrices[i], joint.translation);
+                mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
+                mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
+            }
+
             this.updateBoneMatrices();
         } else {
             this.boneMatrices = [mat4.create()];
@@ -907,42 +938,32 @@ export class Model implements BlockRenderer {
     }
 
     public updateBoneMatrices() {
-        // XXX: Beta Fox (swapcircle model 0) seems to have different joint rules than other models.
-        // TODO: Find a way to auto-detect this or fix whatever is broken.
-        const isBetaFox = false;
 
         // Compute joint bones
         // console.log(`computing ${this.joints.length} rigid joint bones`);
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             const parentMtx = mat4.create();
-            const parentBindTrans = vec3.create();
             if (joint.parent != 0xff) {
                 if (joint.parent >= i) {
                     throw Error(`Bad joint hierarchy in model`);
                 }
 
                 mat4.copy(parentMtx, this.boneMatrices[joint.parent]);
-                vec3.copy(parentBindTrans, this.joints[joint.parent].bindTranslation);
             }
-
-            const bindTranslation = vec3.clone(joint.bindTranslation);
-            if (isBetaFox) {
-                vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
-            }
-
-            mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
-            mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
             
             const jointTrans = mat4.create();
             mat4.fromTranslation(jointTrans, joint.translation);
 
             const boneMtx = this.boneMatrices[joint.boneNum];
             mat4.identity(boneMtx);
-            mat4.mul(boneMtx, jointTrans, boneMtx);
-            mat4.mul(boneMtx, this.poseMatrices[joint.boneNum], boneMtx);
-            mat4.mul(boneMtx, boneMtx, parentMtx);
-            if (isBetaFox) {
+            // let jointWalker = joint;
+            // while (jointWalker.parent != 0xff) {
+                mat4.mul(boneMtx, jointTrans, boneMtx);
+                mat4.mul(boneMtx, this.poseMatrices[joint.boneNum], boneMtx);
+                mat4.mul(boneMtx, boneMtx, parentMtx);
+            // }
+            if (this.isBetaFox) {
                 mat4.mul(boneMtx, boneMtx, this.invBindMatrices[i]);
             }
         }
