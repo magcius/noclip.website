@@ -1,5 +1,5 @@
 
-import { SceneObjHolder, SceneObj } from "./Main";
+import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { NameObj } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
 import { vec3 } from "gl-matrix";
@@ -23,14 +23,6 @@ import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "..
 import { MathConstants } from "../MathHelpers";
 
 const scratchVec3 = vec3.create();
-
-abstract class ImageEffectState {
-    public abstract onChange(sceneObjHolder: SceneObjHolder): void;
-
-    public update(sceneObjHolder: SceneObjHolder): void {
-        // TODO(jstpierre)
-    }
-}
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -251,8 +243,13 @@ export class BloomPostFXRenderer {
         const parameterBufferOffs = uniformBuffer.allocateChunk(4);
         const d = uniformBuffer.mapBufferF32(parameterBufferOffs, 4);
 
+        const bloomIntensity = (bloomEffect.bloomIntensity * bloomEffect.strength) / 0xFF;
+        const threshold = bloomEffect.threshold / 0xFF;
+        const intensity1 = bloomEffect.intensity1 / 0xFF;
+        const intensity2 = bloomEffect.intensity2 / 0xFF;
+
         let offs = parameterBufferOffs;
-        offs += fillVec4(d, offs, bloomEffect.bloomIntensity / 0xFF, bloomEffect.threshold / 0xFF, bloomEffect.intensity1 / 0xFF, bloomEffect.intensity2 / 0xFF);
+        offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
 
         return parameterBufferOffs;
     }
@@ -352,7 +349,51 @@ export class BloomPostFXRenderer {
     }
 }
 
-export class BloomEffect extends NameObj {
+abstract class ImageEffectBase extends NameObj {
+    public active = false;
+    public visible = false;
+    public strength = 0.0;
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const strengthAdj = getDeltaTimeFrames(viewerInput) / 30.0;
+
+        if (this.active) {
+            this.visible = true;
+            this.strength += strengthAdj;
+            if (this.strength > 1.0)
+                this.strength = 1.0;
+        } else if (this.visible) {
+            this.strength -= strengthAdj;
+            if (this.strength <= 0.0) {
+                this.strength = 0.0;
+                this.visible = false;
+            }
+        }
+
+        this.calcAnimSub(sceneObjHolder);
+    }
+
+    public calcAnimSub(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOff(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOff(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    connectToScene(sceneObjHolder, nameObj, -1, 4, -1, -1);
+}
+
+export class BloomEffect extends ImageEffectBase {
     public bloomIntensity: number = 0;
     public threshold: number = 0;
     public intensity1: number = 0;
@@ -361,13 +402,59 @@ export class BloomEffect extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'BloomEffect');
 
+        connectToSceneNormalBloom(sceneObjHolder, this);
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
     }
 }
 
-class ImageEffectStateNull extends ImageEffectState {
+export function getImageEffectDirector(sceneObjHolder: SceneObjHolder): ImageEffectDirector {
+    return sceneObjHolder.imageEffectSystemHolder!.imageEffectDirector;
+}
+
+abstract class ImageEffectState {
     public onChange(sceneObjHolder: SceneObjHolder): void {
     }
+
+    public getEffect(sceneObjHolder: SceneObjHolder): ImageEffectBase | null {
+        return null;
+    }
+
+    public update(sceneObjHolder: SceneObjHolder): void {
+        const imageDirector = getImageEffectDirector(sceneObjHolder);
+        const effect = this.getEffect(sceneObjHolder);
+
+        if (imageDirector.currentEffect === effect) {
+            // We are the current effect.
+            if (effect === null)
+                return;
+
+            if (effect.active)
+                return;
+
+            effect.active = true;
+            effect.notifyTurnOn(sceneObjHolder);
+        } else {
+            if (imageDirector.currentEffect !== null) {
+                if (imageDirector.currentEffect.active) {
+                    imageDirector.currentEffect.active = false;
+                    imageDirector.currentEffect.notifyTurnOff(sceneObjHolder);
+                }
+
+                if (imageDirector.currentEffect.visible)
+                    return;
+            }
+
+            if (effect !== null) {
+                effect.active = true;
+                effect.notifyTurnOn(sceneObjHolder);
+            }
+
+            imageDirector.setCurrentEffect(effect);
+        }
+    }
+}
+
+class ImageEffectStateNull extends ImageEffectState {
 }
 
 class ImageEffectStateBloomNormal extends ImageEffectState {
@@ -387,6 +474,10 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
         this.reset = true;
     }
 
+    public getEffect(sceneObjHolder: SceneObjHolder): ImageEffectBase | null {
+        return sceneObjHolder.bloomEffect!;
+    }
+
     public update(sceneObjHolder: SceneObjHolder): void {
         if (this.reset) {
             this.bloomIntensity = this.bloomIntensityTarget;
@@ -395,10 +486,10 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
             this.intensity2 = this.intensity2Target;
             this.reset = false;
         } else {
-            this.bloomIntensity += Math.min(0.1 * (this.bloomIntensityTarget - this.bloomIntensity + 0.5), 255.0);
-            this.threshold      += Math.min(0.1 * (this.thresholdTarget - this.threshold + 0.5), 255.0);
-            this.intensity1     += Math.min(0.1 * (this.intensity1Target - this.intensity1 + 0.5), 255.0);
-            this.intensity2     += Math.min(0.1 * (this.intensity2Target - this.intensity2 + 0.5), 255.0);
+            this.bloomIntensity += Math.min(0.1 * (this.bloomIntensityTarget - this.bloomIntensity), 255.0);
+            this.threshold      += Math.min(0.1 * (this.thresholdTarget - this.threshold), 255.0);
+            this.intensity1     += Math.min(0.1 * (this.intensity1Target - this.intensity1), 255.0);
+            this.intensity2     += Math.min(0.1 * (this.intensity2Target - this.intensity2), 255.0);
         }
 
         const bloomEffect = sceneObjHolder.bloomEffect!;
@@ -444,6 +535,7 @@ class ImageEffectDirector extends NameObj {
     public currentState: ImageEffectState;
     public stateBloomNormal: ImageEffectStateBloomNormal;
     public stateNull: ImageEffectStateNull;
+    public currentEffect: ImageEffectBase | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'ImageEffectDirector');
@@ -456,8 +548,8 @@ class ImageEffectDirector extends NameObj {
         connectToSceneImageEffectMovement(sceneObjHolder, this);
     }
 
-    public isOnNormalBloom(): boolean {
-        return this.currentState === this.stateBloomNormal;
+    public isOnNormalBloom(sceneObjHolder: SceneObjHolder): boolean {
+        return this.currentEffect === this.stateBloomNormal.getEffect(sceneObjHolder);
     }
 
     public turnOnNormal(sceneObjHolder: SceneObjHolder): void {
@@ -505,6 +597,13 @@ class ImageEffectDirector extends NameObj {
 
     public setNormalBloomBlurIntensity2(v: number) {
         this.stateBloomNormal.setIntensity2(v);
+    }
+
+    public setCurrentEffect(effect: ImageEffectBase | null): void {
+        if (this.currentEffect === effect)
+            return;
+        this.currentEffect = effect;
+        console.log('changing effect', effect);
     }
 
     private updateAuto(sceneObjHolder: SceneObjHolder): void {
