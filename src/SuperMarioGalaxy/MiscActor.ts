@@ -4101,7 +4101,8 @@ export class WarpPod extends LiveActor {
         const hasSaveFlag = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
         const astroDomeNum = getJMapInfoBool(fallback(getJMapInfoArg4(infoIter), -1));
         const colorIndex = fallback(getJMapInfoArg6(infoIter), 0);
-        
+        this.isPairPrimary = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
+
         let color = warpPodColorTable[colorIndex];
         if (color === undefined) {
             // Seems to happen in SMG2 sometimes; they might have expanded the color table.
@@ -4130,27 +4131,30 @@ export class WarpPod extends LiveActor {
             this.glowEffect(sceneObjHolder);
         }
 
+        // This isn't quite the same as original, which has a WarpPodMgr which draws all of the paths...
+        if (this.visible) {
+            connectToScene(sceneObjHolder, this, 0x22, 0x05, DrawBufferType.MAP_OBJ, DrawType.WARP_POD_PATH);
+        } else {
+            connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+        }
+
         this.groupId = assertExists(getJMapInfoGroupId(infoIter));
         // Look for the pair. If it's spawned, then init.
         const pairedWarpPod = this.lookForPair(sceneObjHolder);
         if (pairedWarpPod !== null) {
             this.initPair(sceneObjHolder, pairedWarpPod);
             pairedWarpPod.initPair(sceneObjHolder, this);
-        }
 
-        // This isn't quite the same as original, which has a WarpPodMgr which draws all of the paths...
-        if (this.visible) {
-            connectToScene(sceneObjHolder, this, 0x22, 5, DrawBufferType.MAP_OBJ, DrawType.WARP_POD_PATH);
-        } else {
-            connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+            assert(this.isPairPrimary !== pairedWarpPod.isPairPrimary);
         }
     }
 
     private initPair(sceneObjHolder: SceneObjHolder, pairedWarpPod: WarpPod): void {
         this.pairedWarpPod = pairedWarpPod;
 
-        // The primary pod is whichever of the two has the lowest translation.
-        this.isPairPrimary = compareVec3(this.translation, this.pairedWarpPod.translation) < 0;
+        // If neither explicitly marks as the primary, the primary is whichever of the two has the lowest translation.
+        if (!this.isPairPrimary && !this.pairedWarpPod.isPairPrimary)
+            this.isPairPrimary = compareVec3(this.translation, this.pairedWarpPod.translation) < 0;
 
         if (this.isPairPrimary)
             this.initDraw(sceneObjHolder);
@@ -4160,52 +4164,58 @@ export class WarpPod extends LiveActor {
         if (this.pairedWarpPod === null || !this.isPairPrimary)
             return;
 
-        const numPoints = 60;
+        // Quarter circles.
+        const arcAngle = MathConstants.TAU / 4;
+
+        const halfArcAngle = arcAngle / 2;
+
+        const numPoints = 120;
         this.warpPathPoints = [];
 
         const delta = vec3.create();
         vec3.sub(delta, this.pairedWarpPod.translation, this.translation);
-        const mag = vec3.length(delta);
+        const distance = vec3.length(delta);
 
         const upVec = vec3.create();
         calcUpVec(upVec, this);
-        const negUpVec = vec3.create();
-        vec3.negate(negUpVec, upVec);
+        const gravityVec = vec3.create();
+        vec3.negate(gravityVec, upVec);
 
-        const crossA = vec3.create(), crossB = vec3.create();
-        vec3.cross(crossA, delta, negUpVec);
-        vec3.normalize(crossA, crossA);
-        vec3.cross(crossB, crossA, delta);
-        vec3.normalize(crossB, crossB);
+        // Coordinate frame of the circle -- orthonormal frame based around the front vec of the delta between the two positions.
+        const circleRight = vec3.create(), circleDown = vec3.create();
+        vec3.cross(circleRight, delta, gravityVec);
+        vec3.normalize(circleRight, circleRight);
+        vec3.cross(circleDown, circleRight, delta);
+        vec3.normalize(circleDown, circleDown);
 
         const halfway = vec3.create();
-        vec3.scale(halfway, delta, 0.5);
-        vec3.add(halfway, this.translation, halfway);
+        vec3.scaleAndAdd(halfway, this.translation, delta, 0.5);
 
-        const mag2 = 0.5 * mag;
-        const b = mag2 / Math.sin(MathConstants.TAU / 8);
-        let a = (b * b) - (mag2 * mag2);
-        if (a >= 0) {
-            const norm = 1 / Math.sqrt(a);
-            const anorm = a * norm;
-            const cubic = (anorm * norm) - 3.0;
-            a = -cubic * anorm * 0.5;
-        }
+        const chordHalfLength = 0.5 * distance;
+        const arcHalfLength = chordHalfLength / Math.sin(halfArcAngle);
+        let a = (arcHalfLength * arcHalfLength) - (chordHalfLength * chordHalfLength);
+        if (a >= 0)
+            a /= Math.sqrt(a);
 
-        const ca = vec3.create(), cb = vec3.create();
-        vec3.scaleAndAdd(ca, halfway, crossB, a);
-        vec3.scale(cb, crossB, -b);
+        const chordOffset = vec3.create();
+        vec3.scaleAndAdd(chordOffset, halfway, circleDown, a);
+
+        const cb = vec3.create();
+        vec3.scale(cb, circleDown, -arcHalfLength);
 
         for (let i = 0; i < numPoints; i++) {
-            const v = vec3.create();
-            const ha = 1.0 - ((i - numPoints / 2) / numPoints);
-            const c = (Math.sin(Math.PI * ha) + 1.0) * 0.5;
-            const rad = lerp(-MathConstants.TAU / 8, MathConstants.TAU / 8, c);
-            mat4.fromRotation(scratchMatrix, rad, crossA);
+            // Concentrate more points closer to the beginning/end.
+            const t = (Math.sin(Math.PI * ((i - numPoints / 2) / numPoints)) + 1.0) * 0.5;
 
-            vec3.transformMat4(v, cb, scratchMatrix);
-            vec3.add(v, v, ca);
-            vec3.scaleAndAdd(v, v, upVec, 200);
+            const theta = lerp(-halfArcAngle, halfArcAngle, t);
+            mat4.fromRotation(scratchMatrix, theta, circleRight);
+
+            const v = vec3.create();
+            transformVec3Mat4w0(v, scratchMatrix, cb);
+            vec3.add(v, v, chordOffset);
+
+            // Connect to the center of the glow.
+            vec3.scaleAndAdd(v, v, upVec, 200.0);
 
             this.warpPathPoints.push(v);
         }
