@@ -42,14 +42,14 @@ export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
 }
 
-// Reads bitfields. Bits are pulled from the least significant bits of each byte
+// Reads bitfields. Bits are pulled from the most significant bits of each byte
 // in the sequence.
-export class LowBitReader {
+export class HighBitReader {
     dv: DataView
     baseOffs: number;
-    offs: number
-    num: number
-    buf: number
+    offs: number;
+    num: number;
+    buf: number;
 
     constructor(dv: DataView, offs: number = 0) {
         this.dv = dv;
@@ -60,6 +60,54 @@ export class LowBitReader {
     }
 
     public peek(bits: number): number {
+        if (bits > 24) {
+            throw Error(`Cannot read more than 24 bits`);
+        }
+
+        while (this.num < bits) {
+            this.buf |= this.dv.getUint8(this.offs) << (24 - this.num);
+            this.offs++;
+            this.num += 8;
+        }
+
+        return (this.buf >>> (32 - bits)) & ((1 << bits) - 1);
+    }
+
+    public drop(bits: number) {
+        this.peek(bits); // Ensure buffer has bits to drop
+        this.buf <<= bits;
+        this.num -= bits;
+    }
+
+    public get(bits: number): number {
+        const x = this.peek(bits);
+        this.drop(bits);
+        return x;
+    }
+}
+
+// Reads bitfields. Bits are pulled from the least significant bits of each byte
+// in the sequence.
+export class LowBitReader {
+    dv: DataView
+    baseOffs: number;
+    offs: number;
+    num: number;
+    buf: number;
+
+    constructor(dv: DataView, offs: number = 0) {
+        this.dv = dv;
+        this.baseOffs = offs;
+        this.offs = offs;
+        this.num = 0;
+        this.buf = 0;
+    }
+
+    public peek(bits: number): number {
+        if (bits > 32) {
+            throw Error(`Cannot read more than 32 bits`);
+        }
+
         while (this.num < bits) {
             this.buf |= this.dv.getUint8(this.offs) << this.num;
             this.offs++;

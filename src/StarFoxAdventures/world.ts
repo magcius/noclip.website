@@ -23,10 +23,11 @@ import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
 import { Model, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController } from './animation';
+import { SFAAnimationController, AnimFile, Anim } from './animation';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
+const atmosTextureNum = 1;
 
 function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -73,10 +74,10 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     const modelOffs = modelTabValue & 0xffffff;
     const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
     
-    // window.main.downloadModel = () => {
-    //     const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
-    //     aEl.click();
-    // };
+    window.main.downloadModel = () => {
+        const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
+        aEl.click();
+    };
     
     try {
         return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion);
@@ -91,21 +92,19 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private anim: Anim) {
         super(device, animController);
 
         packetParams.clear();
 
         const atmos = this.envfxMan.atmosphere;
-        for (let i = 0; i < 8; i++) {
-            const tex = atmos.textures[i]!;
-            materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
-            materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
-            materialParams.m_TextureMapping[i].width = tex.width;
-            materialParams.m_TextureMapping[i].height = tex.height;
-            materialParams.m_TextureMapping[i].lodBias = 0.0;
-            mat4.identity(materialParams.u_TexMtx[i]);
-        }
+        const tex = atmos.textures[atmosTextureNum]!;
+        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+        materialParams.m_TextureMapping[0].width = tex.width;
+        materialParams.m_TextureMapping[0].height = tex.height;
+        materialParams.m_TextureMapping[0].lodBias = 0.0;
+        mat4.identity(materialParams.u_TexMtx[0]);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -136,7 +135,7 @@ class WorldRenderer extends SFARenderer {
         this.beginPass(viewerInput, true);
 
         const atmos = this.envfxMan.atmosphere;
-        const atmosTexture = atmos.textures[0]!;
+        const atmosTexture = atmos.textures[atmosTextureNum]!;
 
         // Extract pitch
         const cameraFwd = vec3.create();
@@ -201,9 +200,29 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        // Give Fox a pose
+        if (this.models[0] !== undefined) {
+            const model = this.models[0]!;
+            const keyframe = this.anim.keyframes[0];
+            for (let i = 0; i < keyframe.poses.length && i < model.joints.length; i++) {
+                const pose = keyframe.poses[i];
+                const poseMtx = mat4.create();
+                mat4.rotateY(poseMtx, poseMtx, this.animController.animController.getTimeInSeconds());
+                // mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                // mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                // mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation + this.animController.animController.getTimeInFrames());
+                // mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+                // mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+                model.setJointPose(i, poseMtx);
+            }
+            model.updateBoneMatrices();
+        }
+
         // Render opaques
         this.beginPass(viewerInput);
-        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        if (this.mapInstance !== null) {
+            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        }
         
         const mtx = mat4.create();
         const ctx = getDebugOverlayCanvas2D();
@@ -224,10 +243,18 @@ class WorldRenderer extends SFARenderer {
             }
         }
         
+        const testCols = Math.ceil(Math.sqrt(this.models.length));
+        let col = 0;
+        let row = 0;
         for (let i = 0; i < this.models.length; i++) {
             if (this.models[i] !== null) {
-                mat4.fromTranslation(mtx, [i * 30, 0, 0]);
+                mat4.fromTranslation(mtx, [col * 60, row * 60, 0]);
                 this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]!);
+                col++;
+                if (col >= testCols) {
+                    col = 0;
+                    row++;
+                }
             }
         }
         
@@ -235,13 +262,18 @@ class WorldRenderer extends SFARenderer {
 
         // Render waters, furs and translucents
         this.beginPass(viewerInput);
-        this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-        this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        if (this.mapInstance !== null) {
+            this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+            this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        }
         this.endPass(device);
 
-        for (let drawStep = 1; drawStep < this.mapInstance.getNumDrawSteps(); drawStep++) {
+        const NUM_DRAW_STEPS = 3;
+        for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
             this.beginPass(viewerInput);
-            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            if (this.mapInstance !== null) {
+                this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            }
             this.endPass(device);
         }    
     }
@@ -275,10 +307,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const [_1, _2, _3, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
+        const animFile = new AnimFile(this.gameInfo);
+        const [_1, _2, _3, _4, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),
             earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
+            animFile.create(dataFetcher, this.subdir),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
@@ -672,8 +706,32 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, mapInstance, objectInstances, testModels);
+        const anim = animFile.getAnim(0xdc / 4);
+
+        const enableMap = true;
+        const enableObjects = true;
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, anim);
         return renderer;
     }
 }

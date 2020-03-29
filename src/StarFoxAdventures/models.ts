@@ -30,14 +30,15 @@ export class ModelInstance {
     private packetParams = new PacketParams();
     private material: SFAMaterial;
     private sceneTextureSampler: GfxSampler | null = null;
-    private pnMatrices: mat4[] = nArray(10, () => mat4.create());
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
+    private pnMatrixMap: number[] = nArray(10, () => 0);
+
+    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
         this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
@@ -56,10 +57,9 @@ export class ModelInstance {
         }
     }
 
-    public setPnMatrices(mats: mat4[]) {
-        this.pnMatrices = [];
-        for (let i = 0; i < mats.length; i++) {
-            this.pnMatrices.push(mat4.clone(mats[i]));
+    public setPnMatrixMap(pnMatrixMap: number[]) {
+        for (let i = 0; i < pnMatrixMap.length; i++) {
+            this.pnMatrixMap[i] = pnMatrixMap[i];
         }
     }
 
@@ -93,9 +93,6 @@ export class ModelInstance {
         }
         
         this.packetParams.clear();
-        for (let i = 0; i < this.pnMatrices.length && i < this.packetParams.u_PosMtx.length; i++) {
-            mat4.copy(this.packetParams.u_PosMtx[i], this.pnMatrices[i]);
-        }
 
         const renderInst = renderInstManager.newRenderInst();
         this.shapeHelper.setOnRenderInst(renderInst);
@@ -150,7 +147,7 @@ export class ModelInstance {
         }
 
         this.viewState.viewerInput = viewerInput;
-        mat4.mul(this.scratchMtx, this.pnMatrices[0], modelMatrix);
+        mat4.mul(this.scratchMtx, this.matrices[this.pnMatrixMap[0]], modelMatrix);
         this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
 
@@ -165,7 +162,7 @@ export class ModelInstance {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            mat4.mul(this.scratchMtx, modelMatrix, this.pnMatrices[i]);
+            mat4.mul(this.scratchMtx, modelMatrix, this.matrices[this.pnMatrixMap[i]]);
             this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, this.scratchMtx);
         }
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
@@ -176,8 +173,9 @@ export class ModelInstance {
 
 interface Joint {
     parent: number;
+    boneNum: number;
     translation: vec3;
-    worldTranslation: vec3;
+    bindTranslation: vec3;
 }
 
 interface Weight {
@@ -232,6 +230,7 @@ export class Model implements BlockRenderer {
     public models: ModelInstance[][] = [];
     public joints: Joint[] = [];
     public weights: Weight[] = [];
+    public poseMatrices: mat4[] = [];
     public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
     public bindMatrices: mat4[] = [];
     public invBindMatrices: mat4[] = [];
@@ -354,7 +353,7 @@ export class Model implements BlockRenderer {
                     hasYTranslate: false,
                 };
             }
-        } else {
+        } else { // this.modelVersion === ModelVersion.Final
             // FIXME: This field is NOT a model type and doesn't reliably indicate
             // the type of model.
             const modelType = blockDv.getUint16(4);
@@ -478,8 +477,9 @@ export class Model implements BlockRenderer {
             for (let i = 0; i < jointCount; i++) {
                 this.joints.push({
                     parent: blockDv.getUint8(offs),
+                    boneNum: blockDv.getUint8(offs + 0x1) & 0x7f,
                     translation: readVec3(blockDv, offs + 0x4),
-                    worldTranslation: readVec3(blockDv, offs + 0x10),
+                    bindTranslation: readVec3(blockDv, offs + 0x10),
                 });
                 offs += 0x1c;
             }
@@ -504,8 +504,6 @@ export class Model implements BlockRenderer {
                 }
             }
 
-            this.computeBoneMatrices();
-
             // const transIsPresent = blockDv.getUint32(0xa4);
             // if (transIsPresent != 0) {
             //     console.log(`transIsPresent was 0x${transIsPresent.toString(16)} in this model`);
@@ -513,6 +511,8 @@ export class Model implements BlockRenderer {
             //     console.log(`trans: ${this.modelTranslate}`);
             // }
         }
+
+        this.initBoneMatrices();
 
         const shaderOffset = blockDv.getUint32(fields.shaderOffset);
         const shaderCount = blockDv.getUint8(fields.shaderCount);
@@ -636,9 +636,7 @@ export class Model implements BlockRenderer {
             this.yTranslate = 0;
         }
 
-        this.computeBoneMatrices();
-
-        const pnMatrices = nArray(0x10, () => mat4.create());
+        const pnMatrixMap: number[] = nArray(10, () => 0);
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
@@ -750,9 +748,9 @@ export class Model implements BlockRenderer {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
-            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
+            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newModel.setMaterial(material);
-            newModel.setPnMatrices(pnMatrices);
+            newModel.setPnMatrixMap(pnMatrixMap);
 
             return newModel;
         }
@@ -809,9 +807,9 @@ export class Model implements BlockRenderer {
                             const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
                             self.waters.push({ model: newModel });
                         } else {
-                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController);
+                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newModel.setMaterial(curMaterial!);
-                            newModel.setPnMatrices(pnMatrices);
+                            newModel.setPnMatrixMap(pnMatrixMap);
                             models.push(newModel);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
@@ -841,19 +839,21 @@ export class Model implements BlockRenderer {
                 }
                 case 4: // Set weights (skipped by SFA block renderer)
                     const numBones = bits.get(4);
+                    if (numBones > 10) {
+                        throw Error(`Too many PN matrices`);
+                    }
                     if (numBones > self.boneMatrices.length) {
                         // Skip
                         for (let i = 0; i < numBones; i++) {
                             bits.get(8);
                         }
                     } else {
-                        self.computeBoneMatrices();
                         for (let i = 0; i < numBones; i++) {
                             const boneId = bits.get(8);
                             if (boneId >= self.boneMatrices.length) {
                                 throw Error(`Invalid bone ID ${boneId} / ${self.boneMatrices.length}`);
                             }
-                            pnMatrices[i] = self.boneMatrices[boneId];
+                            pnMatrixMap[i] = boneId;
                         }
                     }
                     break;
@@ -873,11 +873,20 @@ export class Model implements BlockRenderer {
         }
     }
 
-    public computeBoneMatrices() {
-        this.boneMatrices = [];
-        this.bindMatrices = [];
-        this.invBindMatrices = [];
+    private initBoneMatrices() {
+        const numBones = this.joints.length + this.weights.length;
+        if (numBones !== 0) {
+            this.boneMatrices = nArray(numBones, () => mat4.create());
+            this.poseMatrices = nArray(this.joints.length, () => mat4.create());
+            this.bindMatrices = nArray(this.joints.length, () => mat4.create());
+            this.invBindMatrices = nArray(this.joints.length, () => mat4.create());
+            this.updateBoneMatrices();
+        } else {
+            this.boneMatrices = [mat4.create()];
+        }
+    }
 
+    public updateBoneMatrices() {
         // XXX: Beta Fox (swapcircle model 0) seems to have different joint rules than other models.
         // TODO: Find a way to auto-detect this or fix whatever is broken.
         const isBetaFox = false;
@@ -887,36 +896,31 @@ export class Model implements BlockRenderer {
         for (let i = 0; i < this.joints.length; i++) {
             const joint = this.joints[i];
             const parentMtx = mat4.create();
-            const parentWorldTrans = vec3.create();
+            const parentBindTrans = vec3.create();
             if (joint.parent != 0xff) {
                 if (joint.parent >= i) {
                     throw Error(`Bad joint hierarchy in model`);
                 }
 
                 mat4.copy(parentMtx, this.boneMatrices[joint.parent]);
-                vec3.copy(parentWorldTrans, this.joints[joint.parent].worldTranslation);
+                vec3.copy(parentBindTrans, this.joints[joint.parent].bindTranslation);
             }
 
-            const bindTranslation = vec3.clone(joint.worldTranslation);
+            const bindTranslation = vec3.clone(joint.bindTranslation);
             if (isBetaFox) {
-                vec3.sub(bindTranslation, bindTranslation, parentWorldTrans);
+                vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
             }
 
-            const bindMtx = mat4.create();
-            mat4.fromTranslation(bindMtx, bindTranslation);
-            this.bindMatrices.push(bindMtx);
-
-            const invBind = mat4.create();
-            mat4.invert(invBind, bindMtx);
-            this.invBindMatrices.push(invBind);
+            mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
+            mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
             
-            const mtx = mat4.create();
-            mat4.fromTranslation(mtx, joint.translation);
-            mat4.mul(mtx, mtx, parentMtx);
+            const boneMtx = this.boneMatrices[joint.boneNum];
+            mat4.fromTranslation(boneMtx, joint.translation);
+            mat4.mul(boneMtx, boneMtx, this.poseMatrices[joint.boneNum]);
+            mat4.mul(boneMtx, boneMtx, parentMtx);
             if (isBetaFox) {
-                mat4.mul(mtx, mtx, invBind);
+                mat4.mul(boneMtx, boneMtx, this.invBindMatrices[i]);
             }
-            this.boneMatrices.push(mtx);
         }
 
         // Compute blended bones
@@ -937,6 +941,10 @@ export class Model implements BlockRenderer {
             mat4.add(mat0, mat0, mat1);
             this.boneMatrices.push(mat0);
         }
+    }
+
+    public setJointPose(jointNum: number, mtx: mat4) {
+        mat4.copy(this.poseMatrices[jointNum], mtx);
     }
 
     public getMaterials() {
