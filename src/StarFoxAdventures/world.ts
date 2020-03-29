@@ -177,7 +177,7 @@ class WorldRenderer extends SFARenderer {
         model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
 
         // Draw bones
-        const drawBones = false;
+        const drawBones = true;
         if (drawBones) {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 1; i < model.joints.length; i++) {
@@ -208,7 +208,7 @@ class WorldRenderer extends SFARenderer {
             for (let i = 0; i < keyframe.poses.length && i < model.joints.length; i++) {
                 const pose = keyframe.poses[i];
                 const poseMtx = mat4.create();
-                mat4.rotateY(poseMtx, poseMtx, this.animController.animController.getTimeInSeconds());
+                mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
                 // mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                 // mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
                 // mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation + this.animController.animController.getTimeInFrames());
@@ -707,26 +707,26 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
-        console.log(`Loading a model with PNMTX 9 stuff....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
+        // console.log(`Loading a model with PNMTX 9 stuff....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
         const anim = animFile.getAnim(0xdc / 4);
 

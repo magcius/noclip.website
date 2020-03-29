@@ -934,9 +934,13 @@ export class Model implements BlockRenderer {
             mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
             mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
             
+            const jointTrans = mat4.create();
+            mat4.fromTranslation(jointTrans, joint.translation);
+
             const boneMtx = this.boneMatrices[joint.boneNum];
-            mat4.fromTranslation(boneMtx, joint.translation);
-            mat4.mul(boneMtx, boneMtx, this.poseMatrices[joint.boneNum]);
+            mat4.identity(boneMtx);
+            mat4.mul(boneMtx, jointTrans, boneMtx);
+            mat4.mul(boneMtx, this.poseMatrices[joint.boneNum], boneMtx);
             mat4.mul(boneMtx, boneMtx, parentMtx);
             if (isBetaFox) {
                 mat4.mul(boneMtx, boneMtx, this.invBindMatrices[i]);
