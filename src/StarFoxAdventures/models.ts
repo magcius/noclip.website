@@ -936,10 +936,10 @@ export class Model implements BlockRenderer {
             const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
             mat4.mul(mat1, mat1, invBind1);
 
+            const boneMtx = this.boneMatrices[this.joints.length + i];
             mat4.multiplyScalar(mat0, mat0, weight.influence0);
             mat4.multiplyScalar(mat1, mat1, weight.influence1);
-            mat4.add(mat0, mat0, mat1);
-            this.boneMatrices.push(mat0);
+            mat4.add(boneMtx, mat0, mat1);
         }
     }
 
