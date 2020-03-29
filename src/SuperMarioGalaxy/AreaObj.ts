@@ -6,7 +6,7 @@ import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
 import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
-import { vecKillElement, listenStageSwitchOnOffAppear } from "./ActorUtil";
+import { vecKillElement } from "./ActorUtil";
 import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForLiveActor } from "./Switch";
 
 interface AreaFormBase {

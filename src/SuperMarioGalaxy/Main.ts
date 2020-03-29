@@ -25,7 +25,6 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
-import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
@@ -42,6 +41,7 @@ import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
+import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -69,7 +69,6 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 
 export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
-    private bloomParameters = new BloomPostFXParameters();
 
     private mainRenderTarget = new BasicRenderTarget();
     private sceneTexture = new ColorTexture();
@@ -159,19 +158,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel];
     }
 
-    private prepareBloomParameters(bloomParameters: BloomPostFXParameters): void {
-        // TODO(jstpierre): Dynamically adjust based on Area.
-        if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
-            bloomParameters.intensity1 = 40/256;
-            bloomParameters.intensity2 = 60/256;
-            bloomParameters.bloomIntensity = 110/256;
-        } else {
-            bloomParameters.intensity1 = 25/256;
-            bloomParameters.intensity2 = 25/256;
-            bloomParameters.bloomIntensity = 50/256;
-        }
-    }
-
     private drawAllEffects(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.sceneObjHolder.effectSystem === null)
             return;
@@ -205,12 +191,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
         executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
-    }
-
-    private isNormalBloomOn(): boolean {
-        if (this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL))
-            return true;
-        return false;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -250,10 +230,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport);
         this.drawAllEffects(viewerInput);
 
+        // TODO(jstpierre): Make this generic to ImageEffectDirector.
         let bloomParameterBufferOffs = -1;
-        if (this.isNormalBloomOn()) {
-            this.prepareBloomParameters(this.bloomParameters);
-            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.bloomParameters);
+        if (this.sceneObjHolder.imageEffectSystemHolder !== null && this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector.isOnNormalBloom() && this.bloomRenderer.pipelinesReady(device)) {
+            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.sceneObjHolder.bloomEffect!);
         }
 
         // Now that we've completed our UBOs, upload.
@@ -403,13 +383,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
-        if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
+        if (bloomParameterBufferOffs !== -1) {
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
             this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
+            this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
@@ -816,6 +797,7 @@ class AreaObjContainer extends NameObj {
         super(sceneObjHolder, 'AreaObjContainer');
         this.managers.push(new LightAreaHolder(sceneObjHolder));
         this.managers.push(new WaterAreaMgr(sceneObjHolder));
+        this.managers.push(new ImageEffectAreaMgr(sceneObjHolder));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -839,6 +821,8 @@ export const enum SceneObj {
     SwitchWatcherHolder     = 0x0B,
     SleepControllerHolder   = 0x0C,
     AreaObjContainer        = 0x0D,
+    ImageEffectSystemHolder = 0x1D,
+    BloomEffect             = 0x1E,
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
@@ -870,6 +854,8 @@ export class SceneObjHolder {
     public switchWatcherHolder: SwitchWatcherHolder | null = null;
     public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
+    public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
+    public bloomEffect: BloomEffect | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -906,6 +892,10 @@ export class SceneObjHolder {
             return this.switchWatcherHolder;
         else if (sceneObj === SceneObj.SleepControllerHolder)
             return this.sleepControllerHolder;
+        else if (sceneObj === SceneObj.ImageEffectSystemHolder)
+            return this.imageEffectSystemHolder;
+        else if (sceneObj === SceneObj.BloomEffect)
+            return this.bloomEffect;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -942,6 +932,10 @@ export class SceneObjHolder {
             this.switchWatcherHolder = new SwitchWatcherHolder(this);
         else if (sceneObj === SceneObj.SleepControllerHolder)
             this.sleepControllerHolder = new SleepControllerHolder(this);
+        else if (sceneObj === SceneObj.ImageEffectSystemHolder)
+            this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
+        else if (sceneObj === SceneObj.BloomEffect)
+            this.bloomEffect = new BloomEffect(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)

@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -36,6 +36,7 @@ import { isInWater } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround, Triangle } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
+import { AreaObj } from './AreaObj';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -5157,6 +5158,19 @@ class WaterPoint {
         vec3.copy(this.upVec, upVec);
     }
 
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (this.height !== 0.0) {
+            vec3.copy(scratchVec3a, this.originalPos);
+            scratchVec3a[1] += 200.0;
+
+            if (calcMapGround(sceneObjHolder, scratchVec3, scratchVec3a, 400.0)) {
+                const y = (this.originalPos[1] - scratchVec3[1]) / 200.0;
+                this.alpha = clamp(30.0 + 255.0 * y, 30.0, 255.0) / 255.0;
+                this.height = Math.min(this.height, clamp(Math.abs(y) + 0.1, 0.1, 1.0));
+            }
+        }
+    }
+
     public calcHeight(theta1: number, theta2: number, wave1Height: number, wave2Height: number, coordAcrossRail: number, coordOnRail: number): number {
         const wave2 = wave2Height * Math.sin(theta2 + (0.0025 * coordOnRail));
         const wave1 = wave1Height * Math.sin(theta1 + (0.003 * coordAcrossRail) + (0.0003 * coordOnRail));
@@ -5643,9 +5657,11 @@ export class OceanRing extends LiveActor {
 
         this.arg1 = fallback(getJMapInfoArg1(infoIter), 30);
 
-        if (arg0 === 0) {
+        if (arg0 === 0)
             this.oceanRingPipe = new OceanRingPipe(zoneAndLayer, sceneObjHolder, infoIter, this);
-        }
+
+        sceneObjHolder.create(SceneObj.WaterAreaHolder);
+        sceneObjHolder.waterAreaHolder!.entryOceanRing(this);
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
@@ -5689,6 +5705,72 @@ export class OceanRing extends LiveActor {
         // TODO(jstpierre): Accurate heightScale?
         for (let i = 0; i < this.points.length; i++)
             this.points[i].updatePos(this.waveTheta1, this.waveTheta2, this.waveHeight1, this.waveHeight2, 1.0);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        for (let i = 0; i < this.points.length; i++)
+            this.points[i].initAfterPlacement(sceneObjHolder);
+    }
+
+    private calcNearestPos(dstPos: vec3, dstDir: vec3 | null, pos: vec3): number {
+        let bestDistance: number = Infinity;
+        let bestSegmentIdx = 0;
+        let bestPoint: WaterPoint | null = null;
+
+        for (let i = 0; i < this.segmentCount; i++) {
+            const p = this.points[i * 15 + 7];
+            const dist = vec3.distance(p.originalPos, pos);
+            if (dist < bestDistance) {
+                bestSegmentIdx = i;
+                bestDistance = dist;
+                bestPoint = p;
+            }
+        }
+
+        assert(bestPoint !== null);
+
+        if (bestSegmentIdx < 1 || bestSegmentIdx >= this.segmentCount - 1) {
+            vec3.copy(dstPos, bestPoint.originalPos);
+            return 0.0;
+        }
+
+        // Search between segments.
+        const prevSeg = this.points[(bestSegmentIdx - 1) * 15 + 7];
+        const nextSeg = this.points[(bestSegmentIdx + 1) * 15 + 7];
+
+        const prevDist = vec3.distance(prevSeg.originalPos, pos);
+        const nextDist = vec3.distance(nextSeg.originalPos, pos);
+
+        const baseCoord = bestSegmentIdx * 200.0;
+        let coord: number = baseCoord;
+
+        if (nextDist <= prevDist) {
+            coord = baseCoord + calcPerpendicFootToLine(dstPos, pos, bestPoint.originalPos, nextSeg.originalPos);
+        } else {
+            coord = baseCoord - calcPerpendicFootToLine(dstPos, pos, bestPoint.originalPos, prevSeg.originalPos);
+        }
+
+        if (dstDir !== null)
+            calcRailDirectionAtCoord(dstDir, this, coord);
+
+        return coord;
+    }
+
+    public isInWater(sceneObjHolder: SceneObjHolder, pos: vec3): boolean {
+        const coord = this.calcNearestPos(scratchVec3, null, pos);
+        const width = 1200.0 * this.calcCurrentWidthRate(coord);
+
+        if (vec3.distance(scratchVec3, pos) > width)
+            return false;
+
+        vec3.sub(scratchVec3a, pos, scratchVec3);
+        calcGravityVector(sceneObjHolder, this, pos, scratchVec3b);
+        if (vec3.dot(scratchVec3a, scratchVec3b) < 0)
+            return false;
+
+        return true;
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -7827,4 +7909,10 @@ export class Pole extends LiveActor {
         else if (name === 'TreeCube')
             sceneObjHolder.modelCache.requestObjectData('TreeCube');
     }
+}
+
+export function getAreaObj(sceneObjHolder: SceneObjHolder, managerName: string, pos: vec3): AreaObj | null {
+    if (sceneObjHolder.areaObjContainer === null)
+        return null;
+    return sceneObjHolder.areaObjContainer.getAreaObj(managerName, pos);
 }

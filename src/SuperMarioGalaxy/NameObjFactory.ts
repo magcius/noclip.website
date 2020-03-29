@@ -10,6 +10,8 @@ import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
 import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj } from './Gravity';
 import { SwitchSynchronizer } from './Switch';
+import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere } from './MiscMap';
+import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -662,17 +664,19 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("GlobalSegmentGravity",         createGlobalSegmentGravityObj),
     N("GlobalWireGravity"),
 
-    // Other Areas
-    N("WaterArea"),
-    N("WaterCube"),
-    N("WaterCylinder"),
-    N("WaterSphere"),
+    // Misc. Map Areas
+    E("WaterCube",                    createWaterAreaCube),
+    E("WaterCylinder",                createWaterAreaCylinder),
+    E("WaterSphere",                  createWaterAreaSphere),
+    E("BloomCube",                    createBloomCube),
+    E("BloomCylinder",                createBloomCylinder),
+    E("BloomSphere",                  createBloomSphere),
 
+    N("WaterArea"),
     N("SwitchArea"),
     N("SwitchCube"),
     N("SwitchSphere"),
     N("SwitchCylinder"),
-
     N("ClipAreaSphere"),
     N("CameraArea"),
     N("CubeCameraBowl"),
@@ -681,7 +685,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("CubeCameraSphere"),
     N("DeathCube"),
     N("DeathArea"),
-    N("BloomCube"),
     N("SimpleBloomCube"),
     N("PostFogArea"),
     N("HazeCube"),
