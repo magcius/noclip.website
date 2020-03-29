@@ -37,6 +37,7 @@ export class ModelInstance {
     private gxMaterial: GXMaterial | undefined;
 
     private pnMatrixMap: number[] = nArray(10, () => 0);
+    private pnmtx9Hack = false;
 
     constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -61,6 +62,10 @@ export class ModelInstance {
         for (let i = 0; i < pnMatrixMap.length; i++) {
             this.pnMatrixMap[i] = pnMatrixMap[i];
         }
+    }
+
+    public setPnMtx9Hack(enable: boolean) {
+        this.pnmtx9Hack = enable;
     }
 
     public setFurLayer(layer: number) {
@@ -162,7 +167,17 @@ export class ModelInstance {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            mat4.mul(this.scratchMtx, modelMatrix, this.matrices[this.pnMatrixMap[i]]);
+            // FIXME: get rid of PNMTX 9 hack below.
+            // PNMTX 9 is special in certain models where the game activates some form of software skinning.
+            let pnmtx;
+            if (this.pnmtx9Hack && i === 9) {
+                pnmtx = mat4.create();
+            } else {
+                pnmtx = this.matrices[this.pnMatrixMap[i]];
+            }
+
+            mat4.mul(this.scratchMtx, modelMatrix, pnmtx);
+
             this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, this.scratchMtx);
         }
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
@@ -243,6 +258,8 @@ export class Model implements BlockRenderer {
     constructor(device: GfxDevice, private materialFactory: MaterialFactory, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController, private modelVersion: ModelVersion = ModelVersion.Final) {
         let offs = 0;
         const blockDv = blockData.createDataView();
+
+        let enablePnmtx9Hack = false;
 
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
@@ -391,6 +408,7 @@ export class Model implements BlockRenderer {
                     oldVat: false,
                     hasYTranslate: false,
                 };
+                enablePnmtx9Hack = blockDv.getUint32(0xa4) !== 0;
                 break;
             case 8:
             case 264:
@@ -751,6 +769,7 @@ export class Model implements BlockRenderer {
             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newModel.setMaterial(material);
             newModel.setPnMatrixMap(pnMatrixMap);
+            newModel.setPnMtx9Hack(enablePnmtx9Hack);
 
             return newModel;
         }
@@ -810,6 +829,7 @@ export class Model implements BlockRenderer {
                             const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newModel.setMaterial(curMaterial!);
                             newModel.setPnMatrixMap(pnMatrixMap);
+                            newModel.setPnMtx9Hack(enablePnmtx9Hack);
                             models.push(newModel);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
