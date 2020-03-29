@@ -931,18 +931,15 @@ export class Model implements BlockRenderer {
                 }
 
                 const bindTranslation = vec3.clone(joint.bindTranslation);
-                if (this.isBetaFox) {
-                    vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
-                }
+                // if (this.isBetaFox) {
+                //     vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
+                // }
 
                 const jointTrans = vec3.clone(joint.translation);
                 // if (this.isBetaFox) {
                 //     vec3.sub(jointTrans, jointTrans, parentJointTrans);
                 // }
 
-                // if (this.isBetaFox) {
-                //     mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
-                // }
                 mat4.fromTranslation(this.jointTfMatrices[i], jointTrans);
                 mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
                 mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
@@ -965,15 +962,18 @@ export class Model implements BlockRenderer {
 
             let jointWalker = joint;
             while (true) {
-                mat4.mul(boneMtx, this.poseMatrices[jointWalker.boneNum], boneMtx);
-                mat4.mul(boneMtx, this.jointTfMatrices[jointWalker.boneNum], boneMtx);
                 if (this.isBetaFox) {
                     mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
                 }
+                mat4.mul(boneMtx, this.poseMatrices[jointWalker.boneNum], boneMtx);
+                mat4.mul(boneMtx, this.jointTfMatrices[jointWalker.boneNum], boneMtx);
                 if (jointWalker.parent === 0xff) {
                     break;
                 }
                 jointWalker = this.joints[jointWalker.parent];
+                if (this.isBetaFox) {
+                    mat4.mul(boneMtx, boneMtx, this.bindMatrices[jointWalker.boneNum]);
+                }
             }
             
         }

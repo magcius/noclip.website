@@ -693,8 +693,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
 
         const testModels = [];
-        console.log(`Loading Fox....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
+        // console.log(`Loading Fox....`);
+        // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
         // console.log(`Loading SharpClaw....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         // console.log(`Loading General Scales....`);
