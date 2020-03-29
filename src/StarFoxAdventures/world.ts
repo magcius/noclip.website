@@ -56,7 +56,7 @@ interface ObjectInstance {
     model?: Model;
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
+async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion, isBetaFox: boolean = false): Promise<Model | null> {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
     const [modelsTabData, modelsBin, _] = await Promise.all([
@@ -80,7 +80,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     };
     
     try {
-        return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion);
+        return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion, isBetaFox);
     } catch (e) {
         console.warn(`Failed to load model due to exception:`);
         console.error(e);
@@ -704,7 +704,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading General Scales (demo version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
         // console.log(`Loading Beta Fox....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
+        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta, true)); // Fox (beta version)
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
