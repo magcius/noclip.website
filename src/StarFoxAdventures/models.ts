@@ -243,6 +243,43 @@ interface Water {
 
 type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
+interface FancySkinningConfig {
+    numPieces: number;
+    quantizeScale: number;
+}
+
+function parseFancySkinningConfig(data: DataView): FancySkinningConfig {
+    return {
+        numPieces: data.getUint16(0x2),
+        quantizeScale: data.getUint8(0x6),
+    };
+}
+
+const FancySkinningPiece_SIZE = 0x74;
+interface FancySkinningPiece {
+    skinDataSrcOffs: number;
+    weightsSrc: number;
+    bone0: number;
+    bone1: number;
+    weightsBlockCount: number;
+    numVertices: number;
+    skinMeOffset: number;
+    skinSrcBlockCount: number; // A block is 32 bytes
+}
+
+function parseFancySkinningPiece(data: DataView): FancySkinningPiece {
+    return {
+        skinDataSrcOffs: data.getUint32(0x60),
+        weightsSrc: data.getUint32(0x64),
+        bone0: data.getUint8(0x6c),
+        bone1: data.getUint8(0x6d),
+        weightsBlockCount: data.getUint8(0x6f),
+        numVertices: data.getUint16(0x70),
+        skinMeOffset: data.getUint8(0x72),
+        skinSrcBlockCount: data.getUint8(0x73),
+    };
+}
+
 export class Model implements BlockRenderer {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
     public shapes: Shape[][] = [];
@@ -272,7 +309,11 @@ export class Model implements BlockRenderer {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
-        let enablePnmtx9Hack = false;
+        let posFancySkinningConfig: FancySkinningConfig | undefined = undefined;
+        let posFancySkinningWeights: DataView | undefined = undefined;
+        const posFancySkinningPieces: FancySkinningPiece[] = [];
+
+        let nrmFancySkinningConfig: FancySkinningConfig | undefined = undefined;
 
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
@@ -421,7 +462,22 @@ export class Model implements BlockRenderer {
                     oldVat: false,
                     hasYTranslate: false,
                 };
-                enablePnmtx9Hack = blockDv.getUint32(0xa4) !== 0;
+
+                posFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0x88));
+                console.log(`posFancySkinningConfig: ${JSON.stringify(posFancySkinningConfig, null, '\t')}`);
+                if (posFancySkinningConfig.numPieces !== 0) {
+                    const weightsOffs = blockDv.getUint32(0xa8);
+                    posFancySkinningWeights = dataSubarray(blockDv, weightsOffs);
+                    const piecesOffs = blockDv.getUint32(0xa4);
+                    for (let i = 0; i < posFancySkinningConfig.numPieces; i++) {
+                        const piece = parseFancySkinningPiece(dataSubarray(blockDv, piecesOffs + i * FancySkinningPiece_SIZE, FancySkinningPiece_SIZE));
+                        console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
+                        posFancySkinningPieces.push(piece);
+                    }
+                }
+
+                nrmFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0xac));
+                // TODO: implement fancy skinning for normals
                 break;
             case 8:
             case 264:
@@ -782,7 +838,7 @@ export class Model implements BlockRenderer {
             const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap);
-            newShape.setPnMtx9Hack(enablePnmtx9Hack);
+            newShape.setPnMtx9Hack(posFancySkinningWeights !== undefined);
 
             return newShape;
         }
@@ -842,7 +898,7 @@ export class Model implements BlockRenderer {
                             const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap);
-                            newShape.setPnMtx9Hack(enablePnmtx9Hack);
+                            newShape.setPnMtx9Hack(posFancySkinningWeights !== undefined);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
