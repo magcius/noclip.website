@@ -14,7 +14,7 @@ import { TextureCollection, SFATextureCollection, FakeTextureCollection } from '
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
-import { ModelInstance, Model } from './models';
+import { Shape, Model } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 
@@ -84,9 +84,10 @@ export class BlockCollection implements IBlockCollection {
 }
 
 export class AncientBlockRenderer implements BlockRenderer {
-    public models: ModelInstance[] = [];
+    public shapes: Shape[] = [];
     public yTranslate: number = 0;
 
+    // TODO: move this stuff to models.ts
     constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController) {
         let offs = 0;
         const blockDv = blockData.createDataView();
@@ -288,7 +289,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, this.animController);
+                    const newShape = new Shape(vtxArrays, vcd, vat, displayList, this.animController, [mat4.create()]);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
@@ -339,9 +340,9 @@ export class AncientBlockRenderer implements BlockRenderer {
                         setupMaterialParams: () => {},
                         rebuild: () => {},
                     }
-                    newModel.setMaterial(material);
+                    newShape.setMaterial(material);
 
-                    this.models.push(newModel);
+                    this.shapes.push(newShape);
                 } catch (e) {
                     console.error(e);
                 }
@@ -389,12 +390,12 @@ export class AncientBlockRenderer implements BlockRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
-        if (drawStep != 0) {
+        if (drawStep !== 0) {
             return;
         }
 
-        for (let i = 0; i < this.models.length; i++) {
-            this.models[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
+        for (let i = 0; i < this.shapes.length; i++) {
+            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
         }
     }
     

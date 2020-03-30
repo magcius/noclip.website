@@ -21,7 +21,7 @@ import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
 
-export class ModelInstance {
+export class Shape {
     private loadedVertexLayout: LoadedVertexLayout;
     private loadedVertexData: LoadedVertexData;
     private shapeHelper: GXShapeHelperGfx | null = null;
@@ -230,19 +230,19 @@ function parseDisplayListInfo(data: DataView): DisplayListInfo {
 }
 
 interface Fur {
-    model: ModelInstance;
+    shape: Shape;
     numLayers: number;
 }
 
 interface Water {
-    model: ModelInstance;
+    shape: Shape;
 }
 
 type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
 export class Model implements BlockRenderer {
-    // There is a ModelInstance array for each draw step (opaques, translucents 1, translucents 2)
-    public models: ModelInstance[][] = [];
+    // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
+    public shapes: Shape[][] = [];
     public joints: Joint[] = [];
     public weights: Weight[] = [];
     public poseMatrices: mat4[] = [];
@@ -255,7 +255,6 @@ export class Model implements BlockRenderer {
     public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
-
 
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
@@ -751,7 +750,7 @@ export class Model implements BlockRenderer {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc): ModelInstance {
+        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc): Shape {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -777,18 +776,18 @@ export class Model implements BlockRenderer {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
-            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
-            newModel.setMaterial(material);
-            newModel.setPnMatrixMap(pnMatrixMap);
-            newModel.setPnMtx9Hack(enablePnmtx9Hack);
+            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
+            newShape.setMaterial(material);
+            newShape.setPnMatrixMap(pnMatrixMap);
+            newShape.setPnMtx9Hack(enablePnmtx9Hack);
 
-            return newModel;
+            return newShape;
         }
 
         function runBitstream(bitsOffset: number, drawStep: number) {
             // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
-            const models: ModelInstance[] = [];
-            self.models[drawStep] = models;
+            const shapes: Shape[] = [];
+            self.shapes[drawStep] = shapes;
 
             if (bitsOffset === 0) {
                 return;
@@ -834,17 +833,17 @@ export class Model implements BlockRenderer {
                             // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
                             // TODO: Implement an option to view this geometry
                         } else if (curShader.flags & ShaderFlags.Water) {
-                            const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
-                            self.waters.push({ model: newModel });
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
+                            self.waters.push({ shape: newShape });
                         } else {
-                            const newModel = new ModelInstance(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
-                            newModel.setMaterial(curMaterial!);
-                            newModel.setPnMatrixMap(pnMatrixMap);
-                            newModel.setPnMtx9Hack(enablePnmtx9Hack);
-                            models.push(newModel);
+                            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
+                            newShape.setMaterial(curMaterial!);
+                            newShape.setPnMatrixMap(pnMatrixMap);
+                            newShape.setPnMtx9Hack(enablePnmtx9Hack);
+                            shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newModel = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory));
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory));
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur) {
@@ -855,7 +854,7 @@ export class Model implements BlockRenderer {
                                     numFurLayers = 16;
                                 }
                     
-                                self.furs.push({ model: newModel, numLayers: numFurLayers });
+                                self.furs.push({ shape: newShape, numLayers: numFurLayers });
                             }
                         }
                     } catch (e) {
@@ -1007,23 +1006,23 @@ export class Model implements BlockRenderer {
     }
 
     public getNumDrawSteps() {
-        return this.models.length;
+        return this.shapes.length;
     }
 
     private scratchMtx = mat4.create();
     private scratchMtx2 = mat4.create();
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
-        if (drawStep < 0 || drawStep >= this.models.length) {
+        if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
         }
 
-        const models = this.models[drawStep];
-        for (let i = 0; i < models.length; i++) {
+        const shapes = this.shapes[drawStep];
+        for (let i = 0; i < shapes.length; i++) {
             mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            models[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+            shapes[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
         }
     }
     
@@ -1034,7 +1033,7 @@ export class Model implements BlockRenderer {
             mat4.fromTranslation(this.scratchMtx, [0, this.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            water.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+            water.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
         }
     }
 
@@ -1047,7 +1046,7 @@ export class Model implements BlockRenderer {
                 mat4.translate(this.scratchMtx, this.scratchMtx, this.modelTranslate);
                 mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-                fur.model.setFurLayer(j);
+                fur.shape.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
                 this.scratchMtx2 = mat4.fromValues(
@@ -1056,9 +1055,9 @@ export class Model implements BlockRenderer {
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                fur.model.setOverrideIndMtx(0, this.scratchMtx2);
-                fur.model.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
-                fur.model.setOverrideIndMtx(0, undefined);
+                fur.shape.setOverrideIndMtx(0, this.scratchMtx2);
+                fur.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+                fur.shape.setOverrideIndMtx(0, undefined);
             }
         }
     }
