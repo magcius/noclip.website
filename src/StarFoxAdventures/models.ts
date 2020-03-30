@@ -40,6 +40,7 @@ export class Shape {
     private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
+    private hasBetaFineSkinning = false;
 
     constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -310,15 +311,15 @@ export class Model implements BlockRenderer {
 
     private nrmFineSkinningConfig: FineSkinningConfig | undefined = undefined;
 
+    private hasFineSkinning: boolean = false;
+    private hasBetaFineSkinning: boolean = false;
+
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texColl: TextureCollection,
         private animController: SFAAnimationController,
-        private modelVersion: ModelVersion = ModelVersion.Final,
-        // XXX: Beta Fox (swapcircle model 0) seems to have different joint rules than other models.
-        // TODO: Find a way to auto-detect this or fix whatever is broken.
-        private isBetaFox = false
+        private modelVersion: ModelVersion = ModelVersion.Final
     ) {
         let offs = 0;
         const blockDv = blockData.createDataView();
@@ -523,14 +524,14 @@ export class Model implements BlockRenderer {
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
-            console.log(`pos fine skinning config: ${JSON.stringify(this.posFineSkinningConfig, null, '\t')}`);
+            // console.log(`pos fine skinning config: ${JSON.stringify(this.posFineSkinningConfig, null, '\t')}`);
             if (this.posFineSkinningConfig.numPieces !== 0) {
                 const weightsOffs = blockDv.getUint32(fields.posFineSkinningWeights);
                 this.posFineSkinningWeights = dataSubarray(blockDv, weightsOffs);
                 const piecesOffs = blockDv.getUint32(fields.posFineSkinningPieces);
                 for (let i = 0; i < this.posFineSkinningConfig.numPieces; i++) {
                     const piece = parseFineSkinningPiece(dataSubarray(blockDv, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
-                    console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
+                    // console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
                     this.posFineSkinningPieces.push(piece);
                 }
             }
@@ -539,7 +540,8 @@ export class Model implements BlockRenderer {
             // TODO: implement fine skinning for normals
         }
 
-        const hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
+        this.hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
+        this.hasBetaFineSkinning = this.hasFineSkinning && this.modelVersion === ModelVersion.Beta;
 
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
@@ -863,7 +865,7 @@ export class Model implements BlockRenderer {
 
             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newShape.setMaterial(material);
-            newShape.setPnMatrixMap(pnMatrixMap, hasFineSkinning);
+            newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
             return newShape;
         }
@@ -922,7 +924,7 @@ export class Model implements BlockRenderer {
                         } else {
                             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newShape.setMaterial(curMaterial!);
-                            newShape.setPnMatrixMap(pnMatrixMap, hasFineSkinning);
+                            newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
@@ -1013,14 +1015,8 @@ export class Model implements BlockRenderer {
                 }
 
                 const bindTranslation = vec3.clone(joint.bindTranslation);
-                // if (this.isBetaFox) {
-                //     vec3.sub(bindTranslation, bindTranslation, parentBindTrans);
-                // }
 
                 const jointTrans = vec3.clone(joint.translation);
-                // if (this.isBetaFox) {
-                //     vec3.sub(jointTrans, jointTrans, parentJointTrans);
-                // }
 
                 mat4.fromTranslation(this.jointTfMatrices[i], jointTrans);
                 mat4.fromTranslation(this.bindMatrices[i], bindTranslation);
@@ -1043,7 +1039,7 @@ export class Model implements BlockRenderer {
             mat4.identity(boneMtx);
 
             let jointWalker = joint;
-            if (this.isBetaFox) {
+            if (this.hasBetaFineSkinning) {
                 mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
             }
             while (true) {
@@ -1095,11 +1091,11 @@ export class Model implements BlockRenderer {
             const piece = this.posFineSkinningPieces[i];
 
             const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
-            if (!this.isBetaFox) {
+            if (!this.hasBetaFineSkinning) {
                 mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
             }
             const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
-            if (!this.isBetaFox) {
+            if (!this.hasBetaFineSkinning) {
                 mat4.mul(boneMtx1, boneMtx1, this.invBindMatrices[piece.bone1]);
             }
 
