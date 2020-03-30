@@ -4169,7 +4169,7 @@ export class WarpPod extends LiveActor {
 
         const halfArcAngle = arcAngle / 2;
 
-        const numPoints = 120;
+        const numPoints = 60;
         this.warpPathPoints = [];
 
         const delta = vec3.create();
