@@ -1086,8 +1086,9 @@ export class Model implements BlockRenderer {
         for (let i = 0; i < this.posFancySkinningPieces.length; i++) {
             const piece = this.posFancySkinningPieces[i];
 
-            const boneMtx0 = this.boneMatrices[piece.bone0];
-            const boneMtx1 = this.boneMatrices[piece.bone1];
+            const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
+            mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
+            const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
 
             const src = dataSubarray(this.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
             const dst = dataSubarray(this.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
@@ -1100,9 +1101,7 @@ export class Model implements BlockRenderer {
                     src.getInt16(srcOffs + 4) * dequant
                 );
 
-                // vec3.transformMat4(pos, pos, boneMtx0); // TODO: blend matrices
-
-                pos[1] += 100 * Math.sin(this.animController.animController.getTimeInSeconds());
+                vec3.transformMat4(pos, pos, boneMtx0); // TODO: blend matrices
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
