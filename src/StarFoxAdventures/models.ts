@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array } from '../gx/gx_displaylist';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader } from '../gx/gx_displaylist';
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -22,7 +22,6 @@ import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
 
 export class Shape {
-    private loadedVertexLayout: LoadedVertexLayout;
     private loadedVertexData: LoadedVertexData;
     private shapeHelper: GXShapeHelperGfx | null = null;
     private materialHelper: GXMaterialHelperGfx;
@@ -36,13 +35,17 @@ export class Shape {
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
 
+    private vtxLoader: VtxLoader;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private pnmtx9Hack = false;
 
-    constructor(vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
-        const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexLayout = vtxLoader.loadedVertexLayout;
-        this.loadedVertexData = vtxLoader.runVertices(vtxArrays, displayList);
+    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
+        this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+        this.reload();
+    }
+
+    public reload() {
+        this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
     }
 
     // Caution: Material is referenced, not copied.
@@ -94,7 +97,7 @@ export class Shape {
 
         if (this.shapeHelper === null) {
             const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.loadedVertexLayout, this.loadedVertexData);
+            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
         }
         
         this.packetParams.clear();
