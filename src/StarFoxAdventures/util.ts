@@ -7,6 +7,10 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
 }
 
+export function arrayBufferSliceFromDataView(data: DataView): ArrayBufferSlice {
+    return new ArrayBufferSlice(data.buffer, data.byteOffset, data.byteLength);
+}
+
 export function interpS16(n: number): number {
     // Bitwise operators automatically convert numbers to 32-bit signed integers.
     return ((n & 0xffff) << 16) >> 16;

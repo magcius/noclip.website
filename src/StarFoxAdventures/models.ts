@@ -16,7 +16,7 @@ import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
-import { LowBitReader, dataSubarray, ViewState } from './util';
+import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
@@ -295,6 +295,7 @@ export class Model implements BlockRenderer {
     public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
+    private posBuffer: DataView;
 
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
@@ -532,8 +533,9 @@ export class Model implements BlockRenderer {
 
         const posOffset = blockDv.getUint32(fields.posOffset);
         const posCount = blockDv.getUint16(fields.posCount);
-        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-        const vertBuffer = blockData.subarray(posOffset);
+        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+        const originalPosBuffer = blockData.subarray(posOffset, posCount * 6);
+        this.posBuffer = new DataView(originalPosBuffer.copyToBuffer());
 
         let nrmBuffer = blockData;
         let nrmTypeFlags = 0;
@@ -726,7 +728,7 @@ export class Model implements BlockRenderer {
         const pnMatrixMap: number[] = nArray(10, () => 0);
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: vertBuffer, offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+        vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(this.posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
         if (fields.hasNormals) {
             vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
         }
