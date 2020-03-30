@@ -17,6 +17,159 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 const pathBaseIn  = `../../../data/DonkeyKong64_Raw`;
 const pathBaseOut = `../../../data/DonkeyKong64`;
 
+export class DisplayListInfo{
+    public ChunkID: number;
+    public F3dexStartIndex: number;
+    public VertStartIndex: number;
+}
+
+export class MapChunk{
+    public x: number
+    public y: number
+    public z: number
+    //public DLOffsets:
+    public dlOffsets: number[] = [];
+    public dlSizes: number[] = [];
+    public vertOffset: number
+    public vertSize: number
+
+    public id: number = 0;
+    // 
+
+    static readonly size = 0x34;
+
+    constructor(bin: ArrayBufferSlice, iChunk?: number){
+        if(iChunk){
+            this.id = iChunk;
+        }
+        let view = bin.createDataView();
+        this.x = view.getInt32(0x00, false);
+        this.y = view.getInt32(0x04, false);
+
+        for (let i = 0; i < 4; i++) {
+            let currOffset = view.getInt32(0x0C + i* 0x08, false);
+            this.dlOffsets[i] = (currOffset);
+            this.dlSizes[i] = view.getUint32(0x10 + i* 0x08, false);
+        }
+        
+        this.vertOffset = view.getInt32(0x2C, false);
+        this.vertSize = view.getInt32(0x30, false);
+    }
+}
+
+export class MapSection{
+    public meshID: number
+    public vertOffsets: number[] = [];
+
+    static readonly size = 0x1C;
+
+    constructor(bin: ArrayBufferSlice){
+        let view = bin.createDataView();
+        this.meshID = view.getUint16(0x02, false);
+        for (let i = 0; i < 8; i++) {
+            this.vertOffsets[i] = view.getUint16(0x08 + i*0x02, false);
+            
+        }
+    }
+}
+
+export class Map{
+    public bin : ArrayBufferSlice
+    public header_raw : ArrayBufferSlice
+    public ChunkCount : number
+    public Chunks : MapChunk[] = [];
+    public Sections : MapSection[] = [];
+    public DisplayLists: DisplayListInfo[] = [];
+
+    //headerInfo
+    private F3DStart : number
+    private vertStart : number
+    private vertEnd : number
+    private sectionStart: number
+    private sectionEnd: number
+    private chunkCountOffset: number
+    private chunkStart: number
+
+    constructor(buffer:ArrayBufferSlice){
+        this.bin = buffer;
+        let view = this.bin.createDataView();
+        this.header_raw = new ArrayBufferSlice(this.bin.arrayBuffer, 0, 0x6C);
+        this.ParseHeader();
+        this.ChunkCount = view.getUint32(this.chunkCountOffset, false);
+        if(this.ChunkCount >0){
+            for (let i = 0; i < this.ChunkCount; i++) {
+                this.Chunks[i] = new MapChunk( new ArrayBufferSlice( this.bin.arrayBuffer, this.chunkStart + MapChunk.size * i, MapChunk.size), i );
+            }
+        }
+        for(let i = 0; ( i * MapSection.size ) < ( this.sectionEnd - this.sectionStart ); i++){
+            this.Sections[i] = new MapSection( new ArrayBufferSlice( this.bin.arrayBuffer, this.sectionStart + i * MapSection.size + 4, MapSection.size ) );
+        }
+        console.log(`${this.ChunkCount} CHUNKS PARSED FOR MAP`);
+        
+        if(this.ChunkCount > 0){
+            this.Chunks.forEach(chunk => {
+                for(let iDL = 0; iDL < 4; iDL++){
+                    if (chunk.dlOffsets[iDL] != -1 && chunk.dlSizes[iDL] != 0){
+                        let offst = chunk.dlOffsets[iDL];
+                        let sze = chunk.dlSizes[iDL];
+                        let snoopPresent = false;
+                        let currf3dexCnt = sze;
+                        let currf3dexOffset = this.F3DStart + offst;
+                        do {
+                            let command = view.getUint8(currf3dexOffset);
+                            if (command === 0x00){
+                                snoopPresent = true;
+                                let f3DMeshID = view.getUint32(currf3dexOffset + 0x04, false);
+                                var currSection = this.Sections.filter((elem, indx, array) => {return (elem.meshID == f3DMeshID);});
+                                if(currSection.length != 0){
+                                    this.DisplayLists.push({
+                                        ChunkID: chunk.id,
+                                        F3dexStartIndex: (currf3dexOffset - this.F3DStart)/8,
+                                        VertStartIndex: (chunk.vertOffset/0x10 + currSection[0].vertOffsets[iDL])
+                                    });
+                                }
+                            }
+                            currf3dexOffset = currf3dexOffset +8;
+                            currf3dexCnt = currf3dexCnt - 8;
+                        } while (currf3dexCnt > 0);
+                        if(snoopPresent == false){
+                            //more than 5 segments to chunk
+                            //include Start as DL
+                            this.DisplayLists.push({
+                                ChunkID: chunk.id,
+                                F3dexStartIndex: offst/0x08, 
+                                VertStartIndex: chunk.vertOffset/0x10
+                            });
+                        }
+                    }
+                }
+            });
+        }
+        else{
+            this.DisplayLists.push({
+                ChunkID: 0,
+                F3dexStartIndex: 0,
+                VertStartIndex: 0
+            });
+        }
+        console.log(`${this.DisplayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
+    }
+
+    private ParseHeader(): void{
+        let view = this.header_raw.createDataView();
+        this.F3DStart = view.getUint32(0x34, false);
+        this.vertStart = view.getUint32(0x38, false);
+        this.vertEnd = view.getUint32(0x40, false);
+        this.sectionStart = view.getUint32(0x58, false);
+        this.sectionEnd = view.getUint32(0x5C, false);
+        this.chunkCountOffset =view.getUint32(0x64, false);
+        this.chunkStart = view.getUint32(0x68, false);
+    }
+
+    //public get DLQueue
+
+}
+
 export class ROMHandler {
     public ROM : ArrayBufferSlice
     public ROM_LittleEndian : ArrayBufferSlice
@@ -60,8 +213,10 @@ export class ROMHandler {
             //ToDo don't unpack all at once, pull when scene/object is needed
             // 215 is num maps
             for (let i = 0; i < 215; i++) {
-                let maps = this.loadMaps(i);
-                if(maps){console.log(`map for scene ${i} decompressed`);}
+                let map_bins = this.loadMap(i);
+                if(map_bins){
+                    let currMap = new Map(map_bins);
+                }
 
                 let walls = this.loadWalls(i);
                 if(walls){console.log(`walls for scene ${i} decompressed`);}
@@ -74,19 +229,10 @@ export class ROMHandler {
 
     public decompress(buffer : ArrayBufferSlice): ArrayBufferSlice | null {
         //TODO: insert check to ensure compressed
-        //assert(this.ROMView.getUint32(0x00) === 0x1172, `bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);
         let view = buffer.createDataView();
-        /*assert((view.getUint16(0) === 0x1172 
-                || view.getUint16(0) === 0x1173 
-                ||view.getUint16(0) === 0x789C 
-                ||view.getUint16(0) ===0x78DA
-                ||view.getUint32(0) ===0x1F8B0800
-                ||view.getUint32(0) ===0x1F8B0808
-            ), `bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);*/
         if(!(view.getUint16(0) === 0x1172    || view.getUint16(0) === 0x1173 
          ||view.getUint16(0) === 0x789C    ||view.getUint16(0) ===0x78DA
          ||view.getUint32(0) ===0x1F8B0800 ||view.getUint32(0) ===0x1F8B0808)){
-             //console.log(`bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);
              return null;
          }
 
@@ -120,7 +266,7 @@ export class ROMHandler {
         return this.decompress(this.ROM.slice(floorPointer));
     }
 
-    public loadMaps(sceneID : number) : ArrayBufferSlice | null {
+    public loadMap(sceneID : number) : ArrayBufferSlice | null {
         let mapPtr = this.MapTableView.getUint32(sceneID * 4, false);
         mapPtr = mapPtr & 0x7FFFFFFF;
         mapPtr = mapPtr + ROMHandler.PointerTableOffset;
