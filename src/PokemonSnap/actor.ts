@@ -10,6 +10,8 @@ import { getPathPoint, getPathTangent } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
 import { ParticleManager } from "./particles";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
@@ -1566,6 +1568,32 @@ class Grimer extends Actor {
     }
 }
 
+
+class Haunter extends Actor {
+    public fullModel: ModelRenderer;
+    private timer = 2000;
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+        if (!this.visible)
+            return;
+        if (viewerInput.time > this.timer) {
+            // every few seconds, flash the full model
+            if (this.hidden)
+                this.timer = viewerInput.time + 2000 + 2000 * Math.random();
+            else
+                this.timer = viewerInput.time + 200 + 300 * Math.random();
+            this.hidden = !this.hidden;
+            this.fullModel.visible = this.hidden;
+        }
+        super.prepareToRender(device, renderInstManager, viewerInput, globals);
+        if (this.hidden) {
+            mat4.copy(this.fullModel.modelMatrix, this.modelMatrix);
+            for (let i = 0; i < this.renderers.length; i++)
+                mat4.copy(this.fullModel.renderers[i].transform, this.renderers[i].transform);
+        }
+    }
+}
+
 export class Staryu extends Actor {
     private spinSpeed = 0;
     private whirlpool: Actor | null = null;
@@ -1973,6 +2001,8 @@ export function sceneActorInit(): void {
     Pikachu.targetDiglett = 1;
     Staryu.evolveCount = 0;
     Staryu.separationScale = 1;
+    Magnemite.center = 0;
+    Magnemite.counter = 0;
 }
 
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
@@ -1992,6 +2022,7 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 79: return new Slowpoke(renderData, spawn, def, globals);
         case 81: return new Magnemite(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
+        case 93: return new Haunter(renderData, spawn, def, globals);
         case 120: return new Staryu(renderData, spawn, def, globals);
         case 124: return new Jynx(renderData, spawn, def, globals);
         case 129: return new Magikarp(renderData, spawn, def, globals);

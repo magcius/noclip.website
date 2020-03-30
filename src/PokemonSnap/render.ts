@@ -301,7 +301,7 @@ export class NodeRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visible || !!(this.animator.stateFlags & 2))
             return;
 
         mat4.mul(this.modelMatrix, this.parent, this.transform);

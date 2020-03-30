@@ -133,7 +133,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=4`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=5`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
@@ -176,8 +176,20 @@ class SceneDesc implements Viewer.SceneDesc {
                     eggInputSetup(device, data, level.eggData!);
                 objectDatas.push(data);
                 sceneRenderer.renderData.push(data);
-                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
+                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++) {
+                    data.sharedOutput.textureCache.textures[j].name = `${level.objectInfo[i].id}_${j}`;
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
+                }
+            }
+
+            let haunterData: RenderData | null = null;
+            if (level.haunterData) {
+                haunterData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.haunterData[1].model!.sharedOutput);
+                sceneRenderer.renderData.push(haunterData);
+                for (let j = 0; j < haunterData.sharedOutput.textureCache.textures.length; j++) {
+                    haunterData.sharedOutput.textureCache.textures[j].name = `93_${j + 1}`;
+                    viewerTextures.push(textureToCanvas(haunterData.sharedOutput.textureCache.textures[j]));
+                }
             }
 
             for (let particle of level.levelParticles.particleTextures)
@@ -211,6 +223,12 @@ class SceneDesc implements Viewer.SceneDesc {
                         const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
                         if (def.id === 133) // eevee actually uses chansey's path
                             objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
+                        if (def.id === 93) {
+                            const fullHaunter = new ModelRenderer(haunterData!, level.haunterData!, []);
+                            (objectRenderer as any).fullModel = fullHaunter;
+                            fullHaunter.visible = false;
+                            sceneRenderer.modelRenderers.push(fullHaunter);
+                        }
                         sceneRenderer.globals.allActors.push(objectRenderer);
                         sceneRenderer.modelRenderers.push(objectRenderer);
                     } else {
