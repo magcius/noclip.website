@@ -348,6 +348,10 @@ export class Model implements BlockRenderer {
                 texcoordCount: 0xa4,
                 texCount: 0xaa,
                 jointCount: 0xab,
+                posFineSkinningConfig: 0x64,
+                posFineSkinningPieces: 0x80,
+                posFineSkinningWeights: 0x84,
+                nrmFineSkinningConfig: 0xac, // ???
                 // weightCount: 0xad,
                 shaderCount: 0xae,
                 texMtxCount: 0xaf,
@@ -519,12 +523,14 @@ export class Model implements BlockRenderer {
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
+            console.log(`pos fine skinning config: ${JSON.stringify(this.posFineSkinningConfig, null, '\t')}`);
             if (this.posFineSkinningConfig.numPieces !== 0) {
                 const weightsOffs = blockDv.getUint32(fields.posFineSkinningWeights);
                 this.posFineSkinningWeights = dataSubarray(blockDv, weightsOffs);
                 const piecesOffs = blockDv.getUint32(fields.posFineSkinningPieces);
                 for (let i = 0; i < this.posFineSkinningConfig.numPieces; i++) {
                     const piece = parseFineSkinningPiece(dataSubarray(blockDv, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
+                    console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
                     this.posFineSkinningPieces.push(piece);
                 }
             }
@@ -1037,19 +1043,16 @@ export class Model implements BlockRenderer {
             mat4.identity(boneMtx);
 
             let jointWalker = joint;
+            if (this.isBetaFox) {
+                mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
+            }
             while (true) {
-                if (this.isBetaFox) {
-                    mat4.mul(boneMtx, boneMtx, this.invBindMatrices[jointWalker.boneNum]);
-                }
                 mat4.mul(boneMtx, this.poseMatrices[jointWalker.boneNum], boneMtx);
                 mat4.mul(boneMtx, this.jointTfMatrices[jointWalker.boneNum], boneMtx);
                 if (jointWalker.parent === 0xff) {
                     break;
                 }
                 jointWalker = this.joints[jointWalker.parent];
-                if (this.isBetaFox) {
-                    mat4.mul(boneMtx, boneMtx, this.bindMatrices[jointWalker.boneNum]);
-                }
             }
             
         }
@@ -1092,9 +1095,13 @@ export class Model implements BlockRenderer {
             const piece = this.posFineSkinningPieces[i];
 
             const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
-            mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
+            if (!this.isBetaFox) {
+                mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
+            }
             const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
-            mat4.mul(boneMtx1, boneMtx1, this.invBindMatrices[piece.bone1]);
+            if (!this.isBetaFox) {
+                mat4.mul(boneMtx1, boneMtx1, this.invBindMatrices[piece.bone1]);
+            }
 
             const src = dataSubarray(this.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
             const dst = dataSubarray(this.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
