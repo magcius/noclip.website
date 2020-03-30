@@ -20,6 +20,7 @@ import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView } f
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 
 export class Shape {
     private loadedVertexData: LoadedVertexData;
@@ -36,6 +37,7 @@ export class Shape {
     private gxMaterial: GXMaterial | undefined;
 
     private vtxLoader: VtxLoader;
+    private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private pnmtx9Hack = false;
 
@@ -48,6 +50,10 @@ export class Shape {
         if (this.shapeHelper !== null) {
             this.shapeHelper.destroy(this.device);
             this.shapeHelper = null;
+        }
+        if (this.bufferCoalescer !== null) {
+            this.bufferCoalescer.destroy(this.device);
+            this.bufferCoalescer = null;
         }
         this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
     }
@@ -100,8 +106,8 @@ export class Shape {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
-            const bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
+            this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
+            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, this.bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
         }
         
         this.packetParams.clear();
