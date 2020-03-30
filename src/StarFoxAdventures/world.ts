@@ -56,7 +56,7 @@ interface ObjectInstance {
     model?: Model;
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion, isBetaFox: boolean = false): Promise<Model | null> {
+async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion, isBetaFox: boolean = false): Promise<Model | null> {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
     const [modelsTabData, modelsBin, _] = await Promise.all([
@@ -80,7 +80,7 @@ async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, ga
     };
     
     try {
-        return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion, isBetaFox);
+        return new Model(device, new MaterialFactory(device), modelData, texColl, animController, modelVersion, isBetaFox);
     } catch (e) {
         console.warn(`Failed to load model due to exception:`);
         console.error(e);
@@ -698,7 +698,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading SharpClaw....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         console.log(`Loading General Scales....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
+        testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
         // console.log(`Loading SharpClaw (demo version)....`);
         // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
         // console.log(`Loading General Scales (demo version)....`);

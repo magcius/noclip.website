@@ -39,13 +39,16 @@ export class Shape {
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private pnmtx9Hack = false;
 
-    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
+    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.reload();
     }
 
     public reload() {
-        this.shapeHelper = null;
+        if (this.shapeHelper !== null) {
+            this.shapeHelper.destroy(this.device);
+            this.shapeHelper = null;
+        }
         this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
     }
 
@@ -317,7 +320,6 @@ export class Model implements BlockRenderer {
     ) {
         let offs = 0;
         const blockDv = blockData.createDataView();
-
 
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
@@ -843,7 +845,7 @@ export class Model implements BlockRenderer {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
-            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
+            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap);
             newShape.setPnMtx9Hack(enablePnmtx9Hack);
@@ -903,7 +905,7 @@ export class Model implements BlockRenderer {
                             const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory));
                             self.waters.push({ shape: newShape });
                         } else {
-                            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
+                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap);
                             newShape.setPnMtx9Hack(enablePnmtx9Hack);
@@ -1094,7 +1096,7 @@ export class Model implements BlockRenderer {
 
                 // vec3.transformMat4(pos, pos, boneMtx0); // TODO: blend matrices
 
-                pos[1] += 100000 * Math.sin(this.animController.animController.getTimeInSeconds());
+                pos[1] += 100 * Math.sin(this.animController.animController.getTimeInSeconds());
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
