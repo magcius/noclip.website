@@ -416,6 +416,10 @@ export class Model implements BlockRenderer {
                     jointCount: 0xf3,
                     weightOffset: 0x54,
                     weightCount: 0xf4,
+                    posFineSkinningConfig: 0x88,
+                    posFineSkinningPieces: 0xa4,
+                    posFineSkinningWeights: 0xa8,
+                    nrmFineSkinningConfig: 0xac,
                     shaderOffset: 0x38,
                     shaderCount: 0xf8, // Polygon attributes and material information
                     shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
@@ -458,6 +462,10 @@ export class Model implements BlockRenderer {
                     jointCount: 0xf3,
                     weightOffset: 0x54,
                     weightCount: 0xf4,
+                    posFineSkinningConfig: 0x88,
+                    posFineSkinningPieces: 0xa4,
+                    posFineSkinningWeights: 0xa8,
+                    nrmFineSkinningConfig: 0xac,
                     shaderOffset: 0x38,
                     shaderCount: 0xf8,
                     shaderFields: SFA_SHADER_FIELDS,
@@ -470,20 +478,6 @@ export class Model implements BlockRenderer {
                     oldVat: false,
                     hasYTranslate: false,
                 };
-
-                this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, 0x88));
-                if (this.posFineSkinningConfig.numPieces !== 0) {
-                    const weightsOffs = blockDv.getUint32(0xa8);
-                    this.posFineSkinningWeights = dataSubarray(blockDv, weightsOffs);
-                    const piecesOffs = blockDv.getUint32(0xa4);
-                    for (let i = 0; i < this.posFineSkinningConfig.numPieces; i++) {
-                        const piece = parseFineSkinningPiece(dataSubarray(blockDv, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
-                        this.posFineSkinningPieces.push(piece);
-                    }
-                }
-
-                this.nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, 0xac));
-                // TODO: implement fine skinning for normals
                 break;
             case 8:
             case 264:
@@ -521,6 +515,22 @@ export class Model implements BlockRenderer {
             default:
                 throw Error(`Model type ${modelType} not implemented`);
             }
+        }
+
+        if (fields.posFineSkinningConfig !== undefined) {
+            this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
+            if (this.posFineSkinningConfig.numPieces !== 0) {
+                const weightsOffs = blockDv.getUint32(fields.posFineSkinningWeights);
+                this.posFineSkinningWeights = dataSubarray(blockDv, weightsOffs);
+                const piecesOffs = blockDv.getUint32(fields.posFineSkinningPieces);
+                for (let i = 0; i < this.posFineSkinningConfig.numPieces; i++) {
+                    const piece = parseFineSkinningPiece(dataSubarray(blockDv, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
+                    this.posFineSkinningPieces.push(piece);
+                }
+            }
+
+            this.nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.nrmFineSkinningConfig));
+            // TODO: implement fine skinning for normals
         }
 
         const hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
