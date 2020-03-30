@@ -39,7 +39,7 @@ export class Shape {
     private vtxLoader: VtxLoader;
     private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
-    private pnmtx9Hack = false;
+    private hasFineSkinning = false;
 
     constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -71,14 +71,11 @@ export class Shape {
         }
     }
 
-    public setPnMatrixMap(pnMatrixMap: number[]) {
+    public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
         for (let i = 0; i < pnMatrixMap.length; i++) {
             this.pnMatrixMap[i] = pnMatrixMap[i];
         }
-    }
-
-    public setPnMtx9Hack(enable: boolean) {
-        this.pnmtx9Hack = enable;
+        this.hasFineSkinning = hasFineSkinning;
     }
 
     public setFurLayer(layer: number) {
@@ -180,15 +177,14 @@ export class Shape {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            // PNMTX 9 is special in models that use fancy skinning, where it denotes a fancy-skinned vertex.
-            let pnmtx;
-            if (this.pnmtx9Hack && i === 9) {
-                pnmtx = mat4.create();
+            // PNMTX 9 is used for fine-skinned vertices in models with fine-skinning enabled.
+            if (this.hasFineSkinning && i === 9) {
+                mat4.identity(this.scratchMtx);
             } else {
-                pnmtx = this.matrices[this.pnMatrixMap[i]];
+                mat4.copy(this.scratchMtx, this.matrices[this.pnMatrixMap[i]]);
             }
 
-            mat4.mul(this.scratchMtx, modelMatrix, pnmtx);
+            mat4.mul(this.scratchMtx, modelMatrix, this.scratchMtx);
 
             this.computeModelView(this.packetParams.u_PosMtx[i], viewerInput.camera, this.scratchMtx);
         }
@@ -229,7 +225,7 @@ export enum ModelVersion {
 interface DisplayListInfo {
     offset: number;
     size: number;
-    specialBitAddress: number; // Command bit address for fur/grass or fancy water
+    specialBitAddress: number; // Command bit address for fur/grass or water
     // TODO: Also includes bounding box
 }
 
@@ -252,20 +248,20 @@ interface Water {
 
 type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
-interface FancySkinningConfig {
+interface FineSkinningConfig {
     numPieces: number;
     quantizeScale: number;
 }
 
-function parseFancySkinningConfig(data: DataView): FancySkinningConfig {
+function parseFineSkinningConfig(data: DataView): FineSkinningConfig {
     return {
         numPieces: data.getUint16(0x2),
         quantizeScale: data.getUint8(0x6),
     };
 }
 
-const FancySkinningPiece_SIZE = 0x74;
-interface FancySkinningPiece {
+const FineSkinningPiece_SIZE = 0x74;
+interface FineSkinningPiece {
     skinDataSrcOffs: number;
     weightsSrc: number;
     bone0: number;
@@ -276,7 +272,7 @@ interface FancySkinningPiece {
     skinSrcBlockCount: number; // A block is 32 bytes
 }
 
-function parseFancySkinningPiece(data: DataView): FancySkinningPiece {
+function parseFineSkinningPiece(data: DataView): FineSkinningPiece {
     return {
         skinDataSrcOffs: data.getUint32(0x60),
         weightsSrc: data.getUint32(0x64),
@@ -308,11 +304,11 @@ export class Model implements BlockRenderer {
     private originalPosBuffer: DataView;
     private posBuffer: DataView;
 
-    private posFancySkinningConfig: FancySkinningConfig | undefined = undefined;
-    private posFancySkinningWeights: DataView | undefined = undefined;
-    private posFancySkinningPieces: FancySkinningPiece[] = [];
+    private posFineSkinningConfig: FineSkinningConfig | undefined = undefined;
+    private posFineSkinningWeights: DataView | undefined = undefined;
+    private posFineSkinningPieces: FineSkinningPiece[] = [];
 
-    private nrmFancySkinningConfig: FancySkinningConfig | undefined = undefined;
+    private nrmFineSkinningConfig: FineSkinningConfig | undefined = undefined;
 
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
@@ -475,21 +471,19 @@ export class Model implements BlockRenderer {
                     hasYTranslate: false,
                 };
 
-                this.posFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0x88));
-                console.log(`posFancySkinningConfig: ${JSON.stringify(this.posFancySkinningConfig, null, '\t')}`);
-                if (this.posFancySkinningConfig.numPieces !== 0) {
+                this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, 0x88));
+                if (this.posFineSkinningConfig.numPieces !== 0) {
                     const weightsOffs = blockDv.getUint32(0xa8);
-                    this.posFancySkinningWeights = dataSubarray(blockDv, weightsOffs);
+                    this.posFineSkinningWeights = dataSubarray(blockDv, weightsOffs);
                     const piecesOffs = blockDv.getUint32(0xa4);
-                    for (let i = 0; i < this.posFancySkinningConfig.numPieces; i++) {
-                        const piece = parseFancySkinningPiece(dataSubarray(blockDv, piecesOffs + i * FancySkinningPiece_SIZE, FancySkinningPiece_SIZE));
-                        console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
-                        this.posFancySkinningPieces.push(piece);
+                    for (let i = 0; i < this.posFineSkinningConfig.numPieces; i++) {
+                        const piece = parseFineSkinningPiece(dataSubarray(blockDv, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
+                        this.posFineSkinningPieces.push(piece);
                     }
                 }
 
-                this.nrmFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0xac));
-                // TODO: implement fancy skinning for normals
+                this.nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, 0xac));
+                // TODO: implement fine skinning for normals
                 break;
             case 8:
             case 264:
@@ -529,7 +523,7 @@ export class Model implements BlockRenderer {
             }
         }
 
-        const enablePnmtx9Hack = this.posFancySkinningConfig !== undefined && this.posFancySkinningConfig.numPieces !== 0;
+        const hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
 
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
@@ -546,7 +540,7 @@ export class Model implements BlockRenderer {
 
         const posOffset = blockDv.getUint32(fields.posOffset);
         const posCount = blockDv.getUint16(fields.posCount);
-        console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+        // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const originalPosBuffer = blockData.subarray(posOffset, posCount * 6);
         this.originalPosBuffer = originalPosBuffer.createDataView();
         this.posBuffer = new DataView(originalPosBuffer.copyToBuffer());
@@ -853,8 +847,7 @@ export class Model implements BlockRenderer {
 
             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newShape.setMaterial(material);
-            newShape.setPnMatrixMap(pnMatrixMap);
-            newShape.setPnMtx9Hack(enablePnmtx9Hack);
+            newShape.setPnMatrixMap(pnMatrixMap, hasFineSkinning);
 
             return newShape;
         }
@@ -913,8 +906,7 @@ export class Model implements BlockRenderer {
                         } else {
                             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newShape.setMaterial(curMaterial!);
-                            newShape.setPnMatrixMap(pnMatrixMap);
-                            newShape.setPnMtx9Hack(enablePnmtx9Hack);
+                            newShape.setPnMatrixMap(pnMatrixMap, hasFineSkinning);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
@@ -1071,33 +1063,32 @@ export class Model implements BlockRenderer {
             mat4.add(boneMtx, mat0, mat1);
         }
 
-        this.performFancySkinning();
+        this.performFineSkinning();
     }
 
-    private performFancySkinning() {
-        if (this.posFancySkinningPieces.length === 0) {
+    private performFineSkinning() {
+        if (this.posFineSkinningPieces.length === 0) {
             return;
         }
 
-        // The original game performs fancy skinning on the CPU.
+        const scratch0 = mat4.create();
+        const scratch1 = mat4.create();
+
+        // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
-        const quant = 1 << this.posFancySkinningConfig!.quantizeScale;
+        const quant = 1 << this.posFineSkinningConfig!.quantizeScale;
         const dequant = 1 / quant;
-        for (let i = 0; i < this.posFancySkinningPieces.length; i++) {
-            const piece = this.posFancySkinningPieces[i];
+        for (let i = 0; i < this.posFineSkinningPieces.length; i++) {
+            const piece = this.posFineSkinningPieces[i];
 
             const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
             mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
             const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
             mat4.mul(boneMtx1, boneMtx1, this.invBindMatrices[piece.bone1]);
 
-            const scratch0 = mat4.create();
-            const scratch1 = mat4.create();
-            const scratch2 = mat4.create();
-
             const src = dataSubarray(this.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
             const dst = dataSubarray(this.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
-            const weights = dataSubarray(this.posFancySkinningWeights!, piece.weightsSrc, 32 * piece.weightsBlockCount);
+            const weights = dataSubarray(this.posFineSkinningWeights!, piece.weightsSrc, 32 * piece.weightsBlockCount);
             let srcOffs = piece.skinMeOffset;
             let dstOffs = piece.skinMeOffset;
             let weightOffs = 0;
@@ -1114,8 +1105,8 @@ export class Model implements BlockRenderer {
                 mat4.multiplyScalar(scratch0, scratch0, weight0);
                 mat4.copy(scratch1, boneMtx1);
                 mat4.multiplyScalar(scratch1, scratch1, weight1);
-                mat4.add(scratch2, scratch0, scratch1);
-                vec3.transformMat4(pos, pos, scratch2);
+                mat4.add(scratch0, scratch0, scratch1);
+                vec3.transformMat4(pos, pos, scratch0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
