@@ -1089,11 +1089,18 @@ export class Model implements BlockRenderer {
             const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
             mat4.mul(boneMtx0, boneMtx0, this.invBindMatrices[piece.bone0]);
             const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
+            mat4.mul(boneMtx1, boneMtx1, this.invBindMatrices[piece.bone1]);
+
+            const scratch0 = mat4.create();
+            const scratch1 = mat4.create();
+            const scratch2 = mat4.create();
 
             const src = dataSubarray(this.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
             const dst = dataSubarray(this.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
+            const weights = dataSubarray(this.posFancySkinningWeights!, piece.weightsSrc, 32 * piece.weightsBlockCount);
             let srcOffs = piece.skinMeOffset;
             let dstOffs = piece.skinMeOffset;
+            let weightOffs = 0;
             for (let j = 0; j < piece.numVertices; j++) {
                 const pos = vec3.fromValues(
                     src.getInt16(srcOffs) * dequant,
@@ -1101,7 +1108,14 @@ export class Model implements BlockRenderer {
                     src.getInt16(srcOffs + 4) * dequant
                 );
 
-                vec3.transformMat4(pos, pos, boneMtx0); // TODO: blend matrices
+                const weight0 = weights.getUint8(weightOffs) / 128;
+                const weight1 = weights.getUint8(weightOffs + 1) / 128;
+                mat4.copy(scratch0, boneMtx0);
+                mat4.multiplyScalar(scratch0, scratch0, weight0);
+                mat4.copy(scratch1, boneMtx1);
+                mat4.multiplyScalar(scratch1, scratch1, weight1);
+                mat4.add(scratch2, scratch0, scratch1);
+                vec3.transformMat4(pos, pos, scratch2);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
@@ -1109,6 +1123,7 @@ export class Model implements BlockRenderer {
 
                 srcOffs += 6;
                 dstOffs += 6;
+                weightOffs += 2;
             }
         }
 
