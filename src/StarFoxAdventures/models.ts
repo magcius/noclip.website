@@ -45,6 +45,7 @@ export class Shape {
     }
 
     public reload() {
+        this.shapeHelper = null;
         this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
     }
 
@@ -170,8 +171,7 @@ export class Shape {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            // FIXME: get rid of PNMTX 9 hack below.
-            // PNMTX 9 is special in certain models where the game activates some form of software skinning.
+            // PNMTX 9 is special in models that use fancy skinning, where it denotes a fancy-skinned vertex.
             let pnmtx;
             if (this.pnmtx9Hack && i === 9) {
                 pnmtx = mat4.create();
@@ -295,7 +295,15 @@ export class Model implements BlockRenderer {
     public materials: (SFAMaterial | undefined)[] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
+
+    private originalPosBuffer: DataView;
     private posBuffer: DataView;
+
+    private posFancySkinningConfig: FancySkinningConfig | undefined = undefined;
+    private posFancySkinningWeights: DataView | undefined = undefined;
+    private posFancySkinningPieces: FancySkinningPiece[] = [];
+
+    private nrmFancySkinningConfig: FancySkinningConfig | undefined = undefined;
 
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
@@ -310,11 +318,6 @@ export class Model implements BlockRenderer {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
-        let posFancySkinningConfig: FancySkinningConfig | undefined = undefined;
-        let posFancySkinningWeights: DataView | undefined = undefined;
-        const posFancySkinningPieces: FancySkinningPiece[] = [];
-
-        let nrmFancySkinningConfig: FancySkinningConfig | undefined = undefined;
 
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
@@ -464,20 +467,20 @@ export class Model implements BlockRenderer {
                     hasYTranslate: false,
                 };
 
-                posFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0x88));
-                console.log(`posFancySkinningConfig: ${JSON.stringify(posFancySkinningConfig, null, '\t')}`);
-                if (posFancySkinningConfig.numPieces !== 0) {
+                this.posFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0x88));
+                console.log(`posFancySkinningConfig: ${JSON.stringify(this.posFancySkinningConfig, null, '\t')}`);
+                if (this.posFancySkinningConfig.numPieces !== 0) {
                     const weightsOffs = blockDv.getUint32(0xa8);
-                    posFancySkinningWeights = dataSubarray(blockDv, weightsOffs);
+                    this.posFancySkinningWeights = dataSubarray(blockDv, weightsOffs);
                     const piecesOffs = blockDv.getUint32(0xa4);
-                    for (let i = 0; i < posFancySkinningConfig.numPieces; i++) {
+                    for (let i = 0; i < this.posFancySkinningConfig.numPieces; i++) {
                         const piece = parseFancySkinningPiece(dataSubarray(blockDv, piecesOffs + i * FancySkinningPiece_SIZE, FancySkinningPiece_SIZE));
                         console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
-                        posFancySkinningPieces.push(piece);
+                        this.posFancySkinningPieces.push(piece);
                     }
                 }
 
-                nrmFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0xac));
+                this.nrmFancySkinningConfig = parseFancySkinningConfig(dataSubarray(blockDv, 0xac));
                 // TODO: implement fancy skinning for normals
                 break;
             case 8:
@@ -518,6 +521,8 @@ export class Model implements BlockRenderer {
             }
         }
 
+        const enablePnmtx9Hack = this.posFancySkinningConfig !== undefined && this.posFancySkinningConfig.numPieces !== 0;
+
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
@@ -535,6 +540,7 @@ export class Model implements BlockRenderer {
         const posCount = blockDv.getUint16(fields.posCount);
         console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const originalPosBuffer = blockData.subarray(posOffset, posCount * 6);
+        this.originalPosBuffer = originalPosBuffer.createDataView();
         this.posBuffer = new DataView(originalPosBuffer.copyToBuffer());
 
         let nrmBuffer = blockData;
@@ -840,7 +846,7 @@ export class Model implements BlockRenderer {
             const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap);
-            newShape.setPnMtx9Hack(posFancySkinningWeights !== undefined);
+            newShape.setPnMtx9Hack(enablePnmtx9Hack);
 
             return newShape;
         }
@@ -900,7 +906,7 @@ export class Model implements BlockRenderer {
                             const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.animController, self.boneMatrices);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap);
-                            newShape.setPnMtx9Hack(posFancySkinningWeights !== undefined);
+                            newShape.setPnMtx9Hack(enablePnmtx9Hack);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
@@ -1055,6 +1061,56 @@ export class Model implements BlockRenderer {
             mat4.multiplyScalar(mat0, mat0, weight.influence0);
             mat4.multiplyScalar(mat1, mat1, weight.influence1);
             mat4.add(boneMtx, mat0, mat1);
+        }
+
+        this.performFancySkinning();
+    }
+
+    private performFancySkinning() {
+        if (this.posFancySkinningPieces.length === 0) {
+            return;
+        }
+
+        // The original game performs fancy skinning on the CPU.
+        // A more appropriate place for these calculations might be in a vertex shader.
+        const quant = 1 << this.posFancySkinningConfig!.quantizeScale;
+        const dequant = 1 / quant;
+        for (let i = 0; i < this.posFancySkinningPieces.length; i++) {
+            const piece = this.posFancySkinningPieces[i];
+
+            const boneMtx0 = this.boneMatrices[piece.bone0];
+            const boneMtx1 = this.boneMatrices[piece.bone1];
+
+            const src = dataSubarray(this.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
+            const dst = dataSubarray(this.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
+            let srcOffs = piece.skinMeOffset;
+            let dstOffs = piece.skinMeOffset;
+            for (let j = 0; j < piece.numVertices; j++) {
+                const pos = vec3.fromValues(
+                    src.getInt16(srcOffs) * dequant,
+                    src.getInt16(srcOffs + 2) * dequant,
+                    src.getInt16(srcOffs + 4) * dequant
+                );
+
+                // vec3.transformMat4(pos, pos, boneMtx0); // TODO: blend matrices
+
+                pos[1] += 100000 * Math.sin(this.animController.animController.getTimeInSeconds());
+
+                dst.setInt16(dstOffs, pos[0] * quant);
+                dst.setInt16(dstOffs + 2, pos[1] * quant);
+                dst.setInt16(dstOffs + 4, pos[2] * quant);
+
+                srcOffs += 6;
+                dstOffs += 6;
+            }
+        }
+
+        // Rerun all display lists
+        for (let i = 0; i < this.shapes.length; i++) {
+            const shapes = this.shapes[i];
+            for (let j = 0; j < shapes.length; j++) {
+                shapes[j].reload();
+            }
         }
     }
 
