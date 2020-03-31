@@ -412,19 +412,23 @@ export class Frustum {
  * to the the AABB's center point.
  */
 export function squaredDistanceFromPointToAABB(v: vec3, aabb: AABB): number {
-    function square(V: number): number {
-        return V * V;
-    }
-
     const pX = v[0], pY = v[1], pZ = v[2];
     let sqDist = 0;
 
-    if (pX < aabb.minX) sqDist += square(aabb.minX - pX);
-    else if (pX > aabb.maxX) sqDist += square(pX - aabb.maxX);
-    if (pY < aabb.minY) sqDist += square(aabb.minY - pY);
-    else if (pY > aabb.maxY) sqDist += square(pY - aabb.maxY);
-    if (pZ < aabb.minZ) sqDist += square(aabb.minZ - pZ);
-    else if (pZ > aabb.maxZ) sqDist += square(pZ - aabb.maxZ);
+    if (pX < aabb.minX)
+        sqDist += (aabb.minX - pX) ** 2.0;
+    else if (pX > aabb.maxX)
+        sqDist += (pX - aabb.maxX) ** 2.0;
+
+    if (pY < aabb.minY)
+        sqDist += (aabb.minY - pY) ** 2.0;
+    else if (pY > aabb.maxY)
+        sqDist += (pY - aabb.maxY) ** 2.0;
+
+    if (pZ < aabb.minZ)
+        sqDist += (aabb.minZ - pZ) ** 2.0;
+    else if (pZ > aabb.maxZ)
+        sqDist += (pZ - aabb.maxZ) ** 2.0;
 
     return sqDist;
 }

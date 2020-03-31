@@ -5,7 +5,6 @@ import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
-import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
@@ -94,7 +93,7 @@ function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTe
 }
 
 export interface Flair {
-    index: number;
+v    index: number;
     background?: string;
     color?: string;
     bulletColor?: string;
