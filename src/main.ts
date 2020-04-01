@@ -175,7 +175,9 @@ class AnimationLoop implements ViewerUpdateInfo {
     // https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
     // https://github.com/WICG/requestPostAnimationFrame
     // https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
-    public useRequestPostAnimationFrame = true;
+
+    // XXX(jstpierre): Disabled for now. https://bugs.chromium.org/p/chromium/issues/detail?id=1065012
+    public useRequestPostAnimationFrame = false;
 
     private _timeoutCallback = (): void => {
         this.onupdate(this);
