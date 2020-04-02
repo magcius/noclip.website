@@ -608,7 +608,7 @@ class SceneDesc implements Viewer.SceneDesc {
             let rotation = setupView.getInt16(entryBase + model1Setup.rotation) / 4096.0 * 360.0;
             let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
             // TODO: Actually render model
-            console.log("Actor: " + entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            //console.log("Actor: " + entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
             //let modelFile = romHandler.getActorModel(behavior);
         }
 
