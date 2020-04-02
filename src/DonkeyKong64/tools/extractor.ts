@@ -186,6 +186,8 @@ export class ROMHandler {
     public SetupTable: ArrayBufferSlice;
     public SetupTableView: DataView;
 
+    public ActorModels: Array<number>;
+
     public MapTable: ArrayBufferSlice;
     public MapTableView: DataView;
 
@@ -229,6 +231,31 @@ export class ROMHandler {
 
         this.MapTable = this.ROM.slice(ROMHandler.MapTableOffset);
         this.MapTableView = this.MapTable.createDataView();
+
+        // Hook up Actor behaviour indexes to Actor model indexes
+        let bigDataBlobContents = decompress(this.ROM.slice(0xC29D4));
+        if (bigDataBlobContents !== null) {
+            let bigDataBlobView = bigDataBlobContents.createDataView();
+
+            this.ActorModels = [];
+            for (let i = 0; i < 127; i++) {
+                let modelBase = 0xA450 + i * 0x30;
+                let behavior = bigDataBlobView.getInt16(modelBase);
+                let modelIndex = bigDataBlobView.getInt16(modelBase + 0x02);
+                this.ActorModels[behavior] = modelIndex;
+            }
+    
+            let actorModelPointerTable = this.ROM.slice(ROMHandler.ActorModelTableOffset);
+            let actorModelPointerTableView = actorModelPointerTable.createDataView();
+            for (let i = 0; i < 237; i++) {
+                let modelPointer = actorModelPointerTableView.getInt32(i * 4, false) + ROMHandler.PointerTableOffset;
+                for (let j = 0; j < this.ActorModels.length; j++) {
+                    if (i + 1 == this.ActorModels[j]) {
+                        this.ActorModels[j] = modelPointer;
+                    }
+                }
+            }
+        }
     }
 
     private decompressAsset(addr: number): ArrayBufferSlice {
@@ -286,4 +313,14 @@ export class ROMHandler {
         const mapData = assertExists(this.loadMap(sceneID));
         return new Map(mapData);
     }
+
+    public getActorModel(behaviorID: number): ArrayBufferSlice {
+        return this.decompressAsset(this.ActorModels[behaviorID]);
+    }
+
+    /*
+    public getObjectModel2Model(behaviorID: number): ArrayBufferSlice {
+        // TODO
+    }
+    */
 }

@@ -605,8 +605,8 @@ class SceneDesc implements Viewer.SceneDesc {
             let scale = setupView.getFloat32(entryBase + model1Setup.scale, false);
             let rotation = setupView.getInt16(entryBase + model1Setup.rotation) / 4096.0 * 360.0;
             let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
-            // TODO: Turn behavior index into model address to render
-            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            // TODO: Actually render model
+            console.log(entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
         }
 
         return sceneRenderer;
