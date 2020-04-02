@@ -9,8 +9,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVers
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT } from './MathHelpers';
-import { mat4, vec3 } from 'gl-matrix';
+import { clamp } from './MathHelpers';
 import "reflect-metadata";
 
 // @ts-ignore
@@ -1526,7 +1525,7 @@ class ViewerSettings extends Panel {
     background: #444;
     text-align: center;
     line-height: 24px;
-    cursor: not-allowed;
+    cursor: pointer;
 }
 </style>
 
@@ -1558,19 +1557,19 @@ class ViewerSettings extends Panel {
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
-        // this.cameraControllerWASD.onclick = () => {
-        //     this.setCameraControllerClass(FPSCameraController);
-        // };
+        this.cameraControllerWASD.onclick = () => {
+            this.setCameraControllerClass(FPSCameraController);
+        };
 
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
-        // this.cameraControllerOrbit.onclick = () => {
-        //     this.setCameraControllerClass(OrbitCameraController);
-        // };
+        this.cameraControllerOrbit.onclick = () => {
+            this.setCameraControllerClass(OrbitCameraController);
+        };
 
         this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
-        // this.cameraControllerOrtho.onclick = () => {
-        //     this.setCameraControllerClass(OrthoCameraController);
-        // };
+        this.cameraControllerOrtho.onclick = () => {
+            this.setCameraControllerClass(OrthoCameraController);
+        };
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -2552,14 +2551,8 @@ class RecordingBranding {
     }
 }
 
-const afm = mat4.create();
-const afv = vec3.create();
-
 export class UI {
     public elem: HTMLElement;
-
-    private toplevelScene1: HTMLElement;
-    private toplevelScene2: HTMLElement;
 
     private toplevel: HTMLElement;
 
@@ -2602,18 +2595,19 @@ export class UI {
 
         this.panelToplevel = document.createElement('div');
         this.panelToplevel.id = 'Panel';
-        this.panelToplevel.style.cssText = 'width: fit-content; width: -moz-fit-content';
-        this.panelToplevel.style.height = '100vh';
+        this.panelToplevel.style.position = 'absolute';
+        this.panelToplevel.style.left = '0';
+        this.panelToplevel.style.top = '0';
+        this.panelToplevel.style.bottom = '0';
         this.panelToplevel.style.padding = '2em';
         this.panelToplevel.style.transition = '.2s background-color';
-        this.panelToplevel.style.pointerEvents = 'auto';
         this.panelToplevel.onmouseover = () => {
             this.panelToplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
             this.panelToplevel.style.overflow = 'auto';
             this.setPanelsAutoClosed(false);
         };
         this.panelToplevel.onmouseout = () => {
-            this.panelToplevel.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+            this.panelToplevel.style.backgroundColor = 'rgba(0, 0, 0, 0)';
             this.panelToplevel.style.overflow = 'hidden';
         };
 
@@ -2623,20 +2617,7 @@ export class UI {
         this.panelContainer.style.gridGap = '20px';
         this.panelToplevel.appendChild(this.panelContainer);
 
-        this.toplevelScene2 = document.createElement('div');
-        this.toplevelScene2.style.pointerEvents = 'none';
-        this.toplevelScene2.appendChild(this.panelToplevel);
-
-        this.toplevelScene1 = document.createElement('div');
-        this.toplevelScene1.style.position = 'absolute';
-        this.toplevelScene1.style.left = '0';
-        this.toplevelScene1.style.right = '0';
-        this.toplevelScene1.style.top = '0';
-        this.toplevelScene1.style.bottom = '0';
-        this.toplevelScene1.style.pointerEvents = 'none';
-        this.toplevelScene1.appendChild(this.toplevelScene2);
-
-        this.toplevel.appendChild(this.toplevelScene1);
+        this.toplevel.appendChild(this.panelToplevel);
 
         this.dragHighlight = document.createElement('div');
         this.toplevel.appendChild(this.dragHighlight);
@@ -2892,24 +2873,6 @@ export class UI {
 
         this.panelToplevel.style.display = visible ? '' : 'none';
         this.bottomBar.elem.style.display = visible ? 'grid' : 'none';
-    }
-
-    private afi1 = mat4.create();
-    public af1(viewerInput: Viewer.ViewerRenderInput): void {
-        mat4.copy(this.afi1, viewerInput.camera.worldMatrix);
-    }
-
-    public af2(viewerInput: Viewer.ViewerRenderInput): void {
-        const c = viewerInput.camera;
-        const m = c.viewMatrix;
-
-        mat4.mul(afm, m, this.afi1);
-        computeEulerAngleRotationFromSRTMatrix(afv, afm);
-        computeModelMatrixSRT(afm, 1, 1, 1, -afv[0], afv[1], -afv[2], afm[12], -afm[13], afm[14]);
-
-        const psp = c.projectionMatrix[5] * 0.5 * viewerInput.backbufferHeight;
-        this.toplevelScene1.style.perspective = `${psp}px`;
-        this.toplevelScene2.style.transform = `translateZ(${psp}px) matrix3d(${afm.join(',')}) translateZ(-${psp}px)`;
     }
 }
 
