@@ -1,3 +1,4 @@
+
 import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as RDP from '../Common/N64/RDP';
 
@@ -5,6 +6,7 @@ import { nArray, assert, assertExists, hexzero } from "../util";
 import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { ROMHandler } from './tools/extractor';
 
 // Interpreter for N64 F3DEX2 microcode.
 export const enum RSP_Geometry {
@@ -24,8 +26,6 @@ export class DrawCall extends F3DEX.DrawCall {
     public DP_PrimColor = vec4.fromValues(1, 1, 1, 1);
     public DP_EnvColor = vec4.fromValues(1, 1, 1, 1);
     public DP_PrimLOD = 0;
-    public materialIndex = -1;
-    public textures: (RDP.Texture | null)[] = [];
 }
 
 // same logic, just with the new type
@@ -46,7 +46,6 @@ export class RSPState {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
-    private minorChange: boolean = false;
     private vertexCache = nArray(64, () => new F3DEX.StagingVertex());
 
     private SP_GeometryMode: number = 0;
@@ -67,9 +66,7 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    public materialIndex = -1;
-
-    constructor(public sharedOutput: F3DEX.RSPSharedOutput, public vertexBuffer: ArrayBufferSlice, public f3dexCmds: ArrayBufferSlice) {
+    constructor(public romHandler: ROMHandler, public sharedOutput: F3DEX.RSPSharedOutput, public vertexBuffer: ArrayBufferSlice, public f3dexCmds: ArrayBufferSlice) {
     }
 
     public finish(): RSPOutput | null {
@@ -85,7 +82,6 @@ export class RSPState {
         this.output = new RSPOutput();
         this.stateChanged = true;
 
-        this.materialIndex = -1;
         // mark any existing vertices as belonging to the parent
         for (let i = 0; i < this.vertexCache.length; i++) {
             this.vertexCache[i].matrixIndex = 1;
@@ -96,9 +92,6 @@ export class RSPState {
     private _setGeometryMode(newGeometryMode: number) {
         if (this.SP_GeometryMode === newGeometryMode)
             return;
-        // occasionally pokemon snap will just modify e.g. culling in between sets of triangles
-        // keep track of this to properly share material across draw calls
-        this.minorChange = true;
         this.SP_GeometryMode = newGeometryMode;
     }
 
@@ -127,38 +120,36 @@ export class RSPState {
         }
     }
 
-    public gSPModifyVertex(w: number, n: number, upper: number, lower: number): void {
-        const vtx = this.vertexCache[n];
-        switch (w) {
-            case 0x14: {
-                // the provided values are already scaled, no need to adjust
-                vtx.tx = (upper / 0x20) + 0.5;
-                vtx.ty = (lower / 0x20) + 0.5;
-            } break;
-            default:
-                console.warn("new modifyvtx", w, upper, lower);
-        }
-        vtx.outputIndex = -1;
-    }
-
     private _translateTileTexture(tileIndex: number): number {
         const tile = this.DP_TileState[tileIndex];
-        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
+        const addr = assertExists(this.DP_TMemTracker.get(tile.tmem));
+        const segment = (addr >>> 24) & 0xFF;
 
-        let dramPalAddr: number;
-        if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
-            const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-            // assert(textlut === TextureLUT.G_TT_RGBA16);
-
-            const palTmem = 0x100 + (tile.palette << 4);
-            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
+        if (segment === 0x00) {
+            // Load from texture index.
+            const segmentBuffers: ArrayBufferSlice[] = [];
+            segmentBuffers[0x01] = assertExists(this.romHandler.loadTexture(addr));
+    
+            tile.cacheKey = addr;
+    
+            let dramPalAddr: number;
+            if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
+                const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
+                // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
+    
+                const palTmem = 0x100 + (tile.palette << 4);
+                const palTextureID = assertExists(this.DP_TMemTracker.get(palTmem));
+                segmentBuffers[0x02] = assertExists(this.romHandler.loadTexture(palTextureID));
+                dramPalAddr = 0x02000000;
+            } else {
+                dramPalAddr = 0;
+            }
+    
+            return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile);
         } else {
-            dramPalAddr = 0;
+            console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
+            return 0;
         }
-
-        //const range = this.dataMap.getRange(dramAddr);
-        //return this.sharedOutput.textureCache.translateTileTexture(, 0, dramPalAddr - range.start, tile);
-        return 0;
     }
 
     private _flushTextures(dc: F3DEX.DrawCall): void {
@@ -167,8 +158,8 @@ export class RSPState {
             return;
 
         const lod_en = !!((this.DP_OtherModeH >>> 16) & 0x01);
-        if (lod_en) {
-            // TODO(jstpierre): Support mip-mapping
+        // TODO(jstpierre): Support mip-mapping
+        if (false && lod_en) {
             assert(false);
         } else {
             // We're in TILE mode. Now check if we're in two-cycle mode.
@@ -185,12 +176,8 @@ export class RSPState {
     }
 
     private _flushDrawCall(): void {
-        if (this.stateChanged || this.minorChange) {
-            // if we've already used this material, and major changes have happened, clear it
-            if (this.materialIndex === this.output.currentDrawCall.materialIndex && this.stateChanged)
-                this.materialIndex = -1;
+        if (this.stateChanged) {
             this.stateChanged = false;
-            this.minorChange = false;
 
             const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
             dc.SP_GeometryMode = this.SP_GeometryMode;
@@ -201,9 +188,8 @@ export class RSPState {
             vec4.copy(dc.DP_PrimColor, this.DP_PrimColor);
             vec4.copy(dc.DP_EnvColor, this.DP_EnvColor);
             dc.DP_PrimLOD = this.DP_PrimLOD;
-            dc.materialIndex = this.materialIndex;
-
-            //this._flushTextures(dc);
+ 
+            this._flushTextures(dc);
         }
     }
 
@@ -238,7 +224,7 @@ export class RSPState {
         // First, verify that we're loading the whole texture.
         assert(uls === 0 && ult === 0);
         // Verify that we're loading into LOADTILE.
-        // assert(tileIndex === 7);
+        assert(tileIndex === 7);
 
         const tile = this.DP_TileState[tileIndex];
 
@@ -290,7 +276,7 @@ export class RSPState {
     }
 }
 
-const enum F3DEX2_GBI {
+enum F3DEX2_GBI {
     G_SNOOP             = 0x00, //used in DK64
     // DMA
     G_VTX               = 0x01,
@@ -343,18 +329,14 @@ const enum F3DEX2_GBI {
     G_RDPHALF_1         = 0XE1,
 }
 
-export type dlRunner = (state: RSPState, addr: number) => void;
-
 export function runDL_F3DEX2(state: RSPState, addr: number): void {
-    //const view = state.dataMap.getView(addr);
-    const view = state.f3dexCmds.createDataView();
+    const view = state.f3dexCmds.createDataView(addr);
     for (let i = 0; i < view.byteLength; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX2_GBI = w0 >>> 24;
-        //if (window.debug)
-        //    console.log(hexzero(i, 8), F3DEX2_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        // console.log(hexzero(i, 8), F3DEX2_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
             case F3DEX2_GBI.G_ENDDL:
@@ -434,12 +416,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
 
             case F3DEX2_GBI.G_DL: {
                 const segment = (w1 >>> 24) & 0xFF;
-               // if (segment === 0x80)
-                //    runDL_F3DEX2(state, w1, subDLHandler);
-               // else
-                //    subDLHandler(state, w1);
-                //if ((w0 >>> 16) & 0xFF)
-                //    return;
+                // runDL_F3DEX2(state, w1 & 0x00FFFFFF);
             } break;
 
             case F3DEX2_GBI.G_RDPSETOTHERMODE: {
@@ -510,26 +487,8 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
                 state.gSPSetEnvColor(r, g, b, a);
             } break;
 
-            case F3DEX2_GBI.G_BRANCH_Z: {
-                //runDL_F3DEX2(state, state.DP_Half1, subDLHandler);
-                return; // assume this DL is just for selecting LOD
-            } break;
-
             case F3DEX2_GBI.G_RDPHALF_1: {
                 state.DP_Half1 = w1;
-            } break;
-
-            case F3DEX2_GBI.G_MODIFYVTX: {
-                const w = (w0 >>> 16) & 0xFF;
-                const n = (w0 >>> 1) & 0x7FFF;
-                const upper = view.getInt16(i + 0x04);
-                const lower = view.getInt16(i + 0x06);
-                state.gSPModifyVertex(w, n, upper, lower);
-            } break;
-
-            case F3DEX2_GBI.G_MOVEWORD: {
-                // TODO: lights
-                assert(((w0 >>> 16) & 0xFF) === 0x0A)
             } break;
 
             case F3DEX2_GBI.G_CULLDL:
@@ -545,4 +504,6 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
                 console.error(`Unknown DL opcode: ${cmd.toString(16)} ${hexzero(i, 8)}`);
         }
     }
+
+    throw "whoops";
 }

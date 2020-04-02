@@ -2,7 +2,6 @@
 // Common utilities for the N64 Reality Display Processor (RDP).
 
 import { assert, hexzero } from "../../util";
-import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM } from "./Image";
 import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../../gfx/platform/GfxPlatform";
@@ -136,6 +135,7 @@ export class Texture {
 }
 
 export class TileState {
+    public cacheKey: number = 0;
     public fmt: number = 0;
     public siz: number = 0;
     public line: number = 0;
@@ -222,7 +222,6 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
 
-
     // TODO(jstpierre): Support more tile parameters
     // assert(tile.shifts === 0); // G_TX_NOLOD
     // assert(tile.shiftt === 0); // G_TX_NOLOD
@@ -250,7 +249,7 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 // figure out if two textures with the same underlying data can reuse the same texture object
 // we assume that a texture has only one real size/tiling behavior, so just match on coords
 function textureMatch(a: TileState, b: TileState): boolean {
-    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt;
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
 }
 
 export class TextureCache {

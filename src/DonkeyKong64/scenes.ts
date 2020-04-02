@@ -95,9 +95,11 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private drawCall: DrawCall) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, sharedOutput: RSPSharedOutput, private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
-            const tex = drawCall.textures[i];
+            const textureIndex = drawCall.textureIndices[i];
+            const tex = sharedOutput.textureCache.textures[textureIndex];
+
             if (tex) {
                 this.textureEntry[i] = tex;
                 this.textureMappings[i].gfxTexture = translateTexture(device, tex);
@@ -385,7 +387,7 @@ export class RootMeshRenderer {
 
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawCallInstance = new DrawCallInstance(device, cache, node.rspOutput.drawCalls[i]);
+                const drawCallInstance = new DrawCallInstance(device, cache, node.sharedOutput, node.rspOutput.drawCalls[i]);
                 geoNodeRenderer.drawCallInstances.push(drawCallInstance);
             }
         }
@@ -507,17 +509,17 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        let ROM = await context.dataFetcher.fetchData(`${ROMHandler.pathBaseIn}/dk64.z64`);
+        const ROM = await context.dataFetcher.fetchData(`${ROMHandler.pathBaseIn}/dk64.z64`);
         const romHandler = new ROMHandler(ROM);
         const map = romHandler.getMap(parseInt(this.id, 16));
 
         const sceneRenderer = new DK64Renderer(device);
         const cache = sceneRenderer.renderHelper.getCache();
-        for (let i = 0; i < map.DisplayLists.length; i++) {
-            const dl = map.DisplayLists[i];
+        for (let i = 0; i < map.displayLists.length; i++) {
+            const dl = map.displayLists[i];
 
             const sharedOutput = new RSPSharedOutput();
-            const state = new RSPState(sharedOutput, 
+            const state = new RSPState(romHandler, sharedOutput, 
                 map.vertBin.slice(dl.VertStartIndex * 0x10),
                 map.f3dexBin.slice(dl.F3dexStartIndex * 0x08)
             );

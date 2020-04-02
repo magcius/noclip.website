@@ -1,6 +1,6 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 //import { readFileSync, writeFileSync } from "fs";
-import { assertExists } from "../../util";
+import { assertExists, hexdump, hexzero } from "../../util";
 import * as Pako from 'pako';
 
 /*
@@ -26,26 +26,22 @@ export class MapChunk {
     public vertOffset: number
     public vertSize: number
 
-    public id: number = 0;
-
     static readonly size = 0x34;
 
-    constructor(bin : ArrayBufferSlice, iChunk ?: number){
-        if (iChunk) {
-            this.id = iChunk;
-        }
+    constructor(bin: ArrayBufferSlice, public id: number) {
         let view = bin.createDataView();
-        this.x = view.getInt32(0x00, false);
-        this.y = view.getInt32(0x04, false);
+        this.x = view.getInt32(0x00);
+        this.y = view.getInt32(0x04);
 
+        let dlTableIdx = 0x0C;
         for (let i = 0; i < 4; i++) {
-            let currOffset = view.getInt32(0x0C + i* 0x08, false);
-            this.dlOffsets[i] = (currOffset);
-            this.dlSizes[i] = view.getUint32(0x10 + i* 0x08, false);
+            this.dlOffsets[i] = view.getInt32(dlTableIdx + 0x00);
+            this.dlSizes[i] = view.getUint32(dlTableIdx + 0x04);
+            dlTableIdx += 0x08;
         }
-        
-        this.vertOffset = view.getInt32(0x2C, false);
-        this.vertSize = view.getInt32(0x30, false);
+
+        this.vertOffset = view.getInt32(0x2C);
+        this.vertSize = view.getUint32(0x30);
     }
 }
 
@@ -55,83 +51,93 @@ export class MapSection {
 
     static readonly size = 0x1C;
 
-    constructor(bin: ArrayBufferSlice){
+    constructor(bin: ArrayBufferSlice) {
         let view = bin.createDataView();
         this.meshID = view.getUint16(0x02, false);
-        for (let i = 0; i < 8; i++) {
-            this.vertOffsets[i] = view.getUint16(0x08 + i*0x02, false);
-            
-        }
+        for (let i = 0; i < 8; i++)
+            this.vertOffsets[i] = view.getUint16(0x08 + i*0x02);
     }
 }
 
 export class Map {
-    public bin : ArrayBufferSlice
-    public header_raw : ArrayBufferSlice
-    public vertBin : ArrayBufferSlice
-    public f3dexBin : ArrayBufferSlice
-    public ChunkCount : number
-    public Chunks : MapChunk[] = [];
-    public Sections : MapSection[] = [];
-    public DisplayLists: DisplayListInfo[] = [];
+    public bin: ArrayBufferSlice;
+    public vertBin: ArrayBufferSlice;
+    public f3dexBin: ArrayBufferSlice;
+    public chunkCount: number;
+    public chunks: MapChunk[] = [];
+    public sections: MapSection[] = [];
+    public displayLists: DisplayListInfo[] = [];
 
     // headerInfo
-    private F3DStart : number
-    private vertStart : number
-    private vertEnd : number
-    private sectionStart : number
-    private sectionEnd : number
-    private chunkCountOffset : number
-    private chunkStart : number
+    private dlStart: number;
+    private vertStart: number;
+    private vertEnd: number;
+    private sectionStart: number;
+    private sectionEnd: number;
+    private chunkCountOffset: number;
+    private chunkStart: number;
 
-    constructor (buffer : ArrayBufferSlice) {
+    constructor(buffer: ArrayBufferSlice) {
         this.bin = buffer;
-        let view = this.bin.createDataView();
-        this.header_raw = new ArrayBufferSlice(this.bin.arrayBuffer, 0, 0x6C);
-        this.ParseHeader();
-        this.vertBin = new ArrayBufferSlice(this.bin.arrayBuffer, this.vertStart, (this.vertEnd - this.vertStart));
-        this.f3dexBin = new ArrayBufferSlice(this.bin.arrayBuffer, this.F3DStart, (this.vertStart - this.F3DStart));
-        this.ChunkCount = view.getUint32(this.chunkCountOffset, false);
-        if (this.ChunkCount > 0){
-            for (let i = 0; i < this.ChunkCount; i++) {
-                this.Chunks[i] = new MapChunk( new ArrayBufferSlice( this.bin.arrayBuffer, this.chunkStart + MapChunk.size * i, MapChunk.size), i );
+
+        const view = this.bin.createDataView();
+        this.dlStart = view.getUint32(0x34, false);
+        this.vertStart = view.getUint32(0x38, false);
+        this.vertEnd = view.getUint32(0x40, false);
+        this.sectionStart = view.getUint32(0x58, false);
+        this.sectionEnd = view.getUint32(0x5C, false);
+        this.chunkCountOffset = view.getUint32(0x64, false);
+        this.chunkStart = view.getUint32(0x68, false);
+
+        this.f3dexBin = this.bin.slice(this.dlStart, this.vertStart);
+        this.vertBin = this.bin.slice(this.vertStart, this.vertEnd);
+
+        this.chunkCount = view.getUint32(this.chunkCountOffset, false);
+
+        if (this.chunkCount > 0) {
+            for (let i = 0; i < this.chunkCount; i++) {
+                const chunkBuffer = this.bin.subarray(this.chunkStart + MapChunk.size * i, MapChunk.size);
+                this.chunks[i] = new MapChunk(chunkBuffer, i);
             }
         }
+
         for (let i = 0; (i * MapSection.size) < (this.sectionEnd - this.sectionStart); i++) {
-            this.Sections[i] = new MapSection( new ArrayBufferSlice( this.bin.arrayBuffer, this.sectionStart + i * MapSection.size + 4, MapSection.size ) );
+            const sectionBuffer = this.bin.subarray(this.sectionStart + i * MapSection.size + 4, MapSection.size);
+            this.sections[i] = new MapSection(sectionBuffer);
         }
-        console.log(`${this.ChunkCount} CHUNKS PARSED FOR MAP`);
+
+        console.log(`${this.chunkCount} CHUNKS PARSED FOR MAP`);
         
-        if(this.ChunkCount > 0){
-            this.Chunks.forEach(chunk => {
+        if (this.chunkCount > 0) {
+            this.chunks.forEach(chunk => {
                 for(let iDL = 0; iDL < 4; iDL++){
                     if (chunk.dlOffsets[iDL] != -1 && chunk.dlSizes[iDL] != 0){
                         let offst = chunk.dlOffsets[iDL];
                         let sze = chunk.dlSizes[iDL];
                         let snoopPresent = false;
                         let currf3dexCnt = sze;
-                        let currf3dexOffset = this.F3DStart + offst;
+                        let currf3dexOffset = this.dlStart + offst;
                         do {
                             let command = view.getUint8(currf3dexOffset);
-                            if (command === 0x00){
+                            if (command === 0x00) {
                                 snoopPresent = true;
                                 let f3DMeshID = view.getUint32(currf3dexOffset + 0x04, false);
-                                var currSection = this.Sections.filter((elem, indx, array) => {return (elem.meshID == f3DMeshID);});
+                                var currSection = this.sections.filter((elem, indx, array) => {return (elem.meshID == f3DMeshID);});
                                 if(currSection.length != 0){
-                                    this.DisplayLists.push({
+                                    this.displayLists.push({
                                         ChunkID: chunk.id,
-                                        F3dexStartIndex: (currf3dexOffset - this.F3DStart)/8,
+                                        F3dexStartIndex: (currf3dexOffset - this.dlStart)/8,
                                         VertStartIndex: (chunk.vertOffset/0x10 + currSection[0].vertOffsets[iDL])
                                     });
                                 }
                             }
-                            currf3dexOffset = currf3dexOffset +8;
+                            currf3dexOffset = currf3dexOffset + 8;
                             currf3dexCnt = currf3dexCnt - 8;
                         } while (currf3dexCnt > 0);
                         if(snoopPresent == false){
                             // More than 5 segments to chunk
                             // Include Start as DL
-                            this.DisplayLists.push({
+                            this.displayLists.push({
                                 ChunkID: chunk.id,
                                 F3dexStartIndex: offst/0x08, 
                                 VertStartIndex: chunk.vertOffset/0x10
@@ -142,42 +148,43 @@ export class Map {
             });
         }
         else{
-            this.DisplayLists.push({
+            this.displayLists.push({
                 ChunkID: 0,
                 F3dexStartIndex: 0,
                 VertStartIndex: 0
             });
         }
-        console.log(`${this.DisplayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
-    }
-
-    private ParseHeader(): void{
-        let view = this.header_raw.createDataView();
-        this.F3DStart = view.getUint32(0x34, false);
-        this.vertStart = view.getUint32(0x38, false);
-        this.vertEnd = view.getUint32(0x40, false);
-        this.sectionStart = view.getUint32(0x58, false);
-        this.sectionEnd = view.getUint32(0x5C, false);
-        this.chunkCountOffset =view.getUint32(0x64, false);
-        this.chunkStart = view.getUint32(0x68, false);
+        console.log(`${this.displayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
     }
 }
 
+function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice | null {
+    const view = buffer.createDataView();
+
+    if (view.getUint32(0x00) === 0x1F8B0800) {
+        const srcOffs = 0x0A;
+        const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
+        return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
+    }
+
+    return null;
+}
+
 export class ROMHandler {
-    public ROM : ArrayBufferSlice
-    public ROMView : DataView
+    public ROM: ArrayBufferSlice;
+    public ROMView: DataView;
 
-    public MapTable : ArrayBufferSlice
-    public MapTableView : DataView
+    public MapTable: ArrayBufferSlice;
+    public MapTableView: DataView;
 
-    public WallTable : ArrayBufferSlice
-    public WallTableView : DataView
+    public WallTable: ArrayBufferSlice;
+    public WallTableView: DataView;
 
-    public FloorTable : ArrayBufferSlice
-    public FloorTableView : DataView
+    public FloorTable: ArrayBufferSlice;
+    public FloorTableView: DataView;
 
-    public TextureTable : ArrayBufferSlice
-    public TextureTableView : DataView
+    public TextureTable: ArrayBufferSlice;
+    public TextureTableView: DataView;
 
     static readonly pathBaseIn  = `../../../data/DonkeyKong64_Raw`;
     static readonly pathBaseOut = `../../../data/DonkeyKong64`;
@@ -193,75 +200,51 @@ export class ROMHandler {
     static readonly TextureTableOffset = 0x118B638;
 
     constructor(ROM : ArrayBufferSlice) {
-            this.ROM = ROM;
-            this.ROMView = new DataView(this.ROM.arrayBuffer);
+        this.ROM = ROM;
+        this.ROMView = new DataView(this.ROM.arrayBuffer);
 
-            this.WallTable = this.ROM.slice(ROMHandler.WallTableOffset);
-            this.WallTableView = this.WallTable.createDataView();
-            
-            this.FloorTable = this.ROM.slice(ROMHandler.FloorTableOffset);
-            this.FloorTableView = this.FloorTable.createDataView();
-            
-            this.TextureTable = this.ROM.slice(ROMHandler.TextureTableOffset);
-            this.TextureTableView = this.TextureTable.createDataView();
+        this.WallTable = this.ROM.slice(ROMHandler.WallTableOffset);
+        this.WallTableView = this.WallTable.createDataView();
+        
+        this.FloorTable = this.ROM.slice(ROMHandler.FloorTableOffset);
+        this.FloorTableView = this.FloorTable.createDataView();
+        
+        this.TextureTable = this.ROM.slice(ROMHandler.TextureTableOffset);
+        this.TextureTableView = this.TextureTable.createDataView();
 
-            this.MapTable = this.ROM.slice(ROMHandler.MapTableOffset);
-            this.MapTableView = this.MapTable.createDataView();
+        this.MapTable = this.ROM.slice(ROMHandler.MapTableOffset);
+        this.MapTableView = this.MapTable.createDataView();
     }
 
-    public decompress(buffer : ArrayBufferSlice): ArrayBufferSlice | null {
-        //TODO: insert check to ensure compressed
-        let view = buffer.createDataView();
-        if(!(view.getUint16(0) === 0x1172    || view.getUint16(0) === 0x1173 
-         ||view.getUint16(0) === 0x789C    ||view.getUint16(0) ===0x78DA
-         ||view.getUint32(0) ===0x1F8B0800 ||view.getUint32(0) ===0x1F8B0808)){
-             return null;
-         }
+    private decompressAsset(addr: number): ArrayBufferSlice {
+        const offs = (addr & 0x7FFFFFFF) + ROMHandler.PointerTableOffset;
 
-        let srcOffs = 0x0A;
+        const decompressed = decompress(this.ROM.slice(offs));
+        if (decompressed !== null)
+            return decompressed;
 
-        if (view.getUint32(0) === 0x1F8B0808){
-            while (view.getUint8(srcOffs) != 0x0) {
-                srcOffs++;
-            }
-            srcOffs++;
-        }
-
-        const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
-        return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
+        // TODO(jstpierre): Figure out what this means... indirection into the asset table, perhaps?
+        throw "whoops";
     }
 
-    public loadWalls(sceneID : number) : ArrayBufferSlice | null {
-        let wallPointer = this.WallTableView.getUint32(sceneID * 4, false);
-        wallPointer = wallPointer & 0x7FFFFFFF;
-        wallPointer = wallPointer + ROMHandler.PointerTableOffset;
-        return this.decompress(this.ROM.slice(wallPointer));
+    public loadWalls(sceneID: number) : ArrayBufferSlice {
+        return this.decompressAsset(this.WallTableView.getUint32(sceneID * 4, false));
     }
 
-    public loadFloors(sceneID : number) : ArrayBufferSlice | null {
-        let floorPointer = this.FloorTableView.getInt32(sceneID * 4, false);
-        floorPointer = floorPointer & 0x7FFFFFFF;
-        floorPointer = floorPointer + ROMHandler.PointerTableOffset;
-        return this.decompress(this.ROM.slice(floorPointer));
+    public loadFloors(sceneID: number): ArrayBufferSlice {
+        return this.decompressAsset(this.FloorTableView.getInt32(sceneID * 4, false));
+    }
+
+    public loadMap(sceneID: number): ArrayBufferSlice {
+        return this.decompressAsset(this.MapTableView.getUint32(sceneID * 4, false));
+    }
+
+    public loadTexture(textureID: number): ArrayBufferSlice {
+        return this.decompressAsset(this.TextureTableView.getUint32(textureID * 4, false));
     }
 
     public getMap(sceneID: number): Map {
         const mapData = assertExists(this.loadMap(sceneID));
         return new Map(mapData);
     }
-
-    public loadMap(sceneID : number) : ArrayBufferSlice | null {
-        let mapPtr = this.MapTableView.getUint32(sceneID * 4, false);
-        mapPtr = mapPtr & 0x7FFFFFFF;
-        mapPtr = mapPtr + ROMHandler.PointerTableOffset;
-        return this.decompress(this.ROM.slice(mapPtr)); 
-    }
-
-    public loadTexture(textureID : number) : ArrayBufferSlice | null {
-        let mapPtr = this.TextureTableView.getUint32(textureID * 4, false);
-        mapPtr = mapPtr & 0x7FFFFFFF;
-        mapPtr = mapPtr + ROMHandler.PointerTableOffset;
-        return this.decompress(this.ROM.slice(mapPtr)); 
-    }
-
 }
