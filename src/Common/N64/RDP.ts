@@ -216,7 +216,7 @@ export function texturePadWidth(siz: ImageSize, line: number, width: number): nu
         return padTexels << (siz - 1);
 }
 
-export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
     if (tile.fmt === ImageFormat.G_IM_FMT_CI)
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
@@ -233,13 +233,13 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     switch ((tile.fmt << 4) | tile.siz) {
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
     case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH); break;
     default:
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
     }
@@ -250,6 +250,8 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 
 // figure out if two textures with the same underlying data can reuse the same texture object
 // we assume that a texture has only one real size/tiling behavior, so just match on coords
+
+// TODO(jstpierre): Build a better upload tracker
 function textureMatch(a: TileState, b: TileState): boolean {
     return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
 }
@@ -257,12 +259,12 @@ function textureMatch(a: TileState, b: TileState): boolean {
 export class TextureCache {
     public textures: Texture[] = [];
 
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
+    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): number {
         const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (tile.fmt !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
+            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile, deinterleave);
             const index = this.textures.length;
             this.textures.push(texture);
             return index;

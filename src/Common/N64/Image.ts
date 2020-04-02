@@ -95,9 +95,9 @@ export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: numbe
     }
 }
 
-export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, line = 0): void {
+export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
-    const padW = texturePadWidth(ImageSize.G_IM_SIZ_32b, line, tileW);
+    const padW = 0;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const p = view.getUint32(srcIdx);

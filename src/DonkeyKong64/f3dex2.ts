@@ -42,6 +42,11 @@ export class RSPOutput extends F3DEX.RSPOutput {
     }
 }
 
+class TMemUploadCache {
+    constructor(public addr: number, public dxt: number = -1) {
+    }
+}
+
 export class RSPState {
     private output = new RSPOutput();
 
@@ -57,7 +62,7 @@ export class RSPState {
     private DP_CombineH: number = 0;
     private DP_TextureImageState = new F3DEX.TextureImageState();
     private DP_TileState = nArray(8, () => new RDP.TileState());
-    private DP_TMemTracker = new Map<number, number>();
+    private DP_TMemUploadTracker = new Map<number, TMemUploadCache>();
 
     private DP_PrimColor = vec4.create();
     private DP_EnvColor = vec4.create();
@@ -123,15 +128,15 @@ export class RSPState {
 
     private _translateTileTexture(tileIndex: number): number {
         const tile = this.DP_TileState[tileIndex];
-        const addr = assertExists(this.DP_TMemTracker.get(tile.tmem));
-        const segment = (addr >>> 24) & 0xFF;
+        const cache = assertExists(this.DP_TMemUploadTracker.get(tile.tmem));
+        const segment = (cache.addr >>> 24) & 0xFF;
 
         if (segment === 0x00) {
             // Load from texture index.
             const segmentBuffers: ArrayBufferSlice[] = [];
-            segmentBuffers[0x01] = assertExists(this.romHandler.loadTexture(addr));
+            segmentBuffers[0x01] = assertExists(this.romHandler.loadTexture(cache.addr));
     
-            tile.cacheKey = addr;
+            tile.cacheKey = cache.addr;
     
             let dramPalAddr: number;
             if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
@@ -139,14 +144,15 @@ export class RSPState {
                 // assert(textlut === RDP.TextureLUT.G_TT_RGBA16);
     
                 const palTmem = 0x100 + (tile.palette << 4);
-                const palTextureID = assertExists(this.DP_TMemTracker.get(palTmem));
-                segmentBuffers[0x02] = assertExists(this.romHandler.loadTexture(palTextureID));
+                const palCache = assertExists(this.DP_TMemUploadTracker.get(palTmem));
+                segmentBuffers[0x02] = assertExists(this.romHandler.loadTexture(palCache.addr));
                 dramPalAddr = 0x02000000;
             } else {
                 dramPalAddr = 0;
             }
 
-            return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile);
+            const deinterleave = cache.dxt === 0;
+            return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile, deinterleave);
         } else {
             console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);
             return 0;
@@ -169,7 +175,7 @@ export class RSPState {
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
+            if (!lod_en && this.SP_TextureState.level === 0 && RDP.combineParamsUsesT1(dc.DP_Combine)) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             }
@@ -218,7 +224,7 @@ export class RSPState {
     public gDPLoadTLUT(tile: number, count: number): void {
         // Track the TMEM destination back to the originating DRAM address.
         const tmemDst = this.DP_TileState[tile].tmem;
-        this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
+        this.DP_TMemUploadTracker.set(tmemDst, new TMemUploadCache(this.DP_TextureImageState.addr));
     }
 
     public gDPLoadBlock(tileIndex: number, uls: number, ult: number, texels: number, dxt: number): void {
@@ -230,7 +236,7 @@ export class RSPState {
         const tile = this.DP_TileState[tileIndex];
 
         // Track the TMEM destination back to the originating DRAM address.
-        this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
+        this.DP_TMemUploadTracker.set(tile.tmem, new TMemUploadCache(this.DP_TextureImageState.addr, dxt));
         this.stateChanged = true;
     }
 
