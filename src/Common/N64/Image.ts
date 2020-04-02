@@ -112,12 +112,14 @@ export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number
     }
 }
 
-export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0): void {
+export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0, deinterleave = false): void {
     let dstIdx = 0;
+    let srcIdx = 0;
     const padW = texturePadWidth(ImageSize.G_IM_SIZ_4b, line, tileW);
     for (let y = 0; y < tileH; y++) {
+        const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {
-            const b = view.getUint8(srcIdx);
+            const b = view.getUint8(srcOffs + (srcIdx ^ di));
             copyTLUTColor(dst, dstIdx + 0, tlutColorTable, (b >>> 4) & 0x0F);
             copyTLUTColor(dst, dstIdx + 4, tlutColorTable, (b >>> 0) & 0x0F);
             srcIdx += 0x01;
@@ -127,12 +129,14 @@ export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, t
     }
 }
 
-export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0): void {
+export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0, deinterleave = false): void {
     let dstIdx = 0;
+    let srcIdx = 0;
     const padW = texturePadWidth(ImageSize.G_IM_SIZ_8b, line, tileW);
     for (let y = 0; y < tileH; y++) {
+        const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
-            const b = view.getUint8(srcIdx);
+            const b = view.getUint8(srcOffs + (srcIdx ^ di));
             copyTLUTColor(dst, dstIdx + 0, tlutColorTable, b);
             srcIdx += 0x01;
             dstIdx += 0x04;
