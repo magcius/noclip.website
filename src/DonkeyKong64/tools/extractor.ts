@@ -1,16 +1,7 @@
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 //import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, nArray, hexdump } from "../../util";
+import { assertExists } from "../../util";
 import * as Pako from 'pako';
-import * as BYML from "../../byml";
-import { SceneContext } from '../../SceneBase';
-import { Endianness } from "../../endian";
-import { getTileHeight } from "../../Common/N64/RDP";
-
-
-import * as F3DEX2 from "../f3dex2";
-import * as F3DEX from '../../BanjoKazooie/f3dex';
-import { TextFilt, ImageFormat, ImageSize } from "../../Common/N64/Image";
 
 /*
 function fetchDataSync(path: string): ArrayBufferSlice {
@@ -172,27 +163,6 @@ export class Map {
     }
 }
 
-function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
-    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE);
-    if (opaque) {
-        rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
-        rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_LIGHTING);
-    } else
-        rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
-    rspState.gDPSetOtherModeH(F3DEX.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << F3DEX.OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    // initially 2-cycle, though this can change
-    rspState.gDPSetOtherModeH(F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
-    // some objects seem to assume this gets set, might rely on stage rendering first
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
-}
-
-function runRoomDL(displayList: number, states: F3DEX2.RSPState): any {
-    const rspState = states;
-    F3DEX2.runDL_F3DEX2(rspState, displayList);
-    const rspOutput = rspState.finish();
-    return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
-}
-
 export class ROMHandler {
     public ROM : ArrayBufferSlice
     public ROMView : DataView
@@ -275,22 +245,9 @@ export class ROMHandler {
         return this.decompress(this.ROM.slice(floorPointer));
     }
 
-    public getMap(sceneID : number) : any {
-        let map = this.loadMap(sceneID);
-        if (map) {
-            let currMap = new Map(map);
-            
-            currMap.DisplayLists.forEach(DL => {
-                const sharedOutput = new F3DEX.RSPSharedOutput();
-                const state = new F3DEX2.RSPState(sharedOutput, 
-                    currMap.vertBin.slice(DL.VertStartIndex * 0x10),
-                    currMap.f3dexBin.slice(DL.F3dexStartIndex * 0x08));
-                initDL(state, true);
-
-                return runRoomDL(0, state);
-            });
-            return currMap;
-        }
+    public getMap(sceneID: number): Map {
+        const mapData = assertExists(this.loadMap(sceneID));
+        return new Map(mapData);
     }
 
     public loadMap(sceneID : number) : ArrayBufferSlice | null {
@@ -308,4 +265,3 @@ export class ROMHandler {
     }
 
 }
-
