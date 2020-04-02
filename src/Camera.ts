@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants, getMatrixAxisY, Vec3Zero, transformVec3Mat4w1 } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
@@ -294,8 +294,6 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
-const vec3Zero = vec3.fromValues(0, 0, 0);
-const vec3Up = vec3.fromValues(0, 1, 0);
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -398,7 +396,7 @@ export class FPSCameraController implements CameraController {
             vec3.set(viewUp, 0, 1, 0);
         }
 
-        if (!vec3.exactEquals(keyMovement, vec3Zero)) {
+        if (!vec3.exactEquals(keyMovement, Vec3Zero)) {
             const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
@@ -435,10 +433,10 @@ export class FPSCameraController implements CameraController {
         else if (inputManager.isKeyDown('KeyO'))
             mouseMovement[2] += keyAngleChangeVel;
 
-        if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
+        if (!vec3.exactEquals(this.mouseMovement, Vec3Zero)) {
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], viewUp);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], [0, 0, 1]);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], Vec3UnitX);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], Vec3UnitZ);
             updated = true;
 
             const mouseLookDrag = inputManager.isDragging() ? this.mouseLookDragFast : this.mouseLookDragSlow;
@@ -489,7 +487,7 @@ export class XRCameraController {
             }
         }
 
-        if (!vec3.exactEquals(keyMovement, vec3Zero)) {            
+        if (!vec3.exactEquals(keyMovement, Vec3Zero)) {            
             const viewMovementSpace = webXRContext.xrViewSpace.getOffsetReferenceSpace(
                 new XRRigidTransform(
                     new DOMPointReadOnly(keyMovement[0], 0, keyMovement[2], 1), {x:0, y:0, z:1.0, w: 1.0}));
@@ -700,7 +698,7 @@ export class OrbitCameraController implements CameraController {
             vec3.scale(eyePos, eyePos, this.z);
             vec3.add(eyePos, eyePos, this.translation);
             this.camera.isOrthographic = false;
-            mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
+            mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
             mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
@@ -881,7 +879,7 @@ export class OrthoCameraController implements CameraController {
         computeUnitSphericalCoordinates(eyePos, this.x, this.y);
         vec3.scale(eyePos, eyePos, -this.farPlane / 2);
         vec3.add(eyePos, eyePos, this.translation);
-        mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
+        mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, Vec3UnitY);
         mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
         this.camera.setOrthographic(this.z * 10, this.camera.aspect, this.nearPlane, this.farPlane);
         this.camera.worldMatrixUpdated();

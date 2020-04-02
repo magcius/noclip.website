@@ -14,6 +14,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { F3DEX_Program } from '../BanjoKazooie/render';
+import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -176,7 +177,7 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, geometryData: RenderData, private drawMatrix: mat4[], private drawCall: DrawCall) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             const tex = drawCall.textures[i];
             if (tex) {
@@ -372,8 +373,6 @@ class MeshRenderer {
 }
 
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class RootMeshRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -401,13 +400,9 @@ export class RootMeshRenderer {
     private buildGeoNodeRenderer(device: GfxDevice, cache: GfxRenderCache, node: Mesh): MeshRenderer {
         const geoNodeRenderer = new MeshRenderer();
 
-        if (node.rspOutput !== null) {
-            for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawMatrix = [mat4.create()];
-                const drawCallInstance = new DrawCallInstance(device, cache, this.geometryData.renderData, drawMatrix, node.rspOutput.drawCalls[i]);
-                geoNodeRenderer.drawCallInstances.push(drawCallInstance);
-            }
-        }
+        if (node.rspOutput !== null)
+            for (let i = 0; i < node.rspOutput.drawCalls.length; i++)
+                geoNodeRenderer.drawCallInstances.push(new DrawCallInstance(device, cache, node.rspOutput.drawCalls[i]));
 
         return geoNodeRenderer;
     }
@@ -458,7 +453,7 @@ export class RootMeshRenderer {
             mat4.getTranslation(lookatScratch, this.modelMatrix);
             vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
             offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }

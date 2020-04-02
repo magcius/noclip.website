@@ -15,7 +15,7 @@ import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT, Vec3One } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LevelGlobals } from './actor';
 
@@ -229,8 +229,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class NodeRenderer {
     private visible = true;
     public modelMatrix = mat4.create();
@@ -445,7 +443,7 @@ export class ModelRenderer {
         mat4.getTranslation(lookatScratch, this.modelMatrix);
         vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-        mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+        mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
         offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
         offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
 
