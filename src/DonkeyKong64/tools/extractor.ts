@@ -244,7 +244,7 @@ export class ROMHandler {
             let bigDataBlobView = bigDataBlobContents.createDataView();
 
             this.ActorModels = [];
-            for (let i = 0; i < 127; i++) {
+            for (let i = 0; i < 128; i++) {
                 let modelBase = 0xA450 + i * 0x30;
                 let behavior = bigDataBlobView.getInt16(modelBase);
                 let modelIndex = bigDataBlobView.getInt16(modelBase + 0x02);
@@ -253,10 +253,10 @@ export class ROMHandler {
     
             let actorModelPointerTable = this.ROM.slice(ROMHandler.ActorModelTableOffset);
             let actorModelPointerTableView = actorModelPointerTable.createDataView();
-            for (let i = 0; i < 237; i++) {
-                let modelPointer = actorModelPointerTableView.getInt32(i * 4, false) + ROMHandler.PointerTableOffset;
+            for (let modelIndex = 0; modelIndex < 237; modelIndex++) {
                 for (let j = 0; j < this.ActorModels.length; j++) {
-                    if (i + 1 == this.ActorModels[j]) {
+                    if (this.ActorModels[j] == modelIndex + 1) {
+                        let modelPointer = actorModelPointerTableView.getInt32(modelIndex * 4, false) + ROMHandler.PointerTableOffset;
                         this.ActorModels[j] = modelPointer;
                     }
                 }
