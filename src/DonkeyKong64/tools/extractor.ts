@@ -131,6 +131,15 @@ export class Map {
                                     });
                                 }
                             }
+                            else if (command === 0xDE){
+                                let tmpDLOff = view.getUint32(currf3dexOffset + 0x04);
+                                tmpDLOff = tmpDLOff & 0x00FFFFFF;
+                                this.displayLists.push({
+                                    ChunkID: chunk.id,
+                                    F3dexStartIndex: (tmpDLOff)/8,
+                                    VertStartIndex: chunk.vertOffset/0x10
+                                });
+                            }
                             currf3dexOffset = currf3dexOffset + 8;
                             currf3dexCnt = currf3dexCnt - 8;
                         } while (currf3dexCnt > 0);
