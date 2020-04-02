@@ -183,6 +183,9 @@ export class ROMHandler {
     public ROM: ArrayBufferSlice;
     public ROMView: DataView;
 
+    public SetupTable: ArrayBufferSlice;
+    public SetupTableView: DataView;
+
     public MapTable: ArrayBufferSlice;
     public MapTableView: DataView;
 
@@ -212,6 +215,9 @@ export class ROMHandler {
         this.ROM = ROM;
         this.ROMView = new DataView(this.ROM.arrayBuffer);
 
+        this.SetupTable = this.ROM.slice(ROMHandler.SetupTableOffset);
+        this.SetupTableView = this.SetupTable.createDataView();
+
         this.WallTable = this.ROM.slice(ROMHandler.WallTableOffset);
         this.WallTableView = this.WallTable.createDataView();
         
@@ -234,6 +240,15 @@ export class ROMHandler {
 
         // TODO(jstpierre): Figure out what this means... indirection into the asset table, perhaps?
         throw "whoops";
+    }
+
+    public loadSetup(sceneID: number) : ArrayBufferSlice {
+        let pointer = this.SetupTableView.getUint32(sceneID * 4, false);
+        if (pointer & 0x80000000) {
+            pointer = pointer & 0x7FFFFFFF;
+            return this.loadSetup(this.ROMView.getUint16(pointer + ROMHandler.PointerTableOffset, false));
+        }
+        return this.decompressAsset(this.SetupTableView.getUint32(sceneID * 4, false));
     }
 
     public loadWalls(sceneID: number) : ArrayBufferSlice {

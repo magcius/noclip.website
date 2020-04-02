@@ -541,6 +541,72 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
 
+        // Load setup data, ported from ScriptHawk's dumpSetup() function
+        const model1SetupSize = 0x38;
+        const model1Setup = {
+            x_pos: 0x00, // Float
+            y_pos: 0x04, // Float
+            z_pos: 0x08, // Float
+            scale: 0x0C, // Float
+            behavior: 0x32, // Short, see ScriptHawk's obj_model1.actor_types table
+        };
+        
+        const model2SetupSize = 0x30;
+        const model2Setup = {
+            x_pos: 0x00, // Float
+            y_pos: 0x04, // Float
+            z_pos: 0x08, // Float
+            scale: 0x0C, // Float
+            behavior: 0x28, // Short, see ScriptHawk's obj_model2.object_types table
+        };
+
+        const setup = romHandler.loadSetup(parseInt(this.id, 16));
+        const setupView = setup.createDataView();
+        
+        console.log("Dumping setup for Object Model 2...");
+        let model2Count = setupView.getUint32(0, false);
+        let model2Base = 0x04;
+        console.log("Count: " + model2Count);
+    
+        for (let i = 0; i < model2Count - 1; i++) {
+            let entryBase = model2Base + i * model2SetupSize;
+            let xPos = setupView.getFloat32(entryBase + model2Setup.x_pos, false);
+            let yPos = setupView.getFloat32(entryBase + model2Setup.y_pos, false);
+            let zPos = setupView.getFloat32(entryBase + model2Setup.z_pos, false);
+            // TODO: Rotation
+            // TODO: Scale
+            let behavior = setupView.getUint16(entryBase + model2Setup.behavior, false);
+            // TODO: Turn behavior index into model address to render
+            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos));
+        }
+    
+        // TODO: What to heck is this data used for?
+        // It's a bunch of floats that get loaded in to model 2 behaviors as far as I can tell
+        let mysteryModelSize = 0x24;
+        let mysteryModelBase = model2Base + model2Count * model2SetupSize;
+        let mysteryModelCount = setupView.getUint32(mysteryModelBase, false);
+        console.log("Dumping setup for 'mystery model'...");
+        console.log("Base: " + mysteryModelBase.toString(16));
+        console.log("Count: " + mysteryModelCount);
+
+        console.log("Dumping setup for Actors...");
+        let model1Base = mysteryModelBase + 0x04 + mysteryModelCount * mysteryModelSize;
+        let model1Count = setupView.getUint32(model1Base, false);
+        console.log("Base: " + model1Base.toString(16));
+        console.log("Count: " + model1Count);
+
+        for (let i = 0; i < model1Count - 1; i++) {
+            let entryBase = model1Base + 0x04 + i * model1SetupSize;
+            let xPos = setupView.getFloat32(entryBase + model1Setup.x_pos, false);
+            let yPos = setupView.getFloat32(entryBase + model1Setup.y_pos, false);
+            let zPos = setupView.getFloat32(entryBase + model1Setup.z_pos, false);
+            // TODO: Rotation
+            // TODO: Scale
+            let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
+            // TODO: Turn behavior index into model address to render
+            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos));
+        }
+
         return sceneRenderer;
     }
 
