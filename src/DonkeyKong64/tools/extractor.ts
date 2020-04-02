@@ -188,6 +188,9 @@ export class ROMHandler {
 
     public ActorModels: Array<number>;
 
+    public StructTable: ArrayBufferSlice;
+    public StructTableView: DataView;
+
     public MapTable: ArrayBufferSlice;
     public MapTableView: DataView;
 
@@ -231,6 +234,9 @@ export class ROMHandler {
 
         this.MapTable = this.ROM.slice(ROMHandler.MapTableOffset);
         this.MapTableView = this.MapTable.createDataView();
+
+        this.StructTable = this.ROM.slice(ROMHandler.StructTableOffset);
+        this.StructTableView = this.StructTable.createDataView();
 
         // Hook up Actor behaviour indexes to Actor model indexes
         let bigDataBlobContents = decompress(this.ROM.slice(0xC29D4));
@@ -315,12 +321,11 @@ export class ROMHandler {
     }
 
     public getActorModel(behaviorID: number): ArrayBufferSlice {
+        // Note: Some actors don't have models, not sure exactly what to do there
         return this.decompressAsset(this.ActorModels[behaviorID]);
     }
 
-    /*
-    public getObjectModel2Model(behaviorID: number): ArrayBufferSlice {
-        // TODO
+    public getStructModel(behaviorID: number): ArrayBufferSlice {
+        return this.decompressAsset(this.StructTableView.getUint32(behaviorID * 4, false));
     }
-    */
 }

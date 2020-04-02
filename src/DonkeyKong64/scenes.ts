@@ -565,7 +565,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const setup = romHandler.loadSetup(parseInt(this.id, 16));
         const setupView = setup.createDataView();
         
-        console.log("Dumping setup for Object Model 2...");
+        console.log("Dumping setup for Structs:");
         let model2Count = setupView.getUint32(0, false);
         let model2Base = 0x04;
         console.log("Count: " + model2Count);
@@ -578,20 +578,21 @@ class SceneDesc implements Viewer.SceneDesc {
             let scale = setupView.getFloat32(entryBase + model2Setup.scale, false);
             let rotation = setupView.getFloat32(entryBase + model2Setup.rotation, false);
             let behavior = setupView.getUint16(entryBase + model2Setup.behavior, false);
-            // TODO: Turn behavior index into model address to render
-            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            // TODO: Actually render model
+            console.log("Struct: " + entryBase.toString(16) + ": " + behavior + " (model: " + (romHandler.StructTableView.getUint32(behavior * 4, false) & 0x7FFFFFFF).toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            //let modelFile = romHandler.getStructModel(behavior);
         }
     
         // TODO: What to heck is this data used for?
-        // It's a bunch of floats that get loaded in to model 2 behaviors as far as I can tell
+        // It's a bunch of floats that get loaded in to struct behaviors as far as I can tell
         let mysteryModelSize = 0x24;
         let mysteryModelBase = model2Base + model2Count * model2SetupSize;
         let mysteryModelCount = setupView.getUint32(mysteryModelBase, false);
-        console.log("Dumping setup for 'mystery model'...");
+        console.log("Dumping setup for 'mystery model':");
         console.log("Base: " + mysteryModelBase.toString(16));
         console.log("Count: " + mysteryModelCount);
 
-        console.log("Dumping setup for Actors...");
+        console.log("Dumping setup for Actors:");
         let model1Base = mysteryModelBase + 0x04 + mysteryModelCount * mysteryModelSize;
         let model1Count = setupView.getUint32(model1Base, false);
         console.log("Base: " + model1Base.toString(16));
@@ -606,7 +607,8 @@ class SceneDesc implements Viewer.SceneDesc {
             let rotation = setupView.getInt16(entryBase + model1Setup.rotation) / 4096.0 * 360.0;
             let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
             // TODO: Actually render model
-            console.log(entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            console.log("Actor: " + entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
+            //let modelFile = romHandler.getActorModel(behavior);
         }
 
         return sceneRenderer;
