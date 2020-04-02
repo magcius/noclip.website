@@ -228,14 +228,29 @@ export class ROMHandler {
     }
 
     public loadWalls(sceneID: number) : ArrayBufferSlice {
+        let pointer = this.WallTableView.getUint32(sceneID * 4, false);
+        if (pointer & 0x80000000) {
+            pointer = pointer & 0x7FFFFFFF;
+            return this.loadWalls(this.ROMView.getUint16(pointer + ROMHandler.PointerTableOffset, false));
+        }
         return this.decompressAsset(this.WallTableView.getUint32(sceneID * 4, false));
     }
 
     public loadFloors(sceneID: number): ArrayBufferSlice {
+        let pointer = this.FloorTableView.getUint32(sceneID * 4, false);
+        if (pointer & 0x80000000) {
+            pointer = pointer & 0x7FFFFFFF;
+            return this.loadFloors(this.ROMView.getUint16(pointer + ROMHandler.PointerTableOffset, false));
+        }
         return this.decompressAsset(this.FloorTableView.getInt32(sceneID * 4, false));
     }
 
     public loadMap(sceneID: number): ArrayBufferSlice {
+        let pointer = this.MapTableView.getUint32(sceneID * 4, false);
+        if (pointer & 0x80000000) {
+            pointer = pointer & 0x7FFFFFFF;
+            return this.loadMap(this.ROMView.getUint16(pointer + ROMHandler.PointerTableOffset, false));
+        }
         return this.decompressAsset(this.MapTableView.getUint32(sceneID * 4, false));
     }
 
