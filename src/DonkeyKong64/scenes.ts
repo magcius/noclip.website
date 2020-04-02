@@ -548,6 +548,7 @@ class SceneDesc implements Viewer.SceneDesc {
             y_pos: 0x04, // Float
             z_pos: 0x08, // Float
             scale: 0x0C, // Float
+            rotation: 0x30, // s16_be / 0x1000 * 360 for degrees
             behavior: 0x32, // Short, see ScriptHawk's obj_model1.actor_types table
         };
         
@@ -557,6 +558,7 @@ class SceneDesc implements Viewer.SceneDesc {
             y_pos: 0x04, // Float
             z_pos: 0x08, // Float
             scale: 0x0C, // Float
+            rotation: 0x1C, // Float
             behavior: 0x28, // Short, see ScriptHawk's obj_model2.object_types table
         };
 
@@ -573,11 +575,11 @@ class SceneDesc implements Viewer.SceneDesc {
             let xPos = setupView.getFloat32(entryBase + model2Setup.x_pos, false);
             let yPos = setupView.getFloat32(entryBase + model2Setup.y_pos, false);
             let zPos = setupView.getFloat32(entryBase + model2Setup.z_pos, false);
-            // TODO: Rotation
-            // TODO: Scale
+            let scale = setupView.getFloat32(entryBase + model2Setup.scale, false);
+            let rotation = setupView.getFloat32(entryBase + model2Setup.rotation, false);
             let behavior = setupView.getUint16(entryBase + model2Setup.behavior, false);
             // TODO: Turn behavior index into model address to render
-            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos));
+            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
         }
     
         // TODO: What to heck is this data used for?
@@ -600,11 +602,11 @@ class SceneDesc implements Viewer.SceneDesc {
             let xPos = setupView.getFloat32(entryBase + model1Setup.x_pos, false);
             let yPos = setupView.getFloat32(entryBase + model1Setup.y_pos, false);
             let zPos = setupView.getFloat32(entryBase + model1Setup.z_pos, false);
-            // TODO: Rotation
-            // TODO: Scale
+            let scale = setupView.getFloat32(entryBase + model1Setup.scale, false);
+            let rotation = setupView.getInt16(entryBase + model1Setup.rotation) / 4096.0 * 360.0;
             let behavior = (setupView.getUint16(entryBase + model1Setup.behavior, false) + 0x10) % 0x10000;
             // TODO: Turn behavior index into model address to render
-            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos));
+            console.log(entryBase.toString(16) + ": " + behavior + " at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
         }
 
         return sceneRenderer;
