@@ -66,7 +66,7 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    constructor(public romHandler: ROMHandler, public sharedOutput: F3DEX.RSPSharedOutput, public vertexBuffer: ArrayBufferSlice, public f3dexCmds: ArrayBufferSlice) {
+    constructor(public romHandler: ROMHandler, public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput) {
     }
 
     public finish(): RSPOutput | null {
@@ -110,7 +110,8 @@ export class RSPState {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
-        const view = this.vertexBuffer.createDataView(dramAddr);
+        const view = this.segmentBuffers[(dramAddr >>> 24)].createDataView(dramAddr & 0x00FFFFFF);
+
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
             // scale texture coordinates by *current* texture state
@@ -330,8 +331,10 @@ enum F3DEX2_GBI {
 }
 
 export function runDL_F3DEX2(state: RSPState, addr: number): void {
-    const view = state.f3dexCmds.createDataView(addr);
-    for (let i = 0; i < view.byteLength; i += 0x08) {
+    const segmentBuffer = state.segmentBuffers[(addr >>> 24) & 0xFF];
+    const view = segmentBuffer.createDataView();
+
+    for (let i = (addr & 0x00FFFFFF); i < segmentBuffer.byteLength; i += 0x08) {
         const w0 = view.getUint32(i + 0x00);
         const w1 = view.getUint32(i + 0x04);
 
@@ -389,7 +392,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
                 const v0w = (w0 >>> 1) & 0xFF;
                 const n = (w0 >>> 12) & 0xFF;
                 const v0 = v0w - n;
-                state.gSPVertex(w1 & 0x00FFFFFF, n, v0);
+                state.gSPVertex(w1, n, v0);
             } break;
 
             case F3DEX2_GBI.G_TRI1: {
@@ -415,8 +418,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
             } break;
 
             case F3DEX2_GBI.G_DL: {
-                const segment = (w1 >>> 24) & 0xFF;
-                // runDL_F3DEX2(state, w1 & 0x00FFFFFF);
+                runDL_F3DEX2(state, w1);
             } break;
 
             case F3DEX2_GBI.G_RDPSETOTHERMODE: {

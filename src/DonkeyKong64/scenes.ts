@@ -23,6 +23,7 @@ import { OtherModeH_Layout, OtherModeH_CycleType, RSPSharedOutput, Vertex } from
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 const pathBase = `DonkeyKong64`;
 
@@ -519,12 +520,12 @@ class SceneDesc implements Viewer.SceneDesc {
             const dl = map.displayLists[i];
 
             const sharedOutput = new RSPSharedOutput();
-            const state = new RSPState(romHandler, sharedOutput, 
-                map.vertBin.slice(dl.VertStartIndex * 0x10),
-                map.f3dexBin.slice(dl.F3dexStartIndex * 0x08)
-            );
+            const segmentBuffers: ArrayBufferSlice[] = [];
+            segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
+            segmentBuffers[0x07] = map.f3dexBin;
+            const state = new RSPState(romHandler, segmentBuffers, sharedOutput);
             initDL(state, true);
-            runDL_F3DEX2(state, 0);
+            runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
             const output = state.finish();
 

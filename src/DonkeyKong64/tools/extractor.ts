@@ -12,7 +12,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 
 export class DisplayListInfo {
     public ChunkID: number;
-    public F3dexStartIndex: number;
+    public dlStartAddr: number;
     public VertStartIndex: number;
 }
 
@@ -107,27 +107,26 @@ export class Map {
         }
 
         console.log(`${this.chunkCount} CHUNKS PARSED FOR MAP`);
-        
+
         if (this.chunkCount > 0) {
             this.chunks.forEach(chunk => {
-                for(let iDL = 0; iDL < 4; iDL++){
-                    if (chunk.dlOffsets[iDL] != -1 && chunk.dlSizes[iDL] != 0){
-                        let offst = chunk.dlOffsets[iDL];
-                        let sze = chunk.dlSizes[iDL];
+                for (let iDL = 0; iDL < 4; iDL++){
+                    if (chunk.dlOffsets[iDL] !== -1 && chunk.dlSizes[iDL] !== 0){
                         let snoopPresent = false;
-                        let currf3dexCnt = sze;
-                        let currf3dexOffset = this.dlStart + offst;
+                        let currf3dexCnt = chunk.dlSizes[iDL];
+                        let currf3dexOffset = this.dlStart + chunk.dlOffsets[iDL];
                         do {
                             let command = view.getUint8(currf3dexOffset);
                             if (command === 0x00) {
                                 snoopPresent = true;
-                                let f3DMeshID = view.getUint32(currf3dexOffset + 0x04, false);
-                                var currSection = this.sections.filter((elem, indx, array) => {return (elem.meshID == f3DMeshID);});
-                                if(currSection.length != 0){
+                                const f3DMeshID = view.getUint32(currf3dexOffset + 0x04, false);
+                                const currSection = this.sections.find((elem) => elem.meshID == f3DMeshID);
+
+                                if (currSection !== undefined) {
                                     this.displayLists.push({
                                         ChunkID: chunk.id,
-                                        F3dexStartIndex: (currf3dexOffset - this.dlStart)/8,
-                                        VertStartIndex: (chunk.vertOffset/0x10 + currSection[0].vertOffsets[iDL])
+                                        dlStartAddr: currf3dexOffset - this.dlStart,
+                                        VertStartIndex: (chunk.vertOffset/0x10 + currSection.vertOffsets[iDL]),
                                     });
                                 }
                             }
@@ -143,26 +142,27 @@ export class Map {
                             currf3dexOffset = currf3dexOffset + 8;
                             currf3dexCnt = currf3dexCnt - 8;
                         } while (currf3dexCnt > 0);
-                        if(snoopPresent == false){
+
+                        if (!snoopPresent){
                             // More than 5 segments to chunk
                             // Include Start as DL
                             this.displayLists.push({
                                 ChunkID: chunk.id,
-                                F3dexStartIndex: offst/0x08, 
+                                dlStartAddr: chunk.dlOffsets[iDL],
                                 VertStartIndex: chunk.vertOffset/0x10
                             });
                         }
                     }
                 }
             });
-        }
-        else{
+        } else {
             this.displayLists.push({
                 ChunkID: 0,
-                F3dexStartIndex: 0,
+                dlStartAddr: 0,
                 VertStartIndex: 0
             });
         }
+
         console.log(`${this.displayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
     }
 }
