@@ -145,7 +145,7 @@ export class RSPState {
             } else {
                 dramPalAddr = 0;
             }
-    
+
             return this.sharedOutput.textureCache.translateTileTexture(segmentBuffers, 0x01000000, dramPalAddr, tile);
         } else {
             console.warn(`Unknown texture segment type ${hexzero(segment, 0x02)}`);

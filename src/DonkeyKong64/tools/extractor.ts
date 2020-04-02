@@ -23,8 +23,8 @@ export class MapChunk {
 
     public dlOffsets: number[] = [];
     public dlSizes: number[] = [];
-    public vertOffset: number
-    public vertSize: number
+    public vertOffset: number;
+    public vertSize: number;
 
     static readonly size = 0x34;
 
@@ -46,7 +46,7 @@ export class MapChunk {
 }
 
 export class MapSection {
-    public meshID: number
+    public meshID: number;
     public vertOffsets: number[] = [];
 
     static readonly size = 0x1C;
@@ -110,17 +110,19 @@ export class Map {
 
         if (this.chunkCount > 0) {
             this.chunks.forEach(chunk => {
-                for (let iDL = 0; iDL < 4; iDL++){
+                for (let iDL = 0; iDL < 4; iDL++) {
                     if (chunk.dlOffsets[iDL] !== -1 && chunk.dlSizes[iDL] !== 0){
                         let snoopPresent = false;
                         let currf3dexCnt = chunk.dlSizes[iDL];
                         let currf3dexOffset = this.dlStart + chunk.dlOffsets[iDL];
                         do {
                             let command = view.getUint8(currf3dexOffset);
+
+                            // Load vertex segment buffer?
                             if (command === 0x00) {
                                 snoopPresent = true;
-                                const f3DMeshID = view.getUint32(currf3dexOffset + 0x04, false);
-                                const currSection = this.sections.find((elem) => elem.meshID == f3DMeshID);
+                                const sectionID = view.getUint32(currf3dexOffset + 0x04, false);
+                                const currSection = this.sections.find((section) => section.meshID == sectionID);
 
                                 if (currSection !== undefined) {
                                     this.displayLists.push({
@@ -130,20 +132,12 @@ export class Map {
                                     });
                                 }
                             }
-                            else if (command === 0xDE){
-                                let tmpDLOff = view.getUint32(currf3dexOffset + 0x04);
-                                tmpDLOff = tmpDLOff & 0x00FFFFFF;
-                                this.displayLists.push({
-                                    ChunkID: chunk.id,
-                                    F3dexStartIndex: (tmpDLOff)/8,
-                                    VertStartIndex: chunk.vertOffset/0x10
-                                });
-                            }
+
                             currf3dexOffset = currf3dexOffset + 8;
                             currf3dexCnt = currf3dexCnt - 8;
                         } while (currf3dexCnt > 0);
 
-                        if (!snoopPresent){
+                        if (!snoopPresent) {
                             // More than 5 segments to chunk
                             // Include Start as DL
                             this.displayLists.push({

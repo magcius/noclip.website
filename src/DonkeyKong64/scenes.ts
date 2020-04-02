@@ -5,13 +5,13 @@ import { GfxDevice, GfxRenderPass, GfxCullMode, GfxProgram, GfxMegaStateDescript
 import { SceneContext } from '../SceneBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ROMHandler } from './tools/extractor';
-import { F3DEX_Program } from '../BanjoKazooie/render';
+import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
 import { translateBlendMode, RSP_Geometry } from '../zelview/f3dzex';
 import { nArray, align, assert } from '../util';
 import { DeviceProgram } from '../Program';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { TextureMapping } from '../TextureHolder';
+import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
 import { DrawCall, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
@@ -467,6 +467,8 @@ class DK64Renderer implements Viewer.SceneGfx {
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
 
+    public textureHolder = new FakeTextureHolder([]);
+
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
     }
@@ -514,12 +516,12 @@ class SceneDesc implements Viewer.SceneDesc {
         const romHandler = new ROMHandler(ROM);
         const map = romHandler.getMap(parseInt(this.id, 16));
 
+        const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
         const cache = sceneRenderer.renderHelper.getCache();
         for (let i = 0; i < map.displayLists.length; i++) {
             const dl = map.displayLists[i];
 
-            const sharedOutput = new RSPSharedOutput();
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
@@ -541,6 +543,9 @@ class SceneDesc implements Viewer.SceneDesc {
             const meshRenderer = new RootMeshRenderer(device, cache, meshData);
             sceneRenderer.meshRenderers.push(meshRenderer);
         }
+
+        for (let i = 0; i < sharedOutput.textureCache.textures.length; i++)
+            sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
 
         // Load setup data, ported from ScriptHawk's dumpSetup() function
         const model1SetupSize = 0x38;
@@ -598,7 +603,7 @@ class SceneDesc implements Viewer.SceneDesc {
         let model1Count = setupView.getUint32(model1Base, false);
         console.log("Base: " + model1Base.toString(16));
         console.log("Count: " + model1Count);
-
+    
         for (let i = 0; i < model1Count - 1; i++) {
             let entryBase = model1Base + 0x04 + i * model1SetupSize;
             let xPos = setupView.getFloat32(entryBase + model1Setup.x_pos, false);

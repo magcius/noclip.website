@@ -130,7 +130,8 @@ export class Texture {
 
     constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
         this.tile.copy(tile);
-        this.name = hexzero(this.dramAddr, 8);
+        const nameAddr = tile.cacheKey !== 0 ? tile.cacheKey : this.dramAddr;
+        this.name = hexzero(nameAddr, 8);
     }
 }
 
@@ -163,6 +164,7 @@ export class TileState {
     public copy(o: TileState): void {
         this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
         this.setSize(o.uls, o.ult, o.lrs, o.lrt);
+        this.cacheKey = o.cacheKey;
     }
 }
 
@@ -237,7 +239,7 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line); break;
     case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line); break;
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH, tile.line); break;
     default:
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
     }

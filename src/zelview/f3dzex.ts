@@ -385,7 +385,7 @@ function translateTile_IA16(tmem: DataView, tile: TileDescriptor): Texture {
 const tlutColorTable = new Uint8Array(256 * 4);
 
 function translateTile_CI4(tmem: DataView, tile: TileDescriptor, tlutfmt: TextureLUT): Texture {
-    const palTmem = 0x100 + (tile.palette << 4); // FIXME: how is address calculated?
+    const palTmem = 0x100 + (tile.palette << 4);
     translateTLUT(tlutColorTable, tmem, palTmem, ImageSize.G_IM_SIZ_4b, tlutfmt);
 
     const tileW = tile.getWidth();
