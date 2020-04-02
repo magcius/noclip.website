@@ -7,6 +7,11 @@ import { SceneContext } from '../../SceneBase';
 import { Endianness } from "../../endian";
 import { getTileHeight } from "../../Common/N64/RDP";
 
+
+import * as F3DEX2 from "../f3dex2";
+import * as F3DEX from '../../BanjoKazooie/f3dex';
+import { TextFilt, ImageFormat, ImageSize } from "../../Common/N64/Image";
+
 /*
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -14,32 +19,28 @@ function fetchDataSync(path: string): ArrayBufferSlice {
 }
 */
 
-const pathBaseIn  = `../../../data/DonkeyKong64_Raw`;
-const pathBaseOut = `../../../data/DonkeyKong64`;
-
-export class DisplayListInfo{
+export class DisplayListInfo {
     public ChunkID: number;
     public F3dexStartIndex: number;
     public VertStartIndex: number;
 }
 
-export class MapChunk{
+export class MapChunk {
     public x: number
     public y: number
     public z: number
-    //public DLOffsets:
+
     public dlOffsets: number[] = [];
     public dlSizes: number[] = [];
     public vertOffset: number
     public vertSize: number
 
     public id: number = 0;
-    // 
 
     static readonly size = 0x34;
 
-    constructor(bin: ArrayBufferSlice, iChunk?: number){
-        if(iChunk){
+    constructor(bin : ArrayBufferSlice, iChunk ?: number){
+        if (iChunk) {
             this.id = iChunk;
         }
         let view = bin.createDataView();
@@ -57,7 +58,7 @@ export class MapChunk{
     }
 }
 
-export class MapSection{
+export class MapSection {
     public meshID: number
     public vertOffsets: number[] = [];
 
@@ -73,35 +74,39 @@ export class MapSection{
     }
 }
 
-export class Map{
+export class Map {
     public bin : ArrayBufferSlice
     public header_raw : ArrayBufferSlice
+    public vertBin : ArrayBufferSlice
+    public f3dexBin : ArrayBufferSlice
     public ChunkCount : number
     public Chunks : MapChunk[] = [];
     public Sections : MapSection[] = [];
     public DisplayLists: DisplayListInfo[] = [];
 
-    //headerInfo
+    // headerInfo
     private F3DStart : number
     private vertStart : number
     private vertEnd : number
-    private sectionStart: number
-    private sectionEnd: number
-    private chunkCountOffset: number
-    private chunkStart: number
+    private sectionStart : number
+    private sectionEnd : number
+    private chunkCountOffset : number
+    private chunkStart : number
 
-    constructor(buffer:ArrayBufferSlice){
+    constructor (buffer : ArrayBufferSlice) {
         this.bin = buffer;
         let view = this.bin.createDataView();
         this.header_raw = new ArrayBufferSlice(this.bin.arrayBuffer, 0, 0x6C);
         this.ParseHeader();
+        this.vertBin = new ArrayBufferSlice(this.bin.arrayBuffer, this.vertStart, (this.vertEnd - this.vertStart));
+        this.f3dexBin = new ArrayBufferSlice(this.bin.arrayBuffer, this.F3DStart, (this.vertStart - this.F3DStart));
         this.ChunkCount = view.getUint32(this.chunkCountOffset, false);
-        if(this.ChunkCount >0){
+        if (this.ChunkCount > 0){
             for (let i = 0; i < this.ChunkCount; i++) {
                 this.Chunks[i] = new MapChunk( new ArrayBufferSlice( this.bin.arrayBuffer, this.chunkStart + MapChunk.size * i, MapChunk.size), i );
             }
         }
-        for(let i = 0; ( i * MapSection.size ) < ( this.sectionEnd - this.sectionStart ); i++){
+        for (let i = 0; (i * MapSection.size) < (this.sectionEnd - this.sectionStart); i++) {
             this.Sections[i] = new MapSection( new ArrayBufferSlice( this.bin.arrayBuffer, this.sectionStart + i * MapSection.size + 4, MapSection.size ) );
         }
         console.log(`${this.ChunkCount} CHUNKS PARSED FOR MAP`);
@@ -133,8 +138,8 @@ export class Map{
                             currf3dexCnt = currf3dexCnt - 8;
                         } while (currf3dexCnt > 0);
                         if(snoopPresent == false){
-                            //more than 5 segments to chunk
-                            //include Start as DL
+                            // More than 5 segments to chunk
+                            // Include Start as DL
                             this.DisplayLists.push({
                                 ChunkID: chunk.id,
                                 F3dexStartIndex: offst/0x08, 
@@ -165,14 +170,31 @@ export class Map{
         this.chunkCountOffset =view.getUint32(0x64, false);
         this.chunkStart = view.getUint32(0x68, false);
     }
+}
 
-    //public get DLQueue
+function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
+    rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE);
+    if (opaque) {
+        rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
+        rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_LIGHTING);
+    } else
+        rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
+    rspState.gDPSetOtherModeH(F3DEX.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << F3DEX.OtherModeH_Layout.G_MDSFT_TEXTFILT);
+    // initially 2-cycle, though this can change
+    rspState.gDPSetOtherModeH(F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    // some objects seem to assume this gets set, might rely on stage rendering first
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
+}
 
+function runRoomDL(displayList: number, states: F3DEX2.RSPState): any {
+    const rspState = states;
+    F3DEX2.runDL_F3DEX2(rspState, displayList);
+    const rspOutput = rspState.finish();
+    return { sharedOutput: rspState.sharedOutput, rspState, rspOutput };
 }
 
 export class ROMHandler {
     public ROM : ArrayBufferSlice
-    public ROM_LittleEndian : ArrayBufferSlice
     public ROMView : DataView
 
     public MapTable : ArrayBufferSlice
@@ -184,6 +206,12 @@ export class ROMHandler {
     public FloorTable : ArrayBufferSlice
     public FloorTableView : DataView
 
+    public TextureTable : ArrayBufferSlice
+    public TextureTableView : DataView
+
+    static readonly pathBaseIn  = `../../../data/DonkeyKong64_Raw`;
+    static readonly pathBaseOut = `../../../data/DonkeyKong64`;
+
     // USA pointer table locations
     static readonly PointerTableOffset = 0x101C50;
     static readonly MapTableOffset = 0x15232C;
@@ -194,37 +222,21 @@ export class ROMHandler {
     static readonly ActorModelTableOffset = 0x8D3018;
     static readonly TextureTableOffset = 0x118B638;
 
-    constructor(context: SceneContext) {
-        const dataFetcher = context.dataFetcher;
-        dataFetcher.fetchData(`${pathBaseIn}/dk64.z64`).then((buffer) => {
-            this.ROM = buffer;
-            //this.ROM_LittleEndian = this.ROM.convertFromEndianness(Endianness.BIG_ENDIAN, 4);
+    constructor(ROM : ArrayBufferSlice) {
+            this.ROM = ROM;
             this.ROMView = new DataView(this.ROM.arrayBuffer);
 
-            this.WallTable = new ArrayBufferSlice(this.ROM.arrayBuffer, ROMHandler.WallTableOffset, 215*4);
+            this.WallTable = this.ROM.slice(ROMHandler.WallTableOffset);
             this.WallTableView = this.WallTable.createDataView();
             
-            this.FloorTable = new ArrayBufferSlice(this.ROM.arrayBuffer, ROMHandler.FloorTableOffset, 215*4);
+            this.FloorTable = this.ROM.slice(ROMHandler.FloorTableOffset);
             this.FloorTableView = this.FloorTable.createDataView();
             
-            this.MapTable = new ArrayBufferSlice(this.ROM.arrayBuffer, ROMHandler.MapTableOffset, 215*4);
+            this.TextureTable = this.ROM.slice(ROMHandler.TextureTableOffset);
+            this.TextureTableView = this.TextureTable.createDataView();
+
+            this.MapTable = this.ROM.slice(ROMHandler.MapTableOffset);
             this.MapTableView = this.MapTable.createDataView();
-
-            //ToDo don't unpack all at once, pull when scene/object is needed
-            // 215 is num maps
-            for (let i = 0; i < 215; i++) {
-                let map_bins = this.loadMap(i);
-                if(map_bins){
-                    let currMap = new Map(map_bins);
-                }
-
-                let walls = this.loadWalls(i);
-                if(walls){console.log(`walls for scene ${i} decompressed`);}
-                
-                let floors = this.loadFloors(i);
-                if(floors){console.log(`floors for scene ${i} decompressed`);}
-            }
-        });
     }
 
     public decompress(buffer : ArrayBufferSlice): ArrayBufferSlice | null {
@@ -246,7 +258,6 @@ export class ROMHandler {
         }
 
         const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
-        //console.log(decompressed);
         return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
     }
 
@@ -254,23 +265,45 @@ export class ROMHandler {
         let wallPointer = this.WallTableView.getUint32(sceneID * 4, false);
         wallPointer = wallPointer & 0x7FFFFFFF;
         wallPointer = wallPointer + ROMHandler.PointerTableOffset;
-        console.log("READING WALLS " + sceneID + " " + wallPointer.toString(16));
         return this.decompress(this.ROM.slice(wallPointer));
     }
 
     public loadFloors(sceneID : number) : ArrayBufferSlice | null {
-        let floorPointer = this.ROMView.getInt32(ROMHandler.FloorTableOffset + sceneID * 4, false);
+        let floorPointer = this.FloorTableView.getInt32(sceneID * 4, false);
         floorPointer = floorPointer & 0x7FFFFFFF;
         floorPointer = floorPointer + ROMHandler.PointerTableOffset;
-        console.log("READING FLOORS " + sceneID + " " + floorPointer.toString(16));
         return this.decompress(this.ROM.slice(floorPointer));
+    }
+
+    public getMap(sceneID : number) : any {
+        let map = this.loadMap(sceneID);
+        if (map) {
+            let currMap = new Map(map);
+            
+            currMap.DisplayLists.forEach(DL => {
+                const sharedOutput = new F3DEX.RSPSharedOutput();
+                const state = new F3DEX2.RSPState(sharedOutput, 
+                    currMap.vertBin.slice(DL.VertStartIndex * 0x10),
+                    currMap.f3dexBin.slice(DL.F3dexStartIndex * 0x08));
+                initDL(state, true);
+
+                return runRoomDL(0, state);
+            });
+            return currMap;
+        }
     }
 
     public loadMap(sceneID : number) : ArrayBufferSlice | null {
         let mapPtr = this.MapTableView.getUint32(sceneID * 4, false);
         mapPtr = mapPtr & 0x7FFFFFFF;
         mapPtr = mapPtr + ROMHandler.PointerTableOffset;
-        console.log("READING MODEL " + sceneID + " " + mapPtr.toString(16));
+        return this.decompress(this.ROM.slice(mapPtr)); 
+    }
+
+    public loadTexture(textureID : number) : ArrayBufferSlice | null {
+        let mapPtr = this.TextureTableView.getUint32(textureID * 4, false);
+        mapPtr = mapPtr & 0x7FFFFFFF;
+        mapPtr = mapPtr + ROMHandler.PointerTableOffset;
         return this.decompress(this.ROM.slice(mapPtr)); 
     }
 

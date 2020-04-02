@@ -42,8 +42,12 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx>{
-        let romHandler = new ROMHandler(context);
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        let ROM = await context.dataFetcher.fetchData(`${ROMHandler.pathBaseIn}/dk64.z64`);
+        let romHandler = new ROMHandler(ROM);
+        let mapModel = romHandler.getMap(parseInt(this.id, 16));
+        let rspOutPls = mapModel.rspOutput;
+        console.log(rspOutPls);
         const sceneRenderer = new DK64Renderer();
         return sceneRenderer;
     }
