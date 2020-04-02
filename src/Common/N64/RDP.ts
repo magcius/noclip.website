@@ -92,6 +92,22 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
     };
 }
 
+function colorCombinePassUsesT0(ccp: ColorCombinePass) {
+    return (ccp.a == CCMUX.TEXEL0) || (ccp.a == CCMUX.TEXEL0_A) ||
+        (ccp.b == CCMUX.TEXEL0) || (ccp.b == CCMUX.TEXEL0_A) ||
+        (ccp.c == CCMUX.TEXEL0) || (ccp.c == CCMUX.TEXEL0_A) ||
+        (ccp.d == CCMUX.TEXEL0) || (ccp.d == CCMUX.TEXEL0_A);
+}
+
+function alphaCombinePassUsesT0(acp: AlphaCombinePass) {
+    return (acp.a == ACMUX.TEXEL0 || acp.b == ACMUX.TEXEL0 || acp.c == ACMUX.TEXEL0 || acp.d == ACMUX.TEXEL0);
+}
+
+export function combineParamsUsesT0(cp: CombineParams) {
+    return colorCombinePassUsesT0(cp.c0) || colorCombinePassUsesT0(cp.c1) ||
+        alphaCombinePassUsesT0(cp.a0) || alphaCombinePassUsesT0(cp.a1);
+}
+
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
     return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
         (ccp.b == CCMUX.TEXEL1) || (ccp.b == CCMUX.TEXEL1_A) ||

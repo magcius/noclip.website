@@ -78,8 +78,8 @@ export class RSPState {
 
     private SP_GeometryMode: number = 0;
 
-    public ramBuffer: ArrayBufferSlice;
-    public ramAddrBase: number;
+    constructor(public ramBuffer: ArrayBufferSlice, public ramAddrBase: number) {
+    }
 
     public finish(): RSPOutput {
         return this.output;

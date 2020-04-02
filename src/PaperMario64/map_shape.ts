@@ -170,11 +170,8 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             const displayListOffs = view.getUint32(displayDataOffs + 0x00) - ramAddrBase;
             assert(view.getUint32(displayDataOffs + 0x04) === 0x00);
 
-            const rspState = new RSPState();
-            rspState.ramAddrBase = ramAddrBase;
-            rspState.ramBuffer = buffer;
+            const rspState = new RSPState(buffer, ramAddrBase);
             runDL_F3DEX2(rspState, displayListOffs);
-            rspState.finish();
             const rspOutput = rspState.finish();
 
             const name = readNextModelName();
