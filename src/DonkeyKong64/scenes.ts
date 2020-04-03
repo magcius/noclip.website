@@ -1,10 +1,10 @@
 
-
 import * as Viewer from '../viewer';
+import * as BYML from '../byml';
+
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexture, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { ROMHandler } from './tools/extractor';
 import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
 import { translateBlendMode, RSP_Geometry } from '../zelview/f3dzex';
 import { nArray, align, assert } from '../util';
@@ -23,7 +23,9 @@ import { OtherModeH_Layout, OtherModeH_CycleType, RSPSharedOutput, Vertex } from
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import Pako from 'pako';
 
 const pathBase = `DonkeyKong64`;
 
@@ -507,14 +509,183 @@ class DK64Renderer implements Viewer.SceneGfx {
     }
 }
 
+export class DisplayListInfo {
+    public ChunkID: number;
+    public dlStartAddr: number;
+    public VertStartIndex: number;
+}
+
+export class MapChunk {
+    public x: number
+    public y: number
+    public z: number
+
+    public dlOffsets: number[] = [];
+    public dlSizes: number[] = [];
+    public vertOffset: number;
+    public vertSize: number;
+
+    static readonly size = 0x34;
+
+    constructor(bin: ArrayBufferSlice, public id: number) {
+        let view = bin.createDataView();
+        this.x = view.getInt32(0x00);
+        this.y = view.getInt32(0x04);
+
+        let dlTableIdx = 0x0C;
+        for (let i = 0; i < 4; i++) {
+            this.dlOffsets[i] = view.getInt32(dlTableIdx + 0x00);
+            this.dlSizes[i] = view.getUint32(dlTableIdx + 0x04);
+            dlTableIdx += 0x08;
+        }
+
+        this.vertOffset = view.getInt32(0x2C);
+        this.vertSize = view.getUint32(0x30);
+    }
+}
+
+export class MapSection {
+    public meshID: number;
+    public vertOffsets: number[] = [];
+
+    static readonly size = 0x1C;
+
+    constructor(bin: ArrayBufferSlice) {
+        let view = bin.createDataView();
+        this.meshID = view.getUint16(0x02, false);
+        for (let i = 0; i < 8; i++)
+            this.vertOffsets[i] = view.getUint16(0x08 + i*0x02);
+    }
+}
+
+export class Map {
+    public bin: ArrayBufferSlice;
+    public vertBin: ArrayBufferSlice;
+    public f3dexBin: ArrayBufferSlice;
+    public chunkCount: number;
+    public chunks: MapChunk[] = [];
+    public sections: MapSection[] = [];
+    public displayLists: DisplayListInfo[] = [];
+
+    // headerInfo
+    private dlStart: number;
+    private vertStart: number;
+    private vertEnd: number;
+    private sectionStart: number;
+    private sectionEnd: number;
+    private chunkCountOffset: number;
+    private chunkStart: number;
+
+    constructor(buffer: ArrayBufferSlice) {
+        this.bin = buffer;
+
+        const view = this.bin.createDataView();
+        this.dlStart = view.getUint32(0x34, false);
+        this.vertStart = view.getUint32(0x38, false);
+        this.vertEnd = view.getUint32(0x40, false);
+        this.sectionStart = view.getUint32(0x58, false);
+        this.sectionEnd = view.getUint32(0x5C, false);
+        this.chunkCountOffset = view.getUint32(0x64, false);
+        this.chunkStart = view.getUint32(0x68, false);
+
+        this.f3dexBin = this.bin.slice(this.dlStart, this.vertStart);
+        this.vertBin = this.bin.slice(this.vertStart, this.vertEnd);
+
+        this.chunkCount = view.getUint32(this.chunkCountOffset, false);
+
+        if (this.chunkCount > 0) {
+            for (let i = 0; i < this.chunkCount; i++) {
+                const chunkBuffer = this.bin.subarray(this.chunkStart + MapChunk.size * i, MapChunk.size);
+                this.chunks[i] = new MapChunk(chunkBuffer, i);
+            }
+        }
+
+        for (let i = 0; (i * MapSection.size) < (this.sectionEnd - this.sectionStart); i++) {
+            const sectionBuffer = this.bin.subarray(this.sectionStart + i * MapSection.size + 4, MapSection.size);
+            this.sections[i] = new MapSection(sectionBuffer);
+        }
+
+        console.log(`${this.chunkCount} CHUNKS PARSED FOR MAP`);
+
+        if (this.chunkCount > 0) {
+            this.chunks.forEach(chunk => {
+                for (let iDL = 0; iDL < 4; iDL++) {
+                    if (chunk.dlOffsets[iDL] !== -1 && chunk.dlSizes[iDL] !== 0){
+                        let snoopPresent = false;
+                        let currf3dexCnt = chunk.dlSizes[iDL];
+                        let currf3dexOffset = this.dlStart + chunk.dlOffsets[iDL];
+                        do {
+                            let command = view.getUint8(currf3dexOffset);
+
+                            // Load vertex segment buffer?
+                            if (command === 0x00) {
+                                snoopPresent = true;
+                                const sectionID = view.getUint32(currf3dexOffset + 0x04, false);
+                                const currSection = this.sections.find((section) => section.meshID == sectionID);
+
+                                if (currSection !== undefined) {
+                                    this.displayLists.push({
+                                        ChunkID: chunk.id,
+                                        dlStartAddr: currf3dexOffset - this.dlStart,
+                                        VertStartIndex: (chunk.vertOffset/0x10 + currSection.vertOffsets[iDL]),
+                                    });
+                                }
+                            }
+
+                            currf3dexOffset = currf3dexOffset + 8;
+                            currf3dexCnt = currf3dexCnt - 8;
+                        } while (currf3dexCnt > 0);
+
+                        if (!snoopPresent) {
+                            // More than 5 segments to chunk
+                            // Include Start as DL
+                            this.displayLists.push({
+                                ChunkID: chunk.id,
+                                dlStartAddr: chunk.dlOffsets[iDL],
+                                VertStartIndex: chunk.vertOffset/0x10
+                            });
+                        }
+                    }
+                }
+            });
+        } else {
+            this.displayLists.push({
+                ChunkID: 0,
+                dlStartAddr: 0,
+                VertStartIndex: 0
+            });
+        }
+
+        console.log(`${this.displayLists.length} DISPLAY LISTS FOUND IN MAP MODEL`);
+    }
+}
+
+function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
+    const view = buffer.createDataView();
+    assert(view.getUint32(0x00) === 0x1F8B0800);
+    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, 0x0A));
+    return new ArrayBufferSlice(decompressed.buffer);
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const ROM = await context.dataFetcher.fetchData(`${ROMHandler.pathBaseIn}/dk64.z64`);
-        const romHandler = new ROMHandler(ROM);
-        const map = romHandler.getMap(parseInt(this.id, 16));
+        const dataFetcher = context.dataFetcher;
+        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/ROM_arc.crg1`)!, BYML.FileType.CRG1);
+
+        const sceneID = parseInt(this.id, 16);
+
+        const mapDataArr = obj.MapData as (ArrayBufferSlice | number)[];
+
+        let mapData = mapDataArr[sceneID];
+        if (typeof mapData === 'number')
+            mapData = mapDataArr[mapData];
+        const map = new Map(decompress(mapData as ArrayBufferSlice));
+
+        const texDataArr = obj.TexData as ArrayBufferSlice[];
+        const texData = texDataArr.map((buffer) => decompress(buffer));
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
@@ -525,7 +696,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
-            const state = new RSPState(romHandler, segmentBuffers, sharedOutput);
+            const state = new RSPState(texData, segmentBuffers, sharedOutput);
             initDL(state, true);
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
@@ -548,6 +719,7 @@ class SceneDesc implements Viewer.SceneDesc {
             sceneRenderer.textureHolder.viewerTextures.push(textureToCanvas(sharedOutput.textureCache.textures[i]));
 
         // Load setup data, ported from ScriptHawk's dumpSetup() function
+        /*
         const model1SetupSize = 0x38;
         const model1Setup = {
             x_pos: 0x00, // Float
@@ -616,6 +788,7 @@ class SceneDesc implements Viewer.SceneDesc {
             //console.log("Actor: " + entryBase.toString(16) + ": " + behavior + " (model: " + romHandler.ActorModels[behavior].toString(16) + ") at " + Math.round(xPos) + ", " + Math.round(yPos) + ", " + Math.round(zPos) + " scale " + scale + " rotation " + rotation);
             //let modelFile = romHandler.getActorModel(behavior);
         }
+        */
 
         return sceneRenderer;
     }

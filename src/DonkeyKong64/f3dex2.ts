@@ -6,7 +6,6 @@ import { nArray, assert, assertExists, hexzero } from "../util";
 import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { ROMHandler } from './tools/extractor';
 
 // Interpreter for N64 F3DEX2 microcode.
 export const enum RSP_Geometry {
@@ -71,7 +70,7 @@ export class RSPState {
     public SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
-    constructor(public romHandler: ROMHandler, public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput) {
+    constructor(public textureBuffers: ArrayBufferSlice[], public segmentBuffers: ArrayBufferSlice[], public sharedOutput: F3DEX.RSPSharedOutput) {
     }
 
     public finish(): RSPOutput | null {
@@ -134,7 +133,7 @@ export class RSPState {
         if (segment === 0x00) {
             // Load from texture index.
             const segmentBuffers: ArrayBufferSlice[] = [];
-            segmentBuffers[0x01] = assertExists(this.romHandler.loadTexture(cache.addr));
+            segmentBuffers[0x01] = assertExists(this.textureBuffers[cache.addr]);
     
             tile.cacheKey = cache.addr;
     
@@ -145,7 +144,7 @@ export class RSPState {
     
                 const palTmem = 0x100 + (tile.palette << 4);
                 const palCache = assertExists(this.DP_TMemUploadTracker.get(palTmem));
-                segmentBuffers[0x02] = assertExists(this.romHandler.loadTexture(palCache.addr));
+                segmentBuffers[0x02] = assertExists(this.textureBuffers[palCache.addr]);
                 dramPalAddr = 0x02000000;
             } else {
                 dramPalAddr = 0;
