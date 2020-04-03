@@ -71,7 +71,7 @@ function main() {
     const TexData: ArrayBufferSlice[] = [];
     // TODO(jstpierre): Proper count
     let texTableIdx = TextureTableOffset;
-    for (let i = 0; i < 0x900; i++) {
+    for (let i = 0; i < 0xC00; i++) {
         const texDataPtr = view.getUint32(texTableIdx + 0x00);
 
         const offs = (texDataPtr & 0x7FFFFFFF) + PointerTableOffset;
