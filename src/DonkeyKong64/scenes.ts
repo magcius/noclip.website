@@ -14,7 +14,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
 import { DrawCall, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
+import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera';
 import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { translateCM, Texture } from '../Common/N64/RDP';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
@@ -186,7 +186,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean): void {
         if (!this.visible)
             return;
 
@@ -206,9 +206,10 @@ class DrawCallInstance {
             computeViewMatrixSkybox(viewMatrixScratch, viewerInput.camera);
         else
             computeViewMatrix(viewMatrixScratch, viewerInput.camera);
+        mat4.mul(viewMatrixScratch, viewMatrixScratch, modelMatrix);
 
         offs += fillMatrix4x3(mappedF32, offs, viewMatrixScratch); // u_ModelView
-        
+
         this.computeTextureMatrix(texMatrixScratch, 0);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch); // u_TexMatrix[0]
 
@@ -323,9 +324,9 @@ export class MeshData {
 class MeshRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, modelMatrix, isSkybox);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -448,7 +449,7 @@ export class RootMeshRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix, this.isSkybox);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -473,6 +474,10 @@ class DK64Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(30/60);
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -667,25 +672,39 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     return new ArrayBufferSlice(decompressed.buffer);
 }
 
+class ROMData {
+    public MapData: (ArrayBufferSlice | number)[];
+    public TexData: ArrayBufferSlice[];
+
+    constructor(buffer: ArrayBufferSlice) {
+        const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
+
+        this.MapData = obj.MapData;
+        this.TexData = obj.TexData;
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/ROM_arc.crg1`)!, BYML.FileType.CRG1);
+        const romData = await context.dataShare.ensureObject(`${pathBase}/ROMData`, async () => {
+            return new ROMData(await dataFetcher.fetchData(`${pathBase}/ROM_arc.crg1`)!);
+        });
 
         const sceneID = parseInt(this.id, 16);
 
-        const mapDataArr = obj.MapData as (ArrayBufferSlice | number)[];
-
-        let mapData = mapDataArr[sceneID];
+        let mapData = romData.MapData[sceneID];
         if (typeof mapData === 'number')
-            mapData = mapDataArr[mapData];
+            mapData = romData.MapData[mapData];
         const map = new Map(decompress(mapData as ArrayBufferSlice));
 
-        const texDataArr = obj.TexData as ArrayBufferSlice[];
-        const texData = texDataArr.map((buffer) => decompress(buffer));
+        const texData = romData.TexData.map((buffer) => decompress(buffer));
 
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
