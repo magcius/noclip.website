@@ -680,7 +680,7 @@ class ROMData {
         const obj: any = BYML.parse(buffer, BYML.FileType.CRG1);
 
         this.MapData = obj.MapData;
-        this.TexData = obj.TexData;
+        this.TexData = obj.TexData.map((buffer: ArrayBufferSlice) => decompress(buffer));
     }
 
     public destroy(device: GfxDevice): void {
@@ -704,8 +704,6 @@ class SceneDesc implements Viewer.SceneDesc {
             mapData = romData.MapData[mapData];
         const map = new Map(decompress(mapData as ArrayBufferSlice));
 
-        const texData = romData.TexData.map((buffer) => decompress(buffer));
-
         const sharedOutput = new RSPSharedOutput();
         const sceneRenderer = new DK64Renderer(device);
         const cache = sceneRenderer.renderHelper.getCache();
@@ -715,7 +713,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const segmentBuffers: ArrayBufferSlice[] = [];
             segmentBuffers[0x06] = map.vertBin.slice(dl.VertStartIndex * 0x10);
             segmentBuffers[0x07] = map.f3dexBin;
-            const state = new RSPState(texData, segmentBuffers, sharedOutput);
+            const state = new RSPState(romData.TexData, segmentBuffers, sharedOutput);
             initDL(state, true);
             runDL_F3DEX2(state, 0x07000000 | dl.dlStartAddr);
 
