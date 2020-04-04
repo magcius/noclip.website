@@ -16,11 +16,11 @@ import { SFATextureCollection, SFATexture } from './textures';
 class ModelExhibitRenderer extends SFARenderer {
     private model: Model | null | undefined = undefined; // null: Failed to load. undefined: Not set.
     private modelNum = 1;
-    private modelSelect: UI.Slider;
+    private modelSelect: UI.TextEntry;
 
-    private anim: Anim | null = null;
+    private anim: Anim | null | undefined = undefined;
     private animNum = 0;
-    private animSelect: UI.Slider;
+    private animSelect: UI.TextEntry;
 
     private displayBones: boolean = false;
 
@@ -33,14 +33,28 @@ class ModelExhibitRenderer extends SFARenderer {
 
         panel.setTitle(UI.SAND_CLOCK_ICON, 'Model Exhibit');
 
-        this.modelSelect = new UI.Slider();
-        this.modelSelect.setLabel("Model #");
-        this.modelSelect.setRange(0, 100);
+        this.modelSelect = new UI.TextEntry();
+        this.modelSelect.ontext = (s: string) => {
+            const newNum = Number.parseInt(s);
+            if (newNum !== NaN) {
+                this.modelNum = newNum;
+                this.model = undefined;
+            }
+        };
+        //this.modelSelect.setLabel("Model #");
+        //this.modelSelect.setRange(0, 200 /*this.modelColl.getNumModels()*/);
         panel.contents.append(this.modelSelect.elem);
 
-        this.animSelect = new UI.Slider();
-        this.animSelect.setLabel("Animation #");
-        this.animSelect.setRange(0, 100);
+        this.animSelect = new UI.TextEntry();
+        this.animSelect.ontext = (s: string) => {
+            const newNum = Number.parseInt(s);
+            if (newNum !== NaN) {
+                this.animNum = Number.parseInt(s);
+                this.anim = undefined;
+            }
+        }
+        // this.animSelect.setLabel("Animation #");
+        // this.animSelect.setRange(0, 200 /*this.animLoader.getNumAnims()*/);
         panel.contents.append(this.animSelect.elem);
 
         const bonesSelect = new UI.Checkbox("Display Bones", false);
@@ -58,10 +72,10 @@ class ModelExhibitRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        if (this.modelNum !== this.modelSelect.getValue()) {
-            this.modelNum = this.modelSelect.getValue();
-            this.model = undefined;
-        }
+        // if (this.modelNum !== selectedModelNum) {
+        //     this.modelNum = selectedModelNum;
+        //     this.model = undefined;
+        // }
 
         if (this.model === undefined) {
             try {
@@ -75,34 +89,47 @@ class ModelExhibitRenderer extends SFARenderer {
         }
         
         const animate = true;
-        if (animate && this.model !== null) {
-            if (this.animNum !== this.animSelect.getValue()) {
-                this.animNum = this.animSelect.getValue();
-                this.anim = null;
+        if (animate && this.model !== null && this.model !== undefined) {
+            // const selectedAnimNum = this.animSelect.getValue()|0;
+            // if (this.animNum !== selectedAnimNum) {
+            //     this.animNum = selectedAnimNum;
+            //     this.anim = null;
+            // }
+
+            if (this.anim === undefined) {
+                try {
+                    this.anim = this.animLoader.getAnim(this.animNum, this.modelNum);
+                    console.log(`Loaded anim ${this.animNum}`);
+                } catch (e) {
+                    console.warn(`Failed to load animation ${this.animNum} due to exception:`);
+                    console.error(e);
+                    this.anim = null;
+                }
             }
 
-            if (this.anim === null) {
-                this.anim = this.animLoader.getAnim(this.animNum);
-            }
-
-            const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
-            const keyframe = this.anim.keyframes[keyframeNum];
-            for (let i = 0; i < keyframe.poses.length && i < this.model.joints.length; i++) {
-                const pose = keyframe.poses[i];
-                const poseMtx = mat4.create();
-                // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
-                mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-                mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-
-                const jointNum = this.anim.amap.getInt8(i);
-                this.model.setJointPose(jointNum, poseMtx);
+            if (this.anim !== null && this.anim !== undefined) {
+                this.model.resetPoses();
+                const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
+                const keyframe = this.anim.keyframes[keyframeNum];
+                for (let i = 0; i < keyframe.poses.length && i < this.model.joints.length; i++) {
+                    const pose = keyframe.poses[i];
+                    const poseMtx = mat4.create();
+                    // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
+                    mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                    mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                    mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
+                    mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+                    mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+    
+                    const jointNum = this.anim.amap.getInt8(i);
+                    this.model.setJointPose(jointNum, poseMtx);
+                }
             }
 
             this.model.updateBoneMatrices();
         }
+
+        // TODO: Render background (configurable?)
 
         // Render opaques
 

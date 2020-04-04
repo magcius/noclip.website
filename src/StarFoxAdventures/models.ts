@@ -1140,6 +1140,12 @@ export class Model implements BlockRenderer {
         }
     }
 
+    public resetPoses() {
+        for (let i = 0; i < this.poseMatrices.length; i++) {
+            mat4.identity(this.poseMatrices[i]);
+        }
+    }
+
     public setJointPose(jointNum: number, mtx: mat4) {
         mat4.copy(this.poseMatrices[jointNum], mtx);
     }
@@ -1222,6 +1228,10 @@ export class ModelCollection {
         ]);
         this.modelsTab = modelsTab.createDataView();
         this.modelsBin = modelsBin;
+    }
+
+    public getNumModels() {
+        return (this.modelsTab.byteLength / 4)|0;
     }
 
     public loadModel(device: GfxDevice, materialFactory: MaterialFactory, num: number): Model {

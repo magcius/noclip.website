@@ -133,7 +133,7 @@ export class AnimFile {
                 result.rotation = interpS16(cmd & 0xfff0);
                 if (numAngleBits !== 0) {
                     const value = kfReader.get(numAngleBits);
-                    result.rotation += signExtend(value, 14);
+                    result.rotation += signExtend(value, 14) * 2;
                 }
 
                 if (cmd & 0x10) {
@@ -161,7 +161,7 @@ export class AnimFile {
                         if (numTransBits !== 0) {
                             result.translation += kfReader.get(numTransBits);
                         }
-                        result.translation /= 256; // FIXME: ???
+                        result.translation /= 0x1fe; // FIXME: ???
                     }
                 }
 
@@ -224,9 +224,13 @@ export class AnimLoader {
         this.amapBin = amapBin.createDataView();
     }
 
-    public getAnim(num: number): Anim {
-        const amapOffs = this.amapTab.getUint32(num * 4);
-        const nextAmapOffs = this.amapTab.getUint32((num + 1) * 4);
+    public getNumAnims() {
+        return (this.amapTab.byteLength / 4)|0;
+    }
+
+    public getAnim(num: number, modelNum: number): Anim {
+        const amapOffs = this.amapTab.getUint32(modelNum * 4);
+        const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
         console.log(`loading amap from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
         //const amap = dataSubarray(this.amapBin, amapOffs, nextAmapOffs - amapOffs);
         const amap = dataSubarray(this.amapBin, amapOffs);
