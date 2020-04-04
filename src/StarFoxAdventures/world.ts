@@ -24,7 +24,7 @@ import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
 import { Model, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, AnimFile, Anim, AnimLoader } from './animation';
+import { SFAAnimationController, AnimCollection } from './animation';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -93,7 +93,7 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private animLoader: AnimLoader) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private animColl: AnimCollection) {
         super(device, animController);
 
         packetParams.clear();
@@ -290,12 +290,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const animLoader = new AnimLoader(this.gameInfo);
+        const animColl = new AnimCollection(this.gameInfo);
         const [_1, _2, _3, _4, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),
             earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
-            animLoader.create(dataFetcher, this.subdir),
+            animColl.create(dataFetcher, this.subdir),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
@@ -712,7 +712,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const enableMap = true;
         const enableObjects = true;
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, animLoader);
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, animColl);
         return renderer;
     }
 }

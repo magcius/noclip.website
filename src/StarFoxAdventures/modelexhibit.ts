@@ -6,7 +6,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimLoader } from './animation';
+import { Anim, SFAAnimationController, AnimCollection } from './animation';
 import { SFARenderer } from './render';
 import { Model, ModelCollection } from './models';
 import { MaterialFactory } from './shaders';
@@ -24,7 +24,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animLoader: AnimLoader) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animLoader: AnimCollection) {
         super(device, animController);
     }
 
@@ -181,13 +181,16 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
 
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
-        const animLoader = new AnimLoader(this.gameInfo);
-        await animLoader.create(context.dataFetcher, subdir);
-        const texColl = new SFATextureCollection(this.gameInfo, false);
-        await texColl.create(context.dataFetcher, subdir);
-        const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
-        await modelColl.create(context.dataFetcher, subdir);
 
-        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animLoader);
+        const animColl = new AnimCollection(this.gameInfo);
+        const texColl = new SFATextureCollection(this.gameInfo, false);
+        const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
+        await Promise.all([
+            animColl.create(context.dataFetcher, subdir),
+            texColl.create(context.dataFetcher, subdir),
+            modelColl.create(context.dataFetcher, subdir),
+        ]);
+
+        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl);
     }
 }

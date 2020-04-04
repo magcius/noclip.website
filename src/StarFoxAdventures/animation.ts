@@ -201,7 +201,7 @@ export class AnimFile {
     }
 }
 
-export class AnimLoader {
+export class AnimCollection {
     private animFile: AnimFile;
     private preanimFile: AnimFile;
     private amapTab: DataView;
