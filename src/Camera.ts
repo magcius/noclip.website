@@ -36,6 +36,8 @@ export class Camera {
     public shearX: number = 0;
     public shearY: number = 0;
 
+    private forceInfiniteFarPlane: boolean = false;
+
     private webXROverrideCameraProperties: boolean = false;
     public setWebXROverrideEnabled(enabled: boolean): void {
         this.webXROverrideCameraProperties = enabled;
@@ -55,6 +57,9 @@ export class Camera {
         this.fovY = fovY;
         this.aspect = aspect;
         this.isOrthographic = false;
+
+        if (this.forceInfiniteFarPlane)
+            f = Infinity;
 
         const nearY = Math.tan(fovY * 0.5) * n;
         const nearX = nearY * aspect;
