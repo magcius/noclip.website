@@ -64,11 +64,6 @@ interface Keyframe {
 }
 
 export interface Anim {
-    amap: DataView;
-    keyframes: Keyframe[];
-}
-
-interface UnmappedAnim {
     keyframes: Keyframe[];
 }
 
@@ -92,7 +87,7 @@ export class AnimFile {
         return (this.tab.getUint32(num * 4) & 0xff000000) === 0x10000000;
     }
 
-    public getAnim(num: number): UnmappedAnim {
+    public getAnim(num: number): Anim {
         const offs = this.tab.getUint32(num * 4) & 0x0fffffff;
         const nextOffs = this.tab.getUint32((num + 1) * 4) & 0x0fffffff;
         const byteLength = nextOffs - offs;
@@ -201,11 +196,34 @@ export class AnimFile {
     }
 }
 
+export class AmapCollection {
+    private amapTab: DataView;
+    private amapBin: DataView;
+
+    constructor(private gameInfo: GameInfo) {
+    }
+
+    public async create(dataFetcher: DataFetcher) {
+        const pathBase = this.gameInfo.pathBase;
+        const [amapTab, amapBin] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/AMAP.tab`),
+            dataFetcher.fetchData(`${pathBase}/AMAP.bin`),
+        ]);
+        this.amapTab = amapTab.createDataView();
+        this.amapBin = amapBin.createDataView();
+    }
+
+    public getAmap(modelNum: number): DataView {
+        const amapOffs = this.amapTab.getUint32(modelNum * 4);
+        const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
+        console.log(`loading amap for model ${modelNum} from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
+        return dataSubarray(this.amapBin, amapOffs);
+    }
+}
+
 export class AnimCollection {
     private animFile: AnimFile;
     private preanimFile: AnimFile;
-    private amapTab: DataView;
-    private amapBin: DataView;
 
     constructor(private gameInfo: GameInfo) {
         this.animFile = new AnimFile(gameInfo);
@@ -220,28 +238,13 @@ export class AnimCollection {
             dataFetcher.fetchData(`${pathBase}/AMAP.tab`),
             dataFetcher.fetchData(`${pathBase}/AMAP.bin`),
         ]);
-        this.amapTab = amapTab.createDataView();
-        this.amapBin = amapBin.createDataView();
     }
 
-    public getNumAnims() {
-        return (this.amapTab.byteLength / 4)|0;
-    }
-
-    public getAnim(num: number, modelNum: number): Anim {
-        const amapOffs = this.amapTab.getUint32(modelNum * 4);
-        const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        console.log(`loading amap from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
-        //const amap = dataSubarray(this.amapBin, amapOffs, nextAmapOffs - amapOffs);
-        const amap = dataSubarray(this.amapBin, amapOffs);
-
-        let unmappedAnim;
+    public getAnim(num: number): Anim {
         if (this.preanimFile.hasAnim(num)) {
-            unmappedAnim = this.preanimFile.getAnim(num);
+            return this.preanimFile.getAnim(num);
         } else {
-            unmappedAnim = this.animFile.getAnim(num);
+            return this.animFile.getAnim(num);
         }
-
-        return { amap, keyframes: unmappedAnim.keyframes };
     }
 }

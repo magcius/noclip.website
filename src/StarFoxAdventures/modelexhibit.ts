@@ -6,7 +6,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection } from './animation';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection } from './animation';
 import { SFARenderer } from './render';
 import { Model, ModelCollection } from './models';
 import { MaterialFactory } from './shaders';
@@ -18,13 +18,14 @@ class ModelExhibitRenderer extends SFARenderer {
     private modelNum = 1;
     private modelSelect: UI.TextEntry;
 
+    private amap: DataView | undefined = undefined;
     private anim: Anim | null | undefined = undefined;
     private animNum = 0;
     private animSelect: UI.TextEntry;
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animLoader: AnimCollection) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection) {
         super(device, animController);
     }
 
@@ -79,6 +80,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
         if (this.model === undefined) {
             try {
+                this.amap = this.amapColl.getAmap(this.modelNum);
                 this.model = this.modelColl.loadModel(device, this.materialFactory, this.modelNum);
                 console.log(`Loaded model ${this.modelNum}`);
             } catch (e) {
@@ -98,7 +100,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
             if (this.anim === undefined) {
                 try {
-                    this.anim = this.animLoader.getAnim(this.animNum, this.modelNum);
+                    this.anim = this.animColl.getAnim(this.animNum);
                     console.log(`Loaded anim ${this.animNum}`);
                 } catch (e) {
                     console.warn(`Failed to load animation ${this.animNum} due to exception:`);
@@ -121,7 +123,7 @@ class ModelExhibitRenderer extends SFARenderer {
                     mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
                     mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
     
-                    const jointNum = this.anim.amap.getInt8(i);
+                    const jointNum = this.amap!.getInt8(i);
                     this.model.setJointPose(jointNum, poseMtx);
                 }
             }
@@ -182,15 +184,17 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
 
+        const amapColl = new AmapCollection(this.gameInfo);
         const animColl = new AnimCollection(this.gameInfo);
         const texColl = new SFATextureCollection(this.gameInfo, false);
         const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
         await Promise.all([
+            amapColl.create(context.dataFetcher),
             animColl.create(context.dataFetcher, subdir),
             texColl.create(context.dataFetcher, subdir),
             modelColl.create(context.dataFetcher, subdir),
         ]);
 
-        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl);
+        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl);
     }
 }
