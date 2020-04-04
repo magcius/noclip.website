@@ -1,4 +1,5 @@
 import { mat4, vec3 } from 'gl-matrix';
+import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -91,8 +92,11 @@ async function testLoadingAModel(device: GfxDevice, animController: SFAAnimation
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
+    private anim: Anim | null = null;
+    private animNum = 0;
+    private animSelect: UI.Slider;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private anim: Anim) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private animLoader: AnimLoader) {
         super(device, animController);
 
         packetParams.clear();
@@ -124,6 +128,18 @@ class WorldRenderer extends SFARenderer {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
+    }
+
+    public createPanels(): UI.Panel[] {
+        const animPanel = new UI.Panel();
+
+        animPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Animation Test');
+        this.animSelect = new UI.Slider();
+        this.animSelect.setLabel("Fox anim #");
+        this.animSelect.setRange(0, 100);
+        animPanel.contents.append(this.animSelect.elem);
+
+        return [animPanel];
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
@@ -203,6 +219,15 @@ class WorldRenderer extends SFARenderer {
         // Give Fox a pose
         const animateFox = true;
         if (animateFox && this.models[0] !== undefined) {
+            if (this.animNum !== this.animSelect.getValue()) {
+                this.animNum = this.animSelect.getValue();
+                this.anim = null;
+            }
+
+            if (this.anim === null) {
+                this.anim = this.animLoader.getAnim(this.animNum);
+            }
+            
             const model = this.models[0]!;
             const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
             const keyframe = this.anim.keyframes[keyframeNum];
@@ -731,11 +756,9 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model with PNMTX 9 stuff....`);
         // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
-        const anim = animLoader.getAnim(1);
-
         const enableMap = true;
         const enableObjects = true;
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, anim);
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, animLoader);
         return renderer;
     }
 }

@@ -161,7 +161,7 @@ export class AnimFile {
                         if (numTransBits !== 0) {
                             result.translation += kfReader.get(numTransBits);
                         }
-                        result.translation /= 256; // ???
+                        result.translation /= 256; // FIXME: ???
                     }
                 }
 
@@ -185,7 +185,7 @@ export class AnimFile {
             for (let i = 0; i < header.numBones; i++) {
                 const pose = loadPose();
                 result.poses.push(pose);
-                console.log(`pose ${i}: ${JSON.stringify(pose, null, '\t')}`);
+                // console.log(`pose ${i}: ${JSON.stringify(pose, null, '\t')}`);
             }
 
             return result;
