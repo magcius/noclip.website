@@ -23,7 +23,7 @@ import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
 import { Model, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, AnimFile, Anim } from './animation';
+import { SFAAnimationController, AnimFile, Anim, AnimLoader } from './animation';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -204,17 +204,20 @@ class WorldRenderer extends SFARenderer {
         const animateFox = true;
         if (animateFox && this.models[0] !== undefined) {
             const model = this.models[0]!;
-            const keyframe = this.anim.keyframes[0];
+            const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
+            const keyframe = this.anim.keyframes[keyframeNum];
             for (let i = 0; i < keyframe.poses.length && i < model.joints.length; i++) {
                 const pose = keyframe.poses[i];
                 const poseMtx = mat4.create();
-                mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
-                // mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                // mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                // mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation + this.animController.animController.getTimeInFrames());
-                // mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-                // mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-                model.setJointPose(i, poseMtx);
+                // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
+                mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
+                mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+                mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+
+                const jointNum = this.anim.amap.getInt8(i);
+                model.setJointPose(jointNum, poseMtx);
             }
             model.updateBoneMatrices();
         }
@@ -308,12 +311,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const animFile = new AnimFile(this.gameInfo);
+        const animLoader = new AnimLoader(this.gameInfo);
         const [_1, _2, _3, _4, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),
             earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
-            animFile.create(dataFetcher, this.subdir),
+            animLoader.create(dataFetcher, this.subdir),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
@@ -708,27 +711,27 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model (really old version)....`);
         // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x28 / 4, ModelVersion.Beta));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
         // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
-        const anim = animFile.getAnim(0xdc / 4);
+        const anim = animLoader.getAnim(1);
 
         const enableMap = true;
         const enableObjects = true;

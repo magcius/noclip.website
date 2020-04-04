@@ -16,6 +16,11 @@ export function interpS16(n: number): number {
     return ((n & 0xffff) << 16) >> 16;
 }
 
+export function signExtend(n: number, bits: number) {
+    const shift = 32 - bits;
+    return (n << shift) >> shift;
+}
+
 export function angle16ToRads(a: number): number {
     return interpS16(a) * Math.PI / 32768;
 }

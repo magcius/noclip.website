@@ -2,7 +2,7 @@ import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
 import { GameInfo } from './scenes';
-import { dataSubarray, interpS16, HighBitReader } from './util';
+import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
 
 export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);
@@ -43,6 +43,8 @@ export class AnimCurvFile {
 
         const data = dataSubarray(this.animcurvBin, offs, byteLength);
 
+        // TODO
+
         return {};
     }
 }
@@ -62,32 +64,40 @@ interface Keyframe {
 }
 
 export interface Anim {
+    amap: DataView;
+    keyframes: Keyframe[];
+}
+
+interface UnmappedAnim {
     keyframes: Keyframe[];
 }
 
 export class AnimFile {
-    private animTab: DataView;
-    private animBin: DataView;
+    private tab: DataView;
+    private bin: DataView;
 
     constructor(private gameInfo: GameInfo) {
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
-        const [animTab, animBin] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/${subdir}/ANIM.tab`),
-            dataFetcher.fetchData(`${pathBase}/${subdir}/ANIM.bin`),
+    public async create(dataFetcher: DataFetcher, path: string) {
+        const [tab, bin] = await Promise.all([
+            dataFetcher.fetchData(`${path}.tab`),
+            dataFetcher.fetchData(`${path}.bin`),
         ]);
-        this.animTab = animTab.createDataView();
-        this.animBin = animBin.createDataView();
+        this.tab = tab.createDataView();
+        this.bin = bin.createDataView();
     }
 
-    public getAnim(num: number): Anim {
-        const offs = this.animTab.getUint32(num * 4) & 0x0fffffff;
-        const nextOffs = this.animTab.getUint32((num + 1) * 4) & 0x0fffffff;
+    public hasAnim(num: number): boolean {
+        return (this.tab.getUint32(num * 4) & 0xff000000) === 0x10000000;
+    }
+
+    public getAnim(num: number): UnmappedAnim {
+        const offs = this.tab.getUint32(num * 4) & 0x0fffffff;
+        const nextOffs = this.tab.getUint32((num + 1) * 4) & 0x0fffffff;
         const byteLength = nextOffs - offs;
 
-        const data = dataSubarray(this.animBin, offs, byteLength);
+        const data = dataSubarray(this.bin, offs, byteLength);
 
         const HEADER_SIZE = 0xa;
         const header = {
@@ -123,7 +133,7 @@ export class AnimFile {
                 result.rotation = interpS16(cmd & 0xfff0);
                 if (numAngleBits !== 0) {
                     const value = kfReader.get(numAngleBits);
-                    result.rotation += value; // TODO: value is scaled?
+                    result.rotation += signExtend(value, 14);
                 }
 
                 if (cmd & 0x10) {
@@ -151,8 +161,11 @@ export class AnimFile {
                         if (numTransBits !== 0) {
                             result.translation += kfReader.get(numTransBits);
                         }
+                        result.translation /= 256; // ???
                     }
                 }
+
+                result.rotation = (result.rotation / 0xd0) * Math.PI / 180;
 
                 return result;
             }
@@ -178,8 +191,53 @@ export class AnimFile {
             return result;
         }
 
-        const kf0 = loadKeyframe(0);
+        const keyframes: Keyframe[] = [];
+        for (let i = 0; i < header.numKeyframes; i++) {
+            const keyframe = loadKeyframe(i);
+            keyframes.push(keyframe);
+        }
 
-        return { keyframes: [kf0] };
+        return { keyframes };
+    }
+}
+
+export class AnimLoader {
+    private animFile: AnimFile;
+    private preanimFile: AnimFile;
+    private amapTab: DataView;
+    private amapBin: DataView;
+
+    constructor(private gameInfo: GameInfo) {
+        this.animFile = new AnimFile(gameInfo);
+        this.preanimFile = new AnimFile(gameInfo);
+    }
+
+    public async create(dataFetcher: DataFetcher, subdir: string) {
+        const pathBase = this.gameInfo.pathBase;
+        const [_1, _2, amapTab, amapBin] = await Promise.all([
+            this.animFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`),
+            this.preanimFile.create(dataFetcher, `${pathBase}/PREANIM`),
+            dataFetcher.fetchData(`${pathBase}/AMAP.tab`),
+            dataFetcher.fetchData(`${pathBase}/AMAP.bin`),
+        ]);
+        this.amapTab = amapTab.createDataView();
+        this.amapBin = amapBin.createDataView();
+    }
+
+    public getAnim(num: number): Anim {
+        const amapOffs = this.amapTab.getUint32(num * 4);
+        const nextAmapOffs = this.amapTab.getUint32((num + 1) * 4);
+        console.log(`loading amap from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
+        //const amap = dataSubarray(this.amapBin, amapOffs, nextAmapOffs - amapOffs);
+        const amap = dataSubarray(this.amapBin, amapOffs);
+
+        let unmappedAnim;
+        if (this.preanimFile.hasAnim(num)) {
+            unmappedAnim = this.preanimFile.getAnim(num);
+        } else {
+            unmappedAnim = this.animFile.getAnim(num);
+        }
+
+        return { amap, keyframes: unmappedAnim.keyframes };
     }
 }
