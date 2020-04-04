@@ -15,7 +15,7 @@ import { getMatrixAxisZ } from '../MathHelpers';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes } from './resource';
-import { ObjectManager, SFAObject } from './objects';
+import { ObjectManager, ObjectInstance } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
@@ -49,13 +49,13 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-interface ObjectInstance {
-    name: string;
-    obj: SFAObject;
-    pos: vec3;
-    radius: number;
-    model?: Model;
-}
+// interface ObjectInstance {
+//     name: string;
+//     obj: SFAObject;
+//     pos: vec3;
+//     radius: number;
+//     model?: Model;
+// }
 
 async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
     const pathBase = gameInfo.pathBase;
@@ -178,7 +178,7 @@ class WorldRenderer extends SFARenderer {
         model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
 
         // Draw bones
-        const drawBones = true;
+        const drawBones = false;
         if (drawBones) {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 1; i < model.joints.length; i++) {
@@ -211,18 +211,13 @@ class WorldRenderer extends SFARenderer {
         const ctx = getDebugOverlayCanvas2D();
         for (let i = 0; i < this.objectInstances.length; i++) {
             const obj = this.objectInstances[i];
-            if (obj.model) {
-                mat4.fromTranslation(mtx, obj.pos);
-                mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
-                mat4.rotateY(mtx, mtx, obj.obj.yaw);
-                mat4.rotateX(mtx, mtx, obj.obj.pitch);
-                mat4.rotateZ(mtx, mtx, obj.obj.roll);
-                this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
-            }
+
+            obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+            // TODO: additional draw steps; object furs and translucents
 
             const drawLabels = false;
             if (drawLabels) {
-                drawWorldSpaceText(ctx, viewerInput.camera, obj.pos, obj.name, undefined, undefined, {outline: 2});
+                drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
             }
         }
         
@@ -305,6 +300,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const tablesBin = tablesBin_.createDataView();
 
         const objectInstances: ObjectInstance[] = [];
+
         let offs = 0;
         let i = 0;
         while (offs < romlist.byteLength) {
@@ -324,351 +320,25 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = await objectMan.loadObject(device, materialFactory, fields.objType);
+            //const obj = await objectMan.loadObjectType(device, materialFactory, fields.objType);
 
-            if (obj.objClass === 201) {
-                // e.g. sharpclawGr
-                obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 222 ||
-                obj.objClass === 227 ||
-                obj.objClass === 233 ||
-                obj.objClass === 234 ||
-                obj.objClass === 235 ||
-                obj.objClass === 280 ||
-                obj.objClass === 283 ||
-                obj.objClass === 291 ||
-                obj.objClass === 304 ||
-                obj.objClass === 312 ||
-                obj.objClass === 313 ||
-                obj.objClass === 316 ||
-                obj.objClass === 319 ||
-                obj.objClass === 343 ||
-                obj.objClass === 344 ||
-                obj.objClass === 387 ||
-                obj.objClass === 389 ||
-                obj.objClass === 423 ||
-                obj.objClass === 424 ||
-                obj.objClass === 437 ||
-                obj.objClass === 442 ||
-                obj.objClass === 487 ||
-                obj.objClass === 509 ||
-                obj.objClass === 533 ||
-                obj.objClass === 576 ||
-                obj.objClass === 642 ||
-                obj.objClass === 666 ||
-                obj.objClass === 691
-            ) {
-                // e.g. setuppoint
-                // Do nothing
-            } else if (obj.objClass === 207) {
-                // e.g. CannonClawO
-                obj.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
-            } else if (obj.objClass === 213) {
-                // e.g. Kaldachom
-                obj.scale = 0.5 + objParams.getInt8(0x28) / 15;
-            } else if (obj.objClass === 231) {
-                // e.g. BurnableVin
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-                obj.scale = 5 * objParams.getInt16(0x1a) / 32767;
-                if (obj.scale < 0.05) {
-                    obj.scale = 0.05;
-                }
-            } else if (obj.objClass === 237) {
-                // e.g. SH_LargeSca
-                obj.yaw = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x22) << 8) * Math.PI / 32768;
-                obj.roll = (objParams.getInt8(0x23) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 239) {
-                // e.g. CCboulder
-                obj.yaw = angle16ToRads(objParams.getUint8(0x22) << 8);
-                fields.pos[1] += 0.5;
-            } else if (obj.objClass === 249) {
-                // e.g. ProjectileS
-                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-                const objScale = objParams.getUint8(0x1d);
-                if (objScale !== 0) {
-                    obj.scale *= objScale / 64;
-                }
-            } else if (obj.objClass === 250) {
-                // e.g. InvisibleHi
-                const scaleParam = objParams.getUint8(0x1d);
-                if (scaleParam !== 0) {
-                    obj.scale *= scaleParam / 64;
-                }
-            } else if (obj.objClass === 251 ||
-                obj.objClass === 393 ||
-                obj.objClass === 445 ||
-                obj.objClass === 579 ||
-                obj.objClass === 510 ||
-                obj.objClass === 513 ||
-                obj.objClass === 525 ||
-                obj.objClass === 609 ||
-                obj.objClass === 617 ||
-                obj.objClass === 650
-            ) {
-                // e.g. SC_Pressure
-                obj.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
-            } else if (obj.objClass === 254) {
-                // e.g. MagicPlant
-                obj.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 256 ||
-                obj.objClass === 391 ||
-                obj.objClass === 392 ||
-                obj.objClass === 394
-            ) {
-                // e.g. TrickyWarp
-                obj.yaw = angle16ToRads(objParams.getInt8(0x1a) << 8);
-            } else if (obj.objClass === 259) {
-                // e.g. CurveFish
-                obj.scale *= objParams.getUint8(0x18) / 100;
-            } else if (obj.objClass === 240 ||
-                obj.objClass === 260 ||
-                obj.objClass === 261
-            ) {
-                // e.g. WarpPoint, SmallBasket, LargeCrate
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-            } else if (obj.objClass === 269) {
-                // e.g. PortalSpell
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-                obj.pitch = angle16ToRads(objParams.getInt16(0x1c) << 8); // Yes, getInt16 is correct.
-                obj.scale = 3.15;
-            } else if (obj.objClass === 272) {
-                // e.g. SH_Portcull
-                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
-                const objScale = objParams.getUint8(0x21) / 64;
-                if (objScale === 0) {
-                    obj.scale = 1.0;
-                } else {
-                    obj.scale *= objScale;
-                }
-            } else if (obj.objClass === 274 ||
-                obj.objClass === 275
-            ) {
-                // e.g. SH_newseqob
-                obj.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
-            } else if (obj.objClass === 284 ||
-                obj.objClass === 289 ||
-                obj.objClass === 300
-            ) {
-                // e.g. StaffBoulde
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-                // TODO: scale depends on subtype param
-            } else if (obj.objClass === 287) {
-                // e.g. MagicCaveTo
-                obj.yaw = angle16ToRads(objParams.getUint8(0x23) << 8);
-            } else if (obj.objClass === 288) {
-                // e.g. TrickyGuard
-                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 293) {
-                // e.g. curve
-                obj.yaw = (objParams.getInt8(0x2c) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x2d) << 8) * Math.PI / 32768;
-                // FIXME: mode 8 and 0x1a also have roll at 0x38
-            } else if (obj.objClass === 294 && obj.objType === 77) {
-                obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 298 && [888, 889].includes(obj.objType)) {
-                // e.g. WM_krazoast
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-            } else if (obj.objClass === 299) {
-                // e.g. FXEmit
-                obj.scale = 0.1;
-                obj.yaw = angle16ToRads(objParams.getInt8(0x24) << 8);
-                obj.pitch = angle16ToRads(objParams.getInt8(0x23) << 8);
-                obj.roll = angle16ToRads(objParams.getInt8(0x22) << 8);
-            } else if (obj.objClass === 306) {
-                // e.g. WaterFallSp
-                obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
-                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 308) {
-                // e.g. texscroll2
-                const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
-                if (block === null) {
-                    console.warn(`couldn't find block for texscroll object`);
-                } else {
-                    const scrollableIndex = objParams.getInt16(0x18);
-                    const speedX = objParams.getInt8(0x1e);
-                    const speedY = objParams.getInt8(0x1f);
+            const obj = await objectMan.createObjectInstance(device, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            objectInstances.push(obj);
 
-                    const tabValue = tablesTab.getUint32(0xe * 4);
-                    const targetTexId = tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
-                    // Note: & 0x7fff above is an artifact of how the game stores tex id's.
-                    // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
-
-                    const materials = block.getMaterials();
-                    for (let i = 0; i < materials.length; i++) {
-                        if (materials[i] !== undefined) {
-                            const mat = materials[i]!;
-                            for (let j = 0; j < mat.shader.layers.length; j++) {
-                                const layer = mat.shader.layers[j];
-                                if (layer.texId === targetTexId) {
-                                    // Found the texture! Make it scroll now.
-                                    const theTexture = texColl.getTexture(device, targetTexId, true)!;
-                                    const dxPerFrame = (speedX << 16) / theTexture.width;
-                                    const dyPerFrame = (speedY << 16) / theTexture.height;
-                                    layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
-                                    mat.rebuild();
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (obj.objClass === 329) {
-                // e.g. CFTreasWind
-                const scaleParam = objParams.getInt8(0x19);
-                let objScale;
-                if (scaleParam === 0) {
-                    objScale = 90;
-                } else {
-                    objScale = 4 * scaleParam;
-                }
-                obj.scale *= objScale / 90;
-            } else if (obj.objClass === 346) {
-                // e.g. SH_BombWall
-                obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
-                obj.pitch = objParams.getInt16(0x1c) * Math.PI / 32768;
-                obj.roll = objParams.getInt16(0x1e) * Math.PI / 32768;
-                let objScale = objParams.getInt8(0x2d);
-                if (objScale === 0) {
-                    objScale = 20;
-                }
-                obj.scale *= objScale / 20;
-            } else if (obj.objClass === 372) {
-                // e.g. CCriverflow
-                obj.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
-                obj.scale += objParams.getUint8(0x19) / 512;
-            } else if (obj.objClass === 383) {
-                // e.g. MSVine
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
-                const scaleParam = objParams.getUint8(0x21);
-                if (scaleParam !== 0) {
-                    obj.scale *= scaleParam / 64;
-                }
-            } else if (obj.objClass === 385) {
-                // e.g. MMP_trenchF
-                obj.roll = angle16ToRads(objParams.getInt8(0x19) << 8);
-                obj.pitch = angle16ToRads(objParams.getInt8(0x1a) << 8);
-                obj.yaw = angle16ToRads(objParams.getInt8(0x1b) << 8);
-                obj.scale = 0.1;
-            } else if (obj.objClass === 390) {
-                // e.g. CCgasvent
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
-            } else if (obj.objClass === 429) {
-                // e.g. ThornTail
-                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.scale *= objParams.getUint16(0x1c) / 1000;
-            } else if (obj.objClass === 439) {
-                // e.g. SC_MusicTre
-                obj.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
-                obj.pitch = angle16ToRads((objParams.getUint8(0x19) - 127) * 128);
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
-                obj.scale = 3.6 * objParams.getFloat32(0x1c);
-            } else if (obj.objClass === 440) {
-                // e.g. SC_totempol
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
-            } else if (obj.objClass === 454 && obj.objType !== 0x1d6) {
-                // e.g. DIMCannon
-                obj.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
-            } else if (obj.objClass === 518) {
-                // e.g. PoleFlame
-                obj.yaw = angle16ToRads((objParams.getUint8(0x18) & 0x3f) << 10);
-                const objScale = objParams.getInt16(0x1a);
-                if (objScale < 1) {
-                    obj.scale = 0.1;
-                } else {
-                    obj.scale = objScale / 8192;
-                }
-            } else if (obj.objClass === 524) {
-                // e.g. WM_spiritpl
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-                obj.pitch = angle16ToRads(objParams.getInt16(0x1a) << 8); // Yes, getInt16 is correct.
-            } else if (obj.objClass === 538) {
-                // e.g. VFP_statueb
-                const scaleParam = objParams.getInt16(0x1c);
-                if (scaleParam > 1) {
-                    obj.scale *= scaleParam;
-                }
-            } else if (obj.objClass === 602) {
-                // e.g. StaticCamer
-                obj.yaw = angle16ToRads(-objParams.getInt16(0x1c));
-                obj.pitch = angle16ToRads(-objParams.getInt16(0x1e));
-                obj.roll = angle16ToRads(-objParams.getInt16(0x20));
-            } else if (obj.objClass === 425 ||
-                obj.objClass === 603
-            ) {
-                // e.g. MSPlantingS
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
-            } else if (obj.objClass === 627) {
-                // e.g. FlameMuzzle
-                const scaleParam = objParams.getInt16(0x1c);
-                if (scaleParam != 0) {
-                    obj.scale *= 0.1 * scaleParam;
-                }
-                obj.roll = 0;
-                obj.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
-                obj.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
-            } else if (obj.objClass === 683) {
-                // e.g. LGTProjecte
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 214 ||
-                obj.objClass === 273 ||
-                obj.objClass === 689 ||
-                obj.objClass === 690
-            ) {
-                // e.g. CmbSrc
-                obj.roll = angle16ToRads(objParams.getUint8(0x18) << 8);
-                obj.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
-            } else if (obj.objClass === 282 ||
-                obj.objClass === 302 ||
-                obj.objClass === 685 ||
-                obj.objClass === 686 ||
-                obj.objClass === 687 ||
-                obj.objClass === 688
-            ) {
-                // e.g. Boulder, LongGrassCl
-                obj.roll = angle16ToRads(objParams.getUint8(0x18) << 8);
-                obj.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
-                obj.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
-                const scaleParam = objParams.getUint8(0x1b);
-                if (scaleParam !== 0) {
-                    obj.scale *= scaleParam / 255;
-                }
-            } else if (obj.objClass === 694) {
-                // e.g. CNThitObjec
-                if (objParams.getInt8(0x19) === 2) {
-                    obj.yaw = angle16ToRads(objParams.getInt16(0x1c));
-                }
-            } else {
-                console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
-            }
-
-            objectInstances.push({
-                name: obj.name,
-                obj: obj,
-                pos: fields.pos,
-                radius: fields.radius,
-                model: obj.models[0],
-            });
-
-            console.log(`Object #${i}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
 
             offs += fields.entrySize * 4;
             i++;
         }
 
         window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await objectMan.loadObject(device, materialFactory, objType, skipObjindex);
-            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+            const obj = await objectMan.loadObjectType(device, materialFactory, objType, skipObjindex);
+            console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
         window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await earlyObjectMan.loadObject(device, materialFactory, objType, skipObjindex);
-            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+            const obj = await earlyObjectMan.loadObjectType(device, materialFactory, objType, skipObjindex);
+            console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
         const envfx = envfxMan.loadEnvfx(device, 60);
