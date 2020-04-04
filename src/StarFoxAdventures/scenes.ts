@@ -3,6 +3,7 @@ import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
+import { SFAModelExhibitSceneDesc } from './modelexhibit';
 import { BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFAWorldSceneDesc } from './world';
@@ -539,6 +540,9 @@ const sceneDescs = [
     // new SFAWorldSceneDesc('snowmines', 'darkicemines', 19, 'DarkIce Mines'),
     // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
     // new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
+
+    'Miscellaneous',
+    new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),

@@ -92,9 +92,6 @@ async function testLoadingAModel(device: GfxDevice, animController: SFAAnimation
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
-    private anim: Anim | null = null;
-    private animNum = 0;
-    private animSelect: UI.Slider;
 
     constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private animLoader: AnimLoader) {
         super(device, animController);
@@ -128,18 +125,6 @@ class WorldRenderer extends SFARenderer {
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
-    }
-
-    public createPanels(): UI.Panel[] {
-        const animPanel = new UI.Panel();
-
-        animPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Animation Test');
-        this.animSelect = new UI.Slider();
-        this.animSelect.setLabel("Fox anim #");
-        this.animSelect.setRange(0, 100);
-        animPanel.contents.append(this.animSelect.elem);
-
-        return [animPanel];
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
@@ -216,37 +201,6 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        // Give Fox a pose
-        const animateFox = true;
-        if (animateFox && this.models[0] !== undefined) {
-            if (this.animNum !== this.animSelect.getValue()) {
-                this.animNum = this.animSelect.getValue();
-                this.anim = null;
-            }
-
-            if (this.anim === null) {
-                this.anim = this.animLoader.getAnim(this.animNum);
-            }
-            
-            const model = this.models[0]!;
-            const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
-            const keyframe = this.anim.keyframes[keyframeNum];
-            for (let i = 0; i < keyframe.poses.length && i < model.joints.length; i++) {
-                const pose = keyframe.poses[i];
-                const poseMtx = mat4.create();
-                // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
-                mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-                mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-
-                const jointNum = this.anim.amap.getInt8(i);
-                model.setJointPose(jointNum, poseMtx);
-            }
-            model.updateBoneMatrices();
-        }
-
         // Render opaques
         this.beginPass(viewerInput);
         if (this.mapInstance !== null) {
