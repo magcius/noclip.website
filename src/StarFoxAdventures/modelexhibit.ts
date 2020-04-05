@@ -8,13 +8,13 @@ import { SceneContext } from '../SceneBase';
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection } from './animation';
 import { SFARenderer } from './render';
-import { Model, ModelCollection } from './models';
+import { ModelCollection, ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { SFATextureCollection, SFATexture } from './textures';
 
 class ModelExhibitRenderer extends SFARenderer {
-    private model: Model | null | undefined = undefined; // null: Failed to load. undefined: Not set.
+    private modelInst: ModelInstance | null | undefined = undefined; // null: Failed to load. undefined: Not set.
     private modelNum = 1;
     private modelSelect: UI.TextEntry;
 
@@ -39,7 +39,7 @@ class ModelExhibitRenderer extends SFARenderer {
             const newNum = Number.parseInt(s);
             if (newNum !== NaN) {
                 this.modelNum = newNum;
-                this.model = undefined;
+                this.modelInst = undefined;
             }
         };
         //this.modelSelect.setLabel("Model #");
@@ -50,7 +50,7 @@ class ModelExhibitRenderer extends SFARenderer {
         this.animSelect.ontext = (s: string) => {
             const newNum = Number.parseInt(s);
             if (newNum !== NaN) {
-                this.animNum = Number.parseInt(s);
+                this.animNum = newNum;
                 this.anim = undefined;
             }
         }
@@ -78,20 +78,20 @@ class ModelExhibitRenderer extends SFARenderer {
         //     this.model = undefined;
         // }
 
-        if (this.model === undefined) {
+        if (this.modelInst === undefined) {
             try {
                 this.amap = this.amapColl.getAmap(this.modelNum);
-                this.model = this.modelColl.loadModel(device, this.materialFactory, this.modelNum);
+                this.modelInst = this.modelColl.createModelInstance(device, this.materialFactory, this.modelNum);
                 console.log(`Loaded model ${this.modelNum}`);
             } catch (e) {
                 console.warn(`Failed to load model ${this.modelNum} due to exception:`);
                 console.error(e);
-                this.model = null;
+                this.modelInst = null;
             }
         }
         
         const animate = true;
-        if (animate && this.model !== null && this.model !== undefined) {
+        if (animate && this.modelInst !== null && this.modelInst !== undefined) {
             // const selectedAnimNum = this.animSelect.getValue()|0;
             // if (this.animNum !== selectedAnimNum) {
             //     this.animNum = selectedAnimNum;
@@ -110,10 +110,10 @@ class ModelExhibitRenderer extends SFARenderer {
             }
 
             if (this.anim !== null && this.anim !== undefined) {
-                this.model.resetPoses();
+                this.modelInst.resetPose();
                 const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
                 const keyframe = this.anim.keyframes[keyframeNum];
-                for (let i = 0; i < keyframe.poses.length && i < this.model.joints.length; i++) {
+                for (let i = 0; i < keyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
                     const pose = keyframe.poses[i];
                     const poseMtx = mat4.create();
                     // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
@@ -124,11 +124,9 @@ class ModelExhibitRenderer extends SFARenderer {
                     mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
     
                     const jointNum = this.amap!.getInt8(i);
-                    this.model.setJointPose(jointNum, poseMtx);
+                    this.modelInst.setJointPose(jointNum, poseMtx);
                 }
             }
-
-            this.model.updateBoneMatrices();
         }
 
         // TODO: Render background (configurable?)
@@ -137,29 +135,29 @@ class ModelExhibitRenderer extends SFARenderer {
 
         this.beginPass(viewerInput);
 
-        if (this.model !== null) {
+        if (this.modelInst !== null) {
             const mtx = mat4.create();
-            this.renderModel(device, renderInstManager, viewerInput, mtx, this.model);
+            this.renderModel(device, renderInstManager, viewerInput, mtx, this.modelInst);
         }
 
         this.endPass(device);
         // TODO: render furs and translucents
     }
 
-    private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
-        model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+    private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
             const ctx = getDebugOverlayCanvas2D();
-            for (let i = 1; i < model.joints.length; i++) {
-                const joint = model.joints[i];
-                const jointMtx = mat4.clone(model.boneMatrices[i]);
+            for (let i = 1; i < modelInst.model.joints.length; i++) {
+                const joint = modelInst.model.joints[i];
+                const jointMtx = mat4.clone(modelInst.boneMatrices[i]);
                 mat4.mul(jointMtx, jointMtx, matrix);
                 const jointPt = vec3.create();
                 mat4.getTranslation(jointPt, jointMtx);
                 if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
+                    const parentMtx = mat4.clone(modelInst.boneMatrices[joint.parent]);
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);

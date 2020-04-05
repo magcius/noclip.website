@@ -22,7 +22,7 @@ import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
-import { Model, ModelVersion } from './models';
+import { Model, ModelVersion, ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, AnimCollection } from './animation';
 
@@ -57,7 +57,7 @@ function vecPitch(v: vec3): number {
 //     model?: Model;
 // }
 
-async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
+async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<ModelInstance | null> {
     const pathBase = gameInfo.pathBase;
     const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
     const [modelsTabData, modelsBin, _] = await Promise.all([
@@ -81,7 +81,8 @@ async function testLoadingAModel(device: GfxDevice, animController: SFAAnimation
     };
     
     try {
-        return new Model(device, new MaterialFactory(device), modelData, texColl, animController, modelVersion);
+        // return new Model(device, new MaterialFactory(device), modelData, texColl, animController, modelVersion);
+        throw Error(`TODO: implement`);
     } catch (e) {
         console.warn(`Failed to load model due to exception:`);
         console.error(e);
@@ -93,7 +94,7 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (Model | null)[], private animColl: AnimCollection) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private animColl: AnimCollection) {
         super(device, animController);
 
         packetParams.clear();
@@ -174,21 +175,21 @@ class WorldRenderer extends SFARenderer {
         this.endPass(device);
     }
 
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
-        model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
 
         // Draw bones
         const drawBones = false;
         if (drawBones) {
             const ctx = getDebugOverlayCanvas2D();
-            for (let i = 1; i < model.joints.length; i++) {
-                const joint = model.joints[i];
-                const jointMtx = mat4.clone(model.boneMatrices[i]);
+            for (let i = 1; i < modelInst.model.joints.length; i++) {
+                const joint = modelInst.model.joints[i];
+                const jointMtx = mat4.clone(modelInst.model.boneMatrices[i]);
                 mat4.mul(jointMtx, jointMtx, matrix);
                 const jointPt = vec3.create();
                 mat4.getTranslation(jointPt, jointMtx);
                 if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
+                    const parentMtx = mat4.clone(modelInst.model.boneMatrices[joint.parent]);
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
@@ -344,7 +345,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const envfx = envfxMan.loadEnvfx(device, 60);
         console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
 
-        const testModels = [];
+        const testModels: (ModelInstance | null)[] = [];
         console.log(`Loading Fox....`);
         testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
         // console.log(`Loading SharpClaw....`);

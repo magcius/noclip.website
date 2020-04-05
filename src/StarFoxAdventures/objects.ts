@@ -7,7 +7,7 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { GameInfo } from './scenes';
-import { Model, ModelCollection } from './models';
+import { Model, ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
 import { dataSubarray, angle16ToRads } from './util';
 import { MaterialFactory } from './shaders';
@@ -21,7 +21,7 @@ export class ObjectType {
     public name: string;
     public scale: number = 1.0;
     public objClass: number;
-    public models: Model[] = [];
+    public modelInsts: ModelInstance[] = [];
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
@@ -45,8 +45,8 @@ export class ObjectType {
         for (let i = 0; i < numModels; i++) {
             const modelNum = data.getUint32(modelListOffs + i * 4);
             try {
-                const model = modelColl.loadModel(device, materialFactory, modelNum);
-                this.models.push(model);
+                const model = modelColl.createModelInstance(device, materialFactory, modelNum);
+                this.modelInsts.push(model);
             } catch (e) {
                 console.warn(`Failed to load model ${modelNum} due to exception:`);
                 console.error(e);
@@ -56,7 +56,7 @@ export class ObjectType {
 }
 
 export class ObjectInstance {
-    private model: Model | null = null;
+    private modelInst: ModelInstance | null = null;
     private position: vec3 = vec3.create();
     private yaw: number = 0;
     private pitch: number = 0;
@@ -73,7 +73,7 @@ export class ObjectInstance {
         );
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
-        this.model = this.objType.models[0];
+        this.modelInst = this.objType.modelInsts[0];
 
         if (objClass === 201) {
             // e.g. sharpclawGr
@@ -422,7 +422,7 @@ export class ObjectInstance {
             return; // TODO: Implement additional draw steps
         }
 
-        if (this.model !== null) {
+        if (this.modelInst !== null) {
             const mtx = mat4.create();
             mat4.fromTranslation(mtx, this.position);
             mat4.scale(mtx, mtx, [this.scale, this.scale, this.scale]);
@@ -430,21 +430,21 @@ export class ObjectInstance {
             mat4.rotateX(mtx, mtx, this.pitch);
             mat4.rotateZ(mtx, mtx, this.roll);
 
-            this.model.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep);
+            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep);
 
             // Draw bones
             const drawBones = false;
             if (drawBones) {
                 const ctx = getDebugOverlayCanvas2D();
                 // TODO: Draw pyramid shapes instead of lines
-                for (let i = 1; i < this.model.joints.length; i++) {
-                    const joint = this.model.joints[i];
-                    const jointMtx = mat4.clone(this.model.boneMatrices[i]);
+                for (let i = 1; i < this.modelInst.model.joints.length; i++) {
+                    const joint = this.modelInst.model.joints[i];
+                    const jointMtx = mat4.clone(this.modelInst.model.boneMatrices[i]);
                     mat4.mul(jointMtx, jointMtx, mtx);
                     const jointPt = vec3.create();
                     mat4.getTranslation(jointPt, jointMtx);
                     if (joint.parent != 0xff) {
-                        const parentMtx = mat4.clone(this.model.boneMatrices[joint.parent]);
+                        const parentMtx = mat4.clone(this.modelInst.model.boneMatrices[joint.parent]);
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);

@@ -14,7 +14,7 @@ import { TextureCollection, SFATextureCollection, FakeTextureCollection } from '
 import { getSubdir } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
-import { Shape, Model } from './models';
+import { Shape, Model, ModelInstance } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 
@@ -71,7 +71,7 @@ export class BlockCollection implements IBlockCollection {
             if (this.isAncient) {
                 this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl, this.animController);
             } else {
-                this.blockRenderers[sub] = new Model(device, this.materialFactory, uncomp, this.texColl, this.animController);
+                this.blockRenderers[sub] = new ModelInstance(new Model(device, this.materialFactory, uncomp, this.texColl, this.animController));
             }
         }
 
@@ -289,7 +289,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newShape = new Shape(vtxArrays, vcd, vat, displayList, this.animController, [mat4.create()]);
+                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController, [mat4.create()]);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
