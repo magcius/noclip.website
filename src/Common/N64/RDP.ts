@@ -2,7 +2,6 @@
 // Common utilities for the N64 Reality Display Processor (RDP).
 
 import { assert, hexzero } from "../../util";
-import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM } from "./Image";
 import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../../gfx/platform/GfxPlatform";
@@ -92,6 +91,22 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
     };
 }
 
+function colorCombinePassUsesT0(ccp: ColorCombinePass) {
+    return (ccp.a == CCMUX.TEXEL0) || (ccp.a == CCMUX.TEXEL0_A) ||
+        (ccp.b == CCMUX.TEXEL0) || (ccp.b == CCMUX.TEXEL0_A) ||
+        (ccp.c == CCMUX.TEXEL0) || (ccp.c == CCMUX.TEXEL0_A) ||
+        (ccp.d == CCMUX.TEXEL0) || (ccp.d == CCMUX.TEXEL0_A);
+}
+
+function alphaCombinePassUsesT0(acp: AlphaCombinePass) {
+    return (acp.a == ACMUX.TEXEL0 || acp.b == ACMUX.TEXEL0 || acp.c == ACMUX.TEXEL0 || acp.d == ACMUX.TEXEL0);
+}
+
+export function combineParamsUsesT0(cp: CombineParams) {
+    return colorCombinePassUsesT0(cp.c0) || colorCombinePassUsesT0(cp.c1) ||
+        alphaCombinePassUsesT0(cp.a0) || alphaCombinePassUsesT0(cp.a1);
+}
+
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
     return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
         (ccp.b == CCMUX.TEXEL1) || (ccp.b == CCMUX.TEXEL1_A) ||
@@ -115,11 +130,13 @@ export class Texture {
 
     constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
         this.tile.copy(tile);
-        this.name = hexzero(this.dramAddr, 8);
+        const nameAddr = tile.cacheKey !== 0 ? tile.cacheKey : this.dramAddr;
+        this.name = hexzero(nameAddr, 8);
     }
 }
 
 export class TileState {
+    public cacheKey: number = 0;
     public fmt: number = 0;
     public siz: number = 0;
     public line: number = 0;
@@ -147,6 +164,7 @@ export class TileState {
     public copy(o: TileState): void {
         this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
         this.setSize(o.uls, o.ult, o.lrs, o.lrt);
+        this.cacheKey = o.cacheKey;
     }
 }
 
@@ -188,14 +206,23 @@ export function getMaskedCMT(tile: TileState): number {
     return tile.cmt;
 }
 
-export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
+export function texturePadWidth(siz: ImageSize, line: number, width: number): number {
+    if (line === 0)
+        return 0;
+    const padTexels = (line << (4 - siz)) - width;
+    if (siz === ImageSize.G_IM_SIZ_4b)
+        return padTexels >>> 1;
+    else
+        return padTexels << (siz - 1);
+}
+
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
     if (tile.fmt === ImageFormat.G_IM_FMT_CI)
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
-
 
     // TODO(jstpierre): Support more tile parameters
     // assert(tile.shifts === 0); // G_TX_NOLOD
@@ -204,14 +231,14 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
     switch ((tile.fmt << 4) | tile.siz) {
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH); break;
     default:
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
@@ -223,19 +250,21 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 
 // figure out if two textures with the same underlying data can reuse the same texture object
 // we assume that a texture has only one real size/tiling behavior, so just match on coords
+
+// TODO(jstpierre): Build a better upload tracker
 function textureMatch(a: TileState, b: TileState): boolean {
-    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt;
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
 }
 
 export class TextureCache {
     public textures: Texture[] = [];
 
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
+    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): number {
         const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (tile.fmt !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
+            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile, deinterleave);
             const index = this.textures.length;
             this.textures.push(texture);
             return index;

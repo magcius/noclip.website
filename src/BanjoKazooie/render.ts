@@ -834,10 +834,14 @@ export class AdjustableAnimationController {
         this.phaseFrames = newPhase;
     }
 
-    public adjust(newFPS: number, newPhase = 0) {
+    // adjust the framerate, while either preserving the current phase value or setting a new one
+    public adjust(newFPS: number, newPhase?: number) {
         // assume time is current, so just adjust the values now
+        if (newPhase !== undefined)
+            this.phaseFrames = newPhase - this.time * newFPS;
+        else // preserve old phase
+            this.phaseFrames += (this.fps - newFPS) * this.time;
         this.fps = newFPS;
-        this.phaseFrames = newPhase - this.time * this.fps;
     }
 
     public getTimeInFrames(): number {
@@ -1265,7 +1269,7 @@ export class GeometryRenderer {
         const animator = this.boneAnimators[newIndex];
         if (animator === undefined)
             throw `bad animation index ${newIndex}`;
-        this.animationController.adjust(animator.fps());
+        this.animationController.adjust(animator.fps(), 0);
     }
 
     public animationPhaseTrigger(phase: number): boolean {

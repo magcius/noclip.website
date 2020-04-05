@@ -15,7 +15,7 @@ import { translateCullMode } from '../gx/gx_material';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT, Vec3One } from '../MathHelpers';
+import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LevelGlobals } from './actor';
 
@@ -63,7 +63,7 @@ class DrawCallInstance {
         const tiles: RDP.TileState[] = [];
         for (let i = 0; i < this.textureEntry.length; i++)
             tiles.push(this.textureEntry[i].tile);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine, 8 / 255, tiles);
+        const program = this.programConstructor(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine, 8 / 255, tiles);
         program.defines.set('BONE_MATRIX_COUNT', this.drawMatrices.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -198,12 +198,21 @@ class DrawCallInstance {
         this.material?.getColor(colorScratch, ColorField.Env);
         offs += fillVec4v(comb, offs, colorScratch);
 
+        this.fillExtraCombine(offs, comb);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    protected fillExtraCombine(offs: number, comb: Float32Array): number {
         let primLOD = this.drawCall.DP_PrimLOD;
         if (this.material && this.material.data.flags & (MaterialFlags.PrimLOD | MaterialFlags.Special))
             primLOD = this.material.getPrimLOD();
-        offs += fillVec4(comb, offs, primLOD);
+        comb[offs] = primLOD;
+        return 1;
+    }
 
-        renderInstManager.submitRenderInst(renderInst);
+    protected programConstructor(otherH: number, otherL: number, combine: RDP.CombineParams, alpha: number, tiles: RDP.TileState[]): F3DEX_Program {
+        return new F3DEX_Program(otherH, otherL, combine, alpha, tiles);
     }
 }
 
@@ -220,8 +229,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class NodeRenderer {
     private visible = true;
     public modelMatrix = mat4.create();
@@ -237,15 +244,21 @@ export class NodeRenderer {
     public animator = new Animator();
     public materials: Material[] = [];
 
-    constructor(renderData: RenderData, private node: GFXNode, public parent: mat4, public isSkybox = false) {
+    constructor(renderData: RenderData, private node: GFXNode, public parent: mat4, public isSkybox = false, isEgg = false) {
         const drawMatrices = [this.modelMatrix, parent];
 
         for (let i = 0; i < node.materials.length; i++)
             this.materials.push(new Material(node.materials[i], renderData.textures));
 
         if (node.model !== undefined && node.model.rspOutput !== null)
-            for (let i = 0; i < node.model.rspOutput.drawCalls.length; i++)
-                this.drawCalls.push(new DrawCallInstance(renderData, node.model.rspOutput.drawCalls[i], drawMatrices, this.node.billboard, this.materials));
+            for (let i = 0; i < node.model.rspOutput.drawCalls.length; i++) {
+                let dc: DrawCallInstance;
+                if (isEgg)
+                    dc = new EggDrawCall(renderData, node.model.rspOutput.drawCalls[i], drawMatrices, this.node.billboard, this.materials);
+                else
+                    dc = new DrawCallInstance(renderData, node.model.rspOutput.drawCalls[i], drawMatrices, this.node.billboard, this.materials);
+                this.drawCalls.push(dc);
+            }
 
         this.setTransfromFromNode();
     }
@@ -257,7 +270,7 @@ export class NodeRenderer {
         buildTransform(this.transform, this.translation, this.euler, this.scale);
     }
 
-    public animate(time: number): void {
+    public animate(time: number, matTime = time): void {
         if (this.animator.update(time)) {
             for (let i = ModelField.Pitch; i <= ModelField.ScaleZ; i++) {
                 if (this.animator.interpolators[i].op === AObjOP.NOP)
@@ -282,11 +295,11 @@ export class NodeRenderer {
             buildTransform(this.transform, this.translation, this.euler, this.scale);
         }
         for (let i = 0; i < this.materials.length; i++)
-            this.materials[i].update(time);
+            this.materials[i].update(matTime);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visible || !!(this.animator.stateFlags & 2))
             return;
 
         mat4.mul(this.modelMatrix, this.parent, this.transform);
@@ -310,16 +323,17 @@ export class ModelRenderer {
     public modelMatrix = mat4.create();
     public renderers: NodeRenderer[] = [];
     public animationController = new AdjustableAnimationController(30);
+    public materialController?: AdjustableAnimationController;
     public currAnimation = -1;
     public headAnimationIndex = -1;
 
-    constructor(private renderData: RenderData, public nodes: GFXNode[], public animations: AnimationData[], public isSkybox = false) {
+    constructor(private renderData: RenderData, public nodes: GFXNode[], public animations: AnimationData[], public isSkybox = false, isEgg = false) {
         for (let i = 0; i < nodes.length; i++) {
             const p = nodes[i].parent;
             if (p === -1)
                 this.renderers.push(new NodeRenderer(renderData, nodes[i], this.modelMatrix, isSkybox));
             else {
-                this.renderers.push(new NodeRenderer(renderData, nodes[i], this.renderers[p].modelMatrix, isSkybox));
+                this.renderers.push(new NodeRenderer(renderData, nodes[i], this.renderers[p].modelMatrix, isSkybox, isEgg && i === 1));
                 this.renderers[p].children.push(this.renderers[i]);
             }
         }
@@ -390,8 +404,9 @@ export class ModelRenderer {
         if (this.animationPaused)
             return;
         const time = this.animationController.getTimeInFrames();
+        const matTime = this.materialController ? this.materialController.getTimeInFrames() : time;
         for (let i = 0; i < this.renderers.length; i++) {
-            this.renderers[i].animate(time);
+            this.renderers[i].animate(time, matTime);
             if (this.renderers[i].animator.lastFunction >= 0 && i > 0) {
                 // function calls from anything but the root are particle effects
                 const arg = this.renderers[i].animator.lastFunction;
@@ -409,6 +424,8 @@ export class ModelRenderer {
             return;
 
         this.animationController.setTimeFromViewerInput(viewerInput);
+        if (this.materialController)
+            this.materialController.setTimeFromViewerInput(viewerInput);
         this.motion(viewerInput, globals);
         this.animate(globals);
         if (this.hidden)
@@ -426,12 +443,57 @@ export class ModelRenderer {
         mat4.getTranslation(lookatScratch, this.modelMatrix);
         vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-        mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+        mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
         offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
         offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
 
         this.renderers[0].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
+    }
+}
+
+export class EggProgram extends F3DEX_Program {
+    public static a_EndPosition = 3;
+    public static a_EndColor = 4;
+
+    constructor(DP_OtherModeH: number, DP_OtherModeL: number, combParams: RDP.CombineParams, blendAlpha = .5, tiles: RDP.TileState[] = []) {
+        super(DP_OtherModeH, DP_OtherModeL, combParams, blendAlpha, tiles);
+        // super hacky, edit beginning of vertex shader to remap attributes and add lerp
+        const parts = this.vert.split("void main() {");
+        this.vert = `
+        layout(location = ${EggProgram.a_Position}) in vec4 a_StartPosition;
+        layout(location = ${EggProgram.a_Color}) in vec4 a_StartColor;
+        layout(location = ${EggProgram.a_TexCoord}) in vec2 a_TexCoord;
+        layout(location = ${EggProgram.a_EndPosition}) in vec3 a_EndPosition;
+        layout(location = ${EggProgram.a_EndColor}) in vec3 a_EndColor;
+
+        vec3 Monochrome(vec3 t_Color) {
+            // NTSC primaries.
+            return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+        }
+
+        void main() {
+            vec4 a_Position = vec4(mix(a_StartPosition.xyz, a_EndPosition, u_MiscComb.y), a_StartPosition.w);
+            // lerp as signed values
+            vec3 v_StartNorm = 2.0*a_StartColor.rgb - 2.0*trunc(2.0*a_StartColor.rgb);
+            vec3 v_EndNorm = 2.0*a_EndColor.rgb - 2.0*trunc(2.0*a_EndColor.rgb);
+            vec4 a_Color = vec4(mix(v_StartNorm, v_EndNorm, u_MiscComb.y), a_StartColor.a);
+            // back to unsigned
+            a_Color.rgb = mod(a_Color.rgb/2.0 + vec3(1.0), 1.0);
+` + parts[1];
+    }
+}
+
+export class EggDrawCall extends DrawCallInstance {
+    public separation = 0;
+    protected fillExtraCombine(offs: number, comb: Float32Array): number {
+        offs += super.fillExtraCombine(offs, comb);
+        comb[offs] = this.separation;
+        return 1;
+    }
+
+    protected programConstructor(otherH: number, otherL: number, combine: RDP.CombineParams, alpha: number, tiles: RDP.TileState[]): F3DEX_Program {
+        return new EggProgram(otherH, otherL, combine, alpha, tiles);
     }
 }

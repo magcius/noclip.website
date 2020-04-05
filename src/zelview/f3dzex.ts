@@ -1,6 +1,6 @@
 import * as RDP from '../Common/N64/RDP';
 
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image";
 import { nArray, assert } from "../util";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -267,15 +267,6 @@ export class DrawCall {
     }
 }
 
-function getSizBitsPerPixel(siz: ImageSize): number {
-    switch (siz) {
-    case ImageSize.G_IM_SIZ_4b:  return 4;
-    case ImageSize.G_IM_SIZ_8b:  return 8;
-    case ImageSize.G_IM_SIZ_16b: return 16;
-    case ImageSize.G_IM_SIZ_32b: return 32;
-    }
-}
-
 export class RSPOutput {
     public drawCalls: DrawCall[] = [];
 
@@ -394,7 +385,7 @@ function translateTile_IA16(tmem: DataView, tile: TileDescriptor): Texture {
 const tlutColorTable = new Uint8Array(256 * 4);
 
 function translateTile_CI4(tmem: DataView, tile: TileDescriptor, tlutfmt: TextureLUT): Texture {
-    const palTmem = 0x100 + (tile.palette << 4); // FIXME: how is address calculated?
+    const palTmem = 0x100 + (tile.palette << 4);
     translateTLUT(tlutColorTable, tmem, palTmem, ImageSize.G_IM_SIZ_4b, tlutfmt);
 
     const tileW = tile.getWidth();
@@ -792,12 +783,12 @@ export class RSPState {
         }
     }
 
-    public setPrimColor(r: number, g: number, b: number, a: number): void {
+    public gDPSetPrimColor(r: number, g: number, b: number, a: number): void {
         this.primColor = vec4.fromValues(r, g, b, a);
         this.stateChanged = true;
     }
 
-    public setEnvColor(r: number, g: number, b: number, a: number): void {
+    public gDPSetEnvColor(r: number, g: number, b: number, a: number): void {
         this.envColor = vec4.fromValues(r, g, b, a);
         this.stateChanged = true;
     }
@@ -1010,7 +1001,7 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const g = ((w1 >>> 16) & 0xFF) / 255;
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
-            state.setPrimColor(r, g, b, a);
+            state.gDPSetPrimColor(r, g, b, a);
         } break;
         
         case F3DZEX_GBI.G_SETENVCOLOR: {
@@ -1018,7 +1009,7 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const g = ((w1 >>> 16) & 0xFF) / 255;
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
-            state.setEnvColor(r, g, b, a);
+            state.gDPSetEnvColor(r, g, b, a);
         } break;
 
         case F3DZEX_GBI.G_RDPFULLSYNC:

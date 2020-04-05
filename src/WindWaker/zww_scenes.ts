@@ -711,7 +711,7 @@ export class ModelCache {
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
             buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);
 
-        const rarc = RARC.parse(buffer, this.yaz0Decompressor);
+        const rarc = RARC.parse(buffer, '', this.yaz0Decompressor);
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }

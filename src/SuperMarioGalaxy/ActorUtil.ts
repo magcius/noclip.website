@@ -197,7 +197,9 @@ export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: JKRArchive, fil
     const cache = sceneObjHolder.modelCache.cache;
 
     const buffer = arc.findFileData(filename);
-    const btiData = new BTIData(device, cache, BTI.parse(buffer!, filename).texture);
+    const textureName = `${arc.name}/${filename}`;
+    const btiData = new BTIData(device, cache, BTI.parse(buffer!, textureName).texture);
+    sceneObjHolder.modelCache.textureListHolder.addTextures([btiData.viewerTexture]);
     return btiData;
 }
 
@@ -918,17 +920,21 @@ export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, spee
 }
 
 // Project pos onto the line created by p0...p1.
-export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): void {
+export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): number {
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
-    vec3.scaleAndAdd(dst, p0, scratch, proj / vec3.squaredLength(scratch));
+    const coord = proj / vec3.squaredLength(scratch);
+    vec3.scaleAndAdd(dst, p0, scratch, coord);
+    return coord;
 }
 
 // Project pos onto the line created by p0...p1, clamped to the inside of the line.
-export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): void {
+export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): number {
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
-    vec3.scaleAndAdd(dst, p0, scratch, saturate(proj / vec3.squaredLength(scratch)));
+    const coord = saturate(proj / vec3.squaredLength(scratch));
+    vec3.scaleAndAdd(dst, p0, scratch, coord);
+    return coord;
 }
 
 export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {

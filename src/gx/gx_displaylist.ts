@@ -69,7 +69,7 @@ export const enum VertexAttributeInput {
     TEX4567MTXIDX,
     POS,
     NRM,
-    // These are part of NBT in original Dolphin. We pack them as separate inputs.
+    // These are part of NBT in original GX. We pack them as separate inputs.
     BINRM,
     TANGENT,
     CLR0,

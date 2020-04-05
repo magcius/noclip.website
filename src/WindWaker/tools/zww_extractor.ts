@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import * as BYML from "../../byml";
 import * as Yaz0 from './Yaz0_NoWASM';
 import { openSync, readSync, closeSync, readFileSync, writeFileSync, readdirSync } from "fs";
-import { assertExists, hexzero, assert, hexdump, readString } from "../../util";
+import { assertExists, hexzero, assert, readString } from "../../util";
 import { Endianness } from "../../endian";
 
 // Standalone tool designed for node to extract data.

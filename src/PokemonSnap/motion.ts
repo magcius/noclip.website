@@ -23,6 +23,7 @@ const enum MotionFuncs {
     FaceTarget      = 0x36148C,
     WalkToTarget    = 0x361748,
     WalkFromTarget  = 0x36194C,
+    WalkFromTarget2 = 0x361B20,
     SetTarget       = 0x361B50,
     StepToPoint     = 0x361B68,
     ApproachPoint   = 0x361E58,
@@ -368,6 +369,15 @@ export class MotionParser extends MIPS.NaiveInterpreter {
                     maxTurn: this.getFloatValue(a2),
                     flags: a3.value | MoveFlags.Ground,
                     away: func === MotionFuncs.WalkFromTarget,
+                });
+            } break;
+            case MotionFuncs.WalkFromTarget2: {
+                this.blocks.push({
+                    kind: "walkToTarget",
+                    radius: this.getFloatValue(a1),
+                    maxTurn: 0.1,
+                    flags: MoveFlags.Ground,
+                    away: true,
                 });
             } break;
             case MotionFuncs.FaceTarget: {
@@ -718,6 +728,37 @@ function fixupMotion(addr: number, blocks: Motion[]): void {
         case 0x802DB5C0: {
             assert(blocks[0].kind === "path");
             blocks[0].flags |= MoveFlags.ConstHeight;
+        } break;
+        // articuno egg
+        case 0x802C4C70: {
+            assert(blocks[0].kind === "basic");
+            blocks[0].subtype = BasicMotionKind.Custom;
+            blocks[0].param = 0;
+        } break;
+        // this motion also has a useless horizontal component
+        case 0x802C4D60: {
+            blocks[0] = {
+                kind: "vertical",
+                target: {index: 0},
+                asDelta: false,
+                startSpeed: 300,
+                g: 0,
+                minVel: 0,
+                maxVel: 0,
+                direction: 1,
+            };
+        } break;
+        // face target in state
+        case 0x802C4820: {
+            blocks.unshift({
+                kind: "faceTarget",
+                maxTurn: 1,
+                flags: MoveFlags.FacePlayer,
+            });
+        } break;
+        case 0x802C502C: {
+            assert(blocks[0].kind === "basic" && blocks[0].subtype === BasicMotionKind.Custom);
+            blocks[0].param = 1;
         } break;
     }
 }

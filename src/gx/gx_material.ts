@@ -614,16 +614,36 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
-    private generateTexGen(texCoordGenIndex: number) {
-        const texCoordGen = this.material.texGens[texCoordGenIndex];
+    private generateTexGen(i: number) {
+        const tg = this.material.texGens[i];
+
+        let suffix: string;
+        if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
+            suffix = `.xy`;
+        else if (tg.type === GX.TexGenType.MTX3x4)
+            suffix = `.xyz`;
+        else
+            throw "whoops";
+
         return `
-    // TexGen ${texCoordGenIndex} Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
-    v_TexCoord${texCoordGenIndex} = ${this.generateTexGenPost(texCoordGenIndex)};`;
+    // TexGen ${i} Type: ${tg.type} Source: ${tg.source} Matrix: ${tg.matrix}
+    v_TexCoord${i} = ${this.generateTexGenPost(i)}${suffix};`;
     }
 
     private generateTexGens(): string {
         return this.material.texGens.map((tg, i) => {
             return this.generateTexGen(i);
+        }).join('');
+    }
+
+    private generateTexCoordVaryings(): string {
+        return this.material.texGens.map((tg, i) => {
+            if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
+                return `varying vec2 v_TexCoord${i};\n`;
+            else if (tg.type === GX.TexGenType.MTX3x4)
+                return `varying vec3 v_TexCoord${i};\n`;
+            else
+                throw "whoops";
         }).join('');
     }
 
@@ -754,6 +774,12 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
+    private stageUsesSimpleCoords(stage: TevStage): boolean {
+        // This is a bit of a hack. If there's no indirect stage, we use simple normalized texture coordinates,
+        // designed renderers where injecting the texture size might be difficult.
+        return stage.indTexMatrix === GX.IndTexMtxID.OFF && !stage.indTexAddPrev;
+    }
+
     private generateTexAccess(stage: TevStage) {
         // Skyward Sword is amazing sometimes. I hope you're happy...
         // assert(stage.texMap !== GX.TexMapID.TEXMAP_NULL);
@@ -764,7 +790,9 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
-        return this.generateTextureSample(stage.texMap, `t_TexCoord * TextureInvScale(${stage.texMap})`);
+        // TODO(jstpierre): Optimize this so we don't repeat this CSE.
+        const texScale = this.stageUsesSimpleCoords(stage) ? `` : ` * TextureInvScale(${stage.texMap})`;
+        return this.generateTextureSample(stage.texMap, `t_TexCoord${texScale}`);
     }
 
     private generateComponentSwizzle(swapTable: SwapTable | undefined, channel: GX.TevColorChan): string {
@@ -930,7 +958,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (texGenId < 0)
             return `vec2(0.0, 0.0)`;
 
-        const baseCoord = `ReadTexCoord${texGenId}() * TextureScale(${stage.texMap})`;
+        const texScale = this.stageUsesSimpleCoords(stage) ? `` : ` * TextureScale(${stage.texMap})`;
+        const baseCoord = `ReadTexCoord${texGenId}()${texScale}`;
         if (stage.indTexWrapS === GX.IndTexWrap.OFF && stage.indTexWrapT === GX.IndTexWrap.OFF)
             return baseCoord;
         else
@@ -1186,14 +1215,7 @@ ${bindingsDefinition}
 varying vec3 v_Position;
 varying vec4 v_Color0;
 varying vec4 v_Color1;
-varying vec3 v_TexCoord0;
-varying vec3 v_TexCoord1;
-varying vec3 v_TexCoord2;
-varying vec3 v_TexCoord3;
-varying vec3 v_TexCoord4;
-varying vec3 v_TexCoord5;
-varying vec3 v_TexCoord6;
-varying vec3 v_TexCoord7;
+${this.generateTexCoordVaryings()}
 `;
 
         this.vert = `

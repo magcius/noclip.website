@@ -4,9 +4,12 @@ import { OceanBowl } from "./OceanBowl";
 import { SceneObjHolder } from "./Main";
 import { connectToSceneScreenEffectMovement } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
-import { AreaObjMgr, AreaObj } from "./AreaObj";
+import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3 } from "gl-matrix";
-import { OceanRing } from "./MiscActor";
+import { OceanRing, getCamPos, isEqualStageName } from "./MiscActor";
+import { JMapInfoIter } from "./JMapInfo";
+import { ZoneAndLayer } from "./LiveActor";
+import { createNormalBloom } from "./ImageEffect";
 
 export class WaterArea extends AreaObj {
     public getManagerName(): string {
@@ -20,12 +23,20 @@ export class WaterAreaMgr extends AreaObjMgr<WaterArea> {
     }
 }
 
+const scratchVec3 = vec3.create();
 export class WaterAreaHolder extends NameObj {
+    public cameraInWater: boolean = false;
     public oceanBowl: OceanBowl[] = [];
     public oceanRing: OceanRing[] = [];
+    private useBloom: boolean = false;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'WaterAreaHolder');
+
+        if (isEqualStageName(sceneObjHolder, 'HeavenlyBeachGalaxy') || isEqualStageName(sceneObjHolder, 'OceanRingGalaxy')) {
+            createNormalBloom(sceneObjHolder);
+            this.useBloom = true;
+        }
 
         connectToSceneScreenEffectMovement(sceneObjHolder, this);
     }
@@ -40,6 +51,35 @@ export class WaterAreaHolder extends NameObj {
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
+
+        getCamPos(scratchVec3, viewerInput.camera);
+
+        const inWater = getWaterAreaObj(sceneObjHolder, scratchVec3);
+        if (inWater) {
+            if (!this.cameraInWater) {
+                this.cameraInWater = true;
+
+                if (this.useBloom) {
+                    const imageEffectDirector = sceneObjHolder.imageEffectSystemHolder!.imageEffectDirector;
+                    imageEffectDirector.turnOnNormal(sceneObjHolder);
+                    imageEffectDirector.setNormalBloomIntensity(0xFF);
+                    imageEffectDirector.setNormalBloomThreshold(0x80);
+                    imageEffectDirector.setNormalBloomBlurIntensity1(0x28);
+                    imageEffectDirector.setNormalBloomBlurIntensity2(0x14);
+                }
+            }
+
+            // TODO(jstpierre): WaterInfo
+        } else {
+            if (this.cameraInWater) {
+                if (this.useBloom) {
+                    const imageEffectDirector = sceneObjHolder.imageEffectSystemHolder!.imageEffectDirector;
+                    imageEffectDirector.setAuto(sceneObjHolder);
+                }
+
+                this.cameraInWater = false;
+            }
+        }
     }
 }
 
@@ -56,12 +96,9 @@ export function getWaterAreaObj(sceneObjHolder: SceneObjHolder, position: vec3):
             if (waterAreas.oceanBowl[i].isInWater(position))
                 return true;
 
-        // TODO(jstpierre): OceanRing.isInWater
-        /*
-        for (let i = 0; i < waterAreas.oceanRing.length; i++) {
-            if (waterAreas.oceanRing[i].isInWater(position))
+        for (let i = 0; i < waterAreas.oceanRing.length; i++)
+            if (waterAreas.oceanRing[i].isInWater(sceneObjHolder, position))
                 return true;
-        */
     }
 
     return false;
@@ -69,4 +106,22 @@ export function getWaterAreaObj(sceneObjHolder: SceneObjHolder, position: vec3):
 
 export function isInWater(sceneObjHolder: SceneObjHolder, position: vec3): boolean {
     return getWaterAreaObj(sceneObjHolder, position);
+}
+
+export function isCameraInWater(sceneObjHolder: SceneObjHolder): boolean {
+    if (sceneObjHolder.waterAreaHolder === null)
+        return false;
+    return sceneObjHolder.waterAreaHolder.cameraInWater;
+}
+
+export function createWaterAreaCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+}
+
+export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+}
+
+export function createWaterAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Sphere);
 }

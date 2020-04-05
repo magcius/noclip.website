@@ -12,6 +12,15 @@ import * as NARC from "./nns_g3d/narc";
 const id = 'test';
 const name = "Test Scenes";
 
+export class EmptyScene implements Viewer.SceneGfx {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        return null as unknown as GfxRenderPass;
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
 class BasicRRESSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 

@@ -140,3 +140,21 @@ export function arrayRemoveIfExist<T>(L: T[], n: T): number {
         L.splice(idx, 1);
     return idx;
 }
+
+export function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
+    let lo = 0, hi = L.length;
+    while (lo < hi) {
+        const mid = lo + ((hi - lo) >>> 1);
+        const cmp = compare(e, L[mid]);
+        if (cmp < 0)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    return lo;
+}
+
+export function spliceBisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): void {
+    const idx = bisectRight(L, e, compare);
+    L.splice(idx, 0, e);
+}

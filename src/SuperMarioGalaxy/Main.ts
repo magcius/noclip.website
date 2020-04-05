@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, align, nArray, fallback, nullify } from '../util';
+import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
@@ -23,9 +23,8 @@ import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
-import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
@@ -42,6 +41,7 @@ import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
+import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -69,7 +69,6 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 
 export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
-    private bloomParameters = new BloomPostFXParameters();
 
     private mainRenderTarget = new BasicRenderTarget();
     private sceneTexture = new ColorTexture();
@@ -79,10 +78,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private scenarioNoToIndex: number[] = [];
 
     public onstatechanged!: () => void;
+    public textureHolder: TextureListHolder;
 
     public isInteractive = true;
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
+        this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
 
         this.applyCurrentScenario();
@@ -157,19 +158,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel];
     }
 
-    private prepareBloomParameters(bloomParameters: BloomPostFXParameters): void {
-        // TODO(jstpierre): Dynamically adjust based on Area.
-        if (this.spawner.zones[0].name === 'PeachCastleGardenGalaxy') {
-            bloomParameters.intensity1 = 40/256;
-            bloomParameters.intensity2 = 60/256;
-            bloomParameters.bloomIntensity = 110/256;
-        } else {
-            bloomParameters.intensity1 = 25/256;
-            bloomParameters.intensity2 = 25/256;
-            bloomParameters.bloomIntensity = 50/256;
-        }
-    }
-
     private drawAllEffects(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.sceneObjHolder.effectSystem === null)
             return;
@@ -193,22 +181,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType), resetState);
+    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
     }
 
-    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType), resetState);
+    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
     }
 
-    private execute(passRenderer: GfxRenderPass, drawType: DrawType, resetState: boolean = false): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType), resetState);
-    }
-
-    private isNormalBloomOn(): boolean {
-        if (this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL))
-            return true;
-        return false;
+    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -248,10 +230,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport);
         this.drawAllEffects(viewerInput);
 
+        // TODO(jstpierre): Make this generic to ImageEffectDirector.
         let bloomParameterBufferOffs = -1;
-        if (this.isNormalBloomOn()) {
-            this.prepareBloomParameters(this.bloomParameters);
-            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.bloomParameters);
+        if (this.sceneObjHolder.imageEffectSystemHolder !== null && this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
+            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.sceneObjHolder.bloomEffect!);
         }
 
         // Now that we've completed our UBOs, upload.
@@ -275,11 +257,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
-        let resetTransientState = true;
-
         if (isExistPriorDrawAir(this.sceneObjHolder)) {
-            this.drawOpa(passRenderer, DrawBufferType.SKY, resetTransientState);
-            resetTransientState = false;
+            this.drawOpa(passRenderer, DrawBufferType.SKY);
             this.drawOpa(passRenderer, DrawBufferType.AIR);
             this.drawOpa(passRenderer, DrawBufferType.SUN);
             this.drawXlu(passRenderer, DrawBufferType.SKY);
@@ -294,8 +273,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
-        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL, resetTransientState);
-        resetTransientState = false;
+        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
         this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
 
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
@@ -405,20 +383,18 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
-        if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
+        if (bloomParameterBufferOffs !== -1) {
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
             this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
+            this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
-
-            resetTransientState = true;
         }
 
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT, resetTransientState);
-        resetTransientState = false;
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
         this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -589,7 +565,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
     }
 }
 
-function patchBMDModel(bmdModel: J3DModelData): void {
+function patchModelData(bmdModel: J3DModelData): void {
     // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
     // of its own sort, which needs to be RE'd.
     for (let i = 0; i < bmdModel.shapeData.length; i++)
@@ -618,17 +594,19 @@ export class ResourceHolder {
     public brkTable = new Map<string, TRK1>();
     public bvaTable = new Map<string, VAF1>();
     public banmtTable = new Map<string, BckCtrl>();
+    public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.JKRArchive) {
-        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
+    constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: RARC.JKRArchive) {
+        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
-            const bmdModel = new J3DModelData(device, cache, bmd);
-            patchBMDModel(bmdModel);
-            return bmdModel;
+            const modelData = new J3DModelData(device, cache, bmd);
+            patchModelData(modelData);
+            this.addTEX1(modelData.modelMaterialData.tex1Data, objectName, filenameWithoutExtension);
+            return modelData;
         });
 
-        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (ext, file) => {
+        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (file, ext) => {
             if (ext === '.bca')
                 debugger;
 
@@ -636,14 +614,28 @@ export class ResourceHolder {
         });
 
         // .blk
-        this.initEachResTable(this.btkTable, ['.btk'], (ext, file) => BTK.parse(file.buffer));
-        this.initEachResTable(this.bpkTable, ['.bpk'], (ext, file) => BPK.parse(file.buffer));
-        this.initEachResTable(this.btpTable, ['.btp'], (ext, file) => BTP.parse(file.buffer));
-        this.initEachResTable(this.brkTable, ['.brk'], (ext, file) => BRK.parse(file.buffer));
+        this.initEachResTable(this.btkTable, ['.btk'], (file) => BTK.parse(file.buffer));
+        this.initEachResTable(this.bpkTable, ['.bpk'], (file) => BPK.parse(file.buffer));
+        this.initEachResTable(this.btpTable, ['.btp'], (file) => BTP.parse(file.buffer));
+        this.initEachResTable(this.brkTable, ['.brk'], (file) => BRK.parse(file.buffer));
         // .bas
         // .bmt
-        this.initEachResTable(this.bvaTable, ['.bva'], (ext, file) => BVA.parse(file.buffer));
-        this.initEachResTable(this.banmtTable, ['.banmt'], (ext, file) => BckCtrl.parse(file.buffer));
+        this.initEachResTable(this.bvaTable, ['.bva'], (file) => BVA.parse(file.buffer));
+        this.initEachResTable(this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
+    }
+
+    private addTEX1(tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
+        if (tex1Data === null)
+            return;
+
+        const prefix = (filenameWithoutExtension.toLowerCase() === objectName.toLowerCase()) ? objectName : `${objectName}/${filenameWithoutExtension}`;
+        for (let i = 0; i < tex1Data.viewerTextures.length; i++) {
+            const texture = tex1Data.viewerTextures[i];
+            if (texture === null) 
+                continue;
+            texture.name = `${prefix}/${texture.name}`;
+            this.viewerTextures.push(texture);
+        }
     }
 
     public getModel(name: string): J3DModelData {
@@ -654,7 +646,7 @@ export class ResourceHolder {
         return nullify(table.get(name.toLowerCase()));
     }
 
-    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (ext: string, file: RARC.RARCFile) => T): void {
+    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (file: RARC.RARCFile, ext: string, filenameWithoutExtension: string) => T): void {
         for (let i = 0; i < this.arc.files.length; i++) {
             const file = this.arc.files[i];
 
@@ -662,7 +654,7 @@ export class ResourceHolder {
                 const ext = extensions[j];
                 if (file.name.endsWith(ext)) {
                     const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
-                    table.set(filenameWithoutExtension, constructor(ext, file));
+                    table.set(filenameWithoutExtension, constructor(file, ext, filenameWithoutExtension));
                 }
             }
         }
@@ -674,11 +666,30 @@ export class ResourceHolder {
     }
 }
 
+class TextureListHolder {
+    public viewerTextures: Viewer.Texture[] = [];
+    public onnewtextures: (() => void) | null = null;
+
+    public addTextures(textures: Viewer.Texture[]): void {
+        let changed = false;
+        for (let i = 0; i < textures.length; i++) {
+            if (!this.viewerTextures.includes(textures[i])) {
+                spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
+                changed = true;
+            }
+        }
+
+        if (changed && this.onnewtextures !== null)
+            this.onnewtextures();
+    }
+}
+
 export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.JKRArchive | null>>();
     public archiveCache = new Map<string, RARC.JKRArchive | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
     public cache = new GfxRenderCache();
+    public textureListHolder = new TextureListHolder();
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
@@ -697,7 +708,8 @@ export class ModelCache {
         }
 
         const decompressed = await Yaz0.decompress(buffer);
-        const rarc = RARC.parse(decompressed);
+        const archiveName = archivePath.split('/').pop()!.split('.')[0];
+        const rarc = RARC.parse(decompressed, archiveName);
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }
@@ -734,7 +746,8 @@ export class ModelCache {
             return this.archiveResourceHolder.get(objectName)!;
 
         const arc = this.getObjectData(objectName);
-        const resourceHolder = new ResourceHolder(this.device, this.cache, arc);
+        const resourceHolder = new ResourceHolder(this.device, this.cache, objectName, arc);
+        this.textureListHolder.addTextures(resourceHolder.viewerTextures);
         this.archiveResourceHolder.set(objectName, resourceHolder);
         return resourceHolder;
     }
@@ -784,6 +797,7 @@ class AreaObjContainer extends NameObj {
         super(sceneObjHolder, 'AreaObjContainer');
         this.managers.push(new LightAreaHolder(sceneObjHolder));
         this.managers.push(new WaterAreaMgr(sceneObjHolder));
+        this.managers.push(new ImageEffectAreaMgr(sceneObjHolder));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -807,6 +821,8 @@ export const enum SceneObj {
     SwitchWatcherHolder     = 0x0B,
     SleepControllerHolder   = 0x0C,
     AreaObjContainer        = 0x0D,
+    ImageEffectSystemHolder = 0x1D,
+    BloomEffect             = 0x1E,
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
@@ -838,6 +854,8 @@ export class SceneObjHolder {
     public switchWatcherHolder: SwitchWatcherHolder | null = null;
     public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
+    public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
+    public bloomEffect: BloomEffect | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -874,6 +892,10 @@ export class SceneObjHolder {
             return this.switchWatcherHolder;
         else if (sceneObj === SceneObj.SleepControllerHolder)
             return this.sleepControllerHolder;
+        else if (sceneObj === SceneObj.ImageEffectSystemHolder)
+            return this.imageEffectSystemHolder;
+        else if (sceneObj === SceneObj.BloomEffect)
+            return this.bloomEffect;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -910,6 +932,10 @@ export class SceneObjHolder {
             this.switchWatcherHolder = new SwitchWatcherHolder(this);
         else if (sceneObj === SceneObj.SleepControllerHolder)
             this.sleepControllerHolder = new SleepControllerHolder(this);
+        else if (sceneObj === SceneObj.ImageEffectSystemHolder)
+            this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
+        else if (sceneObj === SceneObj.BloomEffect)
+            this.bloomEffect = new BloomEffect(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)

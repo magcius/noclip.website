@@ -3,7 +3,7 @@ import * as RDP from "../Common/N64/RDP";
 import * as MIPS from "./mips";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
+import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType, StagingVertex } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
@@ -12,6 +12,10 @@ import { findNewTextures } from "./animation";
 import { MotionParser, Motion, Splash, Direction } from "./motion";
 import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
 import {parseParticles, ParticleSystem } from "./particles";
+import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { RenderData } from "../BanjoKazooie/render";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { EggProgram } from "./render";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -24,6 +28,8 @@ export interface Level {
     fishTable: FishEntry[];
     levelParticles: ParticleSystem;
     pesterParticles: ParticleSystem;
+    eggData?: Float32Array;
+    haunterData?: GFXNode[];
 }
 
 export interface Room {
@@ -76,8 +82,10 @@ export interface LevelArchive {
     Name: number;
     Data: ArrayBufferSlice;
     Code: ArrayBufferSlice;
+    Photo: ArrayBufferSlice;
     StartAddress: number;
     CodeStartAddress: number;
+    PhotoStartAddress: number;
     Header: number;
     Objects: number;
     Collision: number;
@@ -87,6 +95,7 @@ export interface LevelArchive {
 export interface DataRange {
     data: ArrayBufferSlice;
     start: number;
+    overlay?: number; // 0 or undefined is always loaded
 }
 
 interface ZeroOne {
@@ -102,6 +111,7 @@ export interface ProjectileData {
 }
 
 export class DataMap {
+    public overlay = 0;
     constructor(public ranges: DataRange[]) { }
 
     public getView(addr: number): DataView {
@@ -109,8 +119,10 @@ export class DataMap {
         return range.data.createDataView(addr - range.start);
     }
 
-    public getRange(addr: number): DataRange {
+    public getRange(addr: number, overlay = 0): DataRange {
         for (let i = 0; i < this.ranges.length; i++) {
+            if (this.ranges[i].overlay && this.overlay && this.ranges[i].overlay !== this.overlay)
+                continue;
             const offset = addr - this.ranges[i].start;
             if (0 <= offset && offset < this.ranges[i].data.byteLength)
                 return this.ranges[i];
@@ -163,12 +175,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
     const dataMap = new DataMap([
         { data: level.Data, start: level.StartAddress },
-        { data: level.Code, start: level.CodeStartAddress },
+        { data: level.Code, start: level.CodeStartAddress},
+        { data: level.Photo, start: level.PhotoStartAddress },
     ]);
     for (let i = 1; i < archives.length; i++) {
         dataMap.ranges.push(
-            { data: archives[i].Data, start: archives[i].StartAddress },
+            { data: archives[i].Data, start: archives[i].StartAddress, overlay: i === 1 ? 1 : 0 },
             { data: archives[i].Code, start: archives[i].CodeStartAddress },
+            { data: archives[i].Photo, start: archives[i].PhotoStartAddress, overlay: 2 },
         );
     }
 
@@ -274,6 +288,11 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
     if (level.Name === 16)
         parseObject(dataMap, 1006, 0x802CBDA0, objectInfo);
+    let haunterData : GFXNode[] | undefined = undefined;
+    if (level.Name === 18) {
+        const sharedOutput = new RSPSharedOutput();
+        haunterData = parseGraph(dataMap, 0x801A5CC0, 0, 0x800A1650, sharedOutput);
+    }
 
     const statics = dataMap.deref(level.Header + 0x04);
     if (statics !== 0) {
@@ -316,17 +335,40 @@ export function parseLevel(archives: LevelArchive[]): Level {
     const levelParticles = parseParticles(archives[0].ParticleData, false);
     const pesterParticles = parseParticles(archives[1].ParticleData, true);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles };
+    const eggData = buildEggData(dataMap, level.Name);
+
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles, eggData, haunterData };
 }
+
+const photoDataStart = 0x800ADBEC;
 
 function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: ObjectDef[]): void {
     const initView = dataMap.getView(initFunc);
     assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
     const objectView = dataMap.getView(dataFinder.dataAddress);
 
-    const graphStart = objectView.getUint32(0x00);
-    const materials = objectView.getUint32(0x04);
-    const renderer = objectView.getUint32(0x08);
+    let graphStart = objectView.getUint32(0x00);
+    let materials = objectView.getUint32(0x04);
+    let renderer = objectView.getUint32(0x08);
+
+    let usePhoto = false;
+
+    if (id !== 93 && id !== 101) { // preserve haunter's original data
+        const photoView = dataMap.getView(photoDataStart);
+        let offs = 0;
+        while (offs < photoView.byteLength) {
+            const photoID = photoView.getUint32(offs);
+            if (photoID !== id) {
+                offs += 0x14;
+                continue;
+            }
+            graphStart = photoView.getUint32(offs + 0x08);
+            materials = photoView.getUint32(offs + 0x0C);
+            renderer = photoView.getUint32(offs + 0x10);
+            usePhoto = true;
+            break;
+        }
+    }
     const animationStart = objectView.getUint32(0x0C);
     const scale = getVec3(objectView, 0x10);
     const center = getVec3(objectView, 0x1C);
@@ -339,8 +381,11 @@ function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: Objec
 
     const sharedOutput = new RSPSharedOutput();
     try {
+        if (usePhoto && id !== 1003) // special case for splash, for some reason
+            dataMap.overlay = 2;
         const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
         const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
+        dataMap.overlay = 0;
         defs.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
     } catch (e) {
         console.warn("failed parse", id, e);
@@ -541,8 +586,11 @@ function selectRenderer(addr: number): graphRenderer {
     switch (addr) {
         case 0x80014F98:
         case 0x800a15D8:
+
         case 0x803594DC: // object
             return runRoomDL;
+        case 0x800A1650: // fog
+        case 0x800A1680:
         case 0x8035942C: // object, fog
         case 0x8035958C: // object
             return runSplitDL;
@@ -560,7 +608,7 @@ function selectRenderer(addr: number): graphRenderer {
     }
 }
 
-function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, output: RSPSharedOutput): GFXNode[] {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, output: RSPSharedOutput, overlay = 0): GFXNode[] {
     const view = dataMap.getView(graphStart);
     const nodes: GFXNode[] = [];
 
@@ -2047,6 +2095,9 @@ function fixupState(state: State, animationAddresses: number[]): void {
         case 0x802D9074: {
             state.blocks[0].edges[0].type = InteractionType.Unknown;
         } break;
+        case 0x802E4434: {
+            state.blocks[1].signals[0].condition = InteractionType.Unknown;
+        } break;
         // these spawns look like they were copied from elsewhere, without changing the ID
         // they work in game, but break our simple detection logic
         case 0x802D9B8C: {
@@ -2109,6 +2160,29 @@ function fixupState(state: State, animationAddresses: number[]): void {
             }];
             state.blocks[2].flagSet = flagSet;
             state.blocks[2].flagClear = flagClear;
+        } break;
+        // make tunnel doors make sense for a viewer
+        case 0x802EA79C:
+        case 0x802EA970: {
+            state.blocks[0].animation = 1;
+            state.blocks[1].animation = 2;
+            state.blocks[1].signals = []; // don't send room cleanup signal
+            // open and close on a timer
+            assert(state.blocks[0].wait !== null);
+            state.blocks[0].wait.duration = 10;
+            state.blocks[0].wait.durationRange = 2;
+            state.blocks[0].wait.endCondition = EndCondition.Timer;
+            state.blocks[1].wait = {
+                allowInteraction: false,
+                interactions: [],
+                duration: 6,
+                endCondition: EndCondition.Timer,
+                durationRange: .5,
+                loopTarget: 1,
+            };
+            // loop
+            state.blocks[1].edges.push({ type: InteractionType.Basic, index: 1, param: 0, auxFunc: 0 });
+            state.doCleanup = false;
         } break;
     }
 }
@@ -2237,4 +2311,67 @@ function parseFishTable(dataMap: DataMap, id: number): FishEntry[] {
     for (let i = 0; i < fish.length; i++)
         fish[i].probability /= total;
     return fish;
+}
+
+function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
+    let start = 0;
+    let count = 0;
+    if (id === 18) {
+        start = 0x8018A6F0;
+        count = 0x154;
+    } else if (id === 20) {
+        start = 0x8017C090;
+        count = 0x148;
+    } else
+        return undefined;
+    const data = new Float32Array(count * 6);
+    const view = dataMap.getView(start);
+    const dummyVertex = new StagingVertex();
+    let j = 0;
+    // add all of the end position vertices in order
+    // in principle we would have to be careful about matching the order of the original buffer, filtered through our processing,
+    // but it turns out all the triangles are just drawn in order, since there aren't shared vertices
+    for (let i = 0; i < count; i++) {
+        dummyVertex.setFromView(view, i << 4);
+        data[j++] = dummyVertex.x;
+        data[j++] = dummyVertex.y;
+        data[j++] = dummyVertex.z;
+        data[j++] = dummyVertex.c0;
+        data[j++] = dummyVertex.c1;
+        data[j++] = dummyVertex.c2;
+    }
+    return data;
+}
+
+export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Float32Array): void {
+    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertices.buffer);
+    data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
+
+    // clear existing input objects, but leave the buffers
+    device.destroyInputLayout(data.inputLayout);
+    device.destroyInputState(data.inputState);
+
+    const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+        { location: EggProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+        { location: EggProgram.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
+        { location: EggProgram.a_EndPosition, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_EndColor, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x04, },
+    ];
+
+    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+        { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+    ];
+
+    data.inputLayout = device.createInputLayout({
+        indexBufferFormat: GfxFormat.U32_R,
+        vertexBufferDescriptors,
+        vertexAttributeDescriptors,
+    });
+
+    data.inputState = device.createInputState(data.inputLayout, [
+        { buffer: data.vertexBuffer, byteOffset: 0 },
+        { buffer: eggBuffer, byteOffset: 0 }
+    ], { buffer: data.indexBuffer, byteOffset: 0 });
 }

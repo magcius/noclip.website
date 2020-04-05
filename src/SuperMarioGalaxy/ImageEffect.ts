@@ -1,4 +1,15 @@
 
+import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
+import { NameObj } from "./NameObj";
+import { getMatrixTranslation } from "../MathHelpers";
+import { vec3 } from "gl-matrix";
+import { getAreaObj } from "./MiscActor";
+import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
+import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
+import { ZoneAndLayer } from "./LiveActor";
+import { fallback } from "../util";
+import { ViewerRenderInput } from "../viewer";
+import { connectToScene } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
@@ -6,11 +17,12 @@ import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, 
 import { TransparentBlack } from "../Color";
 import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, NormalizedViewportCoords, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
+
+const scratchVec3 = vec3.create();
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -20,10 +32,10 @@ uniform sampler2D u_Texture;
 layout(std140) uniform ub_Params {
     vec4 u_Misc0;
 };
-#define u_Threshold      (u_Misc0.x)
-#define u_Intensity1     (u_Misc0.y)
-#define u_Intensity2     (u_Misc0.z)
-#define u_BloomIntensity (u_Misc0.w)
+#define u_BloomIntensity (u_Misc0.x)
+#define u_Threshold      (u_Misc0.y)
+#define u_Intensity1     (u_Misc0.z)
+#define u_Intensity2     (u_Misc0.w)
 `;
 
     public vert: string = `
@@ -173,13 +185,6 @@ const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     stencilLoadDisposition: GfxLoadDisposition.LOAD,
 };
 
-export class BloomPostFXParameters {
-    public threshold: number = 0/256;
-    public intensity1: number = 50/256;
-    public intensity2: number = 25/256;
-    public bloomIntensity: number = 25/256;
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
 function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState, sampleCount: number = DEFAULT_NUM_SAMPLES): GfxRenderPipeline {
@@ -233,13 +238,18 @@ export class BloomPostFXRenderer {
         }), fullscreenMegaState));
     }
 
-    public allocateParameterBuffer(renderInstManager: GfxRenderInstManager, bloomParameters: BloomPostFXParameters): number {
+    public allocateParameterBuffer(renderInstManager: GfxRenderInstManager, bloomEffect: BloomEffect): number {
         const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
         const parameterBufferOffs = uniformBuffer.allocateChunk(4);
         const d = uniformBuffer.mapBufferF32(parameterBufferOffs, 4);
-        
+
+        const bloomIntensity = (bloomEffect.bloomIntensity * bloomEffect.strength) / 0xFF;
+        const threshold = bloomEffect.threshold / 0xFF;
+        const intensity1 = bloomEffect.intensity1 / 0xFF;
+        const intensity2 = bloomEffect.intensity2 / 0xFF;
+
         let offs = parameterBufferOffs;
-        offs += fillVec4(d, offs, bloomParameters.threshold, bloomParameters.intensity1, bloomParameters.intensity2, bloomParameters.bloomIntensity);
+        offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
 
         return parameterBufferOffs;
     }
@@ -337,4 +347,370 @@ export class BloomPostFXRenderer {
         this.scratch2ColorTarget.destroy(device);
         this.scratch2ColorTexture.destroy(device);
     }
+}
+
+abstract class ImageEffectBase extends NameObj {
+    public active = false;
+    public visible = false;
+    public strength = 0.0;
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const strengthAdj = getDeltaTimeFrames(viewerInput) / 30.0;
+
+        if (this.active) {
+            this.visible = true;
+            this.strength += strengthAdj;
+            if (this.strength > 1.0)
+                this.strength = 1.0;
+        } else if (this.visible) {
+            this.strength -= strengthAdj;
+            if (this.strength <= 0.0) {
+                this.strength = 0.0;
+                this.visible = false;
+            }
+        }
+
+        this.calcAnimSub(sceneObjHolder);
+    }
+
+    public calcAnimSub(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOff(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOff(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    connectToScene(sceneObjHolder, nameObj, -1, 4, -1, -1);
+}
+
+export class BloomEffect extends ImageEffectBase {
+    public bloomIntensity: number = 0;
+    public threshold: number = 0;
+    public intensity1: number = 0;
+    public intensity2: number = 0;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'BloomEffect');
+
+        connectToSceneNormalBloom(sceneObjHolder, this);
+        sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
+    }
+}
+
+export function getImageEffectDirector(sceneObjHolder: SceneObjHolder): ImageEffectDirector {
+    return sceneObjHolder.imageEffectSystemHolder!.imageEffectDirector;
+}
+
+abstract class ImageEffectState {
+    public onChange(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public getEffect(sceneObjHolder: SceneObjHolder): ImageEffectBase | null {
+        return null;
+    }
+
+    public update(sceneObjHolder: SceneObjHolder): void {
+        const imageDirector = getImageEffectDirector(sceneObjHolder);
+        const effect = this.getEffect(sceneObjHolder);
+
+        if (imageDirector.currentEffect === effect) {
+            // We are the current effect.
+            if (effect === null)
+                return;
+
+            if (effect.active)
+                return;
+
+            effect.active = true;
+            effect.notifyTurnOn(sceneObjHolder);
+        } else {
+            if (imageDirector.currentEffect !== null) {
+                if (imageDirector.currentEffect.active) {
+                    imageDirector.currentEffect.active = false;
+                    imageDirector.currentEffect.notifyTurnOff(sceneObjHolder);
+                }
+
+                if (imageDirector.currentEffect.visible)
+                    return;
+            }
+
+            if (effect !== null) {
+                effect.active = true;
+                effect.notifyTurnOn(sceneObjHolder);
+            }
+
+            imageDirector.setCurrentEffect(effect);
+        }
+    }
+}
+
+class ImageEffectStateNull extends ImageEffectState {
+}
+
+class ImageEffectStateBloomNormal extends ImageEffectState {
+    private reset = true;
+
+    private bloomIntensity = 0;
+    private threshold = 0;
+    private intensity1 = 0;
+    private intensity2 = 0;
+
+    private bloomIntensityTarget = 0;
+    private thresholdTarget = 0;
+    private intensity1Target = 0;
+    private intensity2Target = 0;
+
+    public onChange(sceneObjHolder: SceneObjHolder): void {
+        this.reset = true;
+    }
+
+    public getEffect(sceneObjHolder: SceneObjHolder): ImageEffectBase | null {
+        return sceneObjHolder.bloomEffect!;
+    }
+
+    public update(sceneObjHolder: SceneObjHolder): void {
+        if (this.reset) {
+            this.bloomIntensity = this.bloomIntensityTarget;
+            this.threshold = this.thresholdTarget;
+            this.intensity1 = this.intensity1Target;
+            this.intensity2 = this.intensity2Target;
+            this.reset = false;
+        } else {
+            this.bloomIntensity += Math.min(0.1 * (this.bloomIntensityTarget - this.bloomIntensity), 255.0);
+            this.threshold      += Math.min(0.1 * (this.thresholdTarget - this.threshold), 255.0);
+            this.intensity1     += Math.min(0.1 * (this.intensity1Target - this.intensity1), 255.0);
+            this.intensity2     += Math.min(0.1 * (this.intensity2Target - this.intensity2), 255.0);
+        }
+
+        const bloomEffect = sceneObjHolder.bloomEffect!;
+        bloomEffect.bloomIntensity = this.bloomIntensity;
+        bloomEffect.threshold = this.threshold;
+        bloomEffect.intensity1 = this.intensity1;
+        bloomEffect.intensity2 = this.intensity2;
+
+        super.update(sceneObjHolder);
+    }
+
+    public setBloomIntensity(v: number): void {
+        this.bloomIntensityTarget = v;
+    }
+
+    public setThreshold(v: number): void {
+        this.thresholdTarget = v;
+    }
+
+    public setIntensity1(v: number): void {
+        this.intensity1Target = v;
+    }
+
+    public setIntensity2(v: number): void {
+        this.intensity2Target = v;
+    }
+
+    public setIntensity1Default(): void {
+        this.intensity1Target = 0x2A;
+    }
+
+    public setIntensity2Default(): void {
+        this.intensity1Target = 0x15;
+    }
+}
+
+function connectToSceneImageEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    connectToScene(sceneObjHolder, nameObj, 0x17, -1, -1, -1);
+}
+
+class ImageEffectDirector extends NameObj {
+    public auto = true;
+    public currentState: ImageEffectState;
+    public stateBloomNormal: ImageEffectStateBloomNormal;
+    public stateNull: ImageEffectStateNull;
+    public currentEffect: ImageEffectBase | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'ImageEffectDirector');
+
+        this.stateBloomNormal = new ImageEffectStateBloomNormal();
+        this.stateNull = new ImageEffectStateNull();
+
+        this.currentState = this.stateNull;
+
+        connectToSceneImageEffectMovement(sceneObjHolder, this);
+    }
+
+    public isOnNormalBloom(sceneObjHolder: SceneObjHolder): boolean {
+        return this.currentEffect === this.stateBloomNormal.getEffect(sceneObjHolder);
+    }
+
+    public turnOnNormal(sceneObjHolder: SceneObjHolder): void {
+        this.auto = false;
+        this.setState(sceneObjHolder, this.stateBloomNormal);
+    }
+
+    public setAuto(sceneObjHolder: SceneObjHolder): void {
+        this.auto = true;
+    }
+
+    private setState(sceneObjHolder: SceneObjHolder, state: ImageEffectState): void {
+        if (state === this.currentState)
+            return;
+        this.currentState = state;
+        this.currentState.onChange(sceneObjHolder);
+    }
+
+    private setBloomNormalParams(area: BloomArea) {
+        this.stateBloomNormal.setBloomIntensity(area.bloomIntensity);
+        this.stateBloomNormal.setThreshold(area.threshold);
+
+        if (area.intensity1 > -1)
+            this.stateBloomNormal.setIntensity1(area.intensity1);
+        else
+            this.stateBloomNormal.setIntensity1Default();
+
+        if (area.intensity2 > -1)
+            this.stateBloomNormal.setIntensity2(area.intensity2);
+        else
+            this.stateBloomNormal.setIntensity2Default();
+    }
+
+    public setNormalBloomIntensity(v: number) {
+        this.stateBloomNormal.setBloomIntensity(v);
+    }
+
+    public setNormalBloomThreshold(v: number) {
+        this.stateBloomNormal.setThreshold(v);
+    }
+
+    public setNormalBloomBlurIntensity1(v: number) {
+        this.stateBloomNormal.setIntensity1(v);
+    }
+
+    public setNormalBloomBlurIntensity2(v: number) {
+        this.stateBloomNormal.setIntensity2(v);
+    }
+
+    public setCurrentEffect(effect: ImageEffectBase | null): void {
+        if (this.currentEffect === effect)
+            return;
+        this.currentEffect = effect;
+    }
+
+    private updateAuto(sceneObjHolder: SceneObjHolder): void {
+        // getPlayerPos
+        getMatrixTranslation(scratchVec3, sceneObjHolder.viewerInput.camera.worldMatrix);
+
+        const areaObj = getAreaObj(sceneObjHolder, 'ImageEffectArea', scratchVec3) as ImageEffectArea | null;
+        if (areaObj === null) {
+            this.setState(sceneObjHolder, this.stateNull);
+        } else if (areaObj.effectType === ImageEffectType.BloomNormal) {
+            this.setBloomNormalParams(areaObj as BloomArea);
+            this.setState(sceneObjHolder, this.stateBloomNormal);
+        }
+    }
+
+    private updateManual(sceneObjHolder: SceneObjHolder): void {
+        // ...
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.auto)
+            this.updateAuto(sceneObjHolder);
+        else
+            this.updateManual(sceneObjHolder);
+
+        this.currentState.update(sceneObjHolder);
+    }
+}
+
+export class ImageEffectSystemHolder extends NameObj {
+    public imageEffectDirector: ImageEffectDirector;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'ImageEffectSystemHolder');
+
+        this.imageEffectDirector = new ImageEffectDirector(sceneObjHolder);
+    }
+}
+
+const enum ImageEffectType {
+    BloomNormal,
+    BloomSimple,
+    ScreenBlur,
+    DepthOfField,
+}
+
+class ImageEffectArea extends AreaObj {
+    public priority: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public effectType: ImageEffectType, infoIter: JMapInfoIter, formType: AreaFormType) {
+        super(zoneAndLayer, sceneObjHolder, infoIter, formType);
+        this.priority = fallback(getJMapInfoArg7(infoIter), -1);
+    }
+
+    public getManagerName(): string {
+        return "ImageEffectArea";
+    }
+}
+
+export class BloomArea extends ImageEffectArea {
+    public bloomIntensity: number;
+    public threshold: number;
+    public intensity1: number;
+    public intensity2: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
+        super(zoneAndLayer, sceneObjHolder, ImageEffectType.BloomNormal, infoIter, formType);
+
+        createNormalBloom(sceneObjHolder);
+
+        this.bloomIntensity = fallback(getJMapInfoArg0(infoIter), 0x80);
+        this.threshold = fallback(getJMapInfoArg1(infoIter), 0xFF);
+        this.intensity1 = fallback(getJMapInfoArg2(infoIter), -1);
+        this.intensity2 = fallback(getJMapInfoArg3(infoIter), -1);
+    }
+}
+
+export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, "ImageEffectArea");
+    }
+
+    public initAfterPlacement(): void {
+        this.sort();
+    }
+
+    private sort(): void {
+        // Sort by highest priority.
+        this.areaObj.sort((a, b) => {
+            return b.priority - a.priority;
+        });
+    }
+}
+
+export function createBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+}
+
+export function createBloomSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Sphere);
+}
+
+export function createBloomCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+}
+
+export function createNormalBloom(sceneObjHolder: SceneObjHolder): void {
+    sceneObjHolder.create(SceneObj.BloomEffect);
 }

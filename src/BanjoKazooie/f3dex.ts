@@ -3,7 +3,7 @@ import * as RDP from '../Common/N64/RDP';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextFilt } from "../Common/N64/Image";
+import { ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { loadVertexFromView } from '../Common/N64/RSP';
@@ -313,15 +313,6 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
     out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
 
     return out;
-}
-
-function getSizBitsPerPixel(siz: ImageSize): number {
-    switch (siz) {
-    case ImageSize.G_IM_SIZ_4b:  return 4;
-    case ImageSize.G_IM_SIZ_8b:  return 8;
-    case ImageSize.G_IM_SIZ_16b: return 16;
-    case ImageSize.G_IM_SIZ_32b: return 32;
-    }
 }
 
 export class RSPState {

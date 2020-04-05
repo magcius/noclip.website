@@ -46,6 +46,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
 
         if (textureHolder.hasTexture('tou_k_dummy')) {
             // Replace dummy texture with a pure green.
+            // TODO(jstpierre): This leaks.
             const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadTextureData(gfxTexture, 0, [new Uint8Array([0x00, 0xFF, 0x00, 0xFF])]);

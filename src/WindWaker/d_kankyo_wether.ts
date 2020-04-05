@@ -1282,7 +1282,7 @@ export class dKankyo_star_Packet {
                 angle += angleIncr;
                 angleIncr += uShortTo2PI(0x09C4);
 
-                radius += (1.0 + 3.0 * Math.pow(radius / 200.0, 3.0));
+                radius += (1.0 + 3.0 * (radius / 200.0 ** 3.0));
                 if (radius > 200.0)
                     radius = (20.0 * i) / 1000.0;
             }
@@ -2099,10 +2099,10 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
         const distNormalized = Math.min(distance / 15000.0, 1.0);
 
         const strengthY = 3000.0 + pkt.strength * -1000.0;
-        const distCubic = 1.0 - Math.pow(distNormalized, 3);
+        const distCubic = 1.0 - (distNormalized ** 3.0);
         kumo.position[1] = (500.0 * (i / 100.0)) + skyboxOffsY + (strengthY * distCubic);
 
-        kumo.distFalloff = 1.0 - Math.pow(distNormalized, 6);
+        kumo.distFalloff = 1.0 - (distNormalized ** 6.0);
 
         let alphaBaseTarget: number;
         let alphaMaxVel = 1.0;

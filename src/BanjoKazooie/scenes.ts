@@ -654,61 +654,60 @@ class SceneDesc implements Viewer.SceneDesc {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`).then((data) => {
-            const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
 
-            const viewerTextures: Viewer.Texture[] = [];
-            const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-            const sceneRenderer = new BKRenderer(device, fakeTextureHolder, objectData);
-            const cache = sceneRenderer.renderHelper.getCache();
+        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`)!, BYML.FileType.CRG1);
 
-            const opaFile = findFileByID(obj, obj.OpaGeoFileId);
-            if (opaFile !== null) {
-                const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
-                const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-                setLevelGeoSelector(opa, obj.SceneID);
+        const viewerTextures: Viewer.Texture[] = [];
+        const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
+        const sceneRenderer = new BKRenderer(device, fakeTextureHolder, objectData);
+        const cache = sceneRenderer.renderHelper.getCache();
+
+        const opaFile = findFileByID(obj, obj.OpaGeoFileId);
+        if (opaFile !== null) {
+            const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
+            const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+            setLevelGeoSelector(opa, obj.SceneID);
+        }
+
+        const xluFile = findFileByID(obj, obj.XluGeoFileId);
+        if (xluFile !== null) {
+            const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
+            const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
+        }
+
+        const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
+        if (opaSkybox !== null) {
+            const geo = Geo.parse(opaSkybox.Data, Geo.RenderZMode.OPA, true);
+            const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            renderer.isSkybox = true;
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
+        }
+
+        const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
+        if (xluSkybox !== null) {
+            const geo = Geo.parse(xluSkybox.Data, Geo.RenderZMode.XLU, false);
+            const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            renderer.isSkybox = true;
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
+        }
+
+        const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
+        this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
+        if (obj.SceneID == 0x0b) {
+            const clanker = objectData.spawnObject(device, sceneRenderer.sceneEmitters, Actors.clankerID, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
+            clanker.animationController.init(15); // seems slower than others, not sure the source
+            // TODO: make sure Clanker renders before the parts
+            for (let object of sceneRenderer.geoRenderers) {
+                if (object instanceof Actors.ClankerBolt)
+                    object.clankerVector = assertExists(clanker.modelPointArray[5]);
+                else if (object instanceof Actors.ClankerTooth)
+                    object.movementController = new Actors.ModelPin(clanker.modelPointArray, object.index);
             }
-
-            const xluFile = findFileByID(obj, obj.XluGeoFileId);
-            if (xluFile !== null) {
-                const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
-                const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
-            }
-
-            const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
-            if (opaSkybox !== null) {
-                const geo = Geo.parse(opaSkybox.Data, Geo.RenderZMode.OPA, true);
-                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                renderer.isSkybox = true;
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
-            }
-
-            const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
-            if (xluSkybox !== null) {
-                const geo = Geo.parse(xluSkybox.Data, Geo.RenderZMode.XLU, false);
-                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                renderer.isSkybox = true;
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
-            }
-
-            const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
-            this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
-            if (obj.SceneID == 0x0b) {
-                const clanker = objectData.spawnObject(device, sceneRenderer.sceneEmitters, Actors.clankerID, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
-                clanker.animationController.init(15); // seems slower than others, not sure the source
-                // TODO: make sure Clanker renders before the parts
-                for (let object of sceneRenderer.geoRenderers) {
-                    if (object instanceof Actors.ClankerBolt)
-                        object.clankerVector = assertExists(clanker.modelPointArray[5]);
-                    else if (object instanceof Actors.ClankerTooth)
-                        object.movementController = new Actors.ModelPin(clanker.modelPointArray, object.index);
-                }
-                sceneRenderer.geoRenderers.push(clanker);
-            }
-            return sceneRenderer;
-        });
+            sceneRenderer.geoRenderers.push(clanker);
+        }
+        return sceneRenderer;
     }
 }
 

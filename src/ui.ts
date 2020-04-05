@@ -5,7 +5,6 @@ import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
-import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
@@ -1254,6 +1253,11 @@ function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
 
 const CHECKERBOARD_IMAGE = 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVQYlWNgYGCQwoKxgqGgcJA5h3yFAAs8BRWVSwooAAAAAElFTkSuQmCC")';
 
+export interface TextureListHolder {
+    viewerTextures: Viewer.Texture[];
+    onnewtextures: (() => void) | null;
+}
+
 export class TextureViewer extends Panel {
     private scrollList: SingleSelect;
     private surfaceView: HTMLElement;
@@ -1396,7 +1400,7 @@ export class TextureViewer extends Panel {
         this.textureList = textures;
     }
 
-    public setTextureHolder(textureHolder: TextureHolder<any>): void {
+    public setTextureHolder(textureHolder: TextureListHolder): void {
         this.setTextureList(textureHolder.viewerTextures);
         textureHolder.onnewtextures = () => {
             this.setTextureList(textureHolder.viewerTextures);

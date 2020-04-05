@@ -774,7 +774,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Lightswitch) {
             const gar = await fetchArchive(`zelda_lightswitch.gar.lzs`);
             const b = buildModel(gar, `model/switch_8_model.cmb`,0.1);
-            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.csab`));
+            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.cmab`));
             b.setVertexColorScale(characterLightScale);
             //buildModel(gar, `model/switch_8_fire1_model.cmb`,0.1);
             //buildModel(gar, `model/switch_8_fire2_model.cmb`,0.1);

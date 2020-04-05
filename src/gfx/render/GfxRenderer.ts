@@ -1,5 +1,5 @@
 
-import { nArray, assert, assertExists } from "../../util";
+import { nArray, assert, assertExists, spliceBisectRight } from "../../util";
 import { clamp } from "../../MathHelpers";
 
 import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
@@ -496,19 +496,6 @@ export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst):
     return a.sortKey - b.sortKey;
 }
 
-function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
-    let lo = 0, hi = L.length;
-    while (lo < hi) {
-        const mid = lo + ((hi - lo) >>> 1);
-        const cmp = compare(e, L[mid]);
-        if (cmp < 0)
-            hi = mid;
-        else
-            lo = mid + 1;
-    }
-    return lo;
-}
-
 export const enum GfxRenderInstExecutionOrder {
     Forwards,
     Backwards,
@@ -532,8 +519,7 @@ export class GfxRenderInstList {
      */
     public insertSorted(renderInst: GfxRenderInst): void {
         if (this.compareFunction !== null) {
-            const idx = bisectRight(this.renderInsts, renderInst, this.compareFunction);
-            this.renderInsts.splice(idx, 0, renderInst);
+            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
         } else {
             this.renderInsts.push(renderInst);
         }

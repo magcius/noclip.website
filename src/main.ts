@@ -20,6 +20,7 @@ import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
 import * as Scenes_DarkSoulsCollision from './DarkSoulsCollisionData/scenes';
 import * as Scenes_MetroidPrime from './metroid_prime/scenes';
+import * as Scenes_DonkeyKong64 from './DonkeyKong64/scenes';
 import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
 import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
 import * as Scenes_PaperMario_TheThousandYearDoor from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
@@ -55,6 +56,7 @@ import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
+import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -123,6 +125,7 @@ const sceneGroups = [
     "Experimental",
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
+    Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
@@ -140,6 +143,7 @@ const sceneGroups = [
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
+    Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];
@@ -175,7 +179,9 @@ class AnimationLoop implements ViewerUpdateInfo {
     // https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
     // https://github.com/WICG/requestPostAnimationFrame
     // https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
-    public useRequestPostAnimationFrame = true;
+
+    // XXX(jstpierre): Disabled for now. https://bugs.chromium.org/p/chromium/issues/detail?id=1065012
+    public useRequestPostAnimationFrame = false;
 
     private _timeoutCallback = (): void => {
         this.onupdate(this);

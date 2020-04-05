@@ -1,8 +1,8 @@
-import { ModelRenderer, buildTransform } from "./render";
+import { ModelRenderer, buildTransform, EggDrawCall } from "./render";
 import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room";
-import { RenderData } from "../BanjoKazooie/render";
+import { RenderData, AdjustableAnimationController } from "../BanjoKazooie/render";
 import { vec3, mat4 } from "gl-matrix";
-import { assertExists, assert, nArray } from "../util";
+import { assertExists, assert, nArray, hexzero } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion";
 import { Vec3One, lerp, MathConstants, getMatrixAxisZ, reflectVec3, normToLength, Vec3Zero, transformVec3Mat4w0, Vec3UnitY, angleDist, clampRange, clamp } from "../MathHelpers";
@@ -10,6 +10,8 @@ import { getPathPoint, getPathTangent } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
 import { ParticleManager } from "./particles";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
 const throwScratch = nArray(2, () => vec3.create());
 export class LevelGlobals {
@@ -224,7 +226,9 @@ export class LevelGlobals {
                 case 80: // slowbro, and related objects
                 case 603:
                 case 1002:
-                    count = 2;
+                    count = 2; break;
+                case 89: // all grimers can evolve
+                    count = 4; break;
             }
             const tempIndex = defs.findIndex((d) => d.id === id);
             assert(tempIndex >= 0);
@@ -530,8 +534,8 @@ export class Actor extends ModelRenderer {
     public tangible = true;
     public globalPointer = 0;
 
-    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals) {
-        super(renderData, def.nodes, def.stateGraph.animations);
+    constructor(renderData: RenderData, public spawn: ObjectSpawn, public def: ActorDef, globals: LevelGlobals, isEgg = false) {
+        super(renderData, def.nodes, def.stateGraph.animations, false, isEgg);
         this.motionData.path = spawn.path;
         this.globalPointer = def.globalPointer;
         this.reset(globals);
@@ -633,8 +637,6 @@ export class Actor extends ModelRenderer {
     protected changeState(newIndex: number, globals: LevelGlobals): boolean {
         if (newIndex === -1)
             return false;
-        if (this.def.stateGraph.states[newIndex].doCleanup && this.def.stateGraph.states[newIndex].blocks.length === 0)
-            return false; // ignore states that just get rid of the object
         this.currState = newIndex;
         this.currBlock = 0;
         this.startBlock(globals);
@@ -984,8 +986,13 @@ export class Actor extends ModelRenderer {
                             result = MotionResult.Done;
                         } break;
                         case BasicMotionKind.Dynamic: {
-                            // TODO: handle dynamic vertices for eggs
-                            result = MotionResult.Done;
+                            const eggDC = this.renderers[1].drawCalls[0] as EggDrawCall;
+                            eggDC.separation += block.param * dt * 30;
+                            if (eggDC.separation >= 1) {
+                                eggDC.separation = 1;
+                                result = MotionResult.Done;
+                            } else
+                                result = MotionResult.None;
                         } break;
                     }
                 } break;
@@ -1263,7 +1270,7 @@ class Psyduck extends Actor {
         if (this.currAux === 0x802DB630) {
             if (this.motionData.auxStart < 0)
                 this.motionData.auxStart = viewerInput.time;
-            const newOffset = 7 * Math.sin((viewerInput.time - this.motionData.auxStart)/1000 * Math.PI * 4/3);
+            const newOffset = 7 * Math.sin((viewerInput.time - this.motionData.auxStart) / 1000 * Math.PI * 4 / 3);
             this.translation[1] += newOffset - this.oldOffset;
             this.oldOffset = newOffset;
             return MotionResult.Update;
@@ -1429,8 +1436,85 @@ class Slowpoke extends Actor {
     }
 }
 
+class Magnemite extends Actor {
+    public static center = 0;
+    public static counter = 0;
+
+    private matchedAngle = false;
+    private others: Actor[] = [];
+
+    protected auxStep(viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        switch (this.currAux) {
+            case 0x802E39A0: {
+                if (this.others.length === 0) {
+                    for (let i = 1; i <= 3; i++) {
+                        if (i === this.spawn.behavior)
+                            continue;
+                        this.others.push(globals.allActors.find((a) => a.spawn.id === this.spawn.id && a.spawn.behavior === i)!);
+                    }
+                }
+                if (Magnemite.center === 0) {
+                    const aDist = vec3.dist(this.translation, this.others[0].translation);
+                    const bDist = vec3.dist(this.translation, this.others[1].translation);
+                    if (aDist < 300 || bDist < 300) {
+                        Magnemite.center = this.spawn.behavior;
+                        return MotionResult.Done;
+                    }
+                } else {
+                    if (this.others[0].spawn.behavior !== Magnemite.center) {
+                        const a = this.others[1];
+                        this.others[1] = this.others[0];
+                        this.others[0] = a;
+                    }
+                    if (vec3.dist(this.translation, this.others[0].translation) < 300 && this.receiveSignal(this, 0x2C, globals))
+                        return MotionResult.Done;
+                }
+            } break;
+            case 0x802E480C:
+                this.others[0].receiveSignal(this, InteractionType.PesterHit, globals); return MotionResult.Done;
+            case 0x802E4844:
+                this.others[0].receiveSignal(this, InteractionType.AppleHit, globals); return MotionResult.Done;
+        }
+        return MotionResult.None;
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        mat4.getTranslation(this.translation, this.others[0].renderers[1].modelMatrix);
+        if (this.matchedAngle)
+            this.euler[1] = this.others[0].euler[1];
+        else
+            this.matchedAngle = stepYawTowards(this.euler, this.others[0].euler[1], Math.PI / 90, viewerInput.deltaTime / 1000);
+        return MotionResult.Update;
+    }
+
+    protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (addr === 0x802E4434)
+            mat4.getTranslation(this.motionData.destination, this.others[0].renderers[1].modelMatrix);
+        else if (addr === 0x802E4668 && Magnemite.counter >= 2)
+            globals.sendGlobalSignal(this, 0x2D);
+        return MotionResult.None;
+    }
+
+    protected startBlock(globals: LevelGlobals): void {
+        switch (this.def.stateGraph.states[this.currState].startAddress) {
+            case 0x802E4668: {
+                if (this.currAnimation !== this.others[0].currAnimation)
+                    this.setAnimation(this.others[0].currAnimation);
+            } break;
+            case 0x802E45B4:
+                Magnemite.counter++; break;
+        }
+        super.startBlock(globals);
+    }
+}
+
 class Grimer extends Actor {
     private static flags = 0;
+
+    constructor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals) {
+        super(renderData, spawn, def, globals);
+        this.materialController = new AdjustableAnimationController(0);
+    }
 
     protected stateOverride(addr: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
         let mask = 0;
@@ -1456,8 +1540,57 @@ class Grimer extends Actor {
         if (this.currAux === 0x802C1018) {
             Grimer.flags |= 1 << (this.spawn.behavior - 1);
             return MotionResult.Done;
+        } else if (this.currAux === 0x802C0E28) {
+            this.motionData.storedValues[1] -= viewerInput.deltaTime;
+            if (this.motionData.storedValues[1] <= 0) {
+                this.motionData.storedValues[0] = 0;
+                return MotionResult.Done;
+            }
         }
         return MotionResult.None;
+    }
+
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802C0D34 && this.currBlock === 1) {
+            this.motionData.storedValues[1] = 6000;
+            this.motionData.storedValues[0]++;
+            if (this.motionData.storedValues[0] >= 3) {
+                const block = this.def.stateGraph.states[this.currState].blocks[this.currBlock];
+                return this.followEdge(block.edges[0], globals);
+            }
+        }
+        return false;
+    }
+
+    public setAnimation(index: number): void {
+        super.setAnimation(index);
+        this.materialController?.init(this.def.stateGraph.animations[index].fps * this.motionData.storedValues[0] / 2);
+    }
+}
+
+
+class Haunter extends Actor {
+    public fullModel: ModelRenderer;
+    private timer = 2000;
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, globals: LevelGlobals): void {
+        if (!this.visible)
+            return;
+        if (viewerInput.time > this.timer) {
+            // every few seconds, flash the full model
+            if (this.hidden)
+                this.timer = viewerInput.time + 2000 + 2000 * Math.random();
+            else
+                this.timer = viewerInput.time + 200 + 300 * Math.random();
+            this.hidden = !this.hidden;
+            this.fullModel.visible = this.hidden;
+        }
+        super.prepareToRender(device, renderInstManager, viewerInput, globals);
+        if (this.hidden) {
+            mat4.copy(this.fullModel.modelMatrix, this.modelMatrix);
+            for (let i = 0; i < this.renderers.length; i++)
+                mat4.copy(this.fullModel.renderers[i].transform, this.renderers[i].transform);
+        }
     }
 }
 
@@ -1582,16 +1715,42 @@ export class Staryu extends Actor {
 }
 
 class Jynx extends Actor {
-    private static flags = 0;
-
+    private static baseOffset = -53.25;
     protected startBlock(globals: LevelGlobals): void {
         switch (this.def.stateGraph.states[this.currState].startAddress) {
             case 0x802C4EF4: {
-                this.translation[1] = groundHeightAt(globals, this.translation) - 53.25;
+                this.motionData.storedValues[0] = this.euler[1];
+                this.motionData.storedValues[1] = Jynx.baseOffset;
+                this.translation[1] = groundHeightAt(globals, this.translation) + Jynx.baseOffset;
                 this.updatePositions();
             } break;
         }
         super.startBlock(globals);
+    }
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (param === 0) {
+            if (this.motionData.storedValues[1] === 0)
+                return MotionResult.Done;
+            this.motionData.storedValues[1] -= Jynx.baseOffset * viewerInput.deltaTime / 1000;
+            if (this.motionData.storedValues[1] > 0)
+                this.motionData.storedValues[1] = 0;
+            this.translation[1] = groundHeightAt(globals, this.translation) + this.motionData.storedValues[1];
+            this.euler[1] += MathConstants.TAU * viewerInput.deltaTime / 1000;
+            if (this.euler[1] >= this.motionData.storedValues[0] + MathConstants.TAU)
+                this.euler[1] = this.motionData.storedValues[0] + MathConstants.TAU;
+            return MotionResult.Update;
+        } else {
+            if (this.motionData.storedValues[1] === Jynx.baseOffset)
+                return MotionResult.Done;
+            this.motionData.storedValues[1] += Jynx.baseOffset * viewerInput.deltaTime / 1000;
+            if (this.motionData.storedValues[1] < Jynx.baseOffset)
+                this.motionData.storedValues[1] = Jynx.baseOffset;
+            this.translation[1] = groundHeightAt(globals, this.translation) + this.motionData.storedValues[1];
+            this.euler[1] -= MathConstants.TAU * viewerInput.deltaTime / 1000;
+            if (this.euler[1] < this.motionData.storedValues[0])
+                this.euler[1] = this.motionData.storedValues[0];
+            return MotionResult.Update;
+        }
     }
 }
 
@@ -1684,6 +1843,16 @@ class Porygon extends Actor {
     }
 }
 
+class Articuno extends Actor {
+    protected startBlock(globals: LevelGlobals): void {
+        if (this.def.stateGraph.states[this.currState].startAddress === 0x802C46F0) {
+            if (this.currBlock === 0)
+                vec3.copy(this.translation, this.target!.translation);
+        }
+        super.startBlock(globals);
+    }
+}
+
 class Zapdos extends Actor {
     private egg: Actor | null = null;
 
@@ -1711,6 +1880,45 @@ class Zapdos extends Actor {
             }
         }
         return MotionResult.None;
+    }
+}
+
+class ArticunoEgg extends Actor {
+    private currFPS = 30;
+
+    protected startBlock(globals: LevelGlobals): void {
+        const state = this.def.stateGraph.states[this.currState];
+        if (state.startAddress === 0x802C4B04) {
+            if (this.currBlock === 0)
+                this.currFPS = 30;
+        }
+        super.startBlock(globals);
+    }
+
+    protected customMotion(param: number, viewerInput: ViewerRenderInput, globals: LevelGlobals): MotionResult {
+        if (this.currFPS >= 120) {
+            this.motionData.stateFlags |= EndCondition.Misc;
+            return MotionResult.Done;
+        }
+        if (!canHearSong(this.translation, globals)) {
+            this.motionData.stateFlags &= ~EndCondition.Misc;
+            return MotionResult.Done;
+        }
+        this.currFPS += 15 * viewerInput.deltaTime / 1000;
+        this.animationController.adjust(this.currFPS);
+        return MotionResult.None;
+    }
+
+    protected endBlock(address: number, globals: LevelGlobals): boolean {
+        if (address === 0x802C4B04) {
+            if (this.currBlock === 0) {
+                this.animationController.adjust(30);
+                const articuno = globals.allActors.find((a) => a.def.id === 144);
+                if (articuno)
+                    this.motionData.storedValues[0] = articuno.translation[1] - 250;
+            }
+        }
+        return false;
     }
 }
 
@@ -1793,6 +2001,8 @@ export function sceneActorInit(): void {
     Pikachu.targetDiglett = 1;
     Staryu.evolveCount = 0;
     Staryu.separationScale = 1;
+    Magnemite.center = 0;
+    Magnemite.counter = 0;
 }
 
 export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: ActorDef, globals: LevelGlobals): Actor {
@@ -1810,14 +2020,18 @@ export function createActor(renderData: RenderData, spawn: ObjectSpawn, def: Act
         case 70: return new Weepinbell(renderData, spawn, def, globals);
         case 71: return new Victreebel(renderData, spawn, def, globals);
         case 79: return new Slowpoke(renderData, spawn, def, globals);
+        case 81: return new Magnemite(renderData, spawn, def, globals);
         case 88: return new Grimer(renderData, spawn, def, globals);
+        case 93: return new Haunter(renderData, spawn, def, globals);
         case 120: return new Staryu(renderData, spawn, def, globals);
         case 124: return new Jynx(renderData, spawn, def, globals);
         case 129: return new Magikarp(renderData, spawn, def, globals);
         case 131: return new Lapras(renderData, spawn, def, globals);
         case 137: return new Porygon(renderData, spawn, def, globals);
+        case 144: return new Articuno(renderData, spawn, def, globals);
         case 145: return new Zapdos(renderData, spawn, def, globals);
-        case 602: return new ZapdosEgg(renderData, spawn, def, globals);
+        case 601: return new ArticunoEgg(renderData, spawn, def, globals, true);
+        case 602: return new ZapdosEgg(renderData, spawn, def, globals, true);
         case 1026: return new MiniCrater(renderData, spawn, def, globals);
         case 1027: return new Crater(renderData, spawn, def, globals);
     }

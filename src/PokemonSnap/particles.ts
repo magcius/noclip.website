@@ -809,7 +809,18 @@ class Particle {
                                 this.position[2] += Math.random() * instr.vector![2];
                             } break;
                             case 0x09: {
-                                // TODO: figure this out
+                                // orient a matrix along the current velocity
+                                mat4.targetTo(particleMtx, Vec3Zero, this.velocity, Vec3UnitX);
+                                const speed = vec3.len(this.velocity);
+                                const randomAngle = MathConstants.TAU * Math.random();
+                                // randomize the position on a cone
+                                vec3.set(this.velocity,
+                                    Math.sin(instr.values[0]) * Math.cos(randomAngle),
+                                    Math.sin(instr.values[0]) * Math.sin(randomAngle),
+                                    -Math.cos(instr.values[0]),
+                                );
+                                transformVec3Mat4w0(this.velocity, particleMtx, this.velocity);
+                                vec3.scale(this.velocity, this.velocity, speed);
                             } break;
                             case 0x0A: {
                                 const index = instr.values[0] + Math.floor(Math.random() * instr.values[1]);
