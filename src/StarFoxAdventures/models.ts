@@ -1227,6 +1227,8 @@ export class ModelInstance implements BlockRenderer {
 
         const scratch0 = mat4.create();
         const scratch1 = mat4.create();
+        const boneMtx0 = mat4.create();
+        const boneMtx1 = mat4.create();
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
@@ -1235,11 +1237,11 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.posFineSkinningPieces.length; i++) {
             const piece = this.model.posFineSkinningPieces[i];
 
-            const boneMtx0 = mat4.clone(this.boneMatrices[piece.bone0]);
+            mat4.copy(boneMtx0, this.boneMatrices[piece.bone0]);
             if (!this.model.hasBetaFineSkinning) {
                 mat4.mul(boneMtx0, boneMtx0, this.model.invBindMatrices[piece.bone0]);
             }
-            const boneMtx1 = mat4.clone(this.boneMatrices[piece.bone1]);
+            mat4.copy(boneMtx1, this.boneMatrices[piece.bone1]);
             if (!this.model.hasBetaFineSkinning) {
                 mat4.mul(boneMtx1, boneMtx1, this.model.invBindMatrices[piece.bone1]);
             }
@@ -1251,11 +1253,11 @@ export class ModelInstance implements BlockRenderer {
             let dstOffs = piece.skinMeOffset;
             let weightOffs = 0;
             for (let j = 0; j < piece.numVertices; j++) {
-                const pos = vec3.fromValues(
+                const pos = [
                     src.getInt16(srcOffs) * dequant,
                     src.getInt16(srcOffs + 2) * dequant,
                     src.getInt16(srcOffs + 4) * dequant
-                );
+                ];
 
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
