@@ -1176,20 +1176,14 @@ export class ModelInstance implements BlockRenderer {
 
             const boneMtx = this.boneMatrices[joint.boneNum];
             mat4.identity(boneMtx);
-
-            let jointWalker = joint;
             if (this.model.hasBetaFineSkinning) {
-                mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[jointWalker.boneNum]);
+                // TODO: test
+                mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
             }
-            while (true) {
-                mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
-                mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
-                if (jointWalker.parent === 0xff) {
-                    break;
-                }
-                jointWalker = this.model.joints[jointWalker.parent];
+            mat4.mul(boneMtx, this.model.jointTfMatrices[joint.boneNum], this.jointPoseMatrices[joint.boneNum]);
+            if (joint.parent != 0xff) {
+                mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
             }
-            
         }
 
         // Compute coarse blended bones
