@@ -128,7 +128,7 @@ export class AnimFile {
                 result.rotation = interpS16(cmd & 0xfff0);
                 if (numAngleBits !== 0) {
                     const value = kfReader.get(numAngleBits);
-                    result.rotation += signExtend(value, 14) * 2;
+                    result.rotation += signExtend(value, 14) * 4;
                 }
 
                 if (cmd & 0x10) {
@@ -142,10 +142,10 @@ export class AnimFile {
                         const numScaleBits = cmd & 0xf;
                         if (numScaleBits !== 0) {
                             const value = kfReader.get(numScaleBits);
-                            result.scale += signExtend(value, 16);
+                            result.scale += signExtend(value, 16) * 2;
                         }
 
-                        result.scale /= 0x1fe; // FIXME: ???
+                        result.scale = (result.scale & 0xffff) / 1024;
 
                         hasTranslation = !!(cmd & 0x20);
                         if (hasTranslation) {
@@ -159,7 +159,7 @@ export class AnimFile {
                         if (numTransBits !== 0) {
                             result.translation += kfReader.get(numTransBits);
                         }
-                        result.translation /= 0x1fe; // FIXME: ???
+                        result.translation = interpS16(result.translation) / 512;
                     }
                 }
 
