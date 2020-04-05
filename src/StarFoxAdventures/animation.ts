@@ -217,10 +217,10 @@ export class AmapCollection {
     }
 
     public getAmap(modelNum: number): DataView {
-        const amapOffs = this.amapTab.getUint32(modelNum * 4);
-        const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        console.log(`loading amap for model ${modelNum} from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
-        return dataSubarray(this.amapBin, amapOffs, nextAmapOffs - amapOffs);
+        const offs = this.amapTab.getUint32(modelNum * 4);
+        const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
+        console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
 }
 
@@ -245,7 +245,7 @@ export class ModanimCollection {
         const offs = this.modanimTab.getUint16(modelNum * 2);
         const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
         console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
-        return dataSubarray(this.modanimBin, nextOffs - offs);
+        return dataSubarray(this.modanimBin, offs, nextOffs - offs);
     }
 }
 
