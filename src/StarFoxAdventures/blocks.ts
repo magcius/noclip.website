@@ -395,7 +395,7 @@ export class AncientBlockRenderer implements BlockRenderer {
         }
 
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, [mat4.create()]);
         }
     }
     

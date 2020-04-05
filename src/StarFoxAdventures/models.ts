@@ -202,7 +202,7 @@ interface Joint {
     bindTranslation: vec3;
 }
 
-interface Weight {
+interface CoarseBlend {
     joint0: number;
     influence0: number;
     joint1: number;
@@ -361,7 +361,7 @@ export class Model {
     private sharedModelShapes: ModelShapes | null = null;
 
     public joints: Joint[] = [];
-    public weights: Weight[] = [];
+    public coarseBlends: CoarseBlend[] = [];
     public jointTfMatrices: mat4[] = [];
     public bindMatrices: mat4[] = [];
     public invBindMatrices: mat4[] = [];
@@ -672,12 +672,12 @@ export class Model {
                 const weightCount = blockDv.getUint8(fields.weightCount);
                 // console.log(`Loading ${weightCount} weights from offset 0x${weightOffset.toString(16)}`);
 
-                this.weights = [];
+                this.coarseBlends = [];
                 offs = weightOffset;
                 for (let i = 0; i < weightCount; i++) {
                     const split = blockDv.getUint8(offs + 0x2);
                     const influence0 = 0.25 * split;
-                    this.weights.push({
+                    this.coarseBlends.push({
                         joint0: blockDv.getUint8(offs),
                         joint1: blockDv.getUint8(offs + 0x1),
                         influence0,
@@ -1105,7 +1105,7 @@ export class ModelInstance implements BlockRenderer {
     private amap: DataView;
 
     constructor(public model: Model) {
-        const numBones = this.model.joints.length + this.model.weights.length;
+        const numBones = this.model.joints.length + this.model.coarseBlends.length;
         if (numBones !== 0) {
             this.jointPoseMatrices = nArray(this.model.joints.length, () => mat4.create());
             this.boneMatrices = nArray(numBones, () => mat4.create());
@@ -1192,22 +1192,22 @@ export class ModelInstance implements BlockRenderer {
             
         }
 
-        // Compute blended bones
+        // Compute coarse blended bones
         // console.log(`computing ${this.weights.length} blended bones`);
-        for (let i = 0; i < this.model.weights.length; i++) {
-            const weight = this.model.weights[i];
+        for (let i = 0; i < this.model.coarseBlends.length; i++) {
+            const blend = this.model.coarseBlends[i];
 
-            const invBind0 = this.model.invBindMatrices[weight.joint0];
-            const invBind1 = this.model.invBindMatrices[weight.joint1];
+            const invBind0 = this.model.invBindMatrices[blend.joint0];
+            const invBind1 = this.model.invBindMatrices[blend.joint1];
 
-            const mat0 = mat4.clone(this.boneMatrices[weight.joint0]);
+            const mat0 = mat4.clone(this.boneMatrices[blend.joint0]);
             mat4.mul(mat0, mat0, invBind0);
-            const mat1 = mat4.clone(this.boneMatrices[weight.joint1]);
+            const mat1 = mat4.clone(this.boneMatrices[blend.joint1]);
             mat4.mul(mat1, mat1, invBind1);
 
             const boneMtx = this.boneMatrices[this.model.joints.length + i];
-            mat4.multiplyScalar(mat0, mat0, weight.influence0);
-            mat4.multiplyScalar(mat1, mat1, weight.influence1);
+            mat4.multiplyScalar(mat0, mat0, blend.influence0);
+            mat4.multiplyScalar(mat1, mat1, blend.influence1);
             mat4.add(boneMtx, mat0, mat1);
         }
 

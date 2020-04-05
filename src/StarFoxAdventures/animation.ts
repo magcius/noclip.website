@@ -141,8 +141,11 @@ export class AnimFile {
                         result.scale = interpS16(cmd & 0xffc0);
                         const numScaleBits = cmd & 0xf;
                         if (numScaleBits !== 0) {
-                            result.scale += kfReader.get(numScaleBits);
+                            const value = kfReader.get(numScaleBits);
+                            result.scale += signExtend(value, 16);
                         }
+
+                        result.scale /= 0x1fe; // FIXME: ???
 
                         hasTranslation = !!(cmd & 0x20);
                         if (hasTranslation) {
@@ -217,7 +220,7 @@ export class AmapCollection {
         const amapOffs = this.amapTab.getUint32(modelNum * 4);
         const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
         console.log(`loading amap for model ${modelNum} from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
-        return dataSubarray(this.amapBin, amapOffs); // TODO: byteLength
+        return dataSubarray(this.amapBin, amapOffs, nextAmapOffs - amapOffs);
     }
 }
 
@@ -242,7 +245,7 @@ export class ModanimCollection {
         const offs = this.modanimTab.getUint16(modelNum * 2);
         const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
         console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
-        return dataSubarray(this.modanimBin, offs); // TODO: byteLength
+        return dataSubarray(this.modanimBin, nextOffs - offs);
     }
 }
 
