@@ -3,11 +3,13 @@ import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
 import { GameInfo } from './scenes';
 import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
+import { lerp, lerpAngle } from '../MathHelpers';
 
 export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);
     public envAnimValue0: number = 0;
     public envAnimValue1: number = 0;
+    public enableFineSkinAnims: boolean = false;
 
     public update(viewerInput: ViewerRenderInput) {
         this.animController.setTimeFromViewerInput(viewerInput);
@@ -201,6 +203,34 @@ export class AnimFile {
 
         return { keyframes };
     }
+}
+
+export function interpolateAxes(axis0: Axis, axis1: Axis, ratio: number): Axis {
+    return {
+        translation: lerp(axis0.translation, axis1.translation, ratio),
+        rotation: lerp(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
+        scale: lerp(axis0.scale, axis1.scale, ratio),
+    };
+}
+
+export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number): Pose {
+    const result: Pose = { axes: [] };
+
+    for (let i = 0; i < pose0.axes.length && i < pose1.axes.length; i++) {
+        result.axes.push(interpolateAxes(pose0.axes[i], pose1.axes[i], ratio));
+    }
+
+    return result;
+}
+
+export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number): Keyframe {
+    const result: Keyframe = { poses: [] };
+
+    for (let i = 0; i < kf0.poses.length && i < kf1.poses.length; i++) {
+        result.poses.push(interpolatePoses(kf0.poses[i], kf1.poses[i], ratio));
+    }
+
+    return result;
 }
 
 export class AmapCollection {

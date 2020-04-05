@@ -11,7 +11,7 @@ import { ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
 import { dataSubarray, angle16ToRads } from './util';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection } from './animation';
+import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
 import { MapInstance } from './maps';
 import { ResourceCollection } from './resource';
 
@@ -439,12 +439,22 @@ export class ObjectInstance {
     }
 
     public update() {
-        if (this.modelInst !== null && this.anim !== null) {
+        // TODO: always enable animations for fine-skinned models
+        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.animController.enableFineSkinAnims)) {
             this.modelInst.resetPose();
-            const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
-            const keyframe = this.anim.keyframes[keyframeNum];
-            for (let i = 0; i < keyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
-                const pose = keyframe.poses[i];
+            // TODO: use time values from animation data
+            const kfTime = (this.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
+            const kf0Num = Math.floor(kfTime);
+            let kf1Num = kf0Num + 1;
+            if (kf1Num >= this.anim.keyframes.length) {
+                kf1Num = 0;
+            }
+            const kf0 = this.anim.keyframes[kf0Num];
+            const kf1 = this.anim.keyframes[kf1Num];
+            const ratio = kfTime - kf0Num;
+            const kf = interpolateKeyframes(kf0, kf1, ratio);
+            for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
+                const pose = kf.poses[i];
                 const poseMtx = mat4.create();
                 mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                 mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);

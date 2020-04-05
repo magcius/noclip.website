@@ -541,8 +541,8 @@ const sceneDescs = [
     // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
     // new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
 
-    'Miscellaneous',
-    new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit'),
+    // 'Miscellaneous',
+    // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit'),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),

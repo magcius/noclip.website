@@ -6,7 +6,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection } from './animation';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes } from './animation';
 import { SFARenderer } from './render';
 import { ModelCollection, ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
@@ -111,10 +111,18 @@ class ModelExhibitRenderer extends SFARenderer {
 
             if (this.anim !== null && this.anim !== undefined) {
                 this.modelInst.resetPose();
-                const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
-                const keyframe = this.anim.keyframes[keyframeNum];
-                for (let i = 0; i < keyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
-                    const pose = keyframe.poses[i];
+                const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
+                const kf0Num = Math.floor(kfTime);
+                let kf1Num = kf0Num + 1;
+                if (kf1Num >= this.anim.keyframes.length) {
+                    kf1Num = 0;
+                }
+                const kf0 = this.anim.keyframes[kf0Num];
+                const kf1 = this.anim.keyframes[kf1Num];
+                const ratio = kfTime - kf0Num;
+                const kf = interpolateKeyframes(kf0, kf1, ratio);
+                for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
+                    const pose = kf.poses[i];
                     const poseMtx = mat4.create();
                     mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                     mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);

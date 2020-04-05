@@ -120,6 +120,11 @@ class WorldRenderer extends SFARenderer {
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
     }
 
+    // XXX: for testing
+    public enableFineAnims(enable: boolean = true) {
+        this.animController.enableFineSkinAnims = enable;
+    }
+
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
@@ -368,6 +373,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const enableMap = true;
         const enableObjects = true;
         const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, resColl);
+        console.info(`Enter main.scene.enableFineAnims() to enable more animations. However, this will be very slow.`);
         return renderer;
     }
 }
