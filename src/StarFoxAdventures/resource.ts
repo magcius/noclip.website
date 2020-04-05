@@ -4,6 +4,10 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 
 import { GameInfo } from './scenes';
+import { DataFetcher } from '../DataFetcher';
+import { SFATextureCollection } from './textures';
+import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
+import { ModelCollection } from './models';
 
 class ZLBHeader {
     public static readonly SIZE = 16;
@@ -71,4 +75,39 @@ export function getSubdir(locationNum: number, gameInfo: GameInfo): string {
         throw Error(`Subdirectory for location ${locationNum} unknown`);
     }
     return gameInfo.subdirs[locationNum];
+}
+
+export class ResourceCollection {
+    public texColl: SFATextureCollection;
+    public modelColl: ModelCollection;
+    public animColl: AnimCollection;
+    public amapColl: AmapCollection;
+    public modanimColl: ModanimCollection;
+    public tablesTab: DataView;
+    public tablesBin: DataView;
+
+    constructor(private gameInfo: GameInfo, private subdir: string, private animController: SFAAnimationController) {
+        this.texColl = new SFATextureCollection(gameInfo, false); // TODO: support isBeta
+        this.modelColl = new ModelCollection(this.texColl, this.animController, this.gameInfo)
+        this.animColl = new AnimCollection(this.gameInfo);
+        this.amapColl = new AmapCollection(this.gameInfo);
+        this.modanimColl = new ModanimCollection(this.gameInfo);
+    }
+
+    public async create(dataFetcher: DataFetcher) {
+        const pathBase = this.gameInfo.pathBase;
+        await Promise.all([
+            this.texColl.create(dataFetcher, this.subdir),
+            this.modelColl.create(dataFetcher, this.subdir),
+            this.animColl.create(dataFetcher, this.subdir),
+            this.amapColl.create(dataFetcher),
+            this.modanimColl.create(dataFetcher),
+        ]);
+        const [tablesTab, tablesBin] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
+        ]);
+        this.tablesTab = tablesTab.createDataView();
+        this.tablesBin = tablesBin.createDataView();
+    }
 }

@@ -14,7 +14,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawW
 import { getMatrixAxisZ } from '../MathHelpers';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
-import { loadRes } from './resource';
+import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFATextureCollection } from './textures';
@@ -86,7 +86,7 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private animColl: AnimCollection) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private resColl: ResourceCollection) {
         super(device, animController);
 
         packetParams.clear();
@@ -273,30 +273,18 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const texColl = new SFATextureCollection(this.gameInfo, false);
-        await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
-        const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const animColl = new AnimCollection(this.gameInfo);
-        const amapColl = new AmapCollection(this.gameInfo);
-        const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
-        const modanimColl = new ModanimCollection(this.gameInfo);
-        const [_1, _2, _3, _4, _5, _6, _7, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
-            objectMan.create(dataFetcher, this.subdir),
-            earlyObjectMan.create(dataFetcher, this.subdir),
+        const resColl = new ResourceCollection(this.gameInfo, this.subdir, animController);
+        await resColl.create(context.dataFetcher);
+        const objectMan = new ObjectManager(this.gameInfo, resColl, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, resColl, true);
+        const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl);
+        const [_1, _2, _3, romlistFile] = await Promise.all([
+            objectMan.create(dataFetcher),
+            earlyObjectMan.create(dataFetcher),
             envfxMan.create(dataFetcher),
-            animColl.create(dataFetcher, this.subdir),
-            amapColl.create(dataFetcher),
-            modelColl.create(dataFetcher, this.subdir),
-            modanimColl.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
         const romlist = loadRes(romlistFile).createDataView();
-        const tablesTab = tablesTab_.createDataView();
-        const tablesBin = tablesBin_.createDataView();
 
         const objectInstances: ObjectInstance[] = [];
 
@@ -319,9 +307,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            //const obj = await objectMan.loadObjectType(device, materialFactory, fields.objType);
-
-            const obj = await objectMan.createObjectInstance(device, animController, animColl, amapColl, modanimColl, modelColl, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            const obj = await objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -381,7 +367,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const enableMap = true;
         const enableObjects = true;
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, animColl);
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, resColl);
         return renderer;
     }
 }

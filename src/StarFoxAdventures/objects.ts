@@ -13,6 +13,7 @@ import { dataSubarray, angle16ToRads } from './util';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection } from './animation';
 import { MapInstance } from './maps';
+import { ResourceCollection } from './resource';
 
 // An ObjectType is used to spawn ObjectInstance's.
 // Each ObjectType inherits from an ObjectClass, where it shares most of its assets and logic.
@@ -59,7 +60,7 @@ export class ObjectInstance {
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection, private modelColl: ModelCollection, private objType: ObjectType, private objParams: DataView, texColl: SFATextureCollection, posInMap: vec3, mapInstance: MapInstance, tablesTab: DataView, tablesBin: DataView) {
+    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance) {
         this.scale = objType.scale;
         
         this.position = vec3.fromValues(
@@ -72,10 +73,10 @@ export class ObjectInstance {
         
         const modelNum = this.objType.modelNums[0];
         try {
-            const modelInst = modelColl.createModelInstance(device, materialFactory, modelNum);
-            const amap = amapColl.getAmap(modelNum);
+            const modelInst = resColl.modelColl.createModelInstance(device, materialFactory, modelNum);
+            const amap = resColl.amapColl.getAmap(modelNum);
             modelInst.setAmap(amap);
-            this.modanim = this.modanimColl.getModanim(modelNum);
+            this.modanim = resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
         } catch (e) {
             console.warn(`Failed to load model ${modelNum} due to exception:`);
@@ -249,8 +250,8 @@ export class ObjectInstance {
                 const speedX = objParams.getInt8(0x1e);
                 const speedY = objParams.getInt8(0x1f);
 
-                const tabValue = tablesTab.getUint32(0xe * 4);
-                const targetTexId = tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                const tabValue = this.resColl.tablesTab.getUint32(0xe * 4);
+                const targetTexId = this.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
@@ -262,7 +263,7 @@ export class ObjectInstance {
                             const layer = mat.shader.layers[j];
                             if (layer.texId === targetTexId) {
                                 // Found the texture! Make it scroll now.
-                                const theTexture = texColl.getTexture(device, targetTexId, true)!;
+                                const theTexture = this.resColl.texColl.getTexture(device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
                                 layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
@@ -316,7 +317,7 @@ export class ObjectInstance {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
             this.scale *= objParams.getUint16(0x1c) / 1000;
-            this.setAnim(animColl.getAnim(this.modanim.getUint16(0)));
+            this.setAnim(this.resColl.animColl.getAnim(this.modanim.getUint16(0)));
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -398,7 +399,7 @@ export class ObjectInstance {
             }
             if (objClass === 687) {
                 // Play the swaying animation
-                this.setAnim(animColl.getAnim(this.modanim.getUint16(0)));
+                this.setAnim(this.resColl.animColl.getAnim(this.modanim.getUint16(0)));
             }
         } else if (objClass === 694) {
             // e.g. CNThitObjec
@@ -502,33 +503,21 @@ export class ObjectManager {
     private objectsTab: DataView;
     private objectsBin: DataView;
     private objindexBin: DataView | null;
-    private modelColl: ModelCollection;
-    private amapColl: AmapCollection;
     private objectTypes: ObjectType[] = [];
-    private tablesTab: DataView;
-    private tablesBin: DataView;
 
-    constructor(private gameInfo: GameInfo, private texColl: SFATextureCollection, private animController: SFAAnimationController, private useEarlyObjects: boolean) {
+    constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private useEarlyObjects: boolean) {
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
+    public async create(dataFetcher: DataFetcher) {
         const pathBase = this.gameInfo.pathBase;
-        this.modelColl = new ModelCollection(this.texColl, this.animController, this.gameInfo);
-        this.amapColl = new AmapCollection(this.gameInfo);
-        const [objectsTab, objectsBin, objindexBin, _1, _2, tablesTab, tablesBin] = await Promise.all([
+        const [objectsTab, objectsBin, objindexBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
             !this.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
-            this.modelColl.create(dataFetcher, subdir),
-            this.amapColl.create(dataFetcher),
-            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
         this.objectsTab = objectsTab.createDataView();
         this.objectsBin = objectsBin.createDataView();
         this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
-        this.tablesTab = tablesTab.createDataView();
-        this.tablesBin = tablesBin.createDataView();
     }
 
     public async loadObjectType(device: GfxDevice, materialFactory: MaterialFactory, typeNum: number, skipObjindex: boolean = false): Promise<ObjectType> {
@@ -539,16 +528,16 @@ export class ObjectManager {
         if (this.objectTypes[typeNum] === undefined) {
             const offs = this.objectsTab.getUint32(typeNum * 4);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
-            await objType.create(device, materialFactory, this.modelColl, this.amapColl);
+            await objType.create(device, materialFactory, this.resColl.modelColl, this.resColl.amapColl);
             this.objectTypes[typeNum] = objType;
         }
 
         return this.objectTypes[typeNum];
     }
 
-    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, animColl: AnimCollection, amapColl: AmapCollection, modanimColl: ModanimCollection, modelColl: ModelCollection, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
+    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
         const objType = await this.loadObjectType(device, materialFactory, typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, animController, materialFactory, animColl, amapColl, modanimColl, modelColl, objType, objParams, this.texColl, posInMap, mapInstance, this.tablesTab, this.tablesBin);
+        const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance);
         await objInst.create();
         return objInst;
     }
