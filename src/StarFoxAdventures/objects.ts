@@ -78,6 +78,10 @@ export class ObjectInstance {
             modelInst.setAmap(amap);
             this.modanim = resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
+
+            if (this.modanim.byteLength > 0) {
+                this.setAnimNum(0);
+            }
         } catch (e) {
             console.warn(`Failed to load model ${modelNum} due to exception:`);
             console.error(e);
@@ -428,6 +432,11 @@ export class ObjectInstance {
 
     public getPosition(): vec3 {
         return this.position;
+    }
+
+    public setAnimNum(num: number) {
+        const modanim = this.modanim.getUint16(num * 2);
+        this.setAnim(this.resColl.animColl.getAnim(modanim));
     }
 
     public setAnim(anim: Anim | null) {

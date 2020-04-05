@@ -1,7 +1,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { ViewerRenderInput } from '../viewer';
 import { SFAAnimationController } from './animation';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
@@ -56,6 +56,14 @@ export function mat4FromRowMajor(
 
 export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
+}
+
+export function readVec3(data: DataView, byteOffset: number = 0): vec3 {
+    return vec3.fromValues(
+        data.getFloat32(byteOffset + 0),
+        data.getFloat32(byteOffset + 4),
+        data.getFloat32(byteOffset + 8)
+        );
 }
 
 // Reads bitfields. Bits are pulled from the most significant bits of each byte

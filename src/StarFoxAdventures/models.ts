@@ -16,7 +16,7 @@ import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
-import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, dataCopy } from './util';
+import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, dataCopy, readVec3 } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
@@ -207,14 +207,6 @@ interface Weight {
     influence0: number;
     joint1: number;
     influence1: number;
-}
-
-function readVec3(data: DataView, byteOffset: number = 0): vec3 {
-    return vec3.fromValues(
-        data.getFloat32(byteOffset + 0),
-        data.getFloat32(byteOffset + 4),
-        data.getFloat32(byteOffset + 8)
-        );
 }
 
 export enum ModelVersion {
@@ -1168,6 +1160,10 @@ export class ModelInstance implements BlockRenderer {
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
+        if (jointNum < 0 || jointNum >= this.poseMatrices.length) {
+            return;
+        }
+
         mat4.copy(this.poseMatrices[jointNum], mtx);
         this.skeletonDirty = true;
     }
