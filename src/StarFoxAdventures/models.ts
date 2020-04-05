@@ -1061,8 +1061,6 @@ export class Model {
             }
         }
 
-        // Although JavaScript is a horrible language in many ways,
-        // sometimes it's actually kind of cool.
         this.createModelShapes = (boneMatrices: mat4[]) => {
             const modelShapes = new ModelShapes(this);
             runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer, boneMatrices); // Opaques
@@ -1072,9 +1070,10 @@ export class Model {
             return modelShapes;
         }
 
-        // TODO: Create common model shapes to share between instances
+        // TODO: If there is no fine skinning, we can create common model shapes to share between instances
     }
 
+    // TODO: Don't pass bone matrices to this function.
     public createInstanceShapes(boneMatrices: mat4[]): ModelShapes {
         return this.createModelShapes(boneMatrices);
         // TODO: re-enable the below
@@ -1101,6 +1100,7 @@ export class ModelInstance implements BlockRenderer {
     private invBindMatrices: mat4[] = []; // TODO: Keep in Model class
     public boneMatrices: mat4[] = [];
     private skeletonDirty: boolean = true;
+    private amap: DataView;
 
     constructor(public model: Model) {
         const numBones = this.model.joints.length + this.model.weights.length;
@@ -1142,6 +1142,14 @@ export class ModelInstance implements BlockRenderer {
 
         this.modelShapes = model.createInstanceShapes(this.boneMatrices);
         this.updateBoneMatrices();
+    }
+
+    public getAmap(): DataView {
+        return this.amap;
+    }
+
+    public setAmap(amap: DataView) {
+        this.amap = amap;
     }
 
     public getMaterials() {

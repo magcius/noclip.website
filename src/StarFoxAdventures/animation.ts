@@ -232,11 +232,9 @@ export class AnimCollection {
 
     public async create(dataFetcher: DataFetcher, subdir: string) {
         const pathBase = this.gameInfo.pathBase;
-        const [_1, _2, amapTab, amapBin] = await Promise.all([
+        await Promise.all([
             this.animFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`),
             this.preanimFile.create(dataFetcher, `${pathBase}/PREANIM`),
-            dataFetcher.fetchData(`${pathBase}/AMAP.tab`),
-            dataFetcher.fetchData(`${pathBase}/AMAP.bin`),
         ]);
     }
 

@@ -7,11 +7,11 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { GameInfo } from './scenes';
-import { Model, ModelCollection, ModelInstance } from './models';
+import { ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
 import { dataSubarray, angle16ToRads } from './util';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController } from './animation';
+import { SFAAnimationController, Anim, AmapCollection, AnimCollection } from './animation';
 import { MapInstance } from './maps';
 
 // An ObjectType is used to spawn ObjectInstance's.
@@ -37,7 +37,7 @@ export class ObjectType {
         }
     }
 
-    public async create(device: GfxDevice, materialFactory: MaterialFactory, modelColl: ModelCollection) {
+    public async create(device: GfxDevice, materialFactory: MaterialFactory, modelColl: ModelCollection, amapColl: AmapCollection) {
         const data = this.data;
 
         const numModels = data.getUint8(0x55);
@@ -45,8 +45,10 @@ export class ObjectType {
         for (let i = 0; i < numModels; i++) {
             const modelNum = data.getUint32(modelListOffs + i * 4);
             try {
-                const model = modelColl.createModelInstance(device, materialFactory, modelNum);
-                this.modelInsts.push(model);
+                const modelInst = modelColl.createModelInstance(device, materialFactory, modelNum);
+                const amap = amapColl.getAmap(modelNum);
+                modelInst.setAmap(amap);
+                this.modelInsts.push(modelInst);
             } catch (e) {
                 console.warn(`Failed to load model ${modelNum} due to exception:`);
                 console.error(e);
@@ -62,8 +64,9 @@ export class ObjectInstance {
     private pitch: number = 0;
     private roll: number = 0;
     private scale: number = 1.0;
+    private anim: Anim | null = null;
 
-    constructor(device: GfxDevice, private objType: ObjectType, private objParams: DataView, texColl: SFATextureCollection, posInMap: vec3, mapInstance: MapInstance, tablesTab: DataView, tablesBin: DataView) {
+    constructor(device: GfxDevice, private animController: SFAAnimationController, private animColl: AnimCollection, private objType: ObjectType, private objParams: DataView, texColl: SFATextureCollection, posInMap: vec3, mapInstance: MapInstance, tablesTab: DataView, tablesBin: DataView) {
         this.scale = objType.scale;
         
         this.position = vec3.fromValues(
@@ -387,6 +390,10 @@ export class ObjectInstance {
             if (scaleParam !== 0) {
                 this.scale *= scaleParam / 255;
             }
+            if (objClass === 687) {
+                // Play the swaying animation
+                this.setAnim(animColl.getAnim(3));
+            }
         } else if (objClass === 694) {
             // e.g. CNThitObjec
             if (objParams.getInt8(0x19) === 2) {
@@ -398,7 +405,6 @@ export class ObjectInstance {
     }
 
     public async create() {
-
     }
 
     public getType(): ObjectType {
@@ -417,10 +423,38 @@ export class ObjectInstance {
         return this.position;
     }
 
+    public setAnim(anim: Anim | null) {
+        this.anim = anim;
+    }
+
+    public update() {
+        if (this.modelInst !== null && this.anim !== null) {
+            this.modelInst.resetPose();
+            const keyframeNum = Math.floor((this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length);
+            const keyframe = this.anim.keyframes[keyframeNum];
+            for (let i = 0; i < keyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
+                const pose = keyframe.poses[i];
+                const poseMtx = mat4.create();
+                // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
+                mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
+                mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+                mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+
+                const jointNum = this.modelInst.getAmap().getInt8(i);
+                this.modelInst.setJointPose(jointNum, poseMtx);
+            }
+        }
+    }
+
     public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
         if (drawStep !== 0) {
             return; // TODO: Implement additional draw steps
         }
+
+        // TODO: don't update in render function?
+        this.update();
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = mat4.create();
@@ -463,6 +497,7 @@ export class ObjectManager {
     private objectsBin: DataView;
     private objindexBin: DataView | null;
     private modelColl: ModelCollection;
+    private amapColl: AmapCollection;
     private objectTypes: ObjectType[] = [];
     private tablesTab: DataView;
     private tablesBin: DataView;
@@ -473,11 +508,13 @@ export class ObjectManager {
     public async create(dataFetcher: DataFetcher, subdir: string) {
         const pathBase = this.gameInfo.pathBase;
         this.modelColl = new ModelCollection(this.texColl, this.animController, this.gameInfo);
-        const [objectsTab, objectsBin, objindexBin, _, tablesTab, tablesBin] = await Promise.all([
+        this.amapColl = new AmapCollection(this.gameInfo);
+        const [objectsTab, objectsBin, objindexBin, _1, _2, tablesTab, tablesBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
             !this.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
             this.modelColl.create(dataFetcher, subdir),
+            this.amapColl.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
@@ -496,16 +533,16 @@ export class ObjectManager {
         if (this.objectTypes[typeNum] === undefined) {
             const offs = this.objectsTab.getUint32(typeNum * 4);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
-            await objType.create(device, materialFactory, this.modelColl);
+            await objType.create(device, materialFactory, this.modelColl, this.amapColl);
             this.objectTypes[typeNum] = objType;
         }
 
         return this.objectTypes[typeNum];
     }
 
-    public async createObjectInstance(device: GfxDevice, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
+    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, animColl: AnimCollection, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
         const objType = await this.loadObjectType(device, materialFactory, typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, objType, objParams, this.texColl, posInMap, mapInstance, this.tablesTab, this.tablesBin);
+        const objInst = new ObjectInstance(device, animController, animColl, objType, objParams, this.texColl, posInMap, mapInstance, this.tablesTab, this.tablesBin);
         await objInst.create();
         return objInst;
     }

@@ -22,7 +22,7 @@ import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
-import { Model, ModelVersion, ModelInstance } from './models';
+import { ModelVersion, ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, AnimCollection } from './animation';
 
@@ -48,14 +48,6 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
 function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
-
-// interface ObjectInstance {
-//     name: string;
-//     obj: SFAObject;
-//     pos: vec3;
-//     radius: number;
-//     model?: Model;
-// }
 
 async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<ModelInstance | null> {
     const pathBase = gameInfo.pathBase;
@@ -184,12 +176,12 @@ class WorldRenderer extends SFARenderer {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 1; i < modelInst.model.joints.length; i++) {
                 const joint = modelInst.model.joints[i];
-                const jointMtx = mat4.clone(modelInst.model.boneMatrices[i]);
+                const jointMtx = mat4.clone(modelInst.boneMatrices[i]);
                 mat4.mul(jointMtx, jointMtx, matrix);
                 const jointPt = vec3.create();
                 mat4.getTranslation(jointPt, jointMtx);
                 if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(modelInst.model.boneMatrices[joint.parent]);
+                    const parentMtx = mat4.clone(modelInst.boneMatrices[joint.parent]);
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
@@ -323,7 +315,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             //const obj = await objectMan.loadObjectType(device, materialFactory, fields.objType);
 
-            const obj = await objectMan.createObjectInstance(device, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            const obj = await objectMan.createObjectInstance(device, animController, animColl, materialFactory, fields.objType, objParams, posInMap, mapInstance);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
