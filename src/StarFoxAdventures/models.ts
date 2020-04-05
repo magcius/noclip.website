@@ -42,7 +42,7 @@ export class Shape {
     private hasFineSkinning = false;
     public hasBetaFineSkinning = false;
 
-    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private matrices: mat4[]) {
+    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.reload();
     }
@@ -100,7 +100,7 @@ export class Shape {
         mat4.mul(dst, dst, modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[]) {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
@@ -163,7 +163,7 @@ export class Shape {
         }
 
         this.viewState.viewerInput = viewerInput;
-        mat4.mul(this.scratchMtx, this.matrices[this.pnMatrixMap[0]], modelMatrix);
+        mat4.mul(this.scratchMtx, boneMatrices[this.pnMatrixMap[0]], modelMatrix);
         this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
 
@@ -182,7 +182,7 @@ export class Shape {
             if (this.hasFineSkinning && i === 9) {
                 mat4.identity(this.scratchMtx);
             } else {
-                mat4.copy(this.scratchMtx, this.matrices[this.pnMatrixMap[i]]);
+                mat4.copy(this.scratchMtx, boneMatrices[this.pnMatrixMap[i]]);
             }
 
             mat4.mul(this.scratchMtx, modelMatrix, this.scratchMtx);
@@ -239,7 +239,7 @@ interface Water {
     shape: Shape;
 }
 
-type CreateModelShapesFunc = (boneMatrices: mat4[]) => ModelShapes;
+type CreateModelShapesFunc = () => ModelShapes;
 type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
 interface FineSkinningConfig {
@@ -305,7 +305,7 @@ class ModelShapes {
     private scratchMtx = mat4.create();
     private scratchMtx2 = mat4.create();
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], drawStep: number) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
         }
@@ -315,22 +315,22 @@ class ModelShapes {
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            shapes[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+            shapes[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices);
         }
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[]) {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            water.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+            water.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices);
         }
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[]) {
         for (let i = 0; i < this.furs.length; i++) {
             const fur = this.furs[i];
 
@@ -349,7 +349,7 @@ class ModelShapes {
                     0.0, 0.0, 0.0, 0.0
                 );
                 fur.shape.setOverrideIndMtx(0, this.scratchMtx2);
-                fur.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture);
+                fur.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices);
                 fur.shape.setOverrideIndMtx(0, undefined);
             }
         }
@@ -358,7 +358,7 @@ class ModelShapes {
 
 export class Model {
     private createModelShapes: CreateModelShapesFunc;
-    private perModelShapes: ModelShapes | null = null;
+    private sharedModelShapes: ModelShapes | null = null;
 
     public joints: Joint[] = [];
     public weights: Weight[] = [];
@@ -920,7 +920,7 @@ export class Model {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView, boneMatrices: mat4[]): Shape {
+        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -947,14 +947,14 @@ export class Model {
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const vtxArrays = getVtxArrays(posBuffer);
-            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, boneMatrices);
+            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
             return newShape;
         }
 
-        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView, boneMatrices: mat4[]) {
+        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) {
             // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
@@ -1003,17 +1003,17 @@ export class Model {
                             // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
                             // TODO: Implement an option to view this geometry
                         } else if (curShader.flags & ShaderFlags.Water) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer, boneMatrices);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
-                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, boneMatrices);
+                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), posBuffer, boneMatrices);
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), posBuffer);
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur) {
@@ -1037,24 +1037,14 @@ export class Model {
                     vcd = readVertexDesc(bits, curShader);
                     break;
                 }
-                case 4: // Set weights (skipped by SFA block renderer)
+                case 4: // Set matrix selectors (skipped by SFA block renderer)
                     const numBones = bits.get(4);
                     if (numBones > 10) {
                         throw Error(`Too many PN matrices`);
                     }
-                    if (numBones > boneMatrices.length) {
-                        // Skip
-                        for (let i = 0; i < numBones; i++) {
-                            bits.get(8);
-                        }
-                    } else {
-                        for (let i = 0; i < numBones; i++) {
-                            const boneId = bits.get(8);
-                            if (boneId >= boneMatrices.length) {
-                                throw Error(`Invalid bone ID ${boneId} / ${boneMatrices.length}`);
-                            }
-                            pnMatrixMap[i] = boneId;
-                        }
+
+                    for (let i = 0; i < numBones; i++) {
+                        pnMatrixMap[i] = bits.get(8);
                     }
                     break;
                 case 5: // End
@@ -1067,7 +1057,7 @@ export class Model {
             }
         }
 
-        this.createModelShapes = (boneMatrices: mat4[]) => {
+        this.createModelShapes = () => {
             let instancePosBuffer;
             if (this.hasFineSkinning) {
                 instancePosBuffer = dataCopy(this.originalPosBuffer);
@@ -1077,27 +1067,27 @@ export class Model {
 
             const modelShapes = new ModelShapes(this, instancePosBuffer);
 
-            runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer, boneMatrices); // Opaques
+            runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer); // Opaques
             for (let i = 1; i < bitsOffsets.length; i++) {
-                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer, boneMatrices); // Translucents and waters
+                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer); // Translucents and waters
             }
 
             return modelShapes;
         }
 
-        // TODO: If there is no fine skinning, we can create common model shapes to share between instances
+        // If there is no fine skinning, we can share model shapes between instances.
+        if (!this.hasFineSkinning) {
+            this.sharedModelShapes = this.createModelShapes();
+        }
     }
 
-    // TODO: Don't pass bone matrices to this function.
-    public createInstanceShapes(boneMatrices: mat4[]): ModelShapes {
-        return this.createModelShapes(boneMatrices);
-        // TODO: re-enable the below
+    public createInstanceShapes(): ModelShapes {
         if (this.hasFineSkinning) {
             // Fine-skinned models must use per-instance shapes
-            return this.createModelShapes(boneMatrices);
+            return this.createModelShapes();
         } else {
             // Models without fine skinning can use per-model shapes
-            return this.perModelShapes!;
+            return this.sharedModelShapes!;
         }
     }
 
@@ -1109,7 +1099,7 @@ export class Model {
 export class ModelInstance implements BlockRenderer {
     private modelShapes: ModelShapes;
 
-    private poseMatrices: mat4[] = [];
+    private jointPoseMatrices: mat4[] = [];
     public boneMatrices: mat4[] = [];
     private skeletonDirty: boolean = true;
     private amap: DataView;
@@ -1117,13 +1107,13 @@ export class ModelInstance implements BlockRenderer {
     constructor(public model: Model) {
         const numBones = this.model.joints.length + this.model.weights.length;
         if (numBones !== 0) {
+            this.jointPoseMatrices = nArray(this.model.joints.length, () => mat4.create());
             this.boneMatrices = nArray(numBones, () => mat4.create());
-            this.poseMatrices = nArray(this.model.joints.length, () => mat4.create());
         } else {
             this.boneMatrices = [mat4.create()];
         }
 
-        this.modelShapes = model.createInstanceShapes(this.boneMatrices);
+        this.modelShapes = model.createInstanceShapes();
         this.updateBoneMatrices();
     }
 
@@ -1144,34 +1134,34 @@ export class ModelInstance implements BlockRenderer {
     }
     
     public resetPose() {
-        for (let i = 0; i < this.poseMatrices.length; i++) {
-            mat4.identity(this.poseMatrices[i]);
+        for (let i = 0; i < this.jointPoseMatrices.length; i++) {
+            mat4.identity(this.jointPoseMatrices[i]);
         }
         this.skeletonDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
-        if (jointNum < 0 || jointNum >= this.poseMatrices.length) {
+        if (jointNum < 0 || jointNum >= this.jointPoseMatrices.length) {
             return;
         }
 
-        mat4.copy(this.poseMatrices[jointNum], mtx);
+        mat4.copy(this.jointPoseMatrices[jointNum], mtx);
         this.skeletonDirty = true;
     }
     
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
+        this.modelShapes.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, drawStep);
     }
     
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
+        this.modelShapes.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices);
     }
     
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
+        this.modelShapes.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices);
     }
     
     private updateBoneMatrices() {
@@ -1192,7 +1182,7 @@ export class ModelInstance implements BlockRenderer {
                 mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[jointWalker.boneNum]);
             }
             while (true) {
-                mat4.mul(boneMtx, this.poseMatrices[jointWalker.boneNum], boneMtx);
+                mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
                 mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
                 if (jointWalker.parent === 0xff) {
                     break;
