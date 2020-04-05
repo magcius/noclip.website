@@ -78,8 +78,8 @@ export class AnimFile {
 
     public async create(dataFetcher: DataFetcher, path: string) {
         const [tab, bin] = await Promise.all([
-            dataFetcher.fetchData(`${path}.tab`),
-            dataFetcher.fetchData(`${path}.bin`),
+            dataFetcher.fetchData(`${path}.TAB`),
+            dataFetcher.fetchData(`${path}.BIN`),
         ]);
         this.tab = tab.createDataView();
         this.bin = bin.createDataView();
@@ -243,8 +243,8 @@ export class AmapCollection {
     public async create(dataFetcher: DataFetcher) {
         const pathBase = this.gameInfo.pathBase;
         const [amapTab, amapBin] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/AMAP.tab`),
-            dataFetcher.fetchData(`${pathBase}/AMAP.bin`),
+            dataFetcher.fetchData(`${pathBase}/AMAP.TAB`),
+            dataFetcher.fetchData(`${pathBase}/AMAP.BIN`),
         ]);
         this.amapTab = amapTab.createDataView();
         this.amapBin = amapBin.createDataView();
@@ -268,8 +268,8 @@ export class ModanimCollection {
     public async create(dataFetcher: DataFetcher) {
         const pathBase = this.gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/MODANIM.tab`),
-            dataFetcher.fetchData(`${pathBase}/MODANIM.bin`),
+            dataFetcher.fetchData(`${pathBase}/MODANIM.TAB`),
+            dataFetcher.fetchData(`${pathBase}/MODANIM.BIN`),
         ]);
         this.modanimTab = tab.createDataView();
         this.modanimBin = bin.createDataView();
