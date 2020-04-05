@@ -1,15 +1,31 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { ViewerRenderInput } from '../viewer';
 import { SFAAnimationController } from './animation';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
 }
 
+export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: number): DataView {
+    const start = data.byteOffset + byteOffset;
+    const arrayBufferSlice = new ArrayBufferSlice(data.buffer, start, byteLength);
+    const arrayBuffer = arrayBufferSlice.copyToBuffer();
+    return new DataView(arrayBuffer);
+}
+
+export function arrayBufferSliceFromDataView(data: DataView): ArrayBufferSlice {
+    return new ArrayBufferSlice(data.buffer, data.byteOffset, data.byteLength);
+}
+
 export function interpS16(n: number): number {
     // Bitwise operators automatically convert numbers to 32-bit signed integers.
     return ((n & 0xffff) << 16) >> 16;
+}
+
+export function signExtend(n: number, bits: number) {
+    const shift = 32 - bits;
+    return (n << shift) >> shift;
 }
 
 export function angle16ToRads(a: number): number {
@@ -42,14 +58,22 @@ export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
 }
 
-// Reads bitfields. Bits are pulled from the least significant bits of each byte
+export function readVec3(data: DataView, byteOffset: number = 0): vec3 {
+    return vec3.fromValues(
+        data.getFloat32(byteOffset + 0),
+        data.getFloat32(byteOffset + 4),
+        data.getFloat32(byteOffset + 8)
+        );
+}
+
+// Reads bitfields. Bits are pulled from the most significant bits of each byte
 // in the sequence.
-export class LowBitReader {
+export class HighBitReader {
     dv: DataView
     baseOffs: number;
-    offs: number
-    num: number
-    buf: number
+    offs: number;
+    num: number;
+    buf: number;
 
     constructor(dv: DataView, offs: number = 0) {
         this.dv = dv;
@@ -60,6 +84,54 @@ export class LowBitReader {
     }
 
     public peek(bits: number): number {
+        if (bits > 24) {
+            throw Error(`Cannot read more than 24 bits`);
+        }
+
+        while (this.num < bits) {
+            this.buf |= this.dv.getUint8(this.offs) << (24 - this.num);
+            this.offs++;
+            this.num += 8;
+        }
+
+        return (this.buf >>> (32 - bits)) & ((1 << bits) - 1);
+    }
+
+    public drop(bits: number) {
+        this.peek(bits); // Ensure buffer has bits to drop
+        this.buf <<= bits;
+        this.num -= bits;
+    }
+
+    public get(bits: number): number {
+        const x = this.peek(bits);
+        this.drop(bits);
+        return x;
+    }
+}
+
+// Reads bitfields. Bits are pulled from the least significant bits of each byte
+// in the sequence.
+export class LowBitReader {
+    dv: DataView
+    baseOffs: number;
+    offs: number;
+    num: number;
+    buf: number;
+
+    constructor(dv: DataView, offs: number = 0) {
+        this.dv = dv;
+        this.baseOffs = offs;
+        this.offs = offs;
+        this.num = 0;
+        this.buf = 0;
+    }
+
+    public peek(bits: number): number {
+        if (bits > 32) {
+            throw Error(`Cannot read more than 32 bits`);
+        }
+
         while (this.num < bits) {
             this.buf |= this.dv.getUint8(this.offs) << this.num;
             this.offs++;
