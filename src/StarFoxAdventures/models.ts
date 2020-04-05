@@ -1223,6 +1223,7 @@ export class ModelInstance implements BlockRenderer {
         const scratch1 = mat4.create();
         const boneMtx0 = mat4.create();
         const boneMtx1 = mat4.create();
+        const pos = vec3.create();
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
@@ -1247,11 +1248,9 @@ export class ModelInstance implements BlockRenderer {
             let dstOffs = piece.skinMeOffset;
             let weightOffs = 0;
             for (let j = 0; j < piece.numVertices; j++) {
-                const pos = [
-                    src.getInt16(srcOffs) * dequant,
-                    src.getInt16(srcOffs + 2) * dequant,
-                    src.getInt16(srcOffs + 4) * dequant
-                ];
+                pos[0] = src.getInt16(srcOffs) * dequant;
+                pos[1] = src.getInt16(srcOffs + 2) * dequant;
+                pos[2] = src.getInt16(srcOffs + 4) * dequant;
 
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
