@@ -16,7 +16,7 @@ import { SFAMaterial, ShaderAttrFlags } from './shaders';
 import { TextureCollection } from './textures';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
-import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView } from './util';
+import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, dataCopy } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
@@ -289,11 +289,13 @@ function parseFineSkinningPiece(data: DataView): FineSkinningPiece {
 
 class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
+    public posBuffer: DataView;
     public shapes: Shape[][] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
     constructor(public model: Model) {
+        this.posBuffer = dataCopy(model.originalPosBuffer);
     }
 
     public reload() {
@@ -371,7 +373,6 @@ export class Model {
     public joints: Joint[] = [];
     public weights: Weight[] = [];
     public jointTfMatrices: mat4[] = [];
-    //public boneMatrices: mat4[] = []; // contains joint matrices followed by blended weight matrices
     public bindMatrices: mat4[] = [];
     public invBindMatrices: mat4[] = [];
     public yTranslate: number = 0;
@@ -826,14 +827,17 @@ export class Model {
 
         const pnMatrixMap: number[] = nArray(10, () => 0);
 
-        const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(this.originalPosBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
-        if (fields.hasNormals) {
-            vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-        }
-        vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
-        for (let t = 0; t < 8; t++) {
-            vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+        const getVtxArrays = (posBuffer: DataView) => {
+            const vtxArrays: GX_Array[] = [];
+            vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+            if (fields.hasNormals) {
+                vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+            }
+            vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
+            for (let t = 0; t < 8; t++) {
+                vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+            }
+            return vtxArrays;
         }
 
         const self = this;
@@ -910,7 +914,7 @@ export class Model {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, boneMatrices: mat4[]): Shape {
+        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView, boneMatrices: mat4[]): Shape {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -936,6 +940,7 @@ export class Model {
             // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
+            const vtxArrays = getVtxArrays(posBuffer);
             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, boneMatrices);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
@@ -943,7 +948,7 @@ export class Model {
             return newShape;
         }
 
-        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, boneMatrices: mat4[]) {
+        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView, boneMatrices: mat4[]) {
             // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
@@ -992,16 +997,17 @@ export class Model {
                             // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
                             // TODO: Implement an option to view this geometry
                         } else if (curShader.flags & ShaderFlags.Water) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), boneMatrices);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer, boneMatrices);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
+                            const vtxArrays = getVtxArrays(posBuffer);
                             const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, boneMatrices);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), boneMatrices);
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), posBuffer, boneMatrices);
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur) {
@@ -1059,9 +1065,9 @@ export class Model {
         // sometimes it's actually kind of cool.
         this.createModelShapes = (boneMatrices: mat4[]) => {
             const modelShapes = new ModelShapes(this);
-            runBitstream(modelShapes, bitsOffsets[0], 0, boneMatrices); // Opaques
+            runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer, boneMatrices); // Opaques
             for (let i = 1; i < bitsOffsets.length; i++) {
-                runBitstream(modelShapes, bitsOffsets[i], i, boneMatrices); // Translucents and waters
+                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer, boneMatrices); // Translucents and waters
             }
             return modelShapes;
         }
@@ -1088,8 +1094,6 @@ export class Model {
 
 export class ModelInstance implements BlockRenderer {
     private modelShapes: ModelShapes;
-    private perInstancePosBuffer: DataView | null = null;
-    // TODO: support per-instance normals
 
     private poseMatrices: mat4[] = [];
     private jointTfMatrices: mat4[] = []; // TODO: Keep in Model class
@@ -1256,7 +1260,7 @@ export class ModelInstance implements BlockRenderer {
             }
 
             const src = dataSubarray(this.model.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
-            const dst = dataSubarray(this.perInstancePosBuffer!, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
+            const dst = dataSubarray(this.modelShapes.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
             const weights = dataSubarray(this.model.posFineSkinningWeights!, piece.weightsSrc, 32 * piece.weightsBlockCount);
             let srcOffs = piece.skinMeOffset;
             let dstOffs = piece.skinMeOffset;

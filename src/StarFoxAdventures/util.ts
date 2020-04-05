@@ -7,6 +7,13 @@ export function dataSubarray(data: DataView, byteOffset: number, byteLength?: nu
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
 }
 
+export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: number): DataView {
+    const start = data.byteOffset + byteOffset;
+    const arrayBufferSlice = new ArrayBufferSlice(data.buffer, start, byteLength);
+    const arrayBuffer = arrayBufferSlice.copyToBuffer();
+    return new DataView(arrayBuffer);
+}
+
 export function arrayBufferSliceFromDataView(data: DataView): ArrayBufferSlice {
     return new ArrayBufferSlice(data.buffer, data.byteOffset, data.byteLength);
 }

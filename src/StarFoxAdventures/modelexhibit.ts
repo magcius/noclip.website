@@ -177,7 +177,7 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for character exhibit ...`);
         
-        const subdir = 'swaphol'; // TODO: configurable
+        const subdir = 'shipbattle'; // TODO: configurable
 
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();

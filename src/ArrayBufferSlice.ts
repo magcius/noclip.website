@@ -46,7 +46,7 @@ export default class ArrayBufferSlice {
         // class as incompatible with the ArrayBuffer interface.
         public readonly arrayBuffer: ArrayBuffer,
         public readonly byteOffset: number = 0,
-        public readonly byteLength: number = arrayBuffer.byteLength
+        public readonly byteLength: number = arrayBuffer.byteLength - byteOffset
     ) {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
     }
