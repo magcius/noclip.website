@@ -79,7 +79,7 @@ export class ObjectInstance {
             this.modanim = resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
 
-            if (this.modanim.byteLength > 0) {
+            if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
                 this.setAnimNum(0);
             }
         } catch (e) {
@@ -321,7 +321,6 @@ export class ObjectInstance {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
             this.scale *= objParams.getUint16(0x1c) / 1000;
-            this.setAnim(this.resColl.animColl.getAnim(this.modanim.getUint16(0)));
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -400,10 +399,6 @@ export class ObjectInstance {
             const scaleParam = objParams.getUint8(0x1b);
             if (scaleParam !== 0) {
                 this.scale *= scaleParam / 255;
-            }
-            if (objClass === 687) {
-                // Play the swaying animation
-                this.setAnim(this.resColl.animColl.getAnim(this.modanim.getUint16(0)));
             }
         } else if (objClass === 694) {
             // e.g. CNThitObjec
