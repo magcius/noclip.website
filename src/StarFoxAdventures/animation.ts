@@ -124,12 +124,15 @@ export class AnimFile {
 
                 let cmd = getNextCmd();
 
-                const numAngleBits = cmd & 0xf;
                 result.rotation = interpS16(cmd & 0xfff0);
+
+                const numAngleBits = cmd & 0xf;
                 if (numAngleBits !== 0) {
                     const value = kfReader.get(numAngleBits);
                     result.rotation += signExtend(value, 14) * 4;
                 }
+
+                result.rotation = angle16ToRads(result.rotation);
 
                 if (cmd & 0x10) {
                     cmd = getNextCmd();
@@ -138,7 +141,8 @@ export class AnimFile {
                     let hasTranslation = true;
 
                     if (hasScale) {
-                        result.scale = interpS16(cmd & 0xffc0);
+                        result.scale = cmd & 0xffc0;
+
                         const numScaleBits = cmd & 0xf;
                         if (numScaleBits !== 0) {
                             const value = kfReader.get(numScaleBits);
@@ -155,15 +159,15 @@ export class AnimFile {
                     
                     if (hasTranslation) {
                         result.translation = interpS16(cmd & 0xfff0);
+
                         const numTransBits = cmd & 0xf;
                         if (numTransBits !== 0) {
                             result.translation += kfReader.get(numTransBits);
                         }
+
                         result.translation = interpS16(result.translation) / 512;
                     }
                 }
-
-                result.rotation = (result.rotation / 0xd0) * Math.PI / 180;
 
                 return result;
             }

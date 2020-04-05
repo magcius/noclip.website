@@ -116,12 +116,11 @@ class ModelExhibitRenderer extends SFARenderer {
                 for (let i = 0; i < keyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
                     const pose = keyframe.poses[i];
                     const poseMtx = mat4.create();
-                    // mat4.rotateY(poseMtx, poseMtx, Math.sin(this.animController.animController.getTimeInSeconds()) / 2);
                     mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                     mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                    mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
                     mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
                     mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-                    mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
     
                     const jointNum = this.amap!.getInt8(i);
                     this.modelInst.setJointPose(jointNum, poseMtx);
@@ -177,7 +176,7 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for character exhibit ...`);
         
-        const subdir = 'shipbattle'; // TODO: configurable
+        const subdir = 'swaphol'; // TODO: configurable
 
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
