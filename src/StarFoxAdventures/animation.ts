@@ -217,7 +217,32 @@ export class AmapCollection {
         const amapOffs = this.amapTab.getUint32(modelNum * 4);
         const nextAmapOffs = this.amapTab.getUint32((modelNum + 1) * 4);
         console.log(`loading amap for model ${modelNum} from 0x${amapOffs.toString(16)}, size 0x${(nextAmapOffs - amapOffs).toString(16)}`);
-        return dataSubarray(this.amapBin, amapOffs);
+        return dataSubarray(this.amapBin, amapOffs); // TODO: byteLength
+    }
+}
+
+export class ModanimCollection {
+    private modanimTab: DataView;
+    private modanimBin: DataView;
+
+    constructor(private gameInfo: GameInfo) {
+    }
+
+    public async create(dataFetcher: DataFetcher) {
+        const pathBase = this.gameInfo.pathBase;
+        const [tab, bin] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/MODANIM.tab`),
+            dataFetcher.fetchData(`${pathBase}/MODANIM.bin`),
+        ]);
+        this.modanimTab = tab.createDataView();
+        this.modanimBin = bin.createDataView();
+    }
+
+    public getModanim(modelNum: number): DataView {
+        const offs = this.modanimTab.getUint16(modelNum * 2);
+        const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
+        console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        return dataSubarray(this.modanimBin, offs); // TODO: byteLength
     }
 }
 

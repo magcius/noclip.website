@@ -11,7 +11,7 @@ import { ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
 import { dataSubarray, angle16ToRads } from './util';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, Anim, AmapCollection, AnimCollection } from './animation';
+import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection } from './animation';
 import { MapInstance } from './maps';
 
 // An ObjectType is used to spawn ObjectInstance's.
@@ -21,7 +21,7 @@ export class ObjectType {
     public name: string;
     public scale: number = 1.0;
     public objClass: number;
-    public modelInsts: ModelInstance[] = [];
+    public modelNums: number[] = [];
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
@@ -44,15 +44,7 @@ export class ObjectType {
         const modelListOffs = data.getUint32(0x8);
         for (let i = 0; i < numModels; i++) {
             const modelNum = data.getUint32(modelListOffs + i * 4);
-            try {
-                const modelInst = modelColl.createModelInstance(device, materialFactory, modelNum);
-                const amap = amapColl.getAmap(modelNum);
-                modelInst.setAmap(amap);
-                this.modelInsts.push(modelInst);
-            } catch (e) {
-                console.warn(`Failed to load model ${modelNum} due to exception:`);
-                console.error(e);
-            }
+            this.modelNums.push(modelNum);
         }
     }
 }
@@ -65,8 +57,9 @@ export class ObjectInstance {
     private roll: number = 0;
     private scale: number = 1.0;
     private anim: Anim | null = null;
+    private modanim: DataView;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private animColl: AnimCollection, private objType: ObjectType, private objParams: DataView, texColl: SFATextureCollection, posInMap: vec3, mapInstance: MapInstance, tablesTab: DataView, tablesBin: DataView) {
+    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection, private modelColl: ModelCollection, private objType: ObjectType, private objParams: DataView, texColl: SFATextureCollection, posInMap: vec3, mapInstance: MapInstance, tablesTab: DataView, tablesBin: DataView) {
         this.scale = objType.scale;
         
         this.position = vec3.fromValues(
@@ -76,7 +69,19 @@ export class ObjectInstance {
         );
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
-        this.modelInst = this.objType.modelInsts[0];
+        
+        const modelNum = this.objType.modelNums[0];
+        try {
+            const modelInst = modelColl.createModelInstance(device, materialFactory, modelNum);
+            const amap = amapColl.getAmap(modelNum);
+            modelInst.setAmap(amap);
+            this.modanim = this.modanimColl.getModanim(modelNum);
+            this.modelInst = modelInst;
+        } catch (e) {
+            console.warn(`Failed to load model ${modelNum} due to exception:`);
+            console.error(e);
+            this.modelInst = null;
+        }
 
         if (objClass === 201) {
             // e.g. sharpclawGr
@@ -311,6 +316,7 @@ export class ObjectInstance {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
             this.scale *= objParams.getUint16(0x1c) / 1000;
+            this.setAnim(animColl.getAnim(this.modanim.getUint16(0)));
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -392,7 +398,7 @@ export class ObjectInstance {
             }
             if (objClass === 687) {
                 // Play the swaying animation
-                this.setAnim(animColl.getAnim(3));
+                this.setAnim(animColl.getAnim(this.modanim.getUint16(0)));
             }
         } else if (objClass === 694) {
             // e.g. CNThitObjec
@@ -540,9 +546,9 @@ export class ObjectManager {
         return this.objectTypes[typeNum];
     }
 
-    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, animColl: AnimCollection, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
+    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, animColl: AnimCollection, amapColl: AmapCollection, modanimColl: ModanimCollection, modelColl: ModelCollection, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
         const objType = await this.loadObjectType(device, materialFactory, typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, animController, animColl, objType, objParams, this.texColl, posInMap, mapInstance, this.tablesTab, this.tablesBin);
+        const objInst = new ObjectInstance(device, animController, materialFactory, animColl, amapColl, modanimColl, modelColl, objType, objParams, this.texColl, posInMap, mapInstance, this.tablesTab, this.tablesBin);
         await objInst.create();
         return objInst;
     }

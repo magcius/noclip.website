@@ -22,9 +22,9 @@ import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
-import { ModelVersion, ModelInstance } from './models';
+import { ModelVersion, ModelInstance, ModelCollection } from './models';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, AnimCollection } from './animation';
+import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection } from './animation';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -279,11 +279,17 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
         const envfxMan = new EnvfxManager(this.gameInfo, texColl);
         const animColl = new AnimCollection(this.gameInfo);
-        const [_1, _2, _3, _4, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
+        const amapColl = new AmapCollection(this.gameInfo);
+        const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
+        const modanimColl = new ModanimCollection(this.gameInfo);
+        const [_1, _2, _3, _4, _5, _6, _7, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
             objectMan.create(dataFetcher, this.subdir),
             earlyObjectMan.create(dataFetcher, this.subdir),
             envfxMan.create(dataFetcher),
             animColl.create(dataFetcher, this.subdir),
+            amapColl.create(dataFetcher),
+            modelColl.create(dataFetcher, this.subdir),
+            modanimColl.create(dataFetcher),
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
@@ -315,7 +321,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             //const obj = await objectMan.loadObjectType(device, materialFactory, fields.objType);
 
-            const obj = await objectMan.createObjectInstance(device, animController, animColl, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            const obj = await objectMan.createObjectInstance(device, animController, animColl, amapColl, modanimColl, modelColl, materialFactory, fields.objType, objParams, posInMap, mapInstance);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
