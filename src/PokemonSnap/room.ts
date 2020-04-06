@@ -3,7 +3,7 @@ import * as RDP from "../Common/N64/RDP";
 import * as MIPS from "./mips";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType, StagingVertex } from "../BanjoKazooie/f3dex";
+import { RSPSharedOutput, StagingVertex } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
@@ -740,9 +740,9 @@ function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
         rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_LIGHTING);
     } else
         rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT);
     // initially 2-cycle, though this can change
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // some objects seem to assume this gets set, might rely on stage rendering first
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
 }
@@ -760,10 +760,10 @@ function runSplitDL(dataMap: DataMap, dlPair: number, states: F3DEX2.RSPState[],
     const firstDL = view.getUint32(0x00);
     const secondDL = view.getUint32(0x04);
     const rspState = states[0];
-    rspState.SP_MatrixIndex = 1;
+    rspState.gSPResetMatrixStackDepth(1);
     if (firstDL !== 0)
         F3DEX2.runDL_F3DEX2(rspState, firstDL, materialDLHandler(materials));
-    rspState.SP_MatrixIndex = 0;
+    rspState.gSPResetMatrixStackDepth(0);
     if (secondDL !== 0)
         F3DEX2.runDL_F3DEX2(rspState, secondDL, materialDLHandler(materials));
     const rspOutput = rspState.finish();

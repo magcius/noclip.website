@@ -285,7 +285,7 @@ class ObjectData {
                 // Z and opacity modes can be set dynamically,
                 // but most objects support switching beteween opaque and translucent,
                 // so setting translucent by default seems safe
-                const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, false);
+                const geo = Geo.parseBK(geoData, Geo.RenderZMode.OPA, false);
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
@@ -492,7 +492,7 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): GeometryRenderer {
+    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry<Geo.BKGeoNode>): GeometryRenderer {
         for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
 
@@ -654,7 +654,6 @@ class SceneDesc implements Viewer.SceneDesc {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
-
         const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`)!, BYML.FileType.CRG1);
 
         const viewerTextures: Viewer.Texture[] = [];
@@ -664,7 +663,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const opaFile = findFileByID(obj, obj.OpaGeoFileId);
         if (opaFile !== null) {
-            const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
+            const geo = Geo.parseBK(opaFile.Data, Geo.RenderZMode.OPA, true);
             const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
             setLevelGeoSelector(opa, obj.SceneID);
@@ -672,14 +671,14 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const xluFile = findFileByID(obj, obj.XluGeoFileId);
         if (xluFile !== null) {
-            const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
+            const geo = Geo.parseBK(xluFile.Data, Geo.RenderZMode.XLU, false);
             const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
         }
 
         const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
         if (opaSkybox !== null) {
-            const geo = Geo.parse(opaSkybox.Data, Geo.RenderZMode.OPA, true);
+            const geo = Geo.parseBK(opaSkybox.Data, Geo.RenderZMode.OPA, true);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
             mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
@@ -687,7 +686,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
         if (xluSkybox !== null) {
-            const geo = Geo.parse(xluSkybox.Data, Geo.RenderZMode.XLU, false);
+            const geo = Geo.parseBK(xluSkybox.Data, Geo.RenderZMode.XLU, false);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
             mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);

@@ -6,10 +6,12 @@ import { nArray, assert, assertExists, hexzero } from "../util";
 import { ImageFormat } from "../Common/N64/Image";
 import { vec4 } from 'gl-matrix';
 import { DataMap } from './room';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 
 // Interpreter for N64 F3DEX2 microcode.
 
-export const enum RSP_Geometry {
+export enum RSP_Geometry {
     G_ZBUFFER            = 1 << 0,
     G_SHADE              = 1 << 2,
     G_CULL_FRONT         = 1 << 9,
@@ -20,6 +22,24 @@ export const enum RSP_Geometry {
     G_TEXTURE_GEN_LINEAR = 1 << 19,
     G_SHADING_SMOOTH     = 1 << 21,
     G_CLIPPING           = 1 << 23,
+}
+
+export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
+    const out = RDP.translateRenderMode(renderMode);
+
+    if (geoMode & RSP_Geometry.G_CULL_BACK) {
+        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+            out.cullMode = GfxCullMode.FRONT_AND_BACK;
+        } else {
+            out.cullMode = GfxCullMode.BACK;
+        }
+    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
+        out.cullMode = GfxCullMode.FRONT;
+    } else {
+        out.cullMode = GfxCullMode.NONE;
+    }
+
+    return out;
 }
 
 export class DrawCall extends F3DEX.DrawCall {
@@ -41,6 +61,15 @@ export class RSPOutput extends F3DEX.RSPOutput {
         this.drawCalls.push(this.currentDrawCall);
         return this.currentDrawCall;
     }
+}
+
+function addSegment(dataMap: DataMap, segments: ArrayBufferSlice[], addr: number): number {
+    const seg = (addr >>> 24) & 0x7F;
+    const range = dataMap.getRange(addr);
+    segments[seg] = range.data;
+    if (seg === 0)
+        return addr - range.start;
+    return addr;
 }
 
 export class RSPState {
@@ -65,12 +94,12 @@ export class RSPState {
     private DP_EnvColor = vec4.create();
     private DP_PrimLOD = 0;
 
-    public SP_MatrixIndex = 0;
+    private SP_MatrixIndex = 0;
     public DP_Half1 = 0;
 
     public materialIndex = -1;
 
-    constructor(public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap) {
+    constructor(public sharedOutput: F3DEX.RSPSharedOutput, public dataMap: DataMap, private preloaded = false) {
     }
 
     public finish(): RSPOutput | null {
@@ -118,18 +147,25 @@ export class RSPState {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
+        const range = this.dataMap.getRange(dramAddr);
         const view = this.dataMap.getView(dramAddr);
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
-            // scale texture coordinates by *current* texture state
-            this.vertexCache[v0 + i].tx *= this.SP_TextureState.s;
-            this.vertexCache[v0 + i].ty *= this.SP_TextureState.t;
             this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
+            if (this.preloaded) {
+                this.vertexCache[v0 + i].outputIndex = ((dramAddr - range.start) >>> 4) + i;
+            } else {
+                // scale texture coordinates by *current* texture state
+                this.vertexCache[v0 + i].tx *= this.SP_TextureState.s;
+                this.vertexCache[v0 + i].ty *= this.SP_TextureState.t;
+            }
         }
     }
 
     public gSPModifyVertex(w: number, n: number, upper: number, lower: number): void {
         const vtx = this.vertexCache[n];
+        if (this.preloaded)
+            console.warn("modifying preloaded vertex buffer")
         switch (w) {
             case 0x14: {
                 // the provided values are already scaled, no need to adjust
@@ -157,8 +193,10 @@ export class RSPState {
             dramPalAddr = 0;
         }
 
-        const range = this.dataMap.getRange(dramAddr);
-        return this.sharedOutput.textureCache.translateTileTexture([range.data], dramAddr - range.start, dramPalAddr - range.start, tile);
+        const segments: ArrayBufferSlice[] = [];
+        const texAddr = addSegment(this.dataMap, segments, dramAddr);
+        const palAddr = dramPalAddr === 0 ? 0 : addSegment(this.dataMap, segments, dramPalAddr);
+        return this.sharedOutput.textureCache.translateTileTexture(segments, texAddr, palAddr, tile);
     }
 
     private _flushTextures(dc: F3DEX.DrawCall): void {
@@ -172,8 +210,8 @@ export class RSPState {
             assert(false);
         } else {
             // We're in TILE mode. Now check if we're in two-cycle mode.
-            const cycletype = F3DEX.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
-            assert(cycletype === F3DEX.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE);
+            const cycletype = RDP.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
+            assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
@@ -288,9 +326,13 @@ export class RSPState {
         vec4.set(this.DP_EnvColor, r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
         this.stateChanged = true;
     }
+
+    public gSPResetMatrixStackDepth(value: number): void {
+        this.SP_MatrixIndex = value;
+    }
 }
 
-enum F3DEX2_GBI {
+export enum F3DEX2_GBI {
     // DMA
     G_VTX               = 0x01,
     G_MODIFYVTX         = 0x02,
@@ -528,7 +570,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
 
             case F3DEX2_GBI.G_MOVEWORD: {
                 // TODO: lights
-                assert(((w0 >>> 16) & 0xFF) === 0x0A)
+                // assert(((w0 >>> 16) & 0xFF) === 0x0A)
             } break;
 
             case F3DEX2_GBI.G_CULLDL:
