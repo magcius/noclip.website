@@ -23,6 +23,7 @@ export const enum fpc__ProcessName {
     d_a_vrbox           = 0x01BA,
     d_a_vrbox2          = 0x01BB,
     d_a_bg              = 0x01BC,
+    d_a_swhit0          = 0x01C9,
     d_kyeff             = 0x01E4,
     d_kyeff2            = 0x01E5,
 };

@@ -207,7 +207,7 @@ export class dKankyo_sun_Packet {
     private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
-    public visibility: number = 1.0;
+    public visibility: number = 0.0;
 
     // Lenzflare
     private lensHalfTexture: BTIData;
@@ -1382,9 +1382,9 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, of
     if (dst.triviallyCulled)
         return SunPeekZResult.Culled;
 
-    // Value is not available yet; consider it visible.
+    // Value is not available yet; consider it obscured.
     if (dst.value === null)
-        return SunPeekZResult.Visible;
+        return SunPeekZResult.Obscured;
 
     // Test if the depth buffer is less than our projected Z coordinate.
     // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
@@ -1410,7 +1410,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
     let sunCanGlare = true;
-    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
+    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)) {
         // Sun should not glare during non-sunny weather.
         sunCanGlare = false;
     } else if (roomType === 2) {

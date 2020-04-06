@@ -1725,7 +1725,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Gyorg spawners.
     } else if (actorName === 'agbTBOX' || actorName === 'agbMARK' || actorName === 'agbF' || actorName === 'agbA' || actorName === 'agbAT' || actorName === 'agbA2' || actorName === 'agbR' || actorName === 'agbB' || actorName === 'agbFA' || actorName === 'agbCSW') {
         // Markers for Tingle Tuner
-    } else if (actorName === 'AND_SW0' || actorName === 'AND_SW1' || actorName === 'AND_SW2' || actorName === 'SW_HIT0' || actorName === 'ALLdie' || actorName === 'SW_C00') {
+    } else if (actorName === 'AND_SW0' || actorName === 'AND_SW1' || actorName === 'AND_SW2' || actorName === 'ALLdie' || actorName === 'SW_C00') {
         // Logic flags used for gameplay, not spawnable objects.
     } else if (actorName === 'SwSlvg') {
         // SWitch SaLVaGe?
