@@ -217,7 +217,7 @@ export class dKankyo_sun_Packet {
     public lenzflarePos = nArray(6, () => vec3.create());
     public lenzflareAngle: number = 0.0;
     public distFalloff: number = 0.0;
-    public hideLenz: boolean = false;
+    public drawLenzInSky: boolean = false;
 
     public chkPoints: vec2[] = [
         vec2.fromValues(  0,   0),
@@ -416,7 +416,7 @@ export class dKankyo_sun_Packet {
     }
 
     @dfShow()
-    private lensflareColor = colorNewCopy(White, 0x50/0xFF);
+    private lensflareColor = colorNewCopy(White);
     @dfRange(0, 1600, 1)
     private lensflareBaseSize: number = 960.0;
     @dfRange(0, 32, 1)
@@ -439,7 +439,7 @@ export class dKankyo_sun_Packet {
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
-        if (this.hideLenz)
+        if (this.drawLenzInSky)
             renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
         else
             renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
@@ -498,7 +498,8 @@ export class dKankyo_sun_Packet {
 
             ddraw.end();
         }
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor);
+        const lensflareAlpha = (80.0 * vizSq ** 3.0) / 0xFF;
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
@@ -508,7 +509,7 @@ export class dKankyo_sun_Packet {
         const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
         const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
         for (let i = 7; i >= 0; i--) {
-            if (this.hideLenz && i !== 0)
+            if (this.drawLenzInSky && i !== 0)
                 continue;
 
             let alpha = vizSq * alphaTable[i] / 0xFF;
@@ -1469,7 +1470,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         else
             pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.5, 0.2, 0.001);
     } else {
-        if (numPointsVisible === 5)
+        if (numPointsVisible >= 5)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.5, 0.2, 0.01);
         else if (numPointsVisible === 4)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
@@ -1477,7 +1478,7 @@ function dKyr_sun_move(globals: dGlobals): void {
             pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.1, 0.2, 0.001);
     }
 
-    pkt.hideLenz = numPointsVisible < 2;
+    pkt.drawLenzInSky = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
         const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
