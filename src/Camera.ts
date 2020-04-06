@@ -801,7 +801,7 @@ export class OrthoCameraController implements CameraController {
         const invertYMult = inputManager.invertY ? -1 : 1;
 
         // Get new velocities from inputs.
-        if (!!(inputManager.button & 1)) {
+        if (!!(inputManager.buttons & 1)) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
