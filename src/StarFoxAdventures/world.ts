@@ -11,7 +11,7 @@ import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from 
 import { ViewerRenderInput } from "../viewer";
 import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ } from '../MathHelpers';
+import { getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -25,6 +25,7 @@ import { createDownloadLink, dataSubarray, interpS16, angle16ToRads, readVec3 } 
 import { ModelVersion, ModelInstance, ModelCollection } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection } from './animation';
+import { Camera } from '../Camera';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -46,6 +47,10 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
 
 function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
+}
+
+function getCamPos(v: vec3, camera: Camera): void {
+    getMatrixTranslation(v, camera.worldMatrix);
 }
 
 class WorldRenderer extends SFARenderer {
@@ -158,6 +163,19 @@ class WorldRenderer extends SFARenderer {
         this.ddraw.endAndUpload(device, renderInstManager);
         
         this.endPass(device);
+        
+        // Draw skyscape
+        this.beginPass(viewerInput);
+
+        const eyePos = vec3.create();
+        getCamPos(eyePos, viewerInput.camera);
+        for (let i = 0; i < this.envfxMan.skyscape.objects.length; i++) {
+            const obj = this.envfxMan.skyscape.objects[i];
+            obj.setPosition(eyePos);
+            obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0); // TODO: additional draw steps?
+        }
+
+        this.endPass(device);
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
@@ -268,9 +286,9 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const resColl = new ResourceCollection(this.gameInfo, this.subdir, animController);
         await resColl.create(context.dataFetcher);
-        const objectMan = new ObjectManager(this.gameInfo, resColl, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, resColl, true);
-        const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl);
+        const objectMan = new ObjectManager(this.gameInfo, resColl, animController, materialFactory, false);
+        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, resColl, animController, materialFactory, true);
+        const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl, objectMan);
         const [_1, _2, _3, romlistFile] = await Promise.all([
             objectMan.create(dataFetcher),
             earlyObjectMan.create(dataFetcher),
@@ -299,7 +317,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance, envfxMan);
+            const obj = objectMan.createObjectInstance(device, fields.objType, objParams, posInMap, mapInstance, envfxMan);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -307,7 +325,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             offs += fields.entrySize * 4;
             i++;
         }
-
+        
         window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
             const obj = objectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
@@ -356,7 +374,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const enableMap = true;
         const enableObjects = true;
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null, enableObjects ? objectInstances : [], testModels, resColl);
+        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null,
+            enableObjects ? objectInstances : [],
+            testModels,
+            resColl
+        );
         console.info(`Enter main.scene.enableFineAnims() to enable more animations. However, this will be very slow.`);
         return renderer;
     }

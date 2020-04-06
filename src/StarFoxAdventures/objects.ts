@@ -57,7 +57,7 @@ export class ObjectInstance {
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance, private envfxMan: EnvfxManager) {
+    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance | null, private envfxMan: EnvfxManager) {
         this.scale = objType.scale;
         
         this.position = readVec3(objParams, 0x8);
@@ -241,6 +241,10 @@ export class ObjectInstance {
             this.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
         } else if (objClass === 308) {
             // e.g. texscroll2
+            if (mapInstance === null) {
+                throw Error(`No map available when spawning texscroll`);
+            }
+
             const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
             if (block === null) {
                 console.warn(`couldn't find block for texscroll object`);
@@ -298,7 +302,10 @@ export class ObjectInstance {
             this.scale += objParams.getUint8(0x19) / 512;
         } else if (objClass === 382) {
             // e.g. MMP_levelco
+            // FIXME: other envfx are used in certain scenarios
+            this.envfxMan.loadEnvfx(device, 0x13a);
             this.envfxMan.loadEnvfx(device, 0x138);
+            this.envfxMan.loadEnvfx(device, 0x139);
         } else if (objClass === 383) {
             // e.g. MSVine
             this.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
@@ -434,6 +441,10 @@ export class ObjectInstance {
         return this.position;
     }
 
+    public setPosition(pos: vec3) {
+        vec3.copy(this.position, pos);
+    }
+
     public setAnimNum(num: number) {
         const modanim = this.modanim.getUint16(num * 2);
         this.setAnim(this.resColl.animColl.getAnim(modanim));
@@ -523,7 +534,7 @@ export class ObjectManager {
     private objindexBin: DataView | null;
     private objectTypes: ObjectType[] = [];
 
-    constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private useEarlyObjects: boolean) {
+    constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private useEarlyObjects: boolean) {
     }
 
     public async create(dataFetcher: DataFetcher) {
@@ -552,9 +563,9 @@ export class ObjectManager {
         return this.objectTypes[typeNum];
     }
 
-    public createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, envfxMan: EnvfxManager, skipObjindex: boolean = false) {
+    public createObjectInstance(device: GfxDevice, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance | null, envfxMan: EnvfxManager, skipObjindex: boolean = false) {
         const objType = this.getObjectType(typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance, envfxMan);
+        const objInst = new ObjectInstance(device, this.animController, this.materialFactory, this.resColl, objType, objParams, posInMap, mapInstance, envfxMan);
         return objInst;
     }
 }
