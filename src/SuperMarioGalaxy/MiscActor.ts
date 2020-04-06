@@ -2487,6 +2487,7 @@ export class Air extends LiveActor<AirNrv> {
 
 export class PriorDrawAirHolder extends NameObj {
     public airs: PriorDrawAir[] = [];
+    public forcePriorAir = false;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'PriorDrawAirHolder');
@@ -2497,6 +2498,8 @@ export class PriorDrawAirHolder extends NameObj {
     }
 
     public isExistValidDrawAir(): boolean {
+        if (this.forcePriorAir)
+            return true;
         for (let i = 0; i < this.airs.length; i++)
             if (this.airs[i].isDrawing())
                 return true;
