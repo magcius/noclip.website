@@ -14,6 +14,7 @@ import { MaterialFactory } from './shaders';
 import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
 import { MapInstance } from './maps';
 import { ResourceCollection } from './resource';
+import { EnvfxManager } from './envfx';
 
 // An ObjectType is used to spawn ObjectInstance's.
 // Each ObjectType inherits from an ObjectClass, where it shares most of its assets and logic.
@@ -56,7 +57,7 @@ export class ObjectInstance {
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance) {
+    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance, private envfxMan: EnvfxManager) {
         this.scale = objType.scale;
         
         this.position = vec3.fromValues(
@@ -69,7 +70,7 @@ export class ObjectInstance {
         
         const modelNum = this.objType.modelNums[0];
         try {
-            const modelInst = resColl.modelColl.createModelInstance(device, materialFactory, modelNum);
+            const modelInst = resColl.modelColl.createModelInstance(device, this.materialFactory, modelNum);
             const amap = resColl.amapColl.getAmap(modelNum);
             modelInst.setAmap(amap);
             this.modanim = resColl.modanimColl.getModanim(modelNum);
@@ -317,6 +318,11 @@ export class ObjectInstance {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
             this.scale *= objParams.getUint16(0x1c) / 1000;
+        } else if (objClass === 430) {
+            // e.g. SH_LevelCon
+            // TODO: Load additional env fx
+            // The game has entire tables of effects based on time of day, game progress, etc.
+            this.envfxMan.loadEnvfx(device, 0x1b2);
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -540,9 +546,9 @@ export class ObjectManager {
         return this.objectTypes[typeNum];
     }
 
-    public createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
+    public createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, envfxMan: EnvfxManager, skipObjindex: boolean = false) {
         const objType = this.getObjectType(typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance);
+        const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance, envfxMan);
         return objInst;
     }
 }

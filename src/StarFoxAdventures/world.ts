@@ -28,7 +28,7 @@ import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollecti
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-const atmosTextureNum = 1;
+const atmosTextureNum = 3; // TODO: change textures based on time of day
 
 function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -292,6 +292,9 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         ]);
         const romlist = loadRes(romlistFile).createDataView();
 
+        // Set default atmosphere: "InstallShield Blue"
+        envfxMan.loadEnvfx(device, 0x3c);
+
         const objectInstances: ObjectInstance[] = [];
 
         let offs = 0;
@@ -309,7 +312,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            const obj = objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance, envfxMan);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -327,8 +330,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             const obj = earlyObjectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
-
-        envfxMan.loadEnvfx(device, 60); // Default atmosphere: "InstallShield Blue"
 
         const testModels: (ModelInstance | null)[] = [];
         console.log(`Loading Fox....`);
