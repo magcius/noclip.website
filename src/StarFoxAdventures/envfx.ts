@@ -5,6 +5,10 @@ import { GameInfo } from './scenes';
 import { TextureCollection, SFATexture } from './textures';
 import { dataSubarray } from './util';
 
+enum EnvfxType {
+    Atmosphere = 5,
+}
+
 class Atmosphere {
     public textures: (SFATexture | null)[] = [];
 }
@@ -27,9 +31,8 @@ export class EnvfxManager {
         const fields = {
             index: index,
             type: data.getUint8(0x5c),
-            texIds: [0],
+            texIds: [] as number[],
         };
-        fields.texIds = [];
         for (let i = 0; i < 4; i++) {
             fields.texIds.push(data.getUint16(0x2e + i * 2));
         }
@@ -37,12 +40,14 @@ export class EnvfxManager {
             fields.texIds.push(data.getUint16(0x3e + i * 2));
         }
 
-        if (fields.type == 5) { // Atmosphere
+        console.log(`envfxact ${index}: ${JSON.stringify(fields, null, '\t')}`);
+
+        if (fields.type == EnvfxType.Atmosphere) {
             const BASE = 0xc38;
             this.atmosphere.textures = [];
             for (let i = 0; i < 8; i++) {
                 const texId = BASE + fields.texIds[i];
-                console.log(`loading sky texture ${i}: 0x${texId.toString(16)}`);
+                console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
                 this.atmosphere.textures[i] = this.texColl.getTexture(device, BASE + fields.texIds[i], false);
             }
         }

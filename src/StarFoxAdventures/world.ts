@@ -21,7 +21,7 @@ import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { createDownloadLink, dataSubarray, interpS16, angle16ToRads } from './util';
+import { createDownloadLink, dataSubarray, interpS16, angle16ToRads, readVec3 } from './util';
 import { ModelVersion, ModelInstance, ModelCollection } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection } from './animation';
@@ -86,19 +86,10 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private resColl: ResourceCollection) {
+    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private resColl: ResourceCollection) {
         super(device, animController);
 
         packetParams.clear();
-
-        const atmos = this.envfxMan.atmosphere;
-        const tex = atmos.textures[atmosTextureNum]!;
-        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
-        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
-        materialParams.m_TextureMapping[0].width = tex.width;
-        materialParams.m_TextureMapping[0].height = tex.height;
-        materialParams.m_TextureMapping[0].lodBias = 0.0;
-        mat4.identity(materialParams.u_TexMtx[0]);
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -120,6 +111,10 @@ class WorldRenderer extends SFARenderer {
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
     }
 
+    public setEnvfx(envfxactNum: number) {
+        this.envfxMan.loadEnvfx(this.device, envfxactNum);
+    }
+
     // XXX: for testing
     public enableFineAnims(enable: boolean = true) {
         this.animController.enableFineSkinAnims = enable;
@@ -134,7 +129,13 @@ class WorldRenderer extends SFARenderer {
         this.beginPass(viewerInput, true);
 
         const atmos = this.envfxMan.atmosphere;
-        const atmosTexture = atmos.textures[atmosTextureNum]!;
+        const tex = atmos.textures[atmosTextureNum]!;
+        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+        materialParams.m_TextureMapping[0].width = tex.width;
+        materialParams.m_TextureMapping[0].height = tex.height;
+        materialParams.m_TextureMapping[0].lodBias = 0.0;
+        mat4.identity(materialParams.u_TexMtx[0]);
 
         // Extract pitch
         const cameraFwd = vec3.create();
@@ -147,10 +148,10 @@ class WorldRenderer extends SFARenderer {
         // FIXME: This implementation is adapted from the game, but correctness is not verified.
         // We should probably use a different technique, since this one works poorly in VR.
         // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-        const fovRollFactor = 3.0 * (atmosTexture.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-        const pitchFactor = (0.5 * atmosTexture.height - 6.0) - (3.0 * atmosTexture.height * camPitch / Math.PI);
-        const t0 = (pitchFactor + fovRollFactor) / atmosTexture.height;
-        const t1 = t0 - (fovRollFactor * 2.0) / atmosTexture.height;
+        const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * camPitch / Math.PI);
+        const t0 = (pitchFactor + fovRollFactor) / tex.height;
+        const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
 
         this.ddraw.beginDraw();
         this.ddraw.begin(GX.Command.DRAW_QUADS);
@@ -300,11 +301,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 objType: romlist.getUint16(offs + 0x0),
                 entrySize: romlist.getUint8(offs + 0x2),
                 radius: 8 * romlist.getUint8(offs + 0x6),
-                pos: vec3.fromValues(
-                    romlist.getFloat32(offs + 0x8),
-                    romlist.getFloat32(offs + 0xc),
-                    romlist.getFloat32(offs + 0x10)
-                ),
+                pos: readVec3(romlist, 0x8),
             };
 
             const posInMap = vec3.clone(fields.pos);
@@ -331,8 +328,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        const envfx = envfxMan.loadEnvfx(device, 60);
-        console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
+        envfxMan.loadEnvfx(device, 60); // Default atmosphere: "InstallShield Blue"
 
         const testModels: (ModelInstance | null)[] = [];
         console.log(`Loading Fox....`);
