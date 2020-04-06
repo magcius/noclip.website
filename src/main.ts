@@ -124,6 +124,7 @@ const sceneGroups = [
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     "Experimental",
+    Scenes_BanjoTooie.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
@@ -145,7 +146,6 @@ const sceneGroups = [
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
     Scenes_GoldenEye007.sceneGroup,
-    Scenes_BanjoTooie.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];
