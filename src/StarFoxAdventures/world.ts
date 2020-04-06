@@ -135,20 +135,21 @@ class WorldRenderer extends SFARenderer {
         // We should probably use a different technique, since this one works poorly in VR.
         // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
         const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * camPitch / Math.PI);
+        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
         const t0 = (pitchFactor + fovRollFactor) / tex.height;
         const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
+        // TODO: Verify to make sure the sky isn't upside-down!
 
         this.ddraw.beginDraw();
         this.ddraw.begin(GX.Command.DRAW_QUADS);
         this.ddraw.position3f32(-1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
         this.ddraw.position3f32(-1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.position3f32(1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.position3f32(1, -1, -1);
         this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.ddraw.position3f32(1, 1, -1);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.ddraw.position3f32(1, -1, -1);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
         this.ddraw.end();
 
         const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);

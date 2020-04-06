@@ -296,6 +296,9 @@ export class ObjectInstance {
             // e.g. CCriverflow
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
             this.scale += objParams.getUint8(0x19) / 512;
+        } else if (objClass === 382) {
+            // e.g. MMP_levelco
+            this.envfxMan.loadEnvfx(device, 0x138);
         } else if (objClass === 383) {
             // e.g. MSVine
             this.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
@@ -314,6 +317,9 @@ export class ObjectInstance {
         } else if (objClass === 390) {
             // e.g. CCgasvent
             this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+        } else if (objClass === 395) {
+            // e.g. CClevcontro
+            this.envfxMan.loadEnvfx(device, 0x241);
         } else if (objClass === 429) {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
