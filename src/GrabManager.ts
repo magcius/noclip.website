@@ -28,6 +28,7 @@ export class GrabManager {
 
     private lastX: number = -1;
     private lastY: number = -1;
+    private grabButton: number = -1;
 
     private _onMouseMove = (e: MouseEvent) => {
         if (this.grabListener === null)
@@ -54,7 +55,8 @@ export class GrabManager {
     };
 
     private _onMouseUp = (e: MouseEvent) => {
-        this.releaseGrab();
+        if (e.button === this.grabButton)
+            this.releaseGrab();
     };
 
     private _onPointerLockChange = (e: Event) => {
@@ -71,8 +73,10 @@ export class GrabManager {
     }
 
     public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
-        if (this.grabListener !== null)
+        if (this.grabListener !== null) {
+            e.preventDefault();
             return;
+        }
 
         this.grabListener = grabListener;
         this.grabOptions = grabOptions;
@@ -82,6 +86,7 @@ export class GrabManager {
 
         this.lastX = e.pageX;
         this.lastY = e.pageY;
+        this.grabButton = e.button;
         // Needed to make the cursor update in Chrome. See:
         // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
         document.body.focus();
