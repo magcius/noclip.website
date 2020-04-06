@@ -9,7 +9,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawW
 import { GameInfo } from './scenes';
 import { ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
-import { dataSubarray, angle16ToRads } from './util';
+import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
 import { MapInstance } from './maps';
@@ -60,11 +60,7 @@ export class ObjectInstance {
     constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance, private envfxMan: EnvfxManager) {
         this.scale = objType.scale;
         
-        this.position = vec3.fromValues(
-            objParams.getFloat32(0x8),
-            objParams.getFloat32(0xc),
-            objParams.getFloat32(0x10)
-        );
+        this.position = readVec3(objParams, 0x8);
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
         
@@ -171,6 +167,8 @@ export class ObjectInstance {
         } else if (objClass === 254) {
             // e.g. MagicPlant
             this.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
+            // XXX: disable anim for now. It uses joint scaling, which is broken.
+            this.setAnim(null);
         } else if (objClass === 256 ||
             objClass === 391 ||
             objClass === 392 ||
@@ -305,6 +303,8 @@ export class ObjectInstance {
             if (scaleParam !== 0) {
                 this.scale *= scaleParam / 64;
             }
+            // XXX: disable anim for now, it's completely broken.
+            this.setAnim(null);
         } else if (objClass === 385) {
             // e.g. MMP_trenchF
             this.roll = angle16ToRads(objParams.getInt8(0x19) << 8);
