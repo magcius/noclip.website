@@ -312,7 +312,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = await objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance);
+            const obj = objectMan.createObjectInstance(device, animController, materialFactory, fields.objType, objParams, posInMap, mapInstance);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -321,13 +321,13 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             i++;
         }
 
-        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await objectMan.loadObjectType(device, materialFactory, objType, skipObjindex);
+        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
+            const obj = objectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await earlyObjectMan.loadObjectType(device, materialFactory, objType, skipObjindex);
+        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
+            const obj = earlyObjectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 

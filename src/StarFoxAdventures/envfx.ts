@@ -3,10 +3,7 @@ import { GfxDevice} from '../gfx/platform/GfxPlatform';
 
 import { GameInfo } from './scenes';
 import { TextureCollection, SFATexture } from './textures';
-
-function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
-}
+import { dataSubarray } from './util';
 
 class Atmosphere {
     public textures: (SFATexture | null)[] = [];

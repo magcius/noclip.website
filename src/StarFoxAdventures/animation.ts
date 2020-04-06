@@ -104,7 +104,7 @@ export class AnimFile {
             numKeyframes: data.getUint8(0x7),
             keyframeStride: data.getUint8(0x8),
         };
-        console.log(`Anim ${num} header: ${JSON.stringify(header, null, '\t')}`);
+        // console.log(`Anim ${num} header: ${JSON.stringify(header, null, '\t')}`);
 
         function loadKeyframe(kfNum: number): Keyframe {
             let cmdOffs = HEADER_SIZE;
@@ -253,7 +253,7 @@ export class AmapCollection {
     public getAmap(modelNum: number): DataView {
         const offs = this.amapTab.getUint32(modelNum * 4);
         const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        // console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
 }
@@ -278,7 +278,7 @@ export class ModanimCollection {
     public getModanim(modelNum: number): DataView {
         const offs = this.modanimTab.getUint16(modelNum * 2);
         const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
-        console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        // console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.modanimBin, offs, nextOffs - offs);
     }
 }

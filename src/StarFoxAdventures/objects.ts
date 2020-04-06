@@ -36,10 +36,6 @@ export class ObjectType {
             this.name += String.fromCharCode(c);
             offs++;
         }
-    }
-
-    public async create(device: GfxDevice, materialFactory: MaterialFactory, modelColl: ModelCollection, amapColl: AmapCollection) {
-        const data = this.data;
 
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
@@ -410,9 +406,6 @@ export class ObjectInstance {
         }
     }
 
-    public async create() {
-    }
-
     public getType(): ObjectType {
         return this.objType;
     }
@@ -533,7 +526,7 @@ export class ObjectManager {
         this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
     }
 
-    public async loadObjectType(device: GfxDevice, materialFactory: MaterialFactory, typeNum: number, skipObjindex: boolean = false): Promise<ObjectType> {
+    public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {
         if (!this.useEarlyObjects && !skipObjindex) {
             typeNum = this.objindexBin!.getUint16(typeNum * 2);
         }
@@ -541,17 +534,15 @@ export class ObjectManager {
         if (this.objectTypes[typeNum] === undefined) {
             const offs = this.objectsTab.getUint32(typeNum * 4);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
-            await objType.create(device, materialFactory, this.resColl.modelColl, this.resColl.amapColl);
             this.objectTypes[typeNum] = objType;
         }
 
         return this.objectTypes[typeNum];
     }
 
-    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
-        const objType = await this.loadObjectType(device, materialFactory, typeNum, skipObjindex);
+    public createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
+        const objType = this.getObjectType(typeNum, skipObjindex);
         const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance);
-        await objInst.create();
         return objInst;
     }
 }
