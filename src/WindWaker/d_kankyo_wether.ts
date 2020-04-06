@@ -1,5 +1,5 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_plight_cut, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
@@ -2213,6 +2213,35 @@ export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRende
 
     if (envLight.vrkumoPacket !== null && envLight.vrkumoPacket.enabled)
         envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
+}
+
+export function dKyw_wind_set(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    const targetWindVecX = Math.cos(envLight.windTactAngleY) * Math.cos(envLight.windTactAngleX);
+    const targetWindVecY = Math.sin(envLight.windTactAngleY);
+    const targetWindVecZ = Math.cos(envLight.windTactAngleY) * Math.sin(envLight.windTactAngleX);
+    envLight.windVec[0] = cLib_addCalc(envLight.windVec[0], targetWindVecX, 0.1, 2.0, 0.001);
+    envLight.windVec[1] = cLib_addCalc(envLight.windVec[1], targetWindVecY, 0.1, 2.0, 0.001);
+    envLight.windVec[2] = cLib_addCalc(envLight.windVec[2], targetWindVecZ, 0.1, 2.0, 0.001);
+
+    let targetWindPower = 0;
+    if (envLight.customWindPower > 0.0) {
+        targetWindPower = envLight.customWindPower;
+    } else {
+        let windPowerFlag = 0;
+        const fili = globals.roomStatus[globals.mStayNo].fili;
+        if (fili !== null)
+            windPowerFlag = (fili.param >>> 18) & 0x03;
+
+        if (windPowerFlag === 0)
+            targetWindPower = 0.3;
+        else if (windPowerFlag === 1)
+            targetWindPower = 0.6;
+        else if (windPowerFlag === 2)
+            targetWindPower = 0.9;
+    }
+    envLight.windPower = cLib_addCalc(envLight.windPower, targetWindPower, 0.1, 1.0, 0.005);
 }
 
 export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
