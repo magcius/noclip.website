@@ -28,7 +28,6 @@ import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollecti
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-const atmosTextureNum = 3; // TODO: change textures based on time of day
 
 function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -49,42 +48,10 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-async function testLoadingAModel(device: GfxDevice, animController: SFAAnimationController, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<ModelInstance | null> {
-    const pathBase = gameInfo.pathBase;
-    const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
-    const [modelsTabData, modelsBin, _] = await Promise.all([
-        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
-        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
-        texColl.create(dataFetcher, subdir),
-    ]);
-    const modelsTab = modelsTabData.createDataView();
-
-    const modelTabValue = modelsTab.getUint32(modelNum * 4);
-    if (modelTabValue === 0) {
-        throw Error(`Model #${modelNum} not found`);
-    }
-
-    const modelOffs = modelTabValue & 0xffffff;
-    const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
-    
-    window.main.downloadModel = () => {
-        const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
-        aEl.click();
-    };
-    
-    try {
-        // return new Model(device, new MaterialFactory(device), modelData, texColl, animController, modelVersion);
-        throw Error(`TODO: implement`);
-    } catch (e) {
-        console.warn(`Failed to load model due to exception:`);
-        console.error(e);
-        return null;
-    }
-}
-
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
+    private timeSelect: UI.Slider;
 
     constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private resColl: ResourceCollection) {
         super(device, animController);
@@ -111,6 +78,19 @@ class WorldRenderer extends SFARenderer {
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
     }
 
+    public createPanels(): UI.Panel[] {
+        const panel = new UI.Panel();
+        panel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
+
+        this.timeSelect = new UI.Slider();
+        this.timeSelect.setLabel('Time');
+        this.timeSelect.setRange(0, 7, 1);
+        this.timeSelect.setValue(4);
+        panel.contents.append(this.timeSelect.elem);
+
+        return [panel];
+    }
+
     public setEnvfx(envfxactNum: number) {
         this.envfxMan.loadEnvfx(this.device, envfxactNum);
     }
@@ -129,7 +109,13 @@ class WorldRenderer extends SFARenderer {
         this.beginPass(viewerInput, true);
 
         const atmos = this.envfxMan.atmosphere;
-        const tex = atmos.textures[atmosTextureNum]!;
+        let texNum = this.timeSelect.getValue()|0;
+        if (texNum < 0) {
+            texNum = 0;
+        } else if (texNum >= atmos.textures.length) {
+            texNum = atmos.textures.length - 1;
+        }
+        const tex = atmos.textures[texNum]!;
         materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
         materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
         materialParams.m_TextureMapping[0].width = tex.width;
@@ -332,8 +318,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         };
 
         const testModels: (ModelInstance | null)[] = [];
-        console.log(`Loading Fox....`);
-        testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
+        // console.log(`Loading Fox....`);
+        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
         // console.log(`Loading SharpClaw....`);
         // testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
         // console.log(`Loading General Scales....`);
