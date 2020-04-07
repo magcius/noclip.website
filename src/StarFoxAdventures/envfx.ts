@@ -76,7 +76,7 @@ export class EnvfxManager {
                 const skyscapeTypeId = SKYSCAPE_TYPES[skyscapeType];
                 console.log(`loading skyscape object id 0x${skyscapeTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const skyscapeObj = this.world.objectMan.createObjectInstance(skyscapeTypeId, objParams, vec3.create(), null);
+                const skyscapeObj = this.world.objectMan.createObjectInstance(skyscapeTypeId, objParams, vec3.create());
                 this.skyscape.objects.push(skyscapeObj);
             }
 
@@ -85,7 +85,7 @@ export class EnvfxManager {
                 const skyRingTypeId = SKY_RING_TYPES[skyRingType];
                 console.log(`loading skyring object id 0x${skyRingTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const skyRingObj = this.world.objectMan.createObjectInstance(skyRingTypeId, objParams, vec3.create(), null);
+                const skyRingObj = this.world.objectMan.createObjectInstance(skyRingTypeId, objParams, vec3.create());
                 this.skyscape.objects.push(skyRingObj);
             }
 
@@ -94,7 +94,7 @@ export class EnvfxManager {
                 const mountainTypeId = MOUNTAIN_TYPES[mountainType];
                 console.log(`loading mountain object id 0x${mountainTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const mountainObj = this.world.objectMan.createObjectInstance(mountainTypeId, objParams, vec3.create(), null);
+                const mountainObj = this.world.objectMan.createObjectInstance(mountainTypeId, objParams, vec3.create());
                 this.skyscape.objects.push(mountainObj);
             }
         } else {
