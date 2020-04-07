@@ -7,7 +7,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { ImageFormat, ImageSize } from "../Common/N64/Image";
+import { ImageFormat, ImageSize, TexCM } from "../Common/N64/Image";
 import { DataMap, DataRange } from "../PokemonSnap/room";
 
 // Banjo-Kazooie Geometry
@@ -243,9 +243,7 @@ function mipmapEntries(fmt: ImageFormat, siz: ImageSize): ArrayBufferSlice {
 
     // clamp
     view.setUint32(0x60, (F3DEX2.F3DEX2_GBI.G_SETTILE << 24) | (fmt << 21) | (siz << 19) | (line << 9));
-    // view.setUint8(0x64, 2);
-    view.setUint32(0x64, (2 << 24) | (h << 14) | (w << 4));
-
+    view.setUint32(0x64, (2 << 24) | (1 << 18) | (h << 14) | (1 << 8) | (w << 4));
 
     view.setUint8(0x68, F3DEX2.F3DEX2_GBI.G_SETTILESIZE);
     view.setUint32(0x6C, (2 << 24) | (lrs << 12) | lrt);
@@ -323,7 +321,7 @@ export class BKGeoNode implements GeoNode {
             RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
             RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
         );
-        setMipmapTiles(this.rspState);
+        setMipmapTiles(this.rspState, TexCM.WRAP);
     }
 
     public runDL(addr: number): void {
@@ -431,16 +429,16 @@ function popGeoNode<N extends GeoNode>(context: GeoContext<N>): N {
     return geoNode;
 }
 
-function setMipmapTiles(rspState: F3DEX.RSPState): void {
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 2, 0, 0, 5, 0, 0, 5, 0);
+function setMipmapTiles(rspState: F3DEX.RSPState, cm: TexCM): void {
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 2, 0, cm, 5, 0, cm, 5, 0);
     rspState.gDPSetTileSize(2, 0, 0, 0x7C, 0x7C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x100, 3, 0, 0, 4, 0, 0, 4, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x100, 3, 0, cm, 4, 0, cm, 4, 0);
     rspState.gDPSetTileSize(3, 0, 0, 0x3C, 0x3C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x104, 4, 0, 0, 3, 0, 0, 3, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x104, 4, 0, cm, 3, 0, cm, 3, 0);
     rspState.gDPSetTileSize(4, 0, 0, 0x1C, 0x1C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x106, 5, 0, 0, 2, 0, 0, 2, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x106, 5, 0, cm, 2, 0, cm, 2, 0);
     rspState.gDPSetTileSize(5, 0, 0, 0x0C, 0x0C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x107, 6, 0, 0, 1, 0, 0, 1, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x107, 6, 0, cm, 1, 0, cm, 1, 0);
     rspState.gDPSetTileSize(6, 0, 0, 0x04, 0x04);
 }
 
@@ -595,9 +593,11 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
             // 1 for clamp, 2 for wrap
             const wrapMode = view.getInt32(geoIdx + 0x08);
             const node = peekGeoNode(context);
-            // only run this for BK
+            // TODO: Make this less heinous
             if (node.rspState instanceof F3DEX.RSPState)
-                setMipmapTiles(node.rspState);
+                setMipmapTiles(node.rspState, wrapMode === 1 ? TexCM.CLAMP : TexCM.WRAP);
+            else
+                node.runDL((7 << 24) | (2-wrapMode)*0x60);
         } else {
             // TODO: new geo layout commands
             assert(peekGeoNode(context) instanceof BTGeoNode);
