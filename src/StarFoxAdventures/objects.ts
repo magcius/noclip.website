@@ -241,7 +241,6 @@ export class ObjectInstance {
             this.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
             this.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
         } else if (objClass === 308) {
-            console.log(`hello? please work?`);
             // e.g. texscroll2
             if (world.mapInstance === null) {
                 throw Error(`No map available when spawning texscroll`);
@@ -251,7 +250,6 @@ export class ObjectInstance {
             if (block === null) {
                 console.warn(`couldn't find block for texscroll object`);
             } else {
-                console.log(`found block at position ${posInMap[0]}, ${posInMap[2]}`);
                 const scrollableIndex = objParams.getInt16(0x18);
                 const speedX = objParams.getInt8(0x1e);
                 const speedY = objParams.getInt8(0x1f);
@@ -268,7 +266,6 @@ export class ObjectInstance {
                         const mat = materials[i]!;
                         for (let j = 0; j < mat.shader.layers.length; j++) {
                             const layer = mat.shader.layers[j];
-                            console.log(`comparing target ${targetTexId} against layer texid ${layer.texId}...`);
                             if (layer.texId === targetTexId) {
                                 fail = false;
                                 // Found the texture! Make it scroll now.
@@ -282,6 +279,7 @@ export class ObjectInstance {
                         }
                     }
                 }
+
                 if (fail) {
                     console.warn(`Couldn't find material texture for scrolling`);
                 }
@@ -350,6 +348,11 @@ export class ObjectInstance {
             this.world.envfxMan.loadEnvfx(0x1b2);
             this.world.envfxMan.loadEnvfx(0x1b3);
             this.world.envfxMan.loadEnvfx(0x1b4);
+        } else if (objClass === 438) {
+            // e.g. SC_LevelCon
+            this.world.envfxMan.loadEnvfx(0x4f);
+            this.world.envfxMan.loadEnvfx(0x50);
+            this.world.envfxMan.loadEnvfx(0x245);
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);

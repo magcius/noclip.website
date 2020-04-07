@@ -238,7 +238,7 @@ export class AnimFile {
         }
 
         const anim = { keyframes, speed, times };
-        console.log(`loaded anim #${num} from offs 0x${offs.toString(16)}: ${JSON.stringify({speed, times}, null, '\t')}`);
+        // console.log(`loaded anim #${num} from offs 0x${offs.toString(16)}: ${JSON.stringify({speed, times}, null, '\t')}`);
         return anim;
     }
 }

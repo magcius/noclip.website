@@ -60,6 +60,7 @@ export class World {
     public materialFactory: MaterialFactory;
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
+    public objectInstances: ObjectInstance[] = [];
 
     // TODO: we might have to support worlds that are comprised of multiple subdirectories
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdir: string) {
@@ -80,6 +81,34 @@ export class World {
     public setMapInstance(mapInstance: MapInstance | null) {
         this.mapInstance = mapInstance;
     }
+
+    public spawnObjectsFromRomlist(romlist: DataView) {
+        const mapObjectOrigin = vec3.create();
+        if (this.mapInstance !== null) {
+            vec3.set(mapObjectOrigin, 640 * this.mapInstance.info.getOrigin()[0], 0, 640 * this.mapInstance.info.getOrigin()[1]);
+        }
+
+        let offs = 0;
+        let i = 0;
+        while (offs < romlist.byteLength) {
+            const entrySize = 4 * romlist.getUint8(offs + 0x2);
+            const objParams = dataSubarray(romlist, offs, entrySize);
+
+            const typeNum = objParams.getUint16(0x0);
+            const pos = readVec3(objParams, 0x8);
+
+            const posInMap = vec3.clone(pos);
+            vec3.add(posInMap, posInMap, mapObjectOrigin);
+
+            const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
+            this.objectInstances.push(obj);
+
+            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
+
+            offs += entrySize;
+            i++;
+        }
+    }
 }
 
 class WorldRenderer extends SFARenderer {
@@ -87,7 +116,7 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
 
-    constructor(private world: World, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[]) {
+    constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
 
         packetParams.clear();
@@ -236,14 +265,14 @@ class WorldRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         // Render opaques
         this.beginPass(viewerInput);
-        if (this.mapInstance !== null) {
-            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        if (this.world.mapInstance !== null) {
+            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
         }
         
         const mtx = mat4.create();
         const ctx = getDebugOverlayCanvas2D();
-        for (let i = 0; i < this.objectInstances.length; i++) {
-            const obj = this.objectInstances[i];
+        for (let i = 0; i < this.world.objectInstances.length; i++) {
+            const obj = this.world.objectInstances[i];
 
             obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
             // TODO: additional draw steps; object furs and translucents
@@ -273,17 +302,17 @@ class WorldRenderer extends SFARenderer {
 
         // Render waters, furs and translucents
         this.beginPass(viewerInput);
-        if (this.mapInstance !== null) {
-            this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-            this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        if (this.world.mapInstance !== null) {
+            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
         }
         this.endPass(device);
 
         const NUM_DRAW_STEPS = 3;
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
             this.beginPass(viewerInput);
-            if (this.mapInstance !== null) {
-                this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            if (this.world.mapInstance !== null) {
+                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
             }
             this.endPass(device);
         }    
@@ -315,39 +344,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         world.setMapInstance(mapInstance);
 
+        // Set default atmosphere: "InstallShield Blue"
+        world.envfxMan.loadEnvfx(0x3c);
+
         const [romlistFile] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
         const romlist = loadRes(romlistFile).createDataView();
 
-        // Set default atmosphere: "InstallShield Blue"
-        world.envfxMan.loadEnvfx(0x3c);
-
-        const objectInstances: ObjectInstance[] = [];
-
-        let offs = 0;
-        let i = 0;
-        while (offs < romlist.byteLength) {
-            const fields = {
-                objType: romlist.getUint16(offs + 0x0),
-                entrySize: romlist.getUint8(offs + 0x2),
-                radius: 8 * romlist.getUint8(offs + 0x6),
-                pos: readVec3(romlist, offs + 0x8),
-            };
-
-            const posInMap = vec3.clone(fields.pos);
-            vec3.add(posInMap, posInMap, objectOrigin);
-
-            const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
-
-            const obj = world.objectMan.createObjectInstance(fields.objType, objParams, posInMap);
-            objectInstances.push(obj);
-
-            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
-
-            offs += fields.entrySize * 4;
-            i++;
-        }
+        world.spawnObjectsFromRomlist(romlist);
         
         window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
             const obj = world.objectMan.getObjectType(objType, skipObjindex);
@@ -395,12 +400,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // console.log(`Loading a model with PNMTX 9 stuff....`);
         // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
-        const enableMap = true;
-        const enableObjects = true;
-        const renderer = new WorldRenderer(world, enableMap ? mapInstance : null,
-            enableObjects ? objectInstances : [],
-            testModels
-        );
+        const renderer = new WorldRenderer(world, testModels);
         console.info(`Enter main.scene.enableFineAnims() to enable more animations. However, this will be very slow.`);
         return renderer;
     }

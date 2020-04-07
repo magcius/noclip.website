@@ -92,7 +92,7 @@ export class MapInstance {
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
     private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(private info: MapSceneInfo) {
+    constructor(public info: MapSceneInfo) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
