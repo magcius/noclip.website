@@ -246,7 +246,7 @@ export class AnimFile {
 export function interpolateAxes(axis0: Axis, axis1: Axis, ratio: number): Axis {
     return {
         translation: lerp(axis0.translation, axis1.translation, ratio),
-        rotation: lerp(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
+        rotation: lerpAngle(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
         scale: lerp(axis0.scale, axis1.scale, ratio),
     };
 }

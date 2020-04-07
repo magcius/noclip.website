@@ -86,7 +86,9 @@ export class ObjectInstance {
             this.modelInst = null;
         }
 
-        if (objClass === 201) {
+        if (objClass === 201 ||
+            objClass === 204
+        ) {
             // e.g. sharpclawGr
             this.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
         } else if (objClass === 222 ||
@@ -94,6 +96,7 @@ export class ObjectInstance {
             objClass === 233 ||
             objClass === 234 ||
             objClass === 235 ||
+            objClass === 238 ||
             objClass === 280 ||
             objClass === 283 ||
             objClass === 291 ||
@@ -110,6 +113,7 @@ export class ObjectInstance {
             objClass === 424 ||
             objClass === 437 ||
             objClass === 442 ||
+            objClass === 448 ||
             objClass === 465 ||
             objClass === 487 ||
             objClass === 509 ||
@@ -164,11 +168,15 @@ export class ObjectInstance {
             objClass === 393 ||
             objClass === 445 ||
             objClass === 451 ||
+            objClass === 452 ||
+            objClass === 455 ||
+            objClass === 457 ||
             objClass === 459 ||
-            objClass === 579 ||
+            (objClass === 502 && typeNum !== 0x803) ||
             objClass === 510 ||
             objClass === 513 ||
             objClass === 525 ||
+            objClass === 579 ||
             objClass === 597 ||
             objClass === 598 ||
             objClass === 609 ||
@@ -214,6 +222,7 @@ export class ObjectInstance {
             }
         } else if (objClass === 274 ||
             objClass === 275 ||
+            objClass === 447 ||
             objClass === 456
         ) {
             // e.g. SH_newseqob
@@ -332,6 +341,14 @@ export class ObjectInstance {
             this.world.envfxMan.loadEnvfx(0xd);
             this.world.envfxMan.loadEnvfx(0x11);
             this.world.envfxMan.loadEnvfx(0xe);
+        } else if (objClass === 359) {
+            // e.g. SpiritDoorL
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            let objScale = objParams.getInt8(0x19) / 64;
+            if (objScale === 0) {
+                objScale = 1;
+            }
+            this.scale *= objScale;
         } else if (objClass === 372) {
             // e.g. CCriverflow
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
