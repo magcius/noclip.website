@@ -6,6 +6,7 @@ import { GameInfo } from './scenes';
 import { TextureCollection, SFATexture, SFATextureCollection } from './textures';
 import { dataSubarray } from './util';
 import { ObjectInstance, ObjectManager } from './objects';
+import { World } from './world';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -27,19 +28,19 @@ export class EnvfxManager {
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
 
-    private constructor(private gameInfo: GameInfo, private texColl: TextureCollection, private objectMan: ObjectManager) {
+    private constructor(private world: World) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: SFATextureCollection, objectMan: ObjectManager): Promise<EnvfxManager> {
-        const self = new EnvfxManager(gameInfo, texColl, objectMan);
+    public static async create(world: World, dataFetcher: DataFetcher): Promise<EnvfxManager> {
+        const self = new EnvfxManager(world);
 
-        const pathBase = self.gameInfo.pathBase;
+        const pathBase = world.gameInfo.pathBase;
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
         
         return self;
     }
 
-    public loadEnvfx(device: GfxDevice, index: number) {
+    public loadEnvfx(index: number) {
         const data = dataSubarray(this.envfxactBin, index * this.ENVFX_SIZE, this.ENVFX_SIZE);
         const fields = {
             index: index,
@@ -61,7 +62,7 @@ export class EnvfxManager {
             for (let i = 0; i < 8; i++) {
                 const texId = BASE + texIds[i];
                 console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
-                this.atmosphere.textures[i] = this.texColl.getTexture(device, texId, false);
+                this.atmosphere.textures[i] = this.world.resColl.texColl.getTexture(this.world.device, texId, false);
             }
         } else if (fields.type === EnvfxType.Skyscape) {
             this.skyscape.objects = [];
@@ -75,7 +76,7 @@ export class EnvfxManager {
                 const skyscapeTypeId = SKYSCAPE_TYPES[skyscapeType];
                 console.log(`loading skyscape object id 0x${skyscapeTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const skyscapeObj = this.objectMan.createObjectInstance(device, skyscapeTypeId, objParams, vec3.create(), null, this);
+                const skyscapeObj = this.world.objectMan.createObjectInstance(skyscapeTypeId, objParams, vec3.create(), null);
                 this.skyscape.objects.push(skyscapeObj);
             }
 
@@ -84,7 +85,7 @@ export class EnvfxManager {
                 const skyRingTypeId = SKY_RING_TYPES[skyRingType];
                 console.log(`loading skyring object id 0x${skyRingTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const skyRingObj = this.objectMan.createObjectInstance(device, skyRingTypeId, objParams, vec3.create(), null, this);
+                const skyRingObj = this.world.objectMan.createObjectInstance(skyRingTypeId, objParams, vec3.create(), null);
                 this.skyscape.objects.push(skyRingObj);
             }
 
@@ -93,7 +94,7 @@ export class EnvfxManager {
                 const mountainTypeId = MOUNTAIN_TYPES[mountainType];
                 console.log(`loading mountain object id 0x${mountainTypeId.toString(16)}`);
                 const objParams = new DataView(new ArrayBuffer(128)); // XXX: doesn't matter, just spawn the object
-                const mountainObj = this.objectMan.createObjectInstance(device, mountainTypeId, objParams, vec3.create(), null, this);
+                const mountainObj = this.world.objectMan.createObjectInstance(mountainTypeId, objParams, vec3.create(), null);
                 this.skyscape.objects.push(mountainObj);
             }
         } else {

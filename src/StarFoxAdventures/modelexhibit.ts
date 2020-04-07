@@ -12,6 +12,7 @@ import { ModelCollection, ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { SFATextureCollection, SFATexture } from './textures';
+import { DataFetcher } from '../DataFetcher';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // null: Failed to load. undefined: Not set.
@@ -189,16 +190,10 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
 
-        const amapColl = new AmapCollection(this.gameInfo);
-        const animColl = new AnimCollection(this.gameInfo);
-        const texColl = new SFATextureCollection(this.gameInfo, false);
-        const modelColl = new ModelCollection(texColl, animController, this.gameInfo);
-        await Promise.all([
-            amapColl.create(context.dataFetcher),
-            animColl.create(context.dataFetcher, subdir),
-            texColl.create(context.dataFetcher, subdir),
-            modelColl.create(context.dataFetcher, subdir),
-        ]);
+        const amapColl = await AmapCollection.create(this.gameInfo, context.dataFetcher);
+        const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, subdir);
+        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, subdir, false);
+        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, subdir, texColl, animController);
 
         return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl);
     }

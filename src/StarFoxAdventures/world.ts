@@ -53,27 +53,32 @@ function getCamPos(v: vec3, camera: Camera): void {
     getMatrixTranslation(v, camera.worldMatrix);
 }
 
-class World {
-    public animCtrl: SFAAnimationController;
+export class World {
+    public animController: SFAAnimationController;
     public envfxMan: EnvfxManager;
+    public mapInstance: MapInstance | null = null;
     public materialFactory: MaterialFactory;
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
 
     // TODO: we might have to support worlds that are comprised of multiple subdirectories
-    private constructor(private device: GfxDevice, public gameInfo: GameInfo, public subdir: string) {
+    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdir: string) {
     }
 
     public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string): Promise<World> {
         const self = new World(device, gameInfo, subdir);
         
-        self.animCtrl = new SFAAnimationController();
-        // TODO
-        self.objectMan = await ObjectManager.create();
-        self.envfxMan = new EnvfxManager(gameInfo, self.texColl);
-        self.materialFactory = new MaterialFactory(this.device);
+        self.animController = new SFAAnimationController();
+        self.materialFactory = new MaterialFactory(device);
+        self.resColl = await ResourceCollection.create(gameInfo, dataFetcher, subdir, self.animController);
+        self.objectMan = await ObjectManager.create(self, dataFetcher, false);
+        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
 
         return self;
+    }
+
+    public setMapInstance(mapInstance: MapInstance | null) {
+        this.mapInstance = mapInstance;
     }
 }
 
@@ -82,8 +87,8 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
 
-    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[], private resColl: ResourceCollection) {
-        super(device, animController);
+    constructor(private world: World, private mapInstance: MapInstance | null, private objectInstances: ObjectInstance[], private models: (ModelInstance | null)[]) {
+        super(world.device, world.animController);
 
         packetParams.clear();
 
@@ -121,7 +126,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     public setEnvfx(envfxactNum: number) {
-        this.envfxMan.loadEnvfx(this.device, envfxactNum);
+        this.world.envfxMan.loadEnvfx(envfxactNum);
     }
 
     // XXX: for testing
@@ -131,13 +136,13 @@ class WorldRenderer extends SFARenderer {
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
-        this.materialFactory.update(this.animController);
+        this.world.materialFactory.update(this.animController);
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         this.beginPass(viewerInput, true);
 
-        const atmos = this.envfxMan.atmosphere;
+        const atmos = this.world.envfxMan.atmosphere;
         let texNum = this.timeSelect.getValue()|0;
         if (texNum < 0) {
             texNum = 0;
@@ -193,8 +198,8 @@ class WorldRenderer extends SFARenderer {
 
         const eyePos = vec3.create();
         getCamPos(eyePos, viewerInput.camera);
-        for (let i = 0; i < this.envfxMan.skyscape.objects.length; i++) {
-            const obj = this.envfxMan.skyscape.objects[i];
+        for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
+            const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
             obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0); // TODO: additional draw steps?
         }
@@ -292,9 +297,11 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
-        const materialFactory = new MaterialFactory(device);
-        const animController = new SFAAnimationController();
-        const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo);
+        const pathBase = this.gameInfo.pathBase;
+        const dataFetcher = context.dataFetcher;
+        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdir);
+        
+        const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
         const mapInstance = new MapInstance(mapSceneInfo);
         await mapInstance.reloadBlocks();
 
@@ -306,20 +313,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         mat4.fromTranslation(mapMatrix, mapTrans);
         mapInstance.setMatrix(mapMatrix);
 
-        const pathBase = this.gameInfo.pathBase;
-        const dataFetcher = context.dataFetcher;
-        const resColl = await ResourceCollection.create(this.gameInfo, context.dataFetcher, this.subdir, animController);
-        const objectMan = await ObjectManager.create(resColl, animController, materialFactory, this.gameInfo, dataFetcher, false);
-        const earlyObjectMan = await ObjectManager.create(resColl, animController, materialFactory, SFADEMO_GAME_INFO, dataFetcher, true);
-        //const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl, objectMan);
-        const envfxMan = await EnvfxManager.create(this.gameInfo, dataFetcher, resColl.texColl, objectMan);
+        world.setMapInstance(mapInstance);
+
         const [romlistFile] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
         const romlist = loadRes(romlistFile).createDataView();
 
         // Set default atmosphere: "InstallShield Blue"
-        envfxMan.loadEnvfx(device, 0x3c);
+        world.envfxMan.loadEnvfx(0x3c);
 
         const objectInstances: ObjectInstance[] = [];
 
@@ -338,7 +340,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
 
-            const obj = objectMan.createObjectInstance(device, fields.objType, objParams, posInMap, mapInstance, envfxMan);
+            const obj = world.objectMan.createObjectInstance(fields.objType, objParams, posInMap);
             objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -348,14 +350,14 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         }
         
         window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
-            const obj = objectMan.getObjectType(objType, skipObjindex);
+            const obj = world.objectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
-            const obj = earlyObjectMan.getObjectType(objType, skipObjindex);
-            console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
-        };
+        // window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
+        //     const obj = earlyObjectMan.getObjectType(objType, skipObjindex);
+        //     console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
+        // };
 
         const testModels: (ModelInstance | null)[] = [];
         // console.log(`Loading Fox....`);
@@ -395,10 +397,9 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const enableMap = true;
         const enableObjects = true;
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, enableMap ? mapInstance : null,
+        const renderer = new WorldRenderer(world, enableMap ? mapInstance : null,
             enableObjects ? objectInstances : [],
-            testModels,
-            resColl
+            testModels
         );
         console.info(`Enter main.scene.enableFineAnims() to enable more animations. However, this will be very slow.`);
         return renderer;

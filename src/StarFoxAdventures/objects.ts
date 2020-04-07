@@ -15,6 +15,7 @@ import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCo
 import { MapInstance } from './maps';
 import { ResourceCollection } from './resource';
 import { EnvfxManager } from './envfx';
+import { World } from './world';
 
 // An ObjectType is used to spawn ObjectInstance's.
 // Each ObjectType inherits from an ObjectClass, where it shares most of its assets and logic.
@@ -27,13 +28,13 @@ export class ObjectType {
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
-        this.scale = data.getFloat32(0x4);
-        this.objClass = data.getInt16(0x50);
+        this.scale = this.data.getFloat32(0x4);
+        this.objClass = this.data.getInt16(0x50);
 
         this.name = '';
         let offs = isEarlyObject ? 0x58 : 0x91;
         let c;
-        while ((c = data.getUint8(offs)) != 0) {
+        while ((c = this.data.getUint8(offs)) != 0) {
             this.name += String.fromCharCode(c);
             offs++;
         }
@@ -57,7 +58,7 @@ export class ObjectInstance {
     private anim: Anim | null = null;
     private modanim: DataView;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance | null, private envfxMan: EnvfxManager) {
+    constructor(private world: World, private objType: ObjectType, private objParams: DataView, posInMap: vec3) {
         this.scale = objType.scale;
         
         this.position = readVec3(objParams, 0x8);
@@ -66,10 +67,10 @@ export class ObjectInstance {
         
         const modelNum = this.objType.modelNums[0];
         try {
-            const modelInst = resColl.modelColl.createModelInstance(device, this.materialFactory, modelNum);
-            const amap = resColl.amapColl.getAmap(modelNum);
+            const modelInst = this.world.resColl.modelColl.createModelInstance(this.world.device, this.world.materialFactory, modelNum);
+            const amap = this.world.resColl.amapColl.getAmap(modelNum);
             modelInst.setAmap(amap);
-            this.modanim = resColl.modanimColl.getModanim(modelNum);
+            this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
 
             if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
@@ -242,11 +243,11 @@ export class ObjectInstance {
         } else if (objClass === 308) {
             console.log(`hello? please work?`);
             // e.g. texscroll2
-            if (mapInstance === null) {
+            if (world.mapInstance === null) {
                 throw Error(`No map available when spawning texscroll`);
             }
 
-            const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
+            const block = world.mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
             if (block === null) {
                 console.warn(`couldn't find block for texscroll object`);
             } else {
@@ -255,8 +256,8 @@ export class ObjectInstance {
                 const speedX = objParams.getInt8(0x1e);
                 const speedY = objParams.getInt8(0x1f);
 
-                const tabValue = this.resColl.tablesTab.getUint32(0xe * 4);
-                const targetTexId = this.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                const tabValue = this.world.resColl.tablesTab.getUint32(0xe * 4);
+                const targetTexId = this.world.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
@@ -272,7 +273,7 @@ export class ObjectInstance {
                                 fail = false;
                                 // Found the texture! Make it scroll now.
                                 console.log(`Making texId ${targetTexId} scroll!`);
-                                const theTexture = this.resColl.texColl.getTexture(device, targetTexId, true)!;
+                                const theTexture = this.world.resColl.texColl.getTexture(this.world.device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
                                 layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
@@ -312,9 +313,9 @@ export class ObjectInstance {
         } else if (objClass === 382) {
             // e.g. MMP_levelco
             // FIXME: other envfx are used in certain scenarios
-            this.envfxMan.loadEnvfx(device, 0x13a);
-            this.envfxMan.loadEnvfx(device, 0x138);
-            this.envfxMan.loadEnvfx(device, 0x139);
+            this.world.envfxMan.loadEnvfx(0x13a);
+            this.world.envfxMan.loadEnvfx(0x138);
+            this.world.envfxMan.loadEnvfx(0x139);
         } else if (objClass === 383) {
             // e.g. MSVine
             this.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
@@ -335,9 +336,9 @@ export class ObjectInstance {
             this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
         } else if (objClass === 395) {
             // e.g. CClevcontro
-            this.envfxMan.loadEnvfx(device, 0x23f);
-            this.envfxMan.loadEnvfx(device, 0x240);
-            this.envfxMan.loadEnvfx(device, 0x241);
+            this.world.envfxMan.loadEnvfx(0x23f);
+            this.world.envfxMan.loadEnvfx(0x240);
+            this.world.envfxMan.loadEnvfx(0x241);
         } else if (objClass === 429) {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -346,9 +347,9 @@ export class ObjectInstance {
             // e.g. SH_LevelCon
             // TODO: Load additional env fx
             // The game has entire tables of effects based on time of day, game progress, etc.
-            this.envfxMan.loadEnvfx(device, 0x1b2);
-            this.envfxMan.loadEnvfx(device, 0x1b3);
-            this.envfxMan.loadEnvfx(device, 0x1b4);
+            this.world.envfxMan.loadEnvfx(0x1b2);
+            this.world.envfxMan.loadEnvfx(0x1b3);
+            this.world.envfxMan.loadEnvfx(0x1b4);
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -460,7 +461,7 @@ export class ObjectInstance {
 
     public setAnimNum(num: number) {
         const modanim = this.modanim.getUint16(num * 2);
-        this.setAnim(this.resColl.animColl.getAnim(modanim));
+        this.setAnim(this.world.resColl.animColl.getAnim(modanim));
     }
 
     public setAnim(anim: Anim | null) {
@@ -469,10 +470,10 @@ export class ObjectInstance {
 
     public update() {
         // TODO: always enable animations for fine-skinned models
-        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.animController.enableFineSkinAnims)) {
+        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             this.modelInst.resetPose();
             // TODO: use time values from animation data
-            const kfTime = (this.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
+            const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
             const kf0Num = Math.floor(kfTime);
             let kf1Num = kf0Num + 1;
             if (kf1Num >= this.anim.keyframes.length) {
@@ -547,13 +548,13 @@ export class ObjectManager {
     private objindexBin: DataView | null;
     private objectTypes: ObjectType[] = [];
 
-    private constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private useEarlyObjects: boolean) {
+    private constructor(private world: World, private useEarlyObjects: boolean) {
     }
 
-    public static async create(resColl: ResourceCollection, animController: SFAAnimationController, materialFactory: MaterialFactory, gameInfo: GameInfo, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
-        const self = new ObjectManager(gameInfo, resColl, animController, materialFactory, useEarlyObjects);
+    public static async create(world: World, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
+        const self = new ObjectManager(world, useEarlyObjects);
 
-        const pathBase = self.gameInfo.pathBase;
+        const pathBase = world.gameInfo.pathBase;
         const [objectsTab, objectsBin, objindexBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
@@ -580,9 +581,9 @@ export class ObjectManager {
         return this.objectTypes[typeNum];
     }
 
-    public createObjectInstance(device: GfxDevice, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance | null, envfxMan: EnvfxManager, skipObjindex: boolean = false) {
+    public createObjectInstance(typeNum: number, objParams: DataView, posInMap: vec3, skipObjindex: boolean = false) {
         const objType = this.getObjectType(typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, this.animController, this.materialFactory, this.resColl, objType, objParams, posInMap, mapInstance, envfxMan);
+        const objInst = new ObjectInstance(this.world, objType, objParams, posInMap);
         return objInst;
     }
 }
