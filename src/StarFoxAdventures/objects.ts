@@ -250,6 +250,7 @@ export class ObjectInstance {
             if (block === null) {
                 console.warn(`couldn't find block for texscroll object`);
             } else {
+                console.log(`found block at position ${posInMap[0]}, ${posInMap[2]}`);
                 const scrollableIndex = objParams.getInt16(0x18);
                 const speedX = objParams.getInt8(0x1e);
                 const speedY = objParams.getInt8(0x1f);
@@ -259,6 +260,7 @@ export class ObjectInstance {
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
+                let fail = true;
                 const materials = block.getMaterials();
                 for (let i = 0; i < materials.length; i++) {
                     if (materials[i] !== undefined) {
@@ -267,6 +269,7 @@ export class ObjectInstance {
                             const layer = mat.shader.layers[j];
                             console.log(`comparing target ${targetTexId} against layer texid ${layer.texId}...`);
                             if (layer.texId === targetTexId) {
+                                fail = false;
                                 // Found the texture! Make it scroll now.
                                 console.log(`Making texId ${targetTexId} scroll!`);
                                 const theTexture = this.resColl.texColl.getTexture(device, targetTexId, true)!;
@@ -277,6 +280,9 @@ export class ObjectInstance {
                             }
                         }
                     }
+                }
+                if (fail) {
+                    console.warn(`Couldn't find material texture for scrolling`);
                 }
             }
         } else if (objClass === 329) {
@@ -329,6 +335,8 @@ export class ObjectInstance {
             this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
         } else if (objClass === 395) {
             // e.g. CClevcontro
+            this.envfxMan.loadEnvfx(device, 0x23f);
+            this.envfxMan.loadEnvfx(device, 0x240);
             this.envfxMan.loadEnvfx(device, 0x241);
         } else if (objClass === 429) {
             // e.g. ThornTail
