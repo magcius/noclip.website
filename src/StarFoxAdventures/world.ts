@@ -332,7 +332,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
                 objType: romlist.getUint16(offs + 0x0),
                 entrySize: romlist.getUint8(offs + 0x2),
                 radius: 8 * romlist.getUint8(offs + 0x6),
-                pos: readVec3(romlist, 0x8),
+                pos: readVec3(romlist, offs + 0x8),
             };
 
             const posInMap = vec3.clone(fields.pos);
