@@ -115,6 +115,7 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
+    private layerSelect: UI.Slider;
 
     constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
@@ -142,16 +143,25 @@ class WorldRenderer extends SFARenderer {
     }
 
     public createPanels(): UI.Panel[] {
-        const panel = new UI.Panel();
-        panel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
+        const timePanel = new UI.Panel();
+        timePanel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
 
         this.timeSelect = new UI.Slider();
         this.timeSelect.setLabel('Time');
         this.timeSelect.setRange(0, 7, 1);
         this.timeSelect.setValue(4);
-        panel.contents.append(this.timeSelect.elem);
+        timePanel.contents.append(this.timeSelect.elem);
 
-        return [panel];
+        const layerPanel = new UI.Panel();
+        layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
+
+        this.layerSelect = new UI.Slider();
+        this.layerSelect.setLabel('Layer');
+        this.layerSelect.setRange(0, 16, 1);
+        this.layerSelect.setValue(0);
+        layerPanel.contents.append(this.layerSelect.elem);
+
+        return [timePanel, layerPanel];
     }
 
     public setEnvfx(envfxactNum: number) {
@@ -274,12 +284,14 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.world.objectInstances.length; i++) {
             const obj = this.world.objectInstances[i];
 
-            obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
-            // TODO: additional draw steps; object furs and translucents
-
-            const drawLabels = false;
-            if (drawLabels) {
-                drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+            if (obj.isInLayer(this.layerSelect.getValue())) {
+                obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+                // TODO: additional draw steps; object furs and translucents
+    
+                const drawLabels = false;
+                if (drawLabels) {
+                    drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                }
             }
         }
         

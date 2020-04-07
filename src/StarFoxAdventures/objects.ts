@@ -57,10 +57,14 @@ export class ObjectInstance {
     private scale: number = 1.0;
     private anim: Anim | null = null;
     private modanim: DataView;
+    private layerVals0x3: number;
+    private layerVals0x5: number;
 
     constructor(private world: World, private objType: ObjectType, private objParams: DataView, posInMap: vec3) {
         this.scale = objType.scale;
         
+        this.layerVals0x3 = objParams.getUint8(0x3);
+        this.layerVals0x5 = objParams.getUint8(0x5);
         this.position = readVec3(objParams, 0x8);
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
@@ -505,6 +509,16 @@ export class ObjectInstance {
 
     public setAnim(anim: Anim | null) {
         this.anim = anim;
+    }
+
+    public isInLayer(layer: number): boolean {
+        if (layer === 0) {
+            return true;
+        } else if (layer < 9) {
+            return ((this.layerVals0x3 >>> (layer - 1)) & 1) === 0;
+        } else {
+            return ((this.layerVals0x5 >>> (16 - layer)) & 1) === 0;
+        }
     }
 
     public update() {
