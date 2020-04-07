@@ -3,7 +3,7 @@ import { DataFetcher } from '../DataFetcher';
 import { GfxDevice} from '../gfx/platform/GfxPlatform';
 
 import { GameInfo } from './scenes';
-import { TextureCollection, SFATexture } from './textures';
+import { TextureCollection, SFATexture, SFATextureCollection } from './textures';
 import { dataSubarray } from './util';
 import { ObjectInstance, ObjectManager } from './objects';
 
@@ -27,12 +27,16 @@ export class EnvfxManager {
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
 
-    constructor(private gameInfo: GameInfo, private texColl: TextureCollection, private objectMan: ObjectManager) {
+    private constructor(private gameInfo: GameInfo, private texColl: TextureCollection, private objectMan: ObjectManager) {
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
-        this.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: SFATextureCollection, objectMan: ObjectManager): Promise<EnvfxManager> {
+        const self = new EnvfxManager(gameInfo, texColl, objectMan);
+
+        const pathBase = self.gameInfo.pathBase;
+        self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
+        
+        return self;
     }
 
     public loadEnvfx(device: GfxDevice, index: number) {
@@ -41,8 +45,6 @@ export class EnvfxManager {
             index: index,
             type: data.getUint8(0x5c),
         };
-
-        console.log(`envfxact ${index}: ${JSON.stringify(fields, null, '\t')}`);
 
         if (fields.type === EnvfxType.Atmosphere) {
             const BASE = 0xc38;

@@ -13,7 +13,7 @@ import * as GX from '../gx/gx_enum';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
-import { TextureCollection } from './textures';
+import { TextureCollection, SFATextureCollection } from './textures';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
 import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, dataCopy, readVec3 } from './util';
@@ -1281,17 +1281,21 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
+    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController): Promise<ModelCollection> {
+        const self = new ModelCollection(texColl, animController, gameInfo);
+
+        const pathBase = self.gameInfo.pathBase;
         const [modelsTab, modelsBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
         ]);
-        this.modelsTab = modelsTab.createDataView();
-        this.modelsBin = modelsBin;
+        self.modelsTab = modelsTab.createDataView();
+        self.modelsBin = modelsBin;
+
+        return self;
     }
 
     public getNumModels() {

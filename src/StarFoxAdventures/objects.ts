@@ -547,19 +547,23 @@ export class ObjectManager {
     private objindexBin: DataView | null;
     private objectTypes: ObjectType[] = [];
 
-    constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private useEarlyObjects: boolean) {
+    private constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private useEarlyObjects: boolean) {
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(resColl: ResourceCollection, animController: SFAAnimationController, materialFactory: MaterialFactory, gameInfo: GameInfo, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
+        const self = new ObjectManager(gameInfo, resColl, animController, materialFactory, useEarlyObjects);
+
+        const pathBase = self.gameInfo.pathBase;
         const [objectsTab, objectsBin, objindexBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
-            !this.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
+            !self.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
         ]);
-        this.objectsTab = objectsTab.createDataView();
-        this.objectsBin = objectsBin.createDataView();
-        this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
+        self.objectsTab = objectsTab.createDataView();
+        self.objectsBin = objectsBin.createDataView();
+        self.objindexBin = !self.useEarlyObjects ? objindexBin!.createDataView() : null;
+
+        return self;
     }
 
     public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {

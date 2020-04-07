@@ -11,7 +11,7 @@ import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from 
 import { ViewerRenderInput } from "../viewer";
 import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
+import { getMatrixAxisZ, getMatrixTranslation, matrixHasUniformScale } from '../MathHelpers';
 
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -51,6 +51,30 @@ function vecPitch(v: vec3): number {
 
 function getCamPos(v: vec3, camera: Camera): void {
     getMatrixTranslation(v, camera.worldMatrix);
+}
+
+class World {
+    public animCtrl: SFAAnimationController;
+    public envfxMan: EnvfxManager;
+    public materialFactory: MaterialFactory;
+    public objectMan: ObjectManager;
+    public resColl: ResourceCollection;
+
+    // TODO: we might have to support worlds that are comprised of multiple subdirectories
+    private constructor(private device: GfxDevice, public gameInfo: GameInfo, public subdir: string) {
+    }
+
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string): Promise<World> {
+        const self = new World(device, gameInfo, subdir);
+        
+        self.animCtrl = new SFAAnimationController();
+        // TODO
+        self.objectMan = await ObjectManager.create();
+        self.envfxMan = new EnvfxManager(gameInfo, self.texColl);
+        self.materialFactory = new MaterialFactory(this.device);
+
+        return self;
+    }
 }
 
 class WorldRenderer extends SFARenderer {
@@ -284,15 +308,12 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const resColl = new ResourceCollection(this.gameInfo, this.subdir, animController);
-        await resColl.create(context.dataFetcher);
-        const objectMan = new ObjectManager(this.gameInfo, resColl, animController, materialFactory, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, resColl, animController, materialFactory, true);
-        const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl, objectMan);
-        const [_1, _2, _3, romlistFile] = await Promise.all([
-            objectMan.create(dataFetcher),
-            earlyObjectMan.create(dataFetcher),
-            envfxMan.create(dataFetcher),
+        const resColl = await ResourceCollection.create(this.gameInfo, context.dataFetcher, this.subdir, animController);
+        const objectMan = await ObjectManager.create(resColl, animController, materialFactory, this.gameInfo, dataFetcher, false);
+        const earlyObjectMan = await ObjectManager.create(resColl, animController, materialFactory, SFADEMO_GAME_INFO, dataFetcher, true);
+        //const envfxMan = new EnvfxManager(this.gameInfo, resColl.texColl, objectMan);
+        const envfxMan = await EnvfxManager.create(this.gameInfo, dataFetcher, resColl.texColl, objectMan);
+        const [romlistFile] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
         ]);
         const romlist = loadRes(romlistFile).createDataView();

@@ -221,12 +221,14 @@ export class SFATextureCollection extends TextureCollection {
     private tex1: TextureFile | null;
     private fakes: FakeTextureCollection = new FakeTextureCollection();
 
-    constructor(private gameInfo: GameInfo, private isBeta: boolean) {
+    private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, isBeta: boolean): Promise<SFATextureCollection> {
+        const self = new SFATextureCollection(gameInfo, isBeta);
+
+        const pathBase = self.gameInfo.pathBase;
         const [textableBin, texpre, tex0, tex1] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
             fetchTextureFile(dataFetcher,
@@ -234,15 +236,17 @@ export class SFATextureCollection extends TextureCollection {
                 `${pathBase}/TEXPRE.bin`, false), // TEXPRE is never beta
             fetchTextureFile(dataFetcher,
                 `${pathBase}/${subdir}/TEX0.tab`,
-                `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
+                `${pathBase}/${subdir}/TEX0.bin`, self.isBeta),
             fetchTextureFile(dataFetcher,
                 `${pathBase}/${subdir}/TEX1.tab`,
-                `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
+                `${pathBase}/${subdir}/TEX1.bin`, self.isBeta),
         ]);
-        this.textableBin = textableBin!.createDataView();
-        this.texpre = texpre;
-        this.tex0 = tex0;
-        this.tex1 = tex1;
+        self.textableBin = textableBin!.createDataView();
+        self.texpre = texpre;
+        self.tex0 = tex0;
+        self.tex1 = tex1;
+
+        return self;
     }
 
     public getTextureArray(device: GfxDevice, texId: number, alwaysUseTex1: boolean = false): SFATextureArray | null {
