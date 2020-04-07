@@ -336,6 +336,8 @@ export class ObjectInstance {
             // TODO: Load additional env fx
             // The game has entire tables of effects based on time of day, game progress, etc.
             this.envfxMan.loadEnvfx(device, 0x1b2);
+            this.envfxMan.loadEnvfx(device, 0x1b3);
+            this.envfxMan.loadEnvfx(device, 0x1b4);
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);

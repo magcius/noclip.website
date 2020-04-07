@@ -94,6 +94,8 @@ export class EnvfxManager {
                 const mountainObj = this.objectMan.createObjectInstance(device, mountainTypeId, objParams, vec3.create(), null, this);
                 this.skyscape.objects.push(mountainObj);
             }
+        } else {
+            console.warn(`Don't know how to load envfx type ${fields.type}`);
         }
 
         return fields;

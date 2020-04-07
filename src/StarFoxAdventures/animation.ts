@@ -67,6 +67,8 @@ interface Keyframe {
 
 export interface Anim {
     keyframes: Keyframe[];
+    speed: number;
+    times: number[];
 }
 
 export class AnimFile {
@@ -201,7 +203,35 @@ export class AnimFile {
             keyframes.push(keyframe);
         }
 
-        return { keyframes };
+        const times = [];
+        let speed = 1;
+        if (header.timesOffset !== 0) {
+            let timesOffs = header.timesOffset;
+            speed = data.getFloat32(timesOffs);
+            timesOffs += 0x4;
+            const numTimes = data.getUint16(timesOffs);
+            timesOffs += 0x2;
+            if (data.getUint16(timesOffs) === 0) {
+                // FIXME: what is this?
+                timesOffs += 0x2;
+                if (data.getUint16(timesOffs) === 0) {
+                    timesOffs += 0x2;
+                }
+            }
+            if (data.getUint16(timesOffs) !== numTimes) {
+                console.warn(`mismatched numTimes ${data.getUint16(timesOffs)} != ${numTimes}`);
+            }
+            timesOffs += 0x2;
+    
+            for (let i = 0; i < numTimes; i++) {
+                times.push(data.getInt16(timesOffs));
+                timesOffs += 0x2;
+            }
+        }
+
+        const anim = { keyframes, speed, times };
+        console.log(`loaded anim #${num} from offs 0x${offs.toString(16)}: ${JSON.stringify({speed, times}, null, '\t')}`);
+        return anim;
     }
 }
 
