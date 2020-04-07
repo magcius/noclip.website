@@ -4064,7 +4064,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const isEnableDrawParent = !!(flags & 0x00080000);
             assertExists(bsp1).stopDrawParent = !isEnableDrawParent;
-    
+
             const posRndm = view.getFloat32(dataBegin + 0x04);
             const baseVel = view.getFloat32(dataBegin + 0x08);
             const baseVelRndm = view.getFloat32(dataBegin + 0x0C);
@@ -4072,7 +4072,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const gravity = view.getFloat32(dataBegin + 0x14);
             const timing = view.getFloat32(dataBegin + 0x18);
             const life = view.getUint16(dataBegin + 0x1C);
-            const rate = view.getUint8(dataBegin + 0x1E);
+            const rate = view.getUint16(dataBegin + 0x1E);
             const step = view.getUint32(dataBegin + 0x20);
 
             const globalScale2DX = view.getFloat32(dataBegin + 0x24);
