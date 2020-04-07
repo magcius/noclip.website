@@ -240,6 +240,7 @@ export class ObjectInstance {
             this.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
             this.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
         } else if (objClass === 308) {
+            console.log(`hello? please work?`);
             // e.g. texscroll2
             if (mapInstance === null) {
                 throw Error(`No map available when spawning texscroll`);
@@ -264,8 +265,10 @@ export class ObjectInstance {
                         const mat = materials[i]!;
                         for (let j = 0; j < mat.shader.layers.length; j++) {
                             const layer = mat.shader.layers[j];
+                            console.log(`comparing target ${targetTexId} against layer texid ${layer.texId}...`);
                             if (layer.texId === targetTexId) {
                                 // Found the texture! Make it scroll now.
+                                console.log(`Making texId ${targetTexId} scroll!`);
                                 const theTexture = this.resColl.texColl.getTexture(device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
