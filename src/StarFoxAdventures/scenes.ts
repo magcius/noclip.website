@@ -537,7 +537,7 @@ const sceneDescs = [
     new SFAWorldSceneDesc('swapcircle', 'lightfoot', 14, 'LightFoot Village'),
     new SFAWorldSceneDesc('fortress', 'crfort', 12, 'CloudRunner Fortress'),
     // new SFAWorldSceneDesc('animtest', 'animtest', 26, 'Test Map (animtest)'),
-    new SFAWorldSceneDesc('snowmines', 'darkicemines', 19, 'DarkIce Mines'),
+    new SFAWorldSceneDesc('snowmines', 'darkicemines', 19, 'DarkIce Mines Exterior'),
     // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
     new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
 

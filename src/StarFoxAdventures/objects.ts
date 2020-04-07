@@ -106,13 +106,16 @@ export class ObjectInstance {
             objClass === 424 ||
             objClass === 437 ||
             objClass === 442 ||
+            objClass === 465 ||
             objClass === 487 ||
             objClass === 509 ||
             objClass === 533 ||
+            objClass === 549 ||
             objClass === 576 ||
             objClass === 642 ||
             objClass === 666 ||
-            objClass === 691
+            objClass === 691 ||
+            objClass === 693
         ) {
             // e.g. setuppoint
             // Do nothing
@@ -153,12 +156,17 @@ export class ObjectInstance {
                 this.scale *= scaleParam / 64;
             }
         } else if (objClass === 251 ||
+            objClass === 285 ||
             objClass === 393 ||
             objClass === 445 ||
+            objClass === 451 ||
+            objClass === 459 ||
             objClass === 579 ||
             objClass === 510 ||
             objClass === 513 ||
             objClass === 525 ||
+            objClass === 597 ||
+            objClass === 598 ||
             objClass === 609 ||
             objClass === 617 ||
             objClass === 650
@@ -201,7 +209,8 @@ export class ObjectInstance {
                 this.scale *= objScale;
             }
         } else if (objClass === 274 ||
-            objClass === 275
+            objClass === 275 ||
+            objClass === 456
         ) {
             // e.g. SH_newseqob
             this.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
@@ -226,6 +235,15 @@ export class ObjectInstance {
         } else if (objClass === 294 && typeNum === 77) {
             this.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
             this.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+        } else if (objClass === 296) {
+            let objScale = objParams.getUint8(0x1c);
+            if (objScale < 10) {
+                objScale = 10;
+            }
+            objScale /= 64;
+            this.scale *= objScale;
+            this.yaw = angle16ToRads((objParams.getUint8(0x1d) & 0x3f) << 10)
+            // TODO: set model # and animation
         } else if (objClass === 298 && [888, 889].includes(typeNum)) {
             // e.g. WM_krazoast
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
@@ -304,6 +322,12 @@ export class ObjectInstance {
                 objScale = 20;
             }
             this.scale *= objScale / 20;
+        } else if (objClass === 356) {
+            // e.g. CFLevelCont
+            this.world.envfxMan.loadEnvfx(0x56);
+            this.world.envfxMan.loadEnvfx(0xd);
+            this.world.envfxMan.loadEnvfx(0x11);
+            this.world.envfxMan.loadEnvfx(0xe);
         } else if (objClass === 372) {
             // e.g. CCriverflow
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
@@ -365,6 +389,12 @@ export class ObjectInstance {
         } else if (objClass === 454 && typeNum !== 0x1d6) {
             // e.g. DIMCannon
             this.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
+        } else if (objClass === 461) {
+            // e.g. DIM_LevelCo
+            this.world.envfxMan.loadEnvfx(0x160);
+            this.world.envfxMan.loadEnvfx(0x15a);
+            this.world.envfxMan.loadEnvfx(0x15c);
+            this.world.envfxMan.loadEnvfx(0x15f);
         } else if (objClass === 518) {
             // e.g. PoleFlame
             this.yaw = angle16ToRads((objParams.getUint8(0x18) & 0x3f) << 10);
@@ -403,6 +433,12 @@ export class ObjectInstance {
             this.roll = 0;
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
             this.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
+        } else if (objClass === 653) {
+            // e.g. WCLevelCont
+            this.world.envfxMan.loadEnvfx(0x1fb);
+            this.world.envfxMan.loadEnvfx(0x1ff);
+            this.world.envfxMan.loadEnvfx(0x1fc);
+            this.world.envfxMan.loadEnvfx(0x1fd);
         } else if (objClass === 683) {
             // e.g. LGTProjecte
             this.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
