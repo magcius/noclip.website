@@ -52,9 +52,7 @@ export class BlockCollection implements IBlockCollection {
         } else {
             const subdir = getSubdir(this.mod, gameInfo);
             try {
-                const texColl = new SFATextureCollection(gameInfo, false); // TODO: support beta blocks (swapcircle)
-                await texColl.create(dataFetcher, subdir);
-                this.texColl = texColl;
+                this.texColl = await SFATextureCollection.create(gameInfo, dataFetcher, subdir, false); // TODO: support beta blocks (swapcircle)
             } catch (e) {
                 console.warn(`Failed to load textures for subdirectory ${subdir}. Using fake textures instead. Exception:`);
                 console.error(e);

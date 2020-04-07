@@ -87,27 +87,25 @@ export class ResourceCollection {
     public tablesBin: DataView;
 
     constructor(private gameInfo: GameInfo, private subdir: string, private animController: SFAAnimationController) {
-        this.texColl = new SFATextureCollection(gameInfo, false); // TODO: support isBeta
-        this.modelColl = new ModelCollection(this.texColl, this.animController, this.gameInfo)
-        this.animColl = new AnimCollection(this.gameInfo);
-        this.amapColl = new AmapCollection(this.gameInfo);
-        this.modanimColl = new ModanimCollection(this.gameInfo);
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
-        await Promise.all([
-            this.texColl.create(dataFetcher, this.subdir),
-            this.modelColl.create(dataFetcher, this.subdir),
-            this.animColl.create(dataFetcher, this.subdir),
-            this.amapColl.create(dataFetcher),
-            this.modanimColl.create(dataFetcher),
-        ]);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, animController: SFAAnimationController): Promise<ResourceCollection> {
+        const self = new ResourceCollection(gameInfo, subdir, animController);
+
+        self.texColl = await SFATextureCollection.create(self.gameInfo, dataFetcher, subdir, false); // TODO: support beta
+        self.modelColl = await ModelCollection.create(gameInfo, dataFetcher, subdir, self.texColl, self.animController)
+        self.animColl = await AnimCollection.create(self.gameInfo, dataFetcher, subdir);
+        self.amapColl = await AmapCollection.create(self.gameInfo, dataFetcher);
+        self.modanimColl = await ModanimCollection.create(self.gameInfo, dataFetcher);
+
+        const pathBase = self.gameInfo.pathBase;
         const [tablesTab, tablesBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
-        this.tablesTab = tablesTab.createDataView();
-        this.tablesBin = tablesBin.createDataView();
+        self.tablesTab = tablesTab.createDataView();
+        self.tablesBin = tablesBin.createDataView();
+
+        return self;
     }
 }

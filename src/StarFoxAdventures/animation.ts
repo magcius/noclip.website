@@ -25,17 +25,21 @@ export class AnimCurvFile {
     private animcurvTab: DataView;
     private animcurvBin: DataView;
 
-    constructor(private gameInfo: GameInfo) {
+    private constructor() {
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string): Promise<AnimCurvFile> {
+        const self = new AnimCurvFile();
+
+        const pathBase = gameInfo.pathBase;
         const [animcurvTab, animcurvBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${subdir}/ANIMCURV.tab`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/ANIMCURV.bin`),
         ]);
-        this.animcurvTab = animcurvTab.createDataView();
-        this.animcurvBin = animcurvBin.createDataView();
+        self.animcurvTab = animcurvTab.createDataView();
+        self.animcurvBin = animcurvBin.createDataView();
+
+        return self;
     }
 
     public getAnimCurve(num: number): AnimCurve {
@@ -67,22 +71,28 @@ interface Keyframe {
 
 export interface Anim {
     keyframes: Keyframe[];
+    speed: number;
+    times: number[];
 }
 
 export class AnimFile {
     private tab: DataView;
     private bin: DataView;
 
-    constructor(private gameInfo: GameInfo) {
+    private constructor() {
     }
 
-    public async create(dataFetcher: DataFetcher, path: string) {
+    public static async create(dataFetcher: DataFetcher, path: string): Promise<AnimFile> {
+        const self = new AnimFile();
+
         const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(`${path}.TAB`),
             dataFetcher.fetchData(`${path}.BIN`),
         ]);
-        this.tab = tab.createDataView();
-        this.bin = bin.createDataView();
+        self.tab = tab.createDataView();
+        self.bin = bin.createDataView();
+
+        return self;
     }
 
     public hasAnim(num: number): boolean {
@@ -104,7 +114,7 @@ export class AnimFile {
             numKeyframes: data.getUint8(0x7),
             keyframeStride: data.getUint8(0x8),
         };
-        console.log(`Anim ${num} header: ${JSON.stringify(header, null, '\t')}`);
+        // console.log(`Anim ${num} header: ${JSON.stringify(header, null, '\t')}`);
 
         function loadKeyframe(kfNum: number): Keyframe {
             let cmdOffs = HEADER_SIZE;
@@ -201,14 +211,42 @@ export class AnimFile {
             keyframes.push(keyframe);
         }
 
-        return { keyframes };
+        const times = [];
+        let speed = 1;
+        if (header.timesOffset !== 0) {
+            let timesOffs = header.timesOffset;
+            speed = data.getFloat32(timesOffs);
+            timesOffs += 0x4;
+            const numTimes = data.getUint16(timesOffs);
+            timesOffs += 0x2;
+            if (data.getUint16(timesOffs) === 0) {
+                // FIXME: what is this?
+                timesOffs += 0x2;
+                if (data.getUint16(timesOffs) === 0) {
+                    timesOffs += 0x2;
+                }
+            }
+            if (data.getUint16(timesOffs) !== numTimes) {
+                console.warn(`mismatched numTimes ${data.getUint16(timesOffs)} != ${numTimes}`);
+            }
+            timesOffs += 0x2;
+    
+            for (let i = 0; i < numTimes; i++) {
+                times.push(data.getInt16(timesOffs));
+                timesOffs += 0x2;
+            }
+        }
+
+        const anim = { keyframes, speed, times };
+        // console.log(`loaded anim #${num} from offs 0x${offs.toString(16)}: ${JSON.stringify({speed, times}, null, '\t')}`);
+        return anim;
     }
 }
 
 export function interpolateAxes(axis0: Axis, axis1: Axis, ratio: number): Axis {
     return {
         translation: lerp(axis0.translation, axis1.translation, ratio),
-        rotation: lerp(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
+        rotation: lerpAngle(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
         scale: lerp(axis0.scale, axis1.scale, ratio),
     };
 }
@@ -237,23 +275,27 @@ export class AmapCollection {
     private amapTab: DataView;
     private amapBin: DataView;
 
-    constructor(private gameInfo: GameInfo) {
+    private constructor() {
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher): Promise<AmapCollection> {
+        const self = new AmapCollection();
+
+        const pathBase = gameInfo.pathBase;
         const [amapTab, amapBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/AMAP.TAB`),
             dataFetcher.fetchData(`${pathBase}/AMAP.BIN`),
         ]);
-        this.amapTab = amapTab.createDataView();
-        this.amapBin = amapBin.createDataView();
+        self.amapTab = amapTab.createDataView();
+        self.amapBin = amapBin.createDataView();
+
+        return self;
     }
 
     public getAmap(modelNum: number): DataView {
         const offs = this.amapTab.getUint32(modelNum * 4);
         const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        // console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
 }
@@ -262,23 +304,27 @@ export class ModanimCollection {
     private modanimTab: DataView;
     private modanimBin: DataView;
 
-    constructor(private gameInfo: GameInfo) {
+    private constructor() {
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher): Promise<ModanimCollection> {
+        const self = new ModanimCollection();
+
+        const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/MODANIM.TAB`),
             dataFetcher.fetchData(`${pathBase}/MODANIM.BIN`),
         ]);
-        this.modanimTab = tab.createDataView();
-        this.modanimBin = bin.createDataView();
+        self.modanimTab = tab.createDataView();
+        self.modanimBin = bin.createDataView();
+
+        return self;
     }
 
     public getModanim(modelNum: number): DataView {
         const offs = this.modanimTab.getUint16(modelNum * 2);
         const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
-        console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        // console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.modanimBin, offs, nextOffs - offs);
     }
 }
@@ -287,17 +333,17 @@ export class AnimCollection {
     private animFile: AnimFile;
     private preanimFile: AnimFile;
 
-    constructor(private gameInfo: GameInfo) {
-        this.animFile = new AnimFile(gameInfo);
-        this.preanimFile = new AnimFile(gameInfo);
+    private constructor() {
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
-        await Promise.all([
-            this.animFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`),
-            this.preanimFile.create(dataFetcher, `${pathBase}/PREANIM`),
-        ]);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string): Promise<AnimCollection> {
+        const self = new AnimCollection();
+
+        const pathBase = gameInfo.pathBase;
+        self.animFile = await AnimFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`);
+        self.preanimFile = await AnimFile.create(dataFetcher, `${pathBase}/PREANIM`);
+
+        return self;
     }
 
     public getAnim(num: number): Anim {

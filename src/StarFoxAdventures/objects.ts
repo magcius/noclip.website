@@ -9,11 +9,13 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawW
 import { GameInfo } from './scenes';
 import { ModelCollection, ModelInstance } from './models';
 import { SFATextureCollection } from './textures';
-import { dataSubarray, angle16ToRads } from './util';
+import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
 import { MapInstance } from './maps';
 import { ResourceCollection } from './resource';
+import { EnvfxManager } from './envfx';
+import { World } from './world';
 
 // An ObjectType is used to spawn ObjectInstance's.
 // Each ObjectType inherits from an ObjectClass, where it shares most of its assets and logic.
@@ -26,20 +28,16 @@ export class ObjectType {
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
-        this.scale = data.getFloat32(0x4);
-        this.objClass = data.getInt16(0x50);
+        this.scale = this.data.getFloat32(0x4);
+        this.objClass = this.data.getInt16(0x50);
 
         this.name = '';
         let offs = isEarlyObject ? 0x58 : 0x91;
         let c;
-        while ((c = data.getUint8(offs)) != 0) {
+        while ((c = this.data.getUint8(offs)) != 0) {
             this.name += String.fromCharCode(c);
             offs++;
         }
-    }
-
-    public async create(device: GfxDevice, materialFactory: MaterialFactory, modelColl: ModelCollection, amapColl: AmapCollection) {
-        const data = this.data;
 
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
@@ -59,24 +57,24 @@ export class ObjectInstance {
     private scale: number = 1.0;
     private anim: Anim | null = null;
     private modanim: DataView;
+    private layerVals0x3: number;
+    private layerVals0x5: number;
 
-    constructor(device: GfxDevice, private animController: SFAAnimationController, private materialFactory: MaterialFactory, private resColl: ResourceCollection, private objType: ObjectType, private objParams: DataView, posInMap: vec3, mapInstance: MapInstance) {
+    constructor(private world: World, private objType: ObjectType, private objParams: DataView, posInMap: vec3) {
         this.scale = objType.scale;
         
-        this.position = vec3.fromValues(
-            objParams.getFloat32(0x8),
-            objParams.getFloat32(0xc),
-            objParams.getFloat32(0x10)
-        );
+        this.layerVals0x3 = objParams.getUint8(0x3);
+        this.layerVals0x5 = objParams.getUint8(0x5);
+        this.position = readVec3(objParams, 0x8);
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
         
         const modelNum = this.objType.modelNums[0];
         try {
-            const modelInst = resColl.modelColl.createModelInstance(device, materialFactory, modelNum);
-            const amap = resColl.amapColl.getAmap(modelNum);
+            const modelInst = this.world.resColl.modelColl.createModelInstance(this.world.device, this.world.materialFactory, modelNum);
+            const amap = this.world.resColl.amapColl.getAmap(modelNum);
             modelInst.setAmap(amap);
-            this.modanim = resColl.modanimColl.getModanim(modelNum);
+            this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
 
             if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
@@ -88,7 +86,9 @@ export class ObjectInstance {
             this.modelInst = null;
         }
 
-        if (objClass === 201) {
+        if (objClass === 201 ||
+            objClass === 204
+        ) {
             // e.g. sharpclawGr
             this.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
         } else if (objClass === 222 ||
@@ -96,6 +96,7 @@ export class ObjectInstance {
             objClass === 233 ||
             objClass === 234 ||
             objClass === 235 ||
+            objClass === 238 ||
             objClass === 280 ||
             objClass === 283 ||
             objClass === 291 ||
@@ -112,13 +113,17 @@ export class ObjectInstance {
             objClass === 424 ||
             objClass === 437 ||
             objClass === 442 ||
+            objClass === 448 ||
+            objClass === 465 ||
             objClass === 487 ||
             objClass === 509 ||
             objClass === 533 ||
+            objClass === 549 ||
             objClass === 576 ||
             objClass === 642 ||
             objClass === 666 ||
-            objClass === 691
+            objClass === 691 ||
+            objClass === 693
         ) {
             // e.g. setuppoint
             // Do nothing
@@ -159,12 +164,21 @@ export class ObjectInstance {
                 this.scale *= scaleParam / 64;
             }
         } else if (objClass === 251 ||
+            objClass === 285 ||
             objClass === 393 ||
             objClass === 445 ||
-            objClass === 579 ||
+            objClass === 451 ||
+            objClass === 452 ||
+            objClass === 455 ||
+            objClass === 457 ||
+            objClass === 459 ||
+            (objClass === 502 && typeNum !== 0x803) ||
             objClass === 510 ||
             objClass === 513 ||
             objClass === 525 ||
+            objClass === 579 ||
+            objClass === 597 ||
+            objClass === 598 ||
             objClass === 609 ||
             objClass === 617 ||
             objClass === 650
@@ -174,6 +188,8 @@ export class ObjectInstance {
         } else if (objClass === 254) {
             // e.g. MagicPlant
             this.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
+            // XXX: disable anim for now. It uses joint scaling, which is broken.
+            this.setAnim(null);
         } else if (objClass === 256 ||
             objClass === 391 ||
             objClass === 392 ||
@@ -205,7 +221,9 @@ export class ObjectInstance {
                 this.scale *= objScale;
             }
         } else if (objClass === 274 ||
-            objClass === 275
+            objClass === 275 ||
+            objClass === 447 ||
+            objClass === 456
         ) {
             // e.g. SH_newseqob
             this.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
@@ -230,6 +248,15 @@ export class ObjectInstance {
         } else if (objClass === 294 && typeNum === 77) {
             this.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
             this.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+        } else if (objClass === 296) {
+            let objScale = objParams.getUint8(0x1c);
+            if (objScale < 10) {
+                objScale = 10;
+            }
+            objScale /= 64;
+            this.scale *= objScale;
+            this.yaw = angle16ToRads((objParams.getUint8(0x1d) & 0x3f) << 10)
+            // TODO: set model # and animation
         } else if (objClass === 298 && [888, 889].includes(typeNum)) {
             // e.g. WM_krazoast
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
@@ -246,7 +273,11 @@ export class ObjectInstance {
             this.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
         } else if (objClass === 308) {
             // e.g. texscroll2
-            const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
+            if (world.mapInstance === null) {
+                throw Error(`No map available when spawning texscroll`);
+            }
+
+            const block = world.mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
             if (block === null) {
                 console.warn(`couldn't find block for texscroll object`);
             } else {
@@ -254,11 +285,12 @@ export class ObjectInstance {
                 const speedX = objParams.getInt8(0x1e);
                 const speedY = objParams.getInt8(0x1f);
 
-                const tabValue = this.resColl.tablesTab.getUint32(0xe * 4);
-                const targetTexId = this.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                const tabValue = this.world.resColl.tablesTab.getUint32(0xe * 4);
+                const targetTexId = this.world.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
+                let fail = true;
                 const materials = block.getMaterials();
                 for (let i = 0; i < materials.length; i++) {
                     if (materials[i] !== undefined) {
@@ -266,8 +298,10 @@ export class ObjectInstance {
                         for (let j = 0; j < mat.shader.layers.length; j++) {
                             const layer = mat.shader.layers[j];
                             if (layer.texId === targetTexId) {
+                                fail = false;
                                 // Found the texture! Make it scroll now.
-                                const theTexture = this.resColl.texColl.getTexture(device, targetTexId, true)!;
+                                console.log(`Making texId ${targetTexId} scroll!`);
+                                const theTexture = this.world.resColl.texColl.getTexture(this.world.device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
                                 layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
@@ -275,6 +309,10 @@ export class ObjectInstance {
                             }
                         }
                     }
+                }
+
+                if (fail) {
+                    console.warn(`Couldn't find material texture for scrolling`);
                 }
             }
         } else if (objClass === 329) {
@@ -297,10 +335,30 @@ export class ObjectInstance {
                 objScale = 20;
             }
             this.scale *= objScale / 20;
+        } else if (objClass === 356) {
+            // e.g. CFLevelCont
+            this.world.envfxMan.loadEnvfx(0x56);
+            this.world.envfxMan.loadEnvfx(0xd);
+            this.world.envfxMan.loadEnvfx(0x11);
+            this.world.envfxMan.loadEnvfx(0xe);
+        } else if (objClass === 359) {
+            // e.g. SpiritDoorL
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            let objScale = objParams.getInt8(0x19) / 64;
+            if (objScale === 0) {
+                objScale = 1;
+            }
+            this.scale *= objScale;
         } else if (objClass === 372) {
             // e.g. CCriverflow
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
             this.scale += objParams.getUint8(0x19) / 512;
+        } else if (objClass === 382) {
+            // e.g. MMP_levelco
+            // FIXME: other envfx are used in certain scenarios
+            this.world.envfxMan.loadEnvfx(0x13a);
+            this.world.envfxMan.loadEnvfx(0x138);
+            this.world.envfxMan.loadEnvfx(0x139);
         } else if (objClass === 383) {
             // e.g. MSVine
             this.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
@@ -308,6 +366,8 @@ export class ObjectInstance {
             if (scaleParam !== 0) {
                 this.scale *= scaleParam / 64;
             }
+            // XXX: disable anim for now, it's completely broken.
+            this.setAnim(null);
         } else if (objClass === 385) {
             // e.g. MMP_trenchF
             this.roll = angle16ToRads(objParams.getInt8(0x19) << 8);
@@ -317,10 +377,27 @@ export class ObjectInstance {
         } else if (objClass === 390) {
             // e.g. CCgasvent
             this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+        } else if (objClass === 395) {
+            // e.g. CClevcontro
+            this.world.envfxMan.loadEnvfx(0x23f);
+            this.world.envfxMan.loadEnvfx(0x240);
+            this.world.envfxMan.loadEnvfx(0x241);
         } else if (objClass === 429) {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
             this.scale *= objParams.getUint16(0x1c) / 1000;
+        } else if (objClass === 430) {
+            // e.g. SH_LevelCon
+            // TODO: Load additional env fx
+            // The game has entire tables of effects based on time of day, game progress, etc.
+            this.world.envfxMan.loadEnvfx(0x1b2);
+            this.world.envfxMan.loadEnvfx(0x1b3);
+            this.world.envfxMan.loadEnvfx(0x1b4);
+        } else if (objClass === 438) {
+            // e.g. SC_LevelCon
+            this.world.envfxMan.loadEnvfx(0x4f);
+            this.world.envfxMan.loadEnvfx(0x50);
+            this.world.envfxMan.loadEnvfx(0x245);
         } else if (objClass === 439) {
             // e.g. SC_MusicTre
             this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
@@ -333,6 +410,12 @@ export class ObjectInstance {
         } else if (objClass === 454 && typeNum !== 0x1d6) {
             // e.g. DIMCannon
             this.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
+        } else if (objClass === 461) {
+            // e.g. DIM_LevelCo
+            this.world.envfxMan.loadEnvfx(0x160);
+            this.world.envfxMan.loadEnvfx(0x15a);
+            this.world.envfxMan.loadEnvfx(0x15c);
+            this.world.envfxMan.loadEnvfx(0x15f);
         } else if (objClass === 518) {
             // e.g. PoleFlame
             this.yaw = angle16ToRads((objParams.getUint8(0x18) & 0x3f) << 10);
@@ -371,6 +454,12 @@ export class ObjectInstance {
             this.roll = 0;
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
             this.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
+        } else if (objClass === 653) {
+            // e.g. WCLevelCont
+            this.world.envfxMan.loadEnvfx(0x1fb);
+            this.world.envfxMan.loadEnvfx(0x1ff);
+            this.world.envfxMan.loadEnvfx(0x1fc);
+            this.world.envfxMan.loadEnvfx(0x1fd);
         } else if (objClass === 683) {
             // e.g. LGTProjecte
             this.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
@@ -410,9 +499,6 @@ export class ObjectInstance {
         }
     }
 
-    public async create() {
-    }
-
     public getType(): ObjectType {
         return this.objType;
     }
@@ -429,21 +515,35 @@ export class ObjectInstance {
         return this.position;
     }
 
+    public setPosition(pos: vec3) {
+        vec3.copy(this.position, pos);
+    }
+
     public setAnimNum(num: number) {
         const modanim = this.modanim.getUint16(num * 2);
-        this.setAnim(this.resColl.animColl.getAnim(modanim));
+        this.setAnim(this.world.resColl.animColl.getAnim(modanim));
     }
 
     public setAnim(anim: Anim | null) {
         this.anim = anim;
     }
 
+    public isInLayer(layer: number): boolean {
+        if (layer === 0) {
+            return true;
+        } else if (layer < 9) {
+            return ((this.layerVals0x3 >>> (layer - 1)) & 1) === 0;
+        } else {
+            return ((this.layerVals0x5 >>> (16 - layer)) & 1) === 0;
+        }
+    }
+
     public update() {
         // TODO: always enable animations for fine-skinned models
-        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.animController.enableFineSkinAnims)) {
+        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             this.modelInst.resetPose();
             // TODO: use time values from animation data
-            const kfTime = (this.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
+            const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
             const kf0Num = Math.floor(kfTime);
             let kf1Num = kf0Num + 1;
             if (kf1Num >= this.anim.keyframes.length) {
@@ -518,22 +618,26 @@ export class ObjectManager {
     private objindexBin: DataView | null;
     private objectTypes: ObjectType[] = [];
 
-    constructor(private gameInfo: GameInfo, private resColl: ResourceCollection, private useEarlyObjects: boolean) {
+    private constructor(private world: World, private useEarlyObjects: boolean) {
     }
 
-    public async create(dataFetcher: DataFetcher) {
-        const pathBase = this.gameInfo.pathBase;
+    public static async create(world: World, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
+        const self = new ObjectManager(world, useEarlyObjects);
+
+        const pathBase = world.gameInfo.pathBase;
         const [objectsTab, objectsBin, objindexBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
-            !this.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
+            !self.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
         ]);
-        this.objectsTab = objectsTab.createDataView();
-        this.objectsBin = objectsBin.createDataView();
-        this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
+        self.objectsTab = objectsTab.createDataView();
+        self.objectsBin = objectsBin.createDataView();
+        self.objindexBin = !self.useEarlyObjects ? objindexBin!.createDataView() : null;
+
+        return self;
     }
 
-    public async loadObjectType(device: GfxDevice, materialFactory: MaterialFactory, typeNum: number, skipObjindex: boolean = false): Promise<ObjectType> {
+    public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {
         if (!this.useEarlyObjects && !skipObjindex) {
             typeNum = this.objindexBin!.getUint16(typeNum * 2);
         }
@@ -541,17 +645,15 @@ export class ObjectManager {
         if (this.objectTypes[typeNum] === undefined) {
             const offs = this.objectsTab.getUint32(typeNum * 4);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
-            await objType.create(device, materialFactory, this.resColl.modelColl, this.resColl.amapColl);
             this.objectTypes[typeNum] = objType;
         }
 
         return this.objectTypes[typeNum];
     }
 
-    public async createObjectInstance(device: GfxDevice, animController: SFAAnimationController, materialFactory: MaterialFactory, typeNum: number, objParams: DataView, posInMap: vec3, mapInstance: MapInstance, skipObjindex: boolean = false) {
-        const objType = await this.loadObjectType(device, materialFactory, typeNum, skipObjindex);
-        const objInst = new ObjectInstance(device, animController, materialFactory, this.resColl, objType, objParams, posInMap, mapInstance);
-        await objInst.create();
+    public createObjectInstance(typeNum: number, objParams: DataView, posInMap: vec3, skipObjindex: boolean = false) {
+        const objType = this.getObjectType(typeNum, skipObjindex);
+        const objInst = new ObjectInstance(this.world, objType, objParams, posInMap);
         return objInst;
     }
 }

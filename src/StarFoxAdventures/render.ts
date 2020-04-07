@@ -3,8 +3,10 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_rende
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { CameraController } from '../Camera';
 import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, BasicRenderTarget, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
+
 import { SFAAnimationController } from './animation';
 
 // Adapted from BasicGXRendererHelper
@@ -36,6 +38,10 @@ export class SFARenderer extends SFARendererHelper {
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
         super(device);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(1 / 2); // Slow down the default camera a bit
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
