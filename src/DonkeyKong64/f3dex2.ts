@@ -169,8 +169,8 @@ export class RSPState {
             assert(false);
         } else {
             // We're in TILE mode. Now check if we're in two-cycle mode.
-            const cycletype = F3DEX.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
-            assert(cycletype === F3DEX.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE);
+            const cycletype = RDP.getCycleTypeFromOtherModeH(this.DP_OtherModeH);
+            assert(cycletype === RDP.OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === RDP.OtherModeH_CycleType.G_CYC_2CYCLE);
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 

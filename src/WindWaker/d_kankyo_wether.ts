@@ -1,5 +1,5 @@
 
-import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_plight_cut, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
+import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2 } from "gl-matrix";
@@ -207,7 +207,7 @@ export class dKankyo_sun_Packet {
     private moonPos = vec3.create();
     public sunAlpha: number = 0.0;
     public moonAlpha: number = 0.0;
-    public visibility: number = 1.0;
+    public visibility: number = 0.0;
 
     // Lenzflare
     private lensHalfTexture: BTIData;
@@ -217,7 +217,7 @@ export class dKankyo_sun_Packet {
     public lenzflarePos = nArray(6, () => vec3.create());
     public lenzflareAngle: number = 0.0;
     public distFalloff: number = 0.0;
-    public hideLenz: boolean = false;
+    public drawLenzInSky: boolean = false;
 
     public chkPoints: vec2[] = [
         vec2.fromValues(  0,   0),
@@ -416,7 +416,7 @@ export class dKankyo_sun_Packet {
     }
 
     @dfShow()
-    private lensflareColor = colorNewCopy(White, 0x50/0xFF);
+    private lensflareColor = colorNewCopy(White);
     @dfRange(0, 1600, 1)
     private lensflareBaseSize: number = 960.0;
     @dfRange(0, 32, 1)
@@ -439,7 +439,7 @@ export class dKankyo_sun_Packet {
 
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.worldMatrix);
 
-        if (this.hideLenz)
+        if (this.drawLenzInSky)
             renderInstManager.setCurrentRenderInstList(globals.dlst.sky[1]);
         else
             renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
@@ -498,7 +498,8 @@ export class dKankyo_sun_Packet {
 
             ddraw.end();
         }
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor);
+        const lensflareAlpha = (80.0 * vizSq ** 3.0) / 0xFF;
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.lensflareColor, lensflareAlpha);
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
         submitScratchRenderInst(device, renderInstManager, this.materialHelperLenzflareSolid, renderInst, viewerInput);
@@ -508,7 +509,7 @@ export class dKankyo_sun_Packet {
         const alphaTable = [255, 80, 140, 255, 125, 140, 170, 140];
         const scaleTable = [8000, 10000, 1600, 4800, 1200, 5600, 2400, 7200];
         for (let i = 7; i >= 0; i--) {
-            if (this.hideLenz && i !== 0)
+            if (this.drawLenzInSky && i !== 0)
                 continue;
 
             let alpha = vizSq * alphaTable[i] / 0xFF;
@@ -1382,9 +1383,9 @@ function dKyr_sun_move__PeekZ(dst: PeekZResult, peekZ: PeekZManager, v: vec3, of
     if (dst.triviallyCulled)
         return SunPeekZResult.Culled;
 
-    // Value is not available yet; consider it visible.
+    // Value is not available yet; consider it obscured.
     if (dst.value === null)
-        return SunPeekZResult.Visible;
+        return SunPeekZResult.Obscured;
 
     // Test if the depth buffer is less than our projected Z coordinate.
     // Depth buffer readback should result in 0.0 for the near plane, and 1.0 for the far plane.
@@ -1410,7 +1411,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
     let sunCanGlare = true;
-    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0)) {
+    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)) {
         // Sun should not glare during non-sunny weather.
         sunCanGlare = false;
     } else if (roomType === 2) {
@@ -1469,7 +1470,7 @@ function dKyr_sun_move(globals: dGlobals): void {
         else
             pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.5, 0.2, 0.001);
     } else {
-        if (numPointsVisible === 5)
+        if (numPointsVisible >= 5)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.5, 0.2, 0.01);
         else if (numPointsVisible === 4)
             pkt.visibility = cLib_addCalc(pkt.visibility, 1.0, 0.1, 0.1, 0.001);
@@ -1477,7 +1478,7 @@ function dKyr_sun_move(globals: dGlobals): void {
             pkt.visibility = cLib_addCalc(pkt.visibility, 0.0, 0.1, 0.2, 0.001);
     }
 
-    pkt.hideLenz = numPointsVisible < 2;
+    pkt.drawLenzInSky = numPointsVisible < 2;
 
     if (pkt.sunPos[1] > 0.0) {
         const pulsePos = 1.0 - sqr(1.0 - saturate(pkt.sunPos[1] - globals.cameraPosition[1] / 8000.0));
@@ -2213,6 +2214,35 @@ export function dKyw_wether_draw2(globals: dGlobals, renderInstManager: GfxRende
 
     if (envLight.vrkumoPacket !== null && envLight.vrkumoPacket.enabled)
         envLight.vrkumoPacket.draw(globals, renderInstManager, viewerInput);
+}
+
+export function dKyw_wind_set(globals: dGlobals): void {
+    const envLight = globals.g_env_light;
+
+    const targetWindVecX = Math.cos(envLight.windTactAngleY) * Math.cos(envLight.windTactAngleX);
+    const targetWindVecY = Math.sin(envLight.windTactAngleY);
+    const targetWindVecZ = Math.cos(envLight.windTactAngleY) * Math.sin(envLight.windTactAngleX);
+    envLight.windVec[0] = cLib_addCalc(envLight.windVec[0], targetWindVecX, 0.1, 2.0, 0.001);
+    envLight.windVec[1] = cLib_addCalc(envLight.windVec[1], targetWindVecY, 0.1, 2.0, 0.001);
+    envLight.windVec[2] = cLib_addCalc(envLight.windVec[2], targetWindVecZ, 0.1, 2.0, 0.001);
+
+    let targetWindPower = 0;
+    if (envLight.customWindPower > 0.0) {
+        targetWindPower = envLight.customWindPower;
+    } else {
+        let windPowerFlag = 0;
+        const fili = globals.roomStatus[globals.mStayNo].fili;
+        if (fili !== null)
+            windPowerFlag = (fili.param >>> 18) & 0x03;
+
+        if (windPowerFlag === 0)
+            targetWindPower = 0.3;
+        else if (windPowerFlag === 1)
+            targetWindPower = 0.6;
+        else if (windPowerFlag === 2)
+            targetWindPower = 0.9;
+    }
+    envLight.windPower = cLib_addCalc(envLight.windPower, targetWindPower, 0.1, 1.0, 0.005);
 }
 
 export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {

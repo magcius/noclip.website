@@ -1,10 +1,14 @@
 
+import * as F3DEX from "./f3dex";
+import * as F3DEX2 from "../PokemonSnap/f3dex2";
+import * as RDP from "../Common/N64/RDP";
+
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists, nArray } from "../util";
-import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
 import { ImageFormat, ImageSize } from "../Common/N64/Image";
+import { DataMap, DataRange } from "../PokemonSnap/room";
 
 // Banjo-Kazooie Geometry
 
@@ -42,34 +46,49 @@ export interface ModelPoint {
 }
 
 export const enum GeoFlags {
-    ComputeLookAt = 0x04,
+    RGBA16Mipmaps   = 0x002,
+    ComputeLookAt   = 0x004,
+    CI8Mipmaps      = 0x080,
+    CI4Mipmaps      = 0x100,
 }
-
-export interface Geometry {
+export interface Geometry<N extends GeoNode> {
     geoFlags: number;
     animationSetup: AnimationSetup | null;
     vertexBoneTable: VertexBoneTable | null;
-    textureAnimationSetup: TextureAnimationSetup | null;
+    textureAnimationSetup: TextureAnimationSetup[];
     vertexEffects: VertexAnimationEffect[];
     modelPoints: ModelPoint[];
     sharedOutput: F3DEX.RSPSharedOutput;
-    rootNode: GeoNode;
+    rootNode: N;
 }
 
 export const enum VertexEffectType {
     // id mapping is different from game table index (in comment)
-    FlowingWater = 1,       // 1
-    ColorFlicker = 2,       // 0
-    StillWater = 3,         // 3
-    ColorPulse = 5,         // 4
-    RipplingWater = 7,      // 5
-    AlphaBlink = 8,         // 6
-    LightningBolt = 9,      // 8
+    // names in the comment are from bt files
+    FlowingWater      = 1,  // 1 scroll
+    ColorFlicker      = 2,  // 0 light
+    StillWater        = 3,  // 3 water
+    ColorPulse        = 5,  // 4 glow
+    RipplingWater     = 7,  // 5 wave
+    AlphaBlink        = 8,  // 6 glowa
+    LightningBolt     = 9,  // 8
     LightningLighting = 10, // 7
 
     // these are still speculative
-    Interactive = 4,        // 2
-    OtherInteractive = 6,   // 2 again
+    Interactive       = 4,  // 2
+    OtherInteractive  = 6,  // 2 again
+
+    // tooie only, there are multiple tables so no meaningful index
+    FlashAlpha        = 9,
+    Flash             = 10,
+    Unknown           = 11,
+    Wibble            = 12,
+    Bounce            = 17,
+    Twinkle           = 18,
+    Flame             = 19,
+    TwinkleAlpha      = 20,
+    OtherWibble       = 21,
+    TwinkleColor      = 22,
 }
 
 interface BlinkStateMachine {
@@ -96,6 +115,7 @@ export interface VertexAnimationEffect {
     bbMax?: vec3;
     blinker?: BlinkStateMachine;
     pairedEffect?: VertexAnimationEffect;
+    timers?: Float32Array;
 }
 
 function otherModeLEntries(flags: number[]): ArrayBufferSlice {
@@ -202,6 +222,45 @@ const renderModeBuffers: ArrayBufferSlice[] = [
     ),
 ];
 
+// just create the first mipmap entry
+function mipmapEntries(fmt: ImageFormat, siz: ImageSize): ArrayBufferSlice {
+    const out = new ArrayBufferSlice(new ArrayBuffer(8 * 24));
+    const view = out.createDataView();
+    let w = 5;
+    let h = 5;
+    const line = Math.ceil((1 << (w + siz - 1)) / 8);
+    const lrs = (1 << (w + 2)) - 4;
+    const lrt = (1 << (h + 2)) - 4;
+
+    // wrap
+    view.setUint32(0x00, (F3DEX2.F3DEX2_GBI.G_SETTILE << 24) | (fmt << 21) | (siz << 19) | (line << 9));
+    view.setUint32(0x04, (2 << 24) | (h << 14) | (w << 4));
+
+    view.setUint8(0x08, F3DEX2.F3DEX2_GBI.G_SETTILESIZE);
+    view.setUint32(0x0C, (2 << 24) | (lrs << 12) | lrt);
+
+    view.setUint8(0x10, F3DEX2.F3DEX2_GBI.G_ENDDL);
+
+    // clamp
+    view.setUint32(0x60, (F3DEX2.F3DEX2_GBI.G_SETTILE << 24) | (fmt << 21) | (siz << 19) | (line << 9));
+    // view.setUint8(0x64, 2);
+    view.setUint32(0x64, (2 << 24) | (h << 14) | (w << 4));
+
+
+    view.setUint8(0x68, F3DEX2.F3DEX2_GBI.G_SETTILESIZE);
+    view.setUint32(0x6C, (2 << 24) | (lrs << 12) | lrt);
+
+    view.setUint8(0x70, F3DEX2.F3DEX2_GBI.G_ENDDL);
+
+    return out;
+}
+
+const mipmapSegments = [
+    mipmapEntries(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_4b),
+    mipmapEntries(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_8b),
+    mipmapEntries(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b),
+];
+
 export interface SelectorNode {
     kind: "select";
     stateIndex: number;
@@ -224,40 +283,133 @@ export function isSorter(node: SelectorNode | SortNode | null): node is SortNode
 export interface GeoNode {
     boneIndex: number;
     parentIndex: number;
-    rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
     nodeData: SelectorNode | SortNode | null;
+    rspState: F3DEX.RSPState | F3DEX2.RSPState;
+    runDL: (addr: number) => void;
 }
 
-interface GeoContext {
+type nodeBuilder<N extends GeoNode> = (bone: number, parent: number, ctx: GeoContext<N>) => N;
+
+interface GeoContext<N extends GeoNode> {
     buffer: ArrayBufferSlice;
 
     segmentBuffers: ArrayBufferSlice[];
+    dataMap?: DataMap;
     sharedOutput: F3DEX.RSPSharedOutput;
+    zMode: RenderZMode;
+
+    animationSetup: AnimationSetup | null;
+    vertexBoneTable: VertexBoneTable | null;
     modelPoints: ModelPoint[];
 
-    nodeStack: GeoNode[];
+    nodeStack: N[];
     buildSortNodes: boolean;
+    nodeBuilder: nodeBuilder<N>;
 }
 
-function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
-    const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
-    // G_TF_BILERP
-    rspState.gDPSetOtherModeH(12, 2, 0x2000);
-    rspState.gDPSetOtherModeH(
-        F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
-        F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
-    );
-    setMipmapTiles(rspState);
-    const geoNode: GeoNode = {
-        boneIndex,
-        parentIndex,
-        children: [],
-        rspOutput: null,
-        rspState,
-        nodeData: null,
-    };
+export class BKGeoNode implements GeoNode {
+    public rspOutput: F3DEX.RSPOutput | null = null;
+    public children: GeoNode[] = [];
+    public nodeData: SelectorNode | SortNode | null = null;
+    public rspState: F3DEX.RSPState;
+
+    constructor(public boneIndex: number, public parentIndex: number, context: GeoContext<BKGeoNode>) {
+        this.rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
+        // G_TF_BILERP
+        this.rspState.gDPSetOtherModeH(12, 2, 0x2000);
+        this.rspState.gDPSetOtherModeH(
+            RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
+            RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        );
+        setMipmapTiles(this.rspState);
+    }
+
+    public runDL(addr: number): void {
+        F3DEX.runDL_F3DEX(this.rspState, addr);
+    }
+}
+
+const zBufferedOpaqueModes = [
+    0x0F0A4030, // OPA_SURF
+    0x0C192078, // AA_OPA_SURF
+    0x0C184270, // XLU_SURF
+    0x0C1841F8, // AA_XLU_SURF
+    0x0C184270, // XLU_SURF
+    0x0C1841F8, // AA_XLU_SURF
+];
+
+const noUpdateOpaqueModes = [
+    0x0F0A4010,
+    0x0C192058,
+    0x0C184250,
+    0x0C1841D8,
+    0x0C184250,
+    0x0C1841D8,
+];
+
+const backupModes = [
+    0x0C1843D8,
+    0x0C184E50,
+    0x0C184DD8,
+    0xC8104E50,
+    0xC8104DD8,
+];
+
+export class BTGeoNode implements GeoNode {
+    public rspOutput: F3DEX.RSPOutput | null = null;
+    public children: GeoNode[] = [];
+    public nodeData: SelectorNode | SortNode | null = null;
+    public rspState: F3DEX2.RSPState;
+
+    private zMode: RenderZMode;
+
+    constructor(public boneIndex: number, public parentIndex: number, context: GeoContext<BTGeoNode>) {
+        this.rspState = new F3DEX2.RSPState(context.sharedOutput, context.dataMap!, true);
+        // G_TF_BILERP
+        this.rspState.gDPSetOtherModeH(12, 2, 0x2000);
+        this.rspState.gDPSetOtherModeH(
+            RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
+            RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        );
+        this.zMode = context.zMode;
+        this.runDL(0x07 << 24); // set up mipmaps
+    }
+
+    private static opaHandler(state: F3DEX2.RSPState, addr: number): void {
+        BTGeoNode.modeHandler(state, addr, zBufferedOpaqueModes);
+    }
+
+    private static xluHandler(state: F3DEX2.RSPState, addr: number): void {
+        BTGeoNode.modeHandler(state, addr, noUpdateOpaqueModes);
+    }
+
+    private static modeHandler(state: F3DEX2.RSPState, addr: number, list: number[]): void {
+        if (addr >>> 24 !== 3)
+            return F3DEX2.runDL_F3DEX2(state, addr);
+        // each entry is two commands, so sixteen bytes
+        const index = (addr & 0xFFFFFF) >>> 4;
+        let mode = list[index % 6];
+        if (index < 24) {
+            const category = Math.floor(index / 6);
+            if (category & 1) // no z update
+                mode = mode & ~(1 << RDP.OtherModeL_Layout.Z_UPD);
+            if (category & 2) // fog
+                mode = (mode & ~0xCCCC0000) | 0xC8000000;
+        } else
+            mode = backupModes[index - 24];
+
+        state.gDPSetOtherModeL(3, 0x1D, mode);
+    }
+
+    public runDL(addr: number): void {
+        F3DEX2.runDL_F3DEX2(this.rspState, addr, this.zMode === RenderZMode.OPA ? BTGeoNode.opaHandler : BTGeoNode.xluHandler);
+    }
+}
+
+function pushGeoNode<N extends GeoNode>(context: GeoContext<N>, boneIndex = 0, parentIndex = -1): N {
+    const geoNode = context.nodeBuilder(boneIndex, parentIndex, context);
 
     if (context.nodeStack.length > 0)
         context.nodeStack[0].children.push(geoNode);
@@ -266,11 +418,11 @@ function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoN
     return geoNode;
 }
 
-function peekGeoNode(context: GeoContext): GeoNode {
+function peekGeoNode<N extends GeoNode>(context: GeoContext<N>): N {
     return assertExists(context.nodeStack[0]);
 }
 
-function popGeoNode(context: GeoContext): GeoNode {
+function popGeoNode<N extends GeoNode>(context: GeoContext<N>): N {
     const geoNode = context.nodeStack.shift()!;
 
     // Finalize geo node.
@@ -292,12 +444,12 @@ function setMipmapTiles(rspState: F3DEX.RSPState): void {
     rspState.gDPSetTileSize(6, 0, 0, 0x04, 0x04);
 }
 
-function runDL(context: GeoContext, addr: number): void {
+function runDL<N extends GeoNode>(context: GeoContext<N>, addr: number): void {
     const node = peekGeoNode(context);
-    F3DEX.runDL_F3DEX(node.rspState, addr);
+    node.runDL(addr);
 }
 
-function runGeoLayout(context: GeoContext, geoIdx_: number): void {
+function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number): void {
     const buffer = context.buffer;
     const view = buffer.createDataView();
 
@@ -443,9 +595,12 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             // 1 for clamp, 2 for wrap
             const wrapMode = view.getInt32(geoIdx + 0x08);
             const node = peekGeoNode(context);
-            setMipmapTiles(node.rspState);
+            // only run this for BK
+            if (node.rspState instanceof F3DEX.RSPState)
+                setMipmapTiles(node.rspState);
         } else {
-            throw `whoops ${cmd}`;
+            // TODO: new geo layout commands
+            assert(peekGeoNode(context) instanceof BTGeoNode);
         }
 
         if (nextSiblingOffs === 0)
@@ -461,12 +616,10 @@ export const enum RenderZMode {
     XLU = 2,
 }
 
-export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry {
+function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boolean, builder: nodeBuilder<N>, zMode: number, textureData?: ArrayBufferSlice): GeoContext<N> {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0x0B);
-    const geoOffs = view.getUint32(0x04);
-    const geoFlags = view.getUint16(0x0A);
 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);
@@ -526,85 +679,137 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
     }
 
     const vertexDataOffs = view.getUint32(0x10);
-    const vertexCount = view.getUint16(0x32);
-    const vertexWordCount = view.getUint16(vertexDataOffs + 0x16);
+    const vertexCount = isTooie ? view.getUint16(vertexDataOffs + 0x16) / 2 : view.getUint16(0x32);
     const vertexData = buffer.subarray(vertexDataOffs + 0x18, vertexCount * 0x10);
 
-    const textureSetupOffs = view.getUint16(0x08);
-    const textureSetupSize = view.getUint32(textureSetupOffs + 0x00);
-    const textureCount = view.getUint8(textureSetupOffs + 0x05);
-    const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * 0x10);
-    const textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
-
-    const renderModeIndex = zMode + (opaque ? 0 : 3);
+    if (!textureData) {
+        const textureSetupOffs = view.getUint16(0x08);
+        const textureSetupSize = view.getUint32(textureSetupOffs + 0x00);
+        const textureCount = view.getUint8(textureSetupOffs + 0x05);
+        const entrySize = isTooie ? 8 : 16;
+        const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * entrySize);
+        textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
+    }
 
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x01] = vertexData;
     segmentBuffers[0x02] = textureData;
-    segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
     segmentBuffers[0x09] = f3dexData;
+    segmentBuffers[0x0B] = textureData;
+    segmentBuffers[0x0C] = textureData;
+    segmentBuffers[0x0D] = textureData;
+    segmentBuffers[0x0E] = textureData;
     segmentBuffers[0x0F] = textureData;
 
     const sharedOutput = new F3DEX.RSPSharedOutput();
     sharedOutput.setVertexBufferFromData(vertexData.createDataView());
     const modelPoints: ModelPoint[] = [];
 
-    const geoContext: GeoContext = {
+    const out: GeoContext<N> = {
         buffer,
 
         segmentBuffers,
         sharedOutput,
+        zMode,
+
+        animationSetup,
+        vertexBoneTable,
         modelPoints,
 
         nodeStack: [],
         buildSortNodes: zMode === RenderZMode.XLU,
+        nodeBuilder: builder,
     };
+    return out;
+}
 
-    const rootNode = pushGeoNode(geoContext, 0);
-    runGeoLayout(geoContext, geoOffs);
-    const rootNode2 = popGeoNode(geoContext);
+function bkBuilder(bone: number, parent: number, ctx: GeoContext<BKGeoNode>): BKGeoNode {
+    return new BKGeoNode(bone, parent, ctx);
+}
+
+function btBuilder(bone: number, parent: number, ctx: GeoContext<BTGeoNode>): BTGeoNode {
+    return new BTGeoNode(bone, parent, ctx);
+}
+
+export function parseBK(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry<BKGeoNode> {
+    const context = commonSetup(buffer, false, bkBuilder, zMode);
+    const renderModeIndex = zMode + (opaque ? 0 : 3);
+    context.segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
+    return parse<BKGeoNode>(buffer, context);
+}
+
+export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureData?: ArrayBufferSlice): Geometry<BTGeoNode> {
+    const context = commonSetup(buffer, true, btBuilder, zMode, textureData);
+
+    let mipmapIndex = 0;
+    const view = buffer.createDataView();
+    const geoFlags = view.getUint16(0x0A);
+    if (geoFlags & GeoFlags.CI8Mipmaps)
+        mipmapIndex = 1;
+    else if (geoFlags & GeoFlags.RGBA16Mipmaps)
+        mipmapIndex = 2;
+    context.segmentBuffers[7] = mipmapSegments[mipmapIndex];
+
+    // build data map for the f3dex2 interpreter
+    const ranges: DataRange[] = [];
+    for (let i = 0; i < context.segmentBuffers.length; i++) {
+        if (context.segmentBuffers[i])
+            ranges.push({ start: i << 24, data: context.segmentBuffers[i] });
+    }
+    context.dataMap = new DataMap(ranges);
+    return parse<BTGeoNode>(buffer, context);
+}
+
+export function parse<N extends GeoNode>(buffer: ArrayBufferSlice, geoContext: GeoContext<N>): Geometry<N> {
+    const view = buffer.createDataView();
+    const geoOffs = view.getUint32(0x04);
+    const geoFlags = view.getUint16(0x0A);
+
+    const sharedOutput = geoContext.sharedOutput;
+
+    const rootNode = pushGeoNode<N>(geoContext, 0);
+    runGeoLayout<N>(geoContext, geoOffs);
+    const rootNode2 = popGeoNode<N>(geoContext);
     assert(rootNode === rootNode2);
 
-    let textureAnimationSetup: TextureAnimationSetup | null = null;
+    let textureAnimationSetup: TextureAnimationSetup[] = [];
     const textureAnimationSetupOffs = view.getInt32(0x2c);
     if (textureAnimationSetupOffs > 0) {
-        let offs = textureAnimationSetupOffs;
-        const blockSize = view.getUint16(offs + 0x00);
-        const blockCount = view.getUint16(offs + 0x02);
-        const speed = view.getFloat32(offs + 0x04);
-
-        const indexLists: number[][] = [];
         const baseTextureCount = sharedOutput.textureCache.textures.length;
-        for (let i = 0; i < baseTextureCount; i++) {
-            const tex = sharedOutput.textureCache.textures[i];
-            let addr = tex.dramAddr;
-            let palAddr = tex.dramPalAddr;
-            // seems like all of the animations are just rgba8
-            const animate = tex.dramAddr >>> 24 === 0xf;
-            const animatePalette = tex.dramPalAddr !== 0 && tex.dramPalAddr >>> 24 === 0xf;
-            if (!animate && !animatePalette) {
-                continue;
-            }
+        let offs = textureAnimationSetupOffs;
+        for (let seg = 0xF; seg >= 0xB; seg--) {
+            const blockSize = view.getUint16(offs + 0x00);
+            const blockCount = view.getUint16(offs + 0x02);
+            const speed = view.getFloat32(offs + 0x04);
+            offs += 8;
+            if (blockSize === 0)
+                break;
+            const indexLists: number[][] = [];
+            for (let i = 0; i < baseTextureCount; i++) {
+                const tex = sharedOutput.textureCache.textures[i];
+                let addr = tex.dramAddr;
+                let palAddr = tex.dramPalAddr;
+                // seems like all of the animations are just rgba8
+                const animate = tex.dramAddr >>> 24 === seg;
+                const animatePalette = tex.dramPalAddr >>> 24 === seg;
+                if (!animate && !animatePalette) {
+                    continue;
+                }
 
-            // first texture is the one we already have
-            const textureFrames: number[] = [i];
-            for (let j = 1; j < blockCount; j++) {
-                if (animate)
-                    addr += blockSize;
-                if (animatePalette)
-                    palAddr += blockSize;
-                textureFrames.push(sharedOutput.textureCache.translateTileTexture(segmentBuffers, addr, palAddr, tex.tile));
-            }
+                // first texture is the one we already have
+                const textureFrames: number[] = [i];
+                for (let j = 1; j < blockCount; j++) {
+                    if (animate)
+                        addr += blockSize;
+                    if (animatePalette)
+                        palAddr += blockSize;
+                    textureFrames.push(sharedOutput.textureCache.translateTileTexture(geoContext.segmentBuffers, addr, palAddr, tex.tile));
+                }
 
-            indexLists.push(textureFrames);
+                indexLists.push(textureFrames);
+            }
+            textureAnimationSetup.push({ blockCount, speed, indexLists });
         }
-
-        // while the code supports up to 4 animated texture segments (f,e,d,c),
-        // only one ever gets used
-        const nextBlockSize = view.getUint16(offs + 0x08);
-        assert(nextBlockSize === 0);
-
-        textureAnimationSetup = { blockCount, speed, indexLists };
     }
 
     const effectSetupOffs = view.getUint32(0x24);
@@ -636,11 +841,11 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
             const effect: VertexAnimationEffect = {
                 type, subID, vertexIndices, baseVertexValues,
-                xPhase: 0, yPhase: 0, dy: 0, dtx: 0, dty: 0, colorFactor: 1
+                xPhase: 0, yPhase: 0, dy: 0, dtx: 0, dty: 0, colorFactor: 1,
             };
 
-            if (type === VertexEffectType.RipplingWater) {
-                // rippling water computes its amplitude from the bounding box
+            if (type === VertexEffectType.RipplingWater || type >= VertexEffectType.Wibble) {
+                // compute bounding box to determine amplitude
                 const vertexPos = vec3.create();
                 const bbMin = vec3.fromValues(baseVertexValues[0].x, baseVertexValues[0].y, baseVertexValues[0].z);
                 const bbMax = vec3.clone(bbMin);
@@ -667,7 +872,10 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         }
     }
 
-    return { geoFlags, animationSetup, vertexBoneTable, vertexEffects, textureAnimationSetup, rootNode, sharedOutput, modelPoints };
+    return {
+        geoFlags, vertexEffects, textureAnimationSetup, rootNode, sharedOutput,
+        animationSetup: geoContext.animationSetup, vertexBoneTable: geoContext.vertexBoneTable, modelPoints: geoContext.modelPoints
+    };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {
@@ -687,5 +895,22 @@ function initEffectState(effect: VertexAnimationEffect) {
             duration: 1,
             timer: 0,
         };
+    } else if (effect.type > VertexEffectType.Wibble && effect.type < VertexEffectType.Bounce) {
+        effect.subID += 100 * (effect.type - VertexEffectType.Wibble);
+        effect.type = VertexEffectType.Wibble;
+        if (effect.subID > 400) {
+            const baseline = (effect.bbMax![1] + effect.bbMin![1]) / 2;
+            for (let i = 0; i < effect.baseVertexValues.length; i++) {
+                effect.baseVertexValues[i].y = baseline;
+            }
+        }
+    } else if (effect.type === VertexEffectType.OtherWibble) {
+        effect.type = VertexEffectType.Wibble;
+        effect.subID += 300;
+    } else if (effect.type === VertexEffectType.Twinkle) {
+        effect.yPhase = Math.random() * (1 + .1 * effect.subID);
+        effect.timers = new Float32Array(effect.vertexIndices.length);
+        for (let i = 0; i < effect.baseVertexValues.length; i++)
+            effect.baseVertexValues[i].a = 0;
     }
 }

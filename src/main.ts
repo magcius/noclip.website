@@ -57,6 +57,7 @@ import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_Metroi
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
+import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -123,6 +124,7 @@ const sceneGroups = [
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     "Experimental",
+    Scenes_BanjoTooie.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,

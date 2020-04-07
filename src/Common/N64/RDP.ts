@@ -3,9 +3,10 @@
 
 import { assert, hexzero } from "../../util";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM } from "./Image";
-import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../../gfx/platform/GfxPlatform";
+import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM, TextFilt } from "./Image";
+import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxMegaStateDescriptor, GfxBlendFactor, GfxBlendMode } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -302,4 +303,169 @@ export function translateSampler(device: GfxDevice, cache: GfxRenderCache, textu
         mipFilter: GfxMipFilterMode.NO_MIP,
         minLOD: 0, maxLOD: 0,
     });
+}
+
+export const enum OtherModeH_Layout {
+    G_MDSFT_BLENDMASK   = 0,
+    G_MDSFT_ALPHADITHER = 4,
+    G_MDSFT_RGBDITHER   = 6,
+    G_MDSFT_COMBKEY     = 8,
+    G_MDSFT_TEXTCONV    = 9,
+    G_MDSFT_TEXTFILT    = 12,
+    G_MDSFT_TEXTLUT     = 14,
+    G_MDSFT_TEXTLOD     = 16,
+    G_MDSFT_TEXTDETAIL  = 17,
+    G_MDSFT_TEXTPERSP   = 19,
+    G_MDSFT_CYCLETYPE   = 20,
+    G_MDSFT_COLORDITHER = 22,
+    G_MDSFT_PIPELINE    = 23,
+}
+
+export const enum OtherModeH_CycleType {
+    G_CYC_1CYCLE = 0x00,
+    G_CYC_2CYCLE = 0x01,
+    G_CYC_COPY   = 0x02,
+    G_CYC_FILL   = 0x03,
+}
+
+export function getCycleTypeFromOtherModeH(modeH: number): OtherModeH_CycleType {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_CYCLETYPE) & 0x03;
+}
+
+export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
+}
+
+export const enum OtherModeL_Layout {
+    // cycle-independent
+    AA_EN         = 3,
+    Z_CMP         = 4,
+    Z_UPD         = 5,
+    IM_RD         = 6,
+    CLR_ON_CVG    = 7,
+    CVG_DST       = 8,
+    ZMODE         = 10,
+    CVG_X_ALPHA   = 12,
+    ALPHA_CVG_SEL = 13,
+    FORCE_BL      = 14,
+    // bit 15 unused, was "TEX_EDGE"
+    // cycle-dependent
+    B_2 = 16,
+    B_1 = 18,
+    M_2 = 20,
+    M_1 = 22,
+    A_2 = 24,
+    A_1 = 26,
+    P_2 = 28,
+    P_1 = 30,
+}
+
+export const enum ZMode {
+    ZMODE_OPA   = 0,
+    ZMODE_INTER = 1,
+    ZMODE_XLU   = 2, // translucent
+    ZMODE_DEC   = 3,
+}
+
+function translateZMode(zmode: ZMode): GfxCompareMode {
+    if (zmode === ZMode.ZMODE_OPA)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_XLU)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_DEC)
+        return GfxCompareMode.GEQUAL;
+    throw "Unknown Z mode: " + zmode;
+}
+
+export const enum BlendParam_PM_Color {
+    G_BL_CLR_IN  = 0,
+    G_BL_CLR_MEM = 1,
+    G_BL_CLR_BL  = 2,
+    G_BL_CLR_FOG = 3,
+}
+
+export const enum BlendParam_A {
+    G_BL_A_IN    = 0,
+    G_BL_A_FOG   = 1,
+    G_BL_A_SHADE = 2,
+    G_BL_0       = 3,
+}
+
+export const enum BlendParam_B {
+    G_BL_1MA   = 0,
+    G_BL_A_MEM = 1,
+    G_BL_1     = 2,
+    G_BL_0     = 3,
+}
+
+function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
+    if (paramB === BlendParam_B.G_BL_1MA) {
+        if (srcParam === GfxBlendFactor.SRC_ALPHA)
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        if (srcParam === GfxBlendFactor.ONE)
+            return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.ONE;
+    }
+    if (paramB === BlendParam_B.G_BL_A_MEM)
+        return GfxBlendFactor.DST_ALPHA;
+    if (paramB === BlendParam_B.G_BL_1)
+        return GfxBlendFactor.ONE;
+    if (paramB === BlendParam_B.G_BL_0)
+        return GfxBlendFactor.ZERO;
+
+    throw "Unknown Blend Param B: "+paramB;
+}
+
+export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDescriptor> {
+    const out: Partial<GfxMegaStateDescriptor> = {};
+
+    const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
+    const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
+    const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
+    const dstFactor: BlendParam_B = (renderMode >>> OtherModeL_Layout.B_2) & 0x03;
+
+    const doBlend = !!(renderMode & (1 << OtherModeL_Layout.FORCE_BL)) && (dstColor === BlendParam_PM_Color.G_BL_CLR_MEM);
+    if (doBlend) {
+        assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
+
+        let blendSrcFactor: GfxBlendFactor;
+        if (srcFactor === BlendParam_A.G_BL_0) {
+            blendSrcFactor = GfxBlendFactor.ZERO;
+        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
+            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
+            // this is technically "coverage", admitting blending on edges
+            blendSrcFactor = GfxBlendFactor.ONE;
+        } else {
+            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        }
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: blendSrcFactor,
+            blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
+            blendMode: GfxBlendMode.ADD,
+        });
+    } else {
+        // without FORCE_BL, blending only happens for AA of internal edges
+        // since we are ignoring n64 coverage values and AA, this means "never"
+        // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.ADD,
+        });
+    }
+
+    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
+        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+        out.depthCompare = translateZMode(zmode);
+    }
+
+    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+    if (zmode === ZMode.ZMODE_DEC)
+        out.polygonOffset = true;
+
+    out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
+
+    return out;
 }

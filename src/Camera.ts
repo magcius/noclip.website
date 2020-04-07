@@ -360,7 +360,7 @@ export class FPSCameraController implements CameraController {
         const keyMovement = this.keyMovement;
         const keyMoveLowSpeedCap = 0.01;
 
-        if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
+        if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp') || (inputManager.buttons & 3) === 3) {
             keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
             keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
@@ -637,7 +637,7 @@ export class OrbitCameraController implements CameraController {
         const invertYMult = inputManager.invertY ? -1 : 1;
 
         // Get new velocities from inputs.
-        if (inputManager.button === 1) {
+        if (!!(inputManager.buttons & 1)) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
@@ -801,7 +801,7 @@ export class OrthoCameraController implements CameraController {
         const invertYMult = inputManager.invertY ? -1 : 1;
 
         // Get new velocities from inputs.
-        if (inputManager.button === 1) {
+        if (!!(inputManager.buttons & 1)) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {

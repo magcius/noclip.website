@@ -42,7 +42,7 @@ export default class InputManager {
     public dx: number;
     public dy: number;
     public dz: number;
-    public button: number = -1;
+    public buttons: number = 0;
     public onisdraggingchanged: (() => void) | null = null;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
@@ -69,14 +69,20 @@ export default class InputManager {
         document.addEventListener('keydown', this._onKeyDown, { capture: true });
         document.addEventListener('keyup', this._onKeyUp, { capture: true });
         window.addEventListener('blur', this._onBlur);
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', (e) => {
             if (!this.isInteractive)
                 return;
-            this.button = e.button;
+            this.buttons = e.buttons;
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
+        });
+        this.toplevel.addEventListener('mouseup', (e) => {
+            this.buttons = e.buttons;
         });
 
         this.toplevel.addEventListener('touchstart', this._onTouchChange);
@@ -274,7 +280,7 @@ export default class InputManager {
     }
 
     public onGrabReleased () {
-        this.button = -1;
+        this.buttons = 0;
         if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();
     }

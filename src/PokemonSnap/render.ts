@@ -1,6 +1,5 @@
 import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
-import * as F3DEX from '../BanjoKazooie/f3dex';
 import * as F3DEX2 from './f3dex2';
 
 import { RenderData, F3DEX_Program, AdjustableAnimationController } from '../BanjoKazooie/render';
@@ -55,7 +54,7 @@ class DrawCallInstance {
         if (drawCall.materialIndex >= 0)
             this.material = assertExists(materials[drawCall.materialIndex]);
 
-        this.megaStateFlags = F3DEX.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
+        this.megaStateFlags = F3DEX2.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.createProgram();
     }
 
@@ -156,7 +155,7 @@ class DrawCallInstance {
         renderInst.setGfxProgram(this.gfxProgram);
 
         // TODO: figure out layers
-        if (!(this.drawCall.DP_OtherModeL & (1 << F3DEX.OtherModeL_Layout.Z_UPD)))
+        if (!(this.drawCall.DP_OtherModeL & (1 << RDP.OtherModeL_Layout.Z_UPD)))
             renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
 
         this.material?.fillTextureMappings(this.textureMappings);

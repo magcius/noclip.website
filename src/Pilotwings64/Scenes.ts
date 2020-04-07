@@ -19,7 +19,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix, CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -1737,8 +1737,8 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     if (rspMode & PilotwingsRSPFlag.FOG) {
         // blend with fog first cycle
         renderMode |=
-            (BlendParam_PM_Color.G_BL_CLR_FOG << OtherModeL_Layout.P_1) |
-            (BlendParam_A.G_BL_A_FOG << OtherModeL_Layout.A_1);
+            (RDP.BlendParam_PM_Color.G_BL_CLR_FOG << RDP.OtherModeL_Layout.P_1) |
+            (RDP.BlendParam_A.G_BL_A_FOG << RDP.OtherModeL_Layout.A_1);
         if (modeIndex === 7) {
             if (hasTexture) {
                 combineOverride = {
@@ -1759,8 +1759,8 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     } else {
         // pass through input in first cycle
         renderMode |=
-            (BlendParam_A.G_BL_0 << OtherModeL_Layout.A_1) |
-            (BlendParam_B.G_BL_1 << OtherModeL_Layout.B_1);
+            (RDP.BlendParam_A.G_BL_0 << RDP.OtherModeL_Layout.A_1) |
+            (RDP.BlendParam_B.G_BL_1 << RDP.OtherModeL_Layout.B_1);
     }
 
     const result: DecodeMaterialResult = { geoMode, renderMode };

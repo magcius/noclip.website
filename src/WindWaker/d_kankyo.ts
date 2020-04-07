@@ -10,7 +10,7 @@ import { Camera } from "../Camera";
 import { ColorKind } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet } from "./d_kankyo_wether";
+import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether";
 import { cM_rndF, cLib_addCalc, cLib_addCalc2 } from "./SComponent";
 import { fpc__ProcessName, fopKyM_Create, fpc_bs__Constructor, fGlobals, fpcPf__Register, kankyo_class, cPhs__Status } from "./framework";
 import { ViewerRenderInput } from "../viewer";
@@ -109,8 +109,10 @@ export class dScnKy_env_light_c {
     public weatherPselIdx = 0;
 
     // Wind
-    public windVec = vec3.fromValues(1.0, 0.0, 0.0);
-    public windPower = 1.0;
+    public windTactAngleX: number = 0;
+    public windTactAngleY: number = 0;
+    public windVec = vec3.fromValues(0.0, 0.0, 0.0);
+    public windPower = 0.0;
     public customWindPower = 0.0;
 
     // TODO(jstpierre): Move these weather states to their own structs?
@@ -1294,14 +1296,14 @@ class d_kankyo extends kankyo_class {
         dKy_wave_chan_init(globals);
         // dKy_event_init();
         // dKy_Sound_init();
-        // dKyw_wind_set();
+        dKyw_wind_set(globals);
         return cPhs__Status.Next;
     }
 
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
         dKy_event_proc(globals);
         exeKankyo(globals, globals.g_env_light, deltaTimeInFrames);
-        // dKyw_wind_set(globals);
+        dKyw_wind_set(globals);
         drawKankyo(globals);
     }
 
