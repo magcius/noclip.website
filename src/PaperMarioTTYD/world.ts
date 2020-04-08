@@ -958,7 +958,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const indexData = indexBuffer.buffer;
                     const totalVertexCount = vertexCount;
                     const vertexBuffers: ArrayBuffer[] = [ vertexData ];
-                    loadedDatas.push({ indexData, packets: [], totalIndexCount, totalVertexCount, vertexBuffers, vertexId });
+                    loadedDatas.push({ indexData, packets: [], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
                     displayListTableIdx += 0x04;
                 }
 

@@ -393,6 +393,8 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalVertexCount,
         vertexId: 0,
         packets,
+        drawCalls: null,
+        dlView: null,
     };
 
     const loadedVertexLayout: LoadedVertexLayout = { ... surfaces[0].loadedVertexLayout };

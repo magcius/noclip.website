@@ -2,7 +2,7 @@ import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, ParsedDisplayList, VertexAttributeInput, LoadedVertexPacket } from '../gx/gx_displaylist';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, VertexAttributeInput, LoadedVertexPacket, compilePartialVtxLoader } from '../gx/gx_displaylist';
 import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -115,7 +115,6 @@ class MyShapeHelper {
 
 export class Shape {
     private vtxLoader: VtxLoader;
-    private parsedDisplayList: ParsedDisplayList;
     private loadedVertexData: LoadedVertexData;
 
     private shapeHelper: MyShapeHelper | null = null;
@@ -137,12 +136,13 @@ export class Shape {
 
     constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.parsedDisplayList = this.vtxLoader.parseDisplayList(this.displayList);
+        this.loadedVertexData = this.vtxLoader.parseDisplayList(displayList);
+        this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }
 
     public reloadVertices() {
-        this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
+        this.vtxLoader.loadVertexData(this.loadedVertexData, this.vtxArrays);
         this.verticesDirty = true;
     }
 
@@ -198,7 +198,7 @@ export class Shape {
             this.shapeHelper.uploadData(device, true, false);
             this.verticesDirty = false;
         }
-        
+
         this.packetParams.clear();
 
         const renderInst = renderInstManager.newRenderInst();
@@ -844,7 +844,7 @@ export class Model {
         vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
         vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-    
+
         vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
         vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
         vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
