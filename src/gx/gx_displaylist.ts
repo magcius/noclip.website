@@ -142,12 +142,15 @@ export interface LoadedVertexData {
 
 export interface LoadOptions {
     firstVertexId?: number;
+    reuse?: LoadedVertexData;
 }
 
 type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
 
 export interface VtxLoader {
     loadedVertexLayout: LoadedVertexLayout;
+    parseDisplayList: (srcBuffer: ArrayBufferSlice) => ParsedDisplayList;
+    runParsedDisplayList: (vtxArrays: GX_Array[], parsedDisplayList: ParsedDisplayList, loadOptions?: LoadOptions) => LoadedVertexData;
     runVertices: VtxLoaderFunc;
 }
 
@@ -794,6 +797,17 @@ ${compileVatLayout(vatLayout)}
     return runVertices;
 }
 
+type DrawCall = { primType: number, vertexFormat: GfxFormat, srcOffs: number, vertexCount: number };
+export interface ParsedDisplayList {
+    dlView: DataView;
+    drawCalls: DrawCall[];
+    packets: LoadedVertexPacket[];
+    dstIndexData: Uint16Array;
+    totalIndexCount: number;
+    totalVertexCount: number;
+    vertexId: number;
+}
+
 class VtxLoaderImpl implements VtxLoader {
     public vtxLoaders: SingleVtxLoaderFunc[] = [];
 
@@ -805,19 +819,8 @@ class VtxLoaderImpl implements VtxLoader {
         }
     }
 
-    public runVertices(vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
+    public parseDisplayList(srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): ParsedDisplayList {
         // TODO(jstpierre): Clean this up eventually
-
-        const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : 0;
-
-        const vtxArrayViews: DataView[] = [];
-        const vtxArrayStrides: number[] = [];
-        for (let i = 0; i < GX.Attr.MAX; i++) {
-            if (vtxArrays[i] !== undefined) {
-                vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
-                vtxArrayStrides[i] = vtxArrays[i].stride;
-            }
-        }
 
         function newPacket(indexOffset: number): LoadedVertexPacket {
             return {
@@ -827,8 +830,6 @@ class VtxLoaderImpl implements VtxLoader {
                 texMatrixTable: Array(10).fill(0xFFFF),
             };
         }
-
-        type DrawCall = { primType: number, vertexFormat: GfxFormat, srcOffs: number, vertexCount: number };
 
         // Parse display list.
         const dlView = srcBuffer.createDataView();
@@ -954,19 +955,23 @@ class VtxLoaderImpl implements VtxLoader {
             drawCallIdx += vatFormat.srcVertexSize * vertexCount;
         }
 
-        // Now make the data.
-        let indexDataIdx = 0;
-        const dstIndexData = new Uint16Array(totalIndexCount);
-        let vertexId = firstVertexId;
+        // Construct the index buffer.
+        const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : 0;
 
-        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
-        const dstVertexData = new ArrayBuffer(dstVertexDataSize);
-        const dstVertexDataView = new DataView(dstVertexData);
-        let dstVertexDataOffs = 0;
+        let indexDataIdx = 0;
+        let dstIndexData;
+        if (loadOptions?.reuse !== undefined &&
+            loadOptions.reuse.indexData.byteLength >= totalIndexCount * 2
+        ) {
+            dstIndexData = new Uint16Array(loadOptions.reuse.indexData);
+        } else {
+            dstIndexData = new Uint16Array(totalIndexCount);
+        }
+        let vertexId = firstVertexId;
 
         for (let z = 0; z < drawCalls.length; z++) {
             const drawCall = drawCalls[z];
-        
+
             // Convert topology to triangles.
             switch (drawCall.primType) {
             case GX.Command.DRAW_TRIANGLES:
@@ -1015,6 +1020,45 @@ class VtxLoaderImpl implements VtxLoader {
                     vertexId += 4;
                 }
             }
+        }
+
+        return { dlView, drawCalls, packets, dstIndexData, totalIndexCount, totalVertexCount, vertexId };
+    }
+
+    public runParsedDisplayList(vtxArrays: GX_Array[], parsedDisplayList: ParsedDisplayList, loadOptions?: LoadOptions): LoadedVertexData {
+        const vtxArrayViews: DataView[] = [];
+        const vtxArrayStrides: number[] = [];
+        for (let i = 0; i < GX.Attr.MAX; i++) {
+            if (vtxArrays[i] !== undefined) {
+                vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
+                vtxArrayStrides[i] = vtxArrays[i].stride;
+            }
+        }
+
+        const dlView = parsedDisplayList.dlView;
+        const drawCalls = parsedDisplayList.drawCalls;
+        const packets = parsedDisplayList.packets;
+        const totalIndexCount = parsedDisplayList.totalIndexCount;
+        const totalVertexCount = parsedDisplayList.totalVertexCount;
+        const dstIndexData = parsedDisplayList.dstIndexData;
+        const vertexId = parsedDisplayList.vertexId;
+
+        // Now make the data.
+
+        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
+        let dstVertexData;
+        if (loadOptions?.reuse !== undefined &&
+            loadOptions.reuse.vertexBuffers[0].byteLength >= dstVertexDataSize
+        ) {
+            dstVertexData = loadOptions.reuse.vertexBuffers[0];
+        } else {
+            dstVertexData = new ArrayBuffer(dstVertexDataSize);
+        }
+        const dstVertexDataView = new DataView(dstVertexData);
+        let dstVertexDataOffs = 0;
+
+        for (let z = 0; z < drawCalls.length; z++) {
+            const drawCall = drawCalls[z];
 
             let drawCallIdx = drawCall.srcOffs;
             for (let j = 0; j < drawCall.vertexCount; j++) {
@@ -1028,6 +1072,11 @@ class VtxLoaderImpl implements VtxLoader {
             vertexBuffers: [dstVertexData],
             totalVertexCount, totalIndexCount, vertexId, packets
         };
+    }
+
+    public runVertices(vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
+        const parsedDisplayList = this.parseDisplayList(srcBuffer, loadOptions);
+        return this.runParsedDisplayList(vtxArrays, parsedDisplayList, loadOptions);
     }
 }
 

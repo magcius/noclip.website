@@ -287,7 +287,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController);
+                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController, false);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);

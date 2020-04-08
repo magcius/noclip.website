@@ -6,27 +6,29 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes } from './animation';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection } from './animation';
 import { SFARenderer } from './render';
-import { ModelCollection, ModelInstance } from './models';
+import { ModelCollection, ModelInstance, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { SFATextureCollection, SFATexture } from './textures';
 import { DataFetcher } from '../DataFetcher';
+import { dataSubarray } from './util';
 
 class ModelExhibitRenderer extends SFARenderer {
-    private modelInst: ModelInstance | null | undefined = undefined; // null: Failed to load. undefined: Not set.
+    private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
     private modelNum = 1;
     private modelSelect: UI.TextEntry;
 
-    private amap: DataView | undefined = undefined;
+    private modanim: DataView | null | undefined = undefined;
+    private amap: DataView | null | undefined = undefined;
     private anim: Anim | null | undefined = undefined;
-    private animNum = 0;
+    private modelAnimNum = 0;
     private animSelect: UI.TextEntry;
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection) {
+    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
         super(device, animController);
     }
 
@@ -51,7 +53,7 @@ class ModelExhibitRenderer extends SFARenderer {
         this.animSelect.ontext = (s: string) => {
             const newNum = Number.parseInt(s);
             if (newNum !== NaN) {
-                this.animNum = newNum;
+                this.modelAnimNum = newNum;
                 this.anim = undefined;
             }
         }
@@ -67,6 +69,24 @@ class ModelExhibitRenderer extends SFARenderer {
 
         return [panel];
     }
+
+    public setAmapNum(num: number | null) {
+        if (num === null) {
+            this.amap = null;
+        } else {
+            this.amap = this.amapColl.getAmap(num);
+            console.log(`Amap ${num} has ${this.amap.byteLength} entries`);
+        }
+    }
+
+    private getGlobalAnimNum(modelAnimNum: number): number {
+        return this.modanim!.getUint16(modelAnimNum * 2);
+    }
+
+    private getAmapForModelAnim(modelAnimNum: number): DataView {
+        const stride = (((this.modelInst!.model.joints.length + 8) / 8)|0) * 8;
+        return dataSubarray(this.amap!, modelAnimNum * stride, stride);
+    }
     
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
@@ -74,16 +94,14 @@ class ModelExhibitRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        // if (this.modelNum !== selectedModelNum) {
-        //     this.modelNum = selectedModelNum;
-        //     this.model = undefined;
-        // }
-
         if (this.modelInst === undefined) {
             try {
+                this.modelAnimNum = 0;
+                this.modanim = this.modanimColl.getModanim(this.modelNum);
                 this.amap = this.amapColl.getAmap(this.modelNum);
                 this.modelInst = this.modelColl.createModelInstance(device, this.materialFactory, this.modelNum);
                 console.log(`Loaded model ${this.modelNum}`);
+                console.log(`Model ${this.modelNum} has ${this.modelInst.model.joints.length} joints`);
             } catch (e) {
                 console.warn(`Failed to load model ${this.modelNum} due to exception:`);
                 console.error(e);
@@ -93,46 +111,53 @@ class ModelExhibitRenderer extends SFARenderer {
         
         const animate = true;
         if (animate && this.modelInst !== null && this.modelInst !== undefined) {
-            // const selectedAnimNum = this.animSelect.getValue()|0;
-            // if (this.animNum !== selectedAnimNum) {
-            //     this.animNum = selectedAnimNum;
-            //     this.anim = null;
-            // }
-
             if (this.anim === undefined) {
                 try {
-                    this.anim = this.animColl.getAnim(this.animNum);
-                    console.log(`Loaded anim ${this.animNum}`);
+                    const globalAnimNum = this.getGlobalAnimNum(this.modelAnimNum);
+                    this.anim = this.animColl.getAnim(globalAnimNum);
+                    console.log(`Loaded anim ${this.modelAnimNum} (global #${globalAnimNum})`);
+                    console.log(`Anim ${this.modelAnimNum} has ${this.anim.keyframes[0].poses.length} poses`);
                 } catch (e) {
-                    console.warn(`Failed to load animation ${this.animNum} due to exception:`);
+                    console.warn(`Failed to load animation ${this.modelAnimNum} due to exception:`);
                     console.error(e);
                     this.anim = null;
                 }
             }
 
             if (this.anim !== null && this.anim !== undefined) {
-                this.modelInst.resetPose();
-                const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
-                const kf0Num = Math.floor(kfTime);
-                let kf1Num = kf0Num + 1;
-                if (kf1Num >= this.anim.keyframes.length) {
-                    kf1Num = 0;
-                }
-                const kf0 = this.anim.keyframes[kf0Num];
-                const kf1 = this.anim.keyframes[kf1Num];
-                const ratio = kfTime - kf0Num;
-                const kf = interpolateKeyframes(kf0, kf1, ratio);
-                for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
-                    const pose = kf.poses[i];
-                    const poseMtx = mat4.create();
-                    mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                    mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                    mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-                    mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                    mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-    
-                    const jointNum = this.amap!.getInt8(i);
-                    this.modelInst.setJointPose(jointNum, poseMtx);
+                try {
+                    const modelAnimAmap = this.getAmapForModelAnim(this.modelAnimNum);
+                    this.modelInst.resetPose();
+                    const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
+                    const kf0Num = Math.floor(kfTime);
+                    let kf1Num = kf0Num + 1;
+                    if (kf1Num >= this.anim.keyframes.length) {
+                        kf1Num = 0;
+                    }
+                    const kf0 = this.anim.keyframes[kf0Num];
+                    const kf1 = this.anim.keyframes[kf1Num];
+                    const ratio = kfTime - kf0Num;
+                    const kf = interpolateKeyframes(kf0, kf1, ratio);
+                    for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
+                        const pose = kf.poses[i];
+                        const poseMtx = mat4.create();
+                        mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                        mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                        mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+                        mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
+                        mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+
+                        let jointNum = i;
+                        if (modelAnimAmap !== null && modelAnimAmap !== undefined) {
+                            jointNum = modelAnimAmap.getInt8(i);
+                        }
+                        this.modelInst.setJointPose(jointNum, poseMtx);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to animate model due to exception:`);
+                    console.error(e);
+                    this.anim = null;
+                    this.modelInst.resetPose();
                 }
             }
         }
@@ -179,22 +204,21 @@ class ModelExhibitRenderer extends SFARenderer {
 }
 
 export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, public name: string, private subdir: string, private modelVersion: ModelVersion, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        console.log(`Creating scene for character exhibit ...`);
-        
-        const subdir = 'swaphol'; // TODO: configurable
+        console.log(`Creating scene for model exhibit ...`);
 
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
 
+        const modanimColl = await ModanimCollection.create(this.gameInfo, context.dataFetcher);
         const amapColl = await AmapCollection.create(this.gameInfo, context.dataFetcher);
-        const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, subdir);
-        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, subdir, false);
-        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, subdir, texColl, animController);
+        const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
+        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, this.subdir, this.modelVersion === ModelVersion.Beta);
+        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texColl, animController, this.modelVersion);
 
-        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl);
+        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl, modanimColl);
     }
 }

@@ -55,6 +55,7 @@ export class ObjectInstance {
     private pitch: number = 0;
     private roll: number = 0;
     private scale: number = 1.0;
+    private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
     private modanim: DataView;
     private layerVals0x3: number;
@@ -78,7 +79,7 @@ export class ObjectInstance {
             this.modelInst = modelInst;
 
             if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
-                this.setAnimNum(0);
+                this.setModelAnimNum(0);
             }
         } catch (e) {
             console.warn(`Failed to load model ${modelNum} due to exception:`);
@@ -519,7 +520,8 @@ export class ObjectInstance {
         vec3.copy(this.position, pos);
     }
 
-    public setAnimNum(num: number) {
+    public setModelAnimNum(num: number) {
+        this.modelAnimNum = num;
         const modanim = this.modanim.getUint16(num * 2);
         this.setAnim(this.world.resColl.animColl.getAnim(modanim));
     }
@@ -542,7 +544,8 @@ export class ObjectInstance {
         // TODO: always enable animations for fine-skinned models
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             this.modelInst.resetPose();
-            // TODO: use time values from animation data
+            // TODO: use time values from animation data?
+            const amap = this.modelInst.getAmap(this.modelAnimNum!);
             const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
             const kf0Num = Math.floor(kfTime);
             let kf1Num = kf0Num + 1;
@@ -562,7 +565,7 @@ export class ObjectInstance {
                 mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
                 mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
 
-                const jointNum = this.modelInst.getAmap().getInt8(i);
+                const jointNum = amap.getInt8(i);
                 this.modelInst.setJointPose(jointNum, poseMtx);
             }
         }

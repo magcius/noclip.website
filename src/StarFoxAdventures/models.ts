@@ -1,12 +1,12 @@
 import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader } from '../gx/gx_displaylist';
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, ParsedDisplayList, VertexAttributeInput, LoadedVertexPacket } from '../gx/gx_displaylist';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
@@ -20,11 +20,105 @@ import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, da
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+
+class MyShapeHelper {
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+    private zeroBuffer: GfxBuffer | null = null;
+    private vertexBuffers: GfxBuffer[] = [];
+    private indexBuffer: GfxBuffer;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean, dynamicIndices: boolean) {
+        let usesZeroBuffer = false;
+        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
+            if (attrib === undefined) {
+                usesZeroBuffer = true;
+                break;
+            }
+        }
+
+        const buffers: GfxVertexBufferDescriptor[] = [];
+        for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
+                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            this.vertexBuffers.push(vertexBuffer);
+
+            buffers.push({
+                buffer: vertexBuffer,
+                byteOffset: 0,
+            });
+        }
+
+        if (usesZeroBuffer) {
+            // TODO(jstpierre): Move this to a global somewhere?
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            buffers.push({
+                buffer: this.zeroBuffer,
+                byteOffset: 0,
+            });
+        }
+
+        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
+            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+
+        const indexBufferDesc: GfxIndexBufferDescriptor = {
+            buffer: this.indexBuffer,
+            byteOffset: 0,
+        };
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDesc);
+
+        this.uploadData(device, true, true);
+    }
+
+    public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
+        const hostAccessPass = device.createHostAccessPass();
+
+        if (uploadVertices) {
+            for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
+                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+            }
+        }
+
+        if (uploadIndices) {
+            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+        }
+
+        device.submitPass(hostAccessPass);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        if (packet !== null)
+            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        else
+            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
+    }
+
+    public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {
+        let offs = renderInst.getUniformBufferOffset(ub_PacketParams);
+        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
+        fillPacketParamsData(d, offs, packetParams);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputState(this.inputState);
+        if (this.zeroBuffer !== null)
+            device.destroyBuffer(this.zeroBuffer);
+    }
+}
 
 export class Shape {
+    private vtxLoader: VtxLoader;
+    private parsedDisplayList: ParsedDisplayList;
     private loadedVertexData: LoadedVertexData;
-    private shapeHelper: GXShapeHelperGfx | null = null;
+
+    private shapeHelper: MyShapeHelper | null = null;
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
     private packetParams = new PacketParams();
@@ -35,28 +129,21 @@ export class Shape {
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
+    private verticesDirty = true;
 
-    private vtxLoader: VtxLoader;
-    private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
     public hasBetaFineSkinning = false;
 
-    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
+    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.reload();
+        this.parsedDisplayList = this.vtxLoader.parseDisplayList(this.displayList);
+        this.reloadVertices();
     }
 
-    public reload() {
-        if (this.shapeHelper !== null) {
-            this.shapeHelper.destroy(this.device);
-            this.shapeHelper = null;
-        }
-        if (this.bufferCoalescer !== null) {
-            this.bufferCoalescer.destroy(this.device);
-            this.bufferCoalescer = null;
-        }
-        this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
+    public reloadVertices() {
+        this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
+        this.verticesDirty = true;
     }
 
     // Caution: Material is referenced, not copied.
@@ -104,8 +191,12 @@ export class Shape {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
-            this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, this.bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
+            this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
+            this.verticesDirty = false;
+        } else if (this.verticesDirty) {
+            this.shapeHelper.uploadData(device, true, false);
+            this.verticesDirty = false;
         }
         
         this.packetParams.clear();
@@ -288,12 +379,12 @@ class ModelShapes {
     constructor(public model: Model, public posBuffer: DataView) {
     }
 
-    public reload() {
+    public reloadVertices() {
         // TODO: reload waters and furs
         for (let i = 0; i < this.shapes.length; i++) {
             const shapes = this.shapes[i];
             for (let j = 0; j < shapes.length; j++) {
-                shapes[j].reload();
+                shapes[j].reloadVertices();
             }
         }
     }
@@ -947,7 +1038,7 @@ export class Model {
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const vtxArrays = getVtxArrays(posBuffer);
-            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
+            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
@@ -1007,7 +1098,7 @@ export class Model {
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
-                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
+                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
@@ -1117,8 +1208,9 @@ export class ModelInstance implements BlockRenderer {
         this.updateBoneMatrices();
     }
 
-    public getAmap(): DataView {
-        return this.amap;
+    public getAmap(modelAnimNum: number): DataView {
+        const stride = (((this.model.joints.length + 8) / 8)|0) * 8;
+        return dataSubarray(this.amap, modelAnimNum * stride, stride);
     }
 
     public setAmap(amap: DataView) {
@@ -1177,12 +1269,17 @@ export class ModelInstance implements BlockRenderer {
             const boneMtx = this.boneMatrices[joint.boneNum];
             mat4.identity(boneMtx);
             if (this.model.hasBetaFineSkinning) {
-                // TODO: test
                 mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
             }
-            mat4.mul(boneMtx, this.model.jointTfMatrices[joint.boneNum], this.jointPoseMatrices[joint.boneNum]);
-            if (joint.parent != 0xff) {
-                mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
+
+            let jointWalker = joint;
+            while (true) {
+                mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
+                mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
+                if (jointWalker.parent === 0xff) {
+                    break;
+                }
+                jointWalker = this.model.joints[jointWalker.parent];
             }
         }
 
@@ -1272,7 +1369,7 @@ export class ModelInstance implements BlockRenderer {
         }
 
         // Rerun all display lists
-        this.modelShapes.reload();
+        this.modelShapes.reloadVertices();
     }
 }
 
@@ -1281,11 +1378,11 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
+    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo, private modelVersion: ModelVersion) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController): Promise<ModelCollection> {
-        const self = new ModelCollection(texColl, animController, gameInfo);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelCollection> {
+        const self = new ModelCollection(texColl, animController, gameInfo, modelVersion);
 
         const pathBase = self.gameInfo.pathBase;
         const [modelsTab, modelsBin] = await Promise.all([
@@ -1313,7 +1410,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController, this.modelVersion);
         }
 
         return this.models[num];

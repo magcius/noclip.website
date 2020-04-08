@@ -413,7 +413,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
 
         const renderer = new WorldRenderer(world, testModels);
-        console.info(`Enter main.scene.enableFineAnims() to enable more animations. However, this will be very slow.`);
         return renderer;
     }
 }

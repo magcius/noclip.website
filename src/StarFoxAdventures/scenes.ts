@@ -4,6 +4,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
 import { SFAModelExhibitSceneDesc } from './modelexhibit';
+import { ModelVersion } from './models';
 import { BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFAWorldSceneDesc } from './world';
@@ -542,7 +543,8 @@ const sceneDescs = [
     new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
 
     // 'Miscellaneous',
-    // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit'),
+    // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
+    // new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
