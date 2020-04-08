@@ -4,6 +4,7 @@ import { DataFetcher } from '../DataFetcher';
 import { GameInfo } from './scenes';
 import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
 import { lerp, lerpAngle } from '../MathHelpers';
+import { nArray } from '../util';
 
 export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);
@@ -61,12 +62,25 @@ interface Axis {
     scale: number;
 }
 
+function createAxis(): Axis {
+    return { translation: 0, rotation: 0, scale: 1 };
+}
+
+const NUM_AXES = 3;
 interface Pose {
     axes: Axis[/* 3 */];
 }
 
-interface Keyframe {
+function createPose(): Pose {
+    return { axes: nArray(NUM_AXES, () => createAxis()) };
+}
+
+export interface Keyframe {
     poses: Pose[];
+}
+
+function createKeyframe(numPoses: number): Keyframe {
+    return { poses: nArray(numPoses, () => createPose()) };
 }
 
 export interface Anim {
@@ -128,11 +142,7 @@ export class AnimFile {
             }
 
             function loadAxis(): Axis {
-                const result: Axis = {
-                    translation: 0,
-                    rotation: 0,
-                    scale: 1.0,
-                };
+                const result: Axis = createAxis();
 
                 let cmd = getNextCmd();
 
@@ -185,20 +195,19 @@ export class AnimFile {
             }
 
             function loadPose(): Pose {
-                const result: Pose = { axes: [] };
+                const result: Pose = createPose();
 
-                for (let i = 0; i < 3; i++) {
-                    result.axes.push(loadAxis());
+                for (let i = 0; i < NUM_AXES; i++) {
+                    result.axes[i] = loadAxis();
                 }
 
                 return result;
             }
 
-            const result: Keyframe = { poses: [] };
+            const result: Keyframe = createKeyframe(header.numBones);
 
             for (let i = 0; i < header.numBones; i++) {
-                const pose = loadPose();
-                result.poses.push(pose);
+                result.poses[i] = loadPose();
                 // console.log(`pose ${i}: ${JSON.stringify(pose, null, '\t')}`);
             }
 
@@ -243,29 +252,32 @@ export class AnimFile {
     }
 }
 
-export function interpolateAxes(axis0: Axis, axis1: Axis, ratio: number): Axis {
-    return {
-        translation: lerp(axis0.translation, axis1.translation, ratio),
-        rotation: lerpAngle(axis0.rotation, axis1.rotation, ratio), // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
-        scale: lerp(axis0.scale, axis1.scale, ratio),
-    };
+export function interpolateAxes(axis0: Axis, axis1: Axis, ratio: number, reuse?: Axis): Axis {
+    const result = reuse !== undefined ? reuse : createAxis();
+
+    result.translation = lerp(axis0.translation, axis1.translation, ratio);
+    result.rotation = lerpAngle(axis0.rotation, axis1.rotation, ratio); // TODO: use lerpAngle? but lerpAngle assumes 0..2pi whereas we use -pi..pi.
+    result.scale = lerp(axis0.scale, axis1.scale, ratio);
+
+    return result;
 }
 
-export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number): Pose {
-    const result: Pose = { axes: [] };
+export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?: Pose): Pose {
+    const result: Pose = reuse !== undefined ? reuse : createPose();
 
-    for (let i = 0; i < pose0.axes.length && i < pose1.axes.length; i++) {
-        result.axes.push(interpolateAxes(pose0.axes[i], pose1.axes[i], ratio));
+    for (let i = 0; i < NUM_AXES; i++) {
+        result.axes[i] = interpolateAxes(pose0.axes[i], pose1.axes[i], ratio, result.axes[i]);
     }
 
     return result;
 }
 
-export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number): Keyframe {
-    const result: Keyframe = { poses: [] };
+export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
+    const numPoses = Math.min(kf0.poses.length, kf1.poses.length);
+    const result: Keyframe = reuse !== undefined ? reuse : createKeyframe(numPoses);
 
-    for (let i = 0; i < kf0.poses.length && i < kf1.poses.length; i++) {
-        result.poses.push(interpolatePoses(kf0.poses[i], kf1.poses[i], ratio));
+    for (let i = 0; i < numPoses; i++) {
+        result.poses[i] = interpolatePoses(kf0.poses[i], kf1.poses[i], ratio, result.poses[i]);
     }
 
     return result;

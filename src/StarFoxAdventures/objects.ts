@@ -3,18 +3,12 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
-import { GameInfo } from './scenes';
-import { ModelCollection, ModelInstance } from './models';
-import { SFATextureCollection } from './textures';
+import { ModelInstance } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
-import { MaterialFactory } from './shaders';
-import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
-import { MapInstance } from './maps';
-import { ResourceCollection } from './resource';
-import { EnvfxManager } from './envfx';
+import { Anim, interpolateKeyframes, Keyframe } from './animation';
 import { World } from './world';
 
 // An ObjectType is used to spawn ObjectInstance's.
@@ -557,6 +551,8 @@ export class ObjectInstance {
         }
     }
 
+    private curKeyframe: Keyframe | undefined = undefined;
+
     public update() {
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             const poseMtx = mat4.create();
@@ -572,9 +568,9 @@ export class ObjectInstance {
             const kf0 = this.anim.keyframes[kf0Num];
             const kf1 = this.anim.keyframes[kf1Num];
             const ratio = kfTime - kf0Num;
-            const kf = interpolateKeyframes(kf0, kf1, ratio);
-            for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
-                const pose = kf.poses[i];
+            this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
+            for (let i = 0; i < this.curKeyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
+                const pose = this.curKeyframe.poses[i];
                 mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                 mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
                 mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
