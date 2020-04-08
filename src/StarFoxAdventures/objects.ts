@@ -3,18 +3,12 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
-import { GameInfo } from './scenes';
-import { ModelCollection, ModelInstance } from './models';
-import { SFATextureCollection } from './textures';
+import { ModelInstance } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
-import { MaterialFactory } from './shaders';
-import { SFAAnimationController, Anim, AmapCollection, AnimCollection, ModanimCollection, interpolateKeyframes } from './animation';
-import { MapInstance } from './maps';
-import { ResourceCollection } from './resource';
-import { EnvfxManager } from './envfx';
+import { Anim, interpolateKeyframes, Keyframe } from './animation';
 import { World } from './world';
 
 // An ObjectType is used to spawn ObjectInstance's.
@@ -50,11 +44,15 @@ export class ObjectType {
 
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
+
     private position: vec3 = vec3.create();
     private yaw: number = 0;
     private pitch: number = 0;
     private roll: number = 0;
     private scale: number = 1.0;
+    private srtMatrix: mat4 = mat4.create();
+    private srtDirty: boolean = true;
+
     private modelAnimNum: number | null = null;
     private anim: Anim | null = null;
     private modanim: DataView;
@@ -500,6 +498,19 @@ export class ObjectInstance {
         }
     }
 
+    public getSRT(): mat4 {
+        if (this.srtDirty) {
+            mat4.fromTranslation(this.srtMatrix, this.position);
+            mat4.scale(this.srtMatrix, this.srtMatrix, [this.scale, this.scale, this.scale]);
+            mat4.rotateY(this.srtMatrix, this.srtMatrix, this.yaw);
+            mat4.rotateX(this.srtMatrix, this.srtMatrix, this.pitch);
+            mat4.rotateZ(this.srtMatrix, this.srtMatrix, this.roll);
+            this.srtDirty = false;
+        }
+
+        return this.srtMatrix;
+    }
+
     public getType(): ObjectType {
         return this.objType;
     }
@@ -540,9 +551,11 @@ export class ObjectInstance {
         }
     }
 
+    private curKeyframe: Keyframe | undefined = undefined;
+
     public update() {
-        // TODO: always enable animations for fine-skinned models
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
+            const poseMtx = mat4.create();
             this.modelInst.resetPose();
             // TODO: use time values from animation data?
             const amap = this.modelInst.getAmap(this.modelAnimNum!);
@@ -555,10 +568,9 @@ export class ObjectInstance {
             const kf0 = this.anim.keyframes[kf0Num];
             const kf1 = this.anim.keyframes[kf1Num];
             const ratio = kfTime - kf0Num;
-            const kf = interpolateKeyframes(kf0, kf1, ratio);
-            for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
-                const pose = kf.poses[i];
-                const poseMtx = mat4.create();
+            this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
+            for (let i = 0; i < this.curKeyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
+                const pose = this.curKeyframe.poses[i];
                 mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
                 mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
                 mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
@@ -580,13 +592,7 @@ export class ObjectInstance {
         this.update();
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
-            const mtx = mat4.create();
-            mat4.fromTranslation(mtx, this.position);
-            mat4.scale(mtx, mtx, [this.scale, this.scale, this.scale]);
-            mat4.rotateY(mtx, mtx, this.yaw);
-            mat4.rotateX(mtx, mtx, this.pitch);
-            mat4.rotateZ(mtx, mtx, this.roll);
-
+            const mtx = this.getSRT();
             this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep);
 
             // Draw bones
