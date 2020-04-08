@@ -1255,6 +1255,9 @@ export class ModelInstance implements BlockRenderer {
         this.updateBoneMatrices();
         this.modelShapes.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices);
     }
+
+    private scratch0 = mat4.create();
+    private scratch1 = mat4.create();
     
     private updateBoneMatrices() {
         if (!this.skeletonDirty) {
@@ -1272,14 +1275,24 @@ export class ModelInstance implements BlockRenderer {
                 mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
             }
 
-            let jointWalker = joint;
-            while (true) {
-                mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
-                mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
-                if (jointWalker.parent === 0xff) {
-                    break;
+            if (!this.model.hasBetaFineSkinning) {
+                // FIXME: Use this code for beta models with fine skinning
+                mat4.mul(boneMtx, this.jointPoseMatrices[joint.boneNum], boneMtx);
+                mat4.mul(boneMtx, this.model.jointTfMatrices[joint.boneNum], boneMtx);
+                if (joint.parent != 0xff) {
+                    mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
                 }
-                jointWalker = this.model.joints[jointWalker.parent];
+            } else {
+                // FIXME: figure out what is broken about fine-skinned beta models that the following code is needed
+                let jointWalker = joint;
+                while (true) {
+                    mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
+                    mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
+                    if (jointWalker.parent === 0xff) {
+                        break;
+                    }
+                    jointWalker = this.model.joints[jointWalker.parent];
+                }
             }
         }
 
@@ -1288,18 +1301,15 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.coarseBlends.length; i++) {
             const blend = this.model.coarseBlends[i];
 
-            const invBind0 = this.model.invBindMatrices[blend.joint0];
-            const invBind1 = this.model.invBindMatrices[blend.joint1];
-
-            const mat0 = mat4.clone(this.boneMatrices[blend.joint0]);
-            mat4.mul(mat0, mat0, invBind0);
-            const mat1 = mat4.clone(this.boneMatrices[blend.joint1]);
-            mat4.mul(mat1, mat1, invBind1);
+            mat4.copy(this.scratch0, this.boneMatrices[blend.joint0]);
+            mat4.mul(this.scratch0, this.scratch0, this.model.invBindMatrices[blend.joint0]);
+            mat4.multiplyScalar(this.scratch0, this.scratch0, blend.influence0);
+            mat4.copy(this.scratch1, this.boneMatrices[blend.joint1]);
+            mat4.mul(this.scratch1, this.scratch1, this.model.invBindMatrices[blend.joint1]);
+            mat4.multiplyScalar(this.scratch1, this.scratch1, blend.influence1);
 
             const boneMtx = this.boneMatrices[this.model.joints.length + i];
-            mat4.multiplyScalar(mat0, mat0, blend.influence0);
-            mat4.multiplyScalar(mat1, mat1, blend.influence1);
-            mat4.add(boneMtx, mat0, mat1);
+            mat4.add(boneMtx, this.scratch0, this.scratch1);
         }
 
         this.performFineSkinning();
@@ -1316,8 +1326,6 @@ export class ModelInstance implements BlockRenderer {
             return;
         }
 
-        const scratch0 = mat4.create();
-        const scratch1 = mat4.create();
         const boneMtx0 = mat4.create();
         const boneMtx1 = mat4.create();
         const pos = vec3.create();
@@ -1351,12 +1359,12 @@ export class ModelInstance implements BlockRenderer {
 
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
-                mat4.copy(scratch0, boneMtx0);
-                mat4.multiplyScalar(scratch0, scratch0, weight0);
-                mat4.copy(scratch1, boneMtx1);
-                mat4.multiplyScalar(scratch1, scratch1, weight1);
-                mat4.add(scratch0, scratch0, scratch1);
-                vec3.transformMat4(pos, pos, scratch0);
+                mat4.copy(this.scratch0, boneMtx0);
+                mat4.multiplyScalar(this.scratch0, this.scratch0, weight0);
+                mat4.copy(this.scratch1, boneMtx1);
+                mat4.multiplyScalar(this.scratch1, this.scratch1, weight1);
+                mat4.add(this.scratch0, this.scratch0, this.scratch1);
+                vec3.transformMat4(pos, pos, this.scratch0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
