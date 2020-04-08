@@ -9,7 +9,7 @@ export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);
     public envAnimValue0: number = 0;
     public envAnimValue1: number = 0;
-    public enableFineSkinAnims: boolean = false;
+    public enableFineSkinAnims: boolean = true;
 
     public update(viewerInput: ViewerRenderInput) {
         this.animController.setTimeFromViewerInput(viewerInput);

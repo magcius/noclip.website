@@ -3,7 +3,7 @@ import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, ParsedDisplayList, VertexAttributeInput, LoadedVertexPacket } from '../gx/gx_displaylist';
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
@@ -20,7 +20,7 @@ import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, da
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
-import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class MyShapeHelper {
@@ -30,7 +30,7 @@ class MyShapeHelper {
     private vertexBuffers: GfxBuffer[] = [];
     private indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, isDynamic: boolean) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, dynamicVertices: boolean, dynamicIndices: boolean) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -43,7 +43,7 @@ class MyShapeHelper {
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
             const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
-                isDynamic ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+                dynamicVertices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
             this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
@@ -64,7 +64,7 @@ class MyShapeHelper {
         this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
 
         this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
-            isDynamic ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            dynamicIndices ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
             buffer: this.indexBuffer,
@@ -72,17 +72,21 @@ class MyShapeHelper {
         };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDesc);
 
-        this.uploadData(device);
+        this.uploadData(device, true, true);
     }
 
-    public uploadData(device: GfxDevice) {
+    public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
         const hostAccessPass = device.createHostAccessPass();
 
-        for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
-            hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+        if (uploadVertices) {
+            for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
+                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+            }
         }
 
-        hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+        if (uploadIndices) {
+            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+        }
 
         device.submitPass(hostAccessPass);
     }
@@ -125,7 +129,7 @@ export class Shape {
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
-    private gfxBuffersDirty = true;
+    private verticesDirty = true;
 
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
@@ -134,12 +138,12 @@ export class Shape {
     constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.parsedDisplayList = this.vtxLoader.parseDisplayList(this.displayList);
-        this.reload();
+        this.reloadVertices();
     }
 
-    public reload() {
+    public reloadVertices() {
         this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
-        this.gfxBuffersDirty = true;
+        this.verticesDirty = true;
     }
 
     // Caution: Material is referenced, not copied.
@@ -188,11 +192,11 @@ export class Shape {
 
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
-                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic);
-            this.gfxBuffersDirty = false;
-        } else if (this.gfxBuffersDirty) {
-            this.shapeHelper.uploadData(device);
-            this.gfxBuffersDirty = false;
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
+            this.verticesDirty = false;
+        } else if (this.verticesDirty) {
+            this.shapeHelper.uploadData(device, true, false);
+            this.verticesDirty = false;
         }
         
         this.packetParams.clear();
@@ -375,12 +379,12 @@ class ModelShapes {
     constructor(public model: Model, public posBuffer: DataView) {
     }
 
-    public reload() {
+    public reloadVertices() {
         // TODO: reload waters and furs
         for (let i = 0; i < this.shapes.length; i++) {
             const shapes = this.shapes[i];
             for (let j = 0; j < shapes.length; j++) {
-                shapes[j].reload();
+                shapes[j].reloadVertices();
             }
         }
     }
@@ -1365,7 +1369,7 @@ export class ModelInstance implements BlockRenderer {
         }
 
         // Rerun all display lists
-        this.modelShapes.reload();
+        this.modelShapes.reloadVertices();
     }
 }
 
