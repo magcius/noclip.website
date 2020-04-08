@@ -1,12 +1,12 @@
 import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader } from '../gx/gx_displaylist';
-import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, ParsedDisplayList, VertexAttributeInput, LoadedVertexPacket } from '../gx/gx_displaylist';
+import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
@@ -20,11 +20,78 @@ import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, da
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+
+export class MyShapeHelper {
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+    private zeroBuffer: GfxBuffer | null = null;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+        let usesZeroBuffer = false;
+        for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
+            const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
+            if (attrib === undefined) {
+                usesZeroBuffer = true;
+                break;
+            }
+        }
+
+        const buffers: GfxVertexBufferDescriptor[] = [];
+        for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+            buffers.push({
+                buffer: coalescedBuffers.vertexBuffers[i].buffer,
+                byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
+            });
+        }
+
+        if (usesZeroBuffer) {
+            // TODO(jstpierre): Move this to a global somewhere?
+            this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
+            buffers.push({
+                buffer: this.zeroBuffer,
+                byteOffset: 0,
+            });
+        }
+
+        this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
+
+        const indexBuffer: GfxIndexBufferDescriptor = {
+            buffer: coalescedBuffers.indexBuffer.buffer,
+            byteOffset: coalescedBuffers.indexBuffer.wordOffset * 4,
+        };
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        if (packet !== null)
+            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        else
+            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
+    }
+
+    public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {
+        let offs = renderInst.getUniformBufferOffset(ub_PacketParams);
+        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
+        fillPacketParamsData(d, offs, packetParams);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputState(this.inputState);
+        if (this.zeroBuffer !== null)
+            device.destroyBuffer(this.zeroBuffer);
+    }
+}
 
 export class Shape {
+    private vtxLoader: VtxLoader;
+    private parsedDisplayList: ParsedDisplayList;
     private loadedVertexData: LoadedVertexData;
-    private shapeHelper: GXShapeHelperGfx | null = null;
+
+    private shapeHelper: MyShapeHelper | null = null;
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
     private packetParams = new PacketParams();
@@ -36,7 +103,6 @@ export class Shape {
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
 
-    private vtxLoader: VtxLoader;
     private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
@@ -44,6 +110,7 @@ export class Shape {
 
     constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
+        this.parsedDisplayList = this.vtxLoader.parseDisplayList(this.displayList);
         this.reload();
     }
 
@@ -53,10 +120,10 @@ export class Shape {
             this.shapeHelper = null;
         }
         if (this.bufferCoalescer !== null) {
-            this.bufferCoalescer.destroy(this.device);
-            this.bufferCoalescer = null;
+            //this.bufferCoalescer.destroy(this.device);
+           // this.bufferCoalescer = null;
         }
-        this.loadedVertexData = this.vtxLoader.runVertices(this.vtxArrays, this.displayList);
+        this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
     }
 
     // Caution: Material is referenced, not copied.
@@ -104,8 +171,10 @@ export class Shape {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
-            this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            this.shapeHelper = new GXShapeHelperGfx(device, renderInstManager.gfxRenderCache, this.bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
+            if (this.bufferCoalescer === null) {
+                this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
+            }
+            this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache, this.bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
         }
         
         this.packetParams.clear();

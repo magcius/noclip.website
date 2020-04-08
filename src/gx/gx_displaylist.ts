@@ -142,12 +142,15 @@ export interface LoadedVertexData {
 
 export interface LoadOptions {
     firstVertexId?: number;
+    reuse?: LoadedVertexData;
 }
 
 type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
 
 export interface VtxLoader {
     loadedVertexLayout: LoadedVertexLayout;
+    parseDisplayList: (srcBuffer: ArrayBufferSlice) => ParsedDisplayList;
+    runParsedDisplayList: (vtxArrays: GX_Array[], parsedDisplayList: ParsedDisplayList, loadOptions?: LoadOptions) => LoadedVertexData;
     runVertices: VtxLoaderFunc;
 }
 
@@ -795,7 +798,7 @@ ${compileVatLayout(vatLayout)}
 }
 
 type DrawCall = { primType: number, vertexFormat: GfxFormat, srcOffs: number, vertexCount: number };
-interface ParsedDisplayList {
+export interface ParsedDisplayList {
     dlView: DataView;
     drawCalls: DrawCall[];
     packets: LoadedVertexPacket[];
@@ -973,11 +976,25 @@ class VtxLoaderImpl implements VtxLoader {
 
         // Now make the data.
         let indexDataIdx = 0;
-        const dstIndexData = new Uint16Array(totalIndexCount);
+        let dstIndexData;
+        if (loadOptions?.reuse !== undefined &&
+            loadOptions.reuse.indexData.byteLength >= totalIndexCount * 2
+        ) {
+            dstIndexData = new Uint16Array(loadOptions.reuse.indexData);
+        } else {
+            dstIndexData = new Uint16Array(totalIndexCount);
+        }
         let vertexId = firstVertexId;
 
         const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
-        const dstVertexData = new ArrayBuffer(dstVertexDataSize);
+        let dstVertexData;
+        if (loadOptions?.reuse !== undefined &&
+            loadOptions.reuse.vertexBuffers[0].byteLength >= dstVertexDataSize
+        ) {
+            dstVertexData = loadOptions.reuse.vertexBuffers[0];
+        } else {
+            dstVertexData = new ArrayBuffer(dstVertexDataSize);
+        }
         const dstVertexDataView = new DataView(dstVertexData);
         let dstVertexDataOffs = 0;
 
