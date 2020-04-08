@@ -1117,8 +1117,9 @@ export class ModelInstance implements BlockRenderer {
         this.updateBoneMatrices();
     }
 
-    public getAmap(): DataView {
-        return this.amap;
+    public getAmap(modelAnimNum: number): DataView {
+        const stride = (((this.model.joints.length + 8) / 8)|0) * 8;
+        return dataSubarray(this.amap, modelAnimNum * stride, stride);
     }
 
     public setAmap(amap: DataView) {
@@ -1177,7 +1178,6 @@ export class ModelInstance implements BlockRenderer {
             const boneMtx = this.boneMatrices[joint.boneNum];
             mat4.identity(boneMtx);
             if (this.model.hasBetaFineSkinning) {
-                // TODO: test
                 mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
             }
 
