@@ -27,8 +27,10 @@ export class MyShapeHelper {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
+    private vertexBuffers: GfxBuffer[] = [];
+    private indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData, isDynamic: boolean) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -40,11 +42,9 @@ export class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
-            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
-
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(vertexBuffer, 0, new Uint8Array(loadedVertexData.vertexBuffers[i]));
-            device.submitPass(hostAccessPass);
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX,
+                isDynamic ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
+            this.vertexBuffers.push(vertexBuffer);
 
             buffers.push({
                 buffer: vertexBuffer,
@@ -63,16 +63,28 @@ export class MyShapeHelper {
 
         this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
 
-        const indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.DYNAMIC);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(indexBuffer, 0, new Uint8Array(loadedVertexData.indexData));
-        device.submitPass(hostAccessPass);
+        this.indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX,
+            isDynamic ? GfxBufferFrequencyHint.DYNAMIC : GfxBufferFrequencyHint.STATIC);
 
         const indexBufferDesc: GfxIndexBufferDescriptor = {
-            buffer: indexBuffer,
+            buffer: this.indexBuffer,
             byteOffset: 0,
         };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDesc);
+
+        this.uploadData(device);
+    }
+
+    public uploadData(device: GfxDevice) {
+        for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+            device.submitPass(hostAccessPass);
+        }
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+        device.submitPass(hostAccessPass);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
@@ -113,6 +125,7 @@ export class Shape {
     private scratchMtx = mat4.create();
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
+    private gfxBuffersDirty = true;
 
     // private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
@@ -126,15 +139,16 @@ export class Shape {
     }
 
     public reload() {
-        if (this.shapeHelper !== null) {
-            this.shapeHelper.destroy(this.device);
-            this.shapeHelper = null;
-        }
+        // if (this.shapeHelper !== null) {
+        //     this.shapeHelper.destroy(this.device);
+        //     this.shapeHelper = null;
+        // }
         // if (this.bufferCoalescer !== null) {
             //this.bufferCoalescer.destroy(this.device);
            // this.bufferCoalescer = null;
         // }
         this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
+        this.gfxBuffersDirty = true;
     }
 
     // Caution: Material is referenced, not copied.
@@ -186,7 +200,12 @@ export class Shape {
             //     this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
             // }
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
-                this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, true);
+                // TODO: only enable isDynamic for models with fine skinning
+            this.gfxBuffersDirty = false;
+        } else if (this.gfxBuffersDirty) {
+            this.shapeHelper.uploadData(device);
+            this.gfxBuffersDirty = false;
         }
         
         this.packetParams.clear();
