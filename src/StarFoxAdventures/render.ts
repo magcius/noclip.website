@@ -41,7 +41,7 @@ export class SFARenderer extends SFARendererHelper {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(1 / 2); // Slow down the default camera a bit
+        c.setSceneMoveSpeedMult(1 / 3); // Slow down the default camera a bit
     }
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {

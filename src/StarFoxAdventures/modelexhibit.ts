@@ -8,14 +8,14 @@ import { SceneContext } from '../SceneBase';
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes } from './animation';
 import { SFARenderer } from './render';
-import { ModelCollection, ModelInstance } from './models';
+import { ModelCollection, ModelInstance, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { SFATextureCollection, SFATexture } from './textures';
 import { DataFetcher } from '../DataFetcher';
 
 class ModelExhibitRenderer extends SFARenderer {
-    private modelInst: ModelInstance | null | undefined = undefined; // null: Failed to load. undefined: Not set.
+    private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
     private modelNum = 1;
     private modelSelect: UI.TextEntry;
 
@@ -111,28 +111,35 @@ class ModelExhibitRenderer extends SFARenderer {
             }
 
             if (this.anim !== null && this.anim !== undefined) {
-                this.modelInst.resetPose();
-                const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
-                const kf0Num = Math.floor(kfTime);
-                let kf1Num = kf0Num + 1;
-                if (kf1Num >= this.anim.keyframes.length) {
-                    kf1Num = 0;
-                }
-                const kf0 = this.anim.keyframes[kf0Num];
-                const kf1 = this.anim.keyframes[kf1Num];
-                const ratio = kfTime - kf0Num;
-                const kf = interpolateKeyframes(kf0, kf1, ratio);
-                for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
-                    const pose = kf.poses[i];
-                    const poseMtx = mat4.create();
-                    mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                    mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                    mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-                    mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                    mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-    
-                    const jointNum = this.amap!.getInt8(i);
-                    this.modelInst.setJointPose(jointNum, poseMtx);
+                try {
+                    this.modelInst.resetPose();
+                    const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
+                    const kf0Num = Math.floor(kfTime);
+                    let kf1Num = kf0Num + 1;
+                    if (kf1Num >= this.anim.keyframes.length) {
+                        kf1Num = 0;
+                    }
+                    const kf0 = this.anim.keyframes[kf0Num];
+                    const kf1 = this.anim.keyframes[kf1Num];
+                    const ratio = kfTime - kf0Num;
+                    const kf = interpolateKeyframes(kf0, kf1, ratio);
+                    for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
+                        const pose = kf.poses[i];
+                        const poseMtx = mat4.create();
+                        mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+                        mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+                        mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
+                        mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
+                        mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
+        
+                        const jointNum = this.amap!.getInt8(i);
+                        this.modelInst.setJointPose(jointNum, poseMtx);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to animate model due to exception:`);
+                    console.error(e);
+                    this.anim = null;
+                    this.modelInst.resetPose();
                 }
             }
         }
@@ -179,21 +186,19 @@ class ModelExhibitRenderer extends SFARenderer {
 }
 
 export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, public name: string, private subdir: string, private modelVersion: ModelVersion, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for character exhibit ...`);
-        
-        const subdir = 'swaphol'; // TODO: configurable
 
         const materialFactory = new MaterialFactory(device);
         const animController = new SFAAnimationController();
 
         const amapColl = await AmapCollection.create(this.gameInfo, context.dataFetcher);
-        const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, subdir);
-        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, subdir, false);
-        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, subdir, texColl, animController);
+        const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
+        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, this.subdir, this.modelVersion === ModelVersion.Beta);
+        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texColl, animController, this.modelVersion);
 
         return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl);
     }

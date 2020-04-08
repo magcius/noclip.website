@@ -1180,9 +1180,15 @@ export class ModelInstance implements BlockRenderer {
                 // TODO: test
                 mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
             }
-            mat4.mul(boneMtx, this.model.jointTfMatrices[joint.boneNum], this.jointPoseMatrices[joint.boneNum]);
-            if (joint.parent != 0xff) {
-                mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
+
+            let jointWalker = joint;
+            while (true) {
+                mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
+                mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
+                if (jointWalker.parent === 0xff) {
+                    break;
+                }
+                jointWalker = this.model.joints[jointWalker.parent];
             }
         }
 
@@ -1281,11 +1287,11 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo) {
+    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo, private modelVersion: ModelVersion) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController): Promise<ModelCollection> {
-        const self = new ModelCollection(texColl, animController, gameInfo);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelCollection> {
+        const self = new ModelCollection(texColl, animController, gameInfo, modelVersion);
 
         const pathBase = self.gameInfo.pathBase;
         const [modelsTab, modelsBin] = await Promise.all([
@@ -1313,7 +1319,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController, this.modelVersion);
         }
 
         return this.models[num];
