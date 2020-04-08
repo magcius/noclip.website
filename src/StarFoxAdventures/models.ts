@@ -23,7 +23,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
-export class MyShapeHelper {
+class MyShapeHelper {
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
@@ -76,14 +76,14 @@ export class MyShapeHelper {
     }
 
     public uploadData(device: GfxDevice) {
+        const hostAccessPass = device.createHostAccessPass();
+
         for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
-            const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
-            device.submitPass(hostAccessPass);
         }
 
-        const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
+
         device.submitPass(hostAccessPass);
     }
 
@@ -127,26 +127,17 @@ export class Shape {
     private gxMaterial: GXMaterial | undefined;
     private gfxBuffersDirty = true;
 
-    // private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
     public hasBetaFineSkinning = false;
 
-    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController) {
+    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.parsedDisplayList = this.vtxLoader.parseDisplayList(this.displayList);
         this.reload();
     }
 
     public reload() {
-        // if (this.shapeHelper !== null) {
-        //     this.shapeHelper.destroy(this.device);
-        //     this.shapeHelper = null;
-        // }
-        // if (this.bufferCoalescer !== null) {
-            //this.bufferCoalescer.destroy(this.device);
-           // this.bufferCoalescer = null;
-        // }
         this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
         this.gfxBuffersDirty = true;
     }
@@ -196,12 +187,8 @@ export class Shape {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
-            // if (this.bufferCoalescer === null) {
-            //     this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            // }
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
-                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, true);
-                // TODO: only enable isDynamic for models with fine skinning
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic);
             this.gfxBuffersDirty = false;
         } else if (this.gfxBuffersDirty) {
             this.shapeHelper.uploadData(device);
@@ -1047,7 +1034,7 @@ export class Model {
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const vtxArrays = getVtxArrays(posBuffer);
-            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
+            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
@@ -1107,7 +1094,7 @@ export class Model {
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
-                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController);
+                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
