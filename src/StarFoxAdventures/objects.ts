@@ -529,6 +529,7 @@ export class ObjectInstance {
 
     public setPosition(pos: vec3) {
         vec3.copy(this.position, pos);
+        this.srtDirty = true;
     }
 
     public setModelAnimNum(num: number) {
