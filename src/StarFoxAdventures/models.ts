@@ -1,7 +1,7 @@
 import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, ParsedDisplayList, VertexAttributeInput, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -28,7 +28,7 @@ export class MyShapeHelper {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -40,9 +40,15 @@ export class MyShapeHelper {
 
         const buffers: GfxVertexBufferDescriptor[] = [];
         for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+            const vertexBuffer = device.createBuffer((loadedVertexData.vertexBuffers[i].byteLength + 3) / 4, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadBufferData(vertexBuffer, 0, new Uint8Array(loadedVertexData.vertexBuffers[i]));
+            device.submitPass(hostAccessPass);
+
             buffers.push({
-                buffer: coalescedBuffers.vertexBuffers[i].buffer,
-                byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
+                buffer: vertexBuffer,
+                byteOffset: 0,
             });
         }
 
@@ -57,11 +63,16 @@ export class MyShapeHelper {
 
         this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
 
-        const indexBuffer: GfxIndexBufferDescriptor = {
-            buffer: coalescedBuffers.indexBuffer.buffer,
-            byteOffset: coalescedBuffers.indexBuffer.wordOffset * 4,
+        const indexBuffer = device.createBuffer((loadedVertexData.indexData.byteLength + 3) / 4, GfxBufferUsage.INDEX, GfxBufferFrequencyHint.DYNAMIC);
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadBufferData(indexBuffer, 0, new Uint8Array(loadedVertexData.indexData));
+        device.submitPass(hostAccessPass);
+
+        const indexBufferDesc: GfxIndexBufferDescriptor = {
+            buffer: indexBuffer,
+            byteOffset: 0,
         };
-        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBufferDesc);
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
@@ -103,7 +114,7 @@ export class Shape {
     private viewState: ViewState | undefined;
     private gxMaterial: GXMaterial | undefined;
 
-    private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
+    // private bufferCoalescer: GfxBufferCoalescerCombo | null = null;
     private pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
     public hasBetaFineSkinning = false;
@@ -119,10 +130,10 @@ export class Shape {
             this.shapeHelper.destroy(this.device);
             this.shapeHelper = null;
         }
-        if (this.bufferCoalescer !== null) {
+        // if (this.bufferCoalescer !== null) {
             //this.bufferCoalescer.destroy(this.device);
            // this.bufferCoalescer = null;
-        }
+        // }
         this.loadedVertexData = this.vtxLoader.runParsedDisplayList(this.vtxArrays, this.parsedDisplayList, { reuse: this.loadedVertexData });
     }
 
@@ -171,10 +182,11 @@ export class Shape {
         this.updateMaterialHelper();
 
         if (this.shapeHelper === null) {
-            if (this.bufferCoalescer === null) {
-                this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
-            }
-            this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache, this.bufferCoalescer.coalescedBuffers[0], this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
+            // if (this.bufferCoalescer === null) {
+            //     this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [this.loadedVertexData]);
+            // }
+            this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
+                this.vtxLoader.loadedVertexLayout, this.loadedVertexData);
         }
         
         this.packetParams.clear();
