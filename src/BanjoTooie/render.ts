@@ -16,6 +16,7 @@ import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers'
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { RenderData, F3DEX_Program, GeometryData } from '../BanjoKazooie/render';
 import { randomRange } from '../BanjoKazooie/particles';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 function updateVertexEffectState(effect: VertexAnimationEffect, timeInSeconds: number, deltaSeconds: number) {
     switch (effect.type) {
@@ -269,10 +270,7 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = this.drawCall.SP_TextureState.s / (entry.width);
-            const st = this.drawCall.SP_TextureState.t / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
         } else {
             mat4.identity(m);
         }

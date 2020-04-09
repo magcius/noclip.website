@@ -15,6 +15,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { F3DEX_Program } from '../BanjoKazooie/render';
 import { Vec3UnitY, Vec3Zero } from '../MathHelpers';
+import { calcTextureScaleForShift } from '../Common/N64/RSP';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -154,14 +155,6 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.NONE;
 }
 
-function calcScaleForShift(shift: number): number {
-    if (shift <= 10) {
-        return 1 / (1 << shift);
-    } else {
-        return 1 << (16 - shift);
-    }
-}
-
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -254,8 +247,8 @@ class DrawCallInstance {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             // G_TEXTURE scaleS and scaleT parameters always seem to be 0xFFFF, so they're ignored here.
             const entry = this.textureEntry[textureEntryIndex];
-            const scaleS0 = calcScaleForShift(entry.tile.shiftS);
-            const scaleT0 = calcScaleForShift(entry.tile.shiftT);
+            const scaleS0 = calcTextureScaleForShift(entry.tile.shiftS);
+            const scaleT0 = calcTextureScaleForShift(entry.tile.shiftT);
             mat4.fromScaling(m,
                 [scaleS0 / entry.width, scaleT0 / entry.height, 1]);
         } else {

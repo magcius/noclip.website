@@ -26,16 +26,9 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Pako from 'pako';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 const pathBase = `DonkeyKong64`;
-
-function calcScaleForShift(shift: number): number {
-    if (shift <= 10) {
-        return 1 / (1 << shift);
-    } else {
-        return 1 << (16 - shift);
-    }
-}
 
 function translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
@@ -175,12 +168,8 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            // G_TEXTURE scaleS and scaleT parameters always seem to be 0xFFFF, so they're ignored here.
             const entry = this.textureEntry[textureEntryIndex];
-            const scaleS0 = calcScaleForShift(entry.tile.shifts);
-            const scaleT0 = calcScaleForShift(entry.tile.shiftt);
-            mat4.fromScaling(m,
-                [scaleS0 / entry.width, scaleT0 / entry.height, 1]);
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
         } else {
             mat4.identity(m);
         }

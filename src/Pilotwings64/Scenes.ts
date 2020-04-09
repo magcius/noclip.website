@@ -29,6 +29,7 @@ import { getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { F3DEX_Program } from "../BanjoKazooie/render";
+import { calcTextureScaleForShift } from '../Common/N64/RSP';
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1622,15 +1623,6 @@ class MeshRenderer {
         renderInstManager.popTemplateRenderInst();
     }
 }
-
-function calcScaleForShift(shift: number): number {
-    if (shift <= 10) {
-        return 1 / (1 << shift);
-    } else {
-        return 1 << (16 - shift);
-    }
-}
-
 interface DecodeMaterialResult {
     geoMode: number;
     renderMode: number;
@@ -1894,8 +1886,8 @@ class MaterialInstance {
 
         if (this.hasTexture) {
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-            let scaleS0 = calcScaleForShift(this.uvtx.levels[0].shiftS);
-            let scaleT0 = calcScaleForShift(this.uvtx.levels[0].shiftT);
+            let scaleS0 = calcTextureScaleForShift(this.uvtx.levels[0].shiftS);
+            let scaleT0 = calcTextureScaleForShift(this.uvtx.levels[0].shiftT);
             // should maybe be careful here because the G_TEXTURE command is overridden,
             // which could affect which tiles get used
             if (this.decodedMaterial.scaleOverride) {
@@ -1910,8 +1902,8 @@ class MaterialInstance {
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
 
             if (this.hasPairedTexture) {
-                const scaleS1 = calcScaleForShift(this.uvtx.levels[1].shiftS);
-                const scaleT1 = calcScaleForShift(this.uvtx.levels[1].shiftT);
+                const scaleS1 = calcTextureScaleForShift(this.uvtx.levels[1].shiftS);
+                const scaleT1 = calcTextureScaleForShift(this.uvtx.levels[1].shiftT);
                 mat4.fromScaling(texMatrixScratch,
                     [scaleS1 / this.textureMappings[1].width, scaleT1 / this.textureMappings[1].height, 1]);
                 if (this.uvtx.combineScroll) {

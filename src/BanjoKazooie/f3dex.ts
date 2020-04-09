@@ -279,8 +279,6 @@ export class RSPState {
     }
 
     public gSPTri(i0: number, i1: number, i2: number): void {
-        if (window.debug)
-            console.log('EXEC TRI');
         this._flushDrawCall();
 
         this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);

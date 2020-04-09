@@ -18,6 +18,7 @@ import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers'
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -605,10 +606,7 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = this.drawCall.SP_TextureState.s / (entry.width);
-            const st = this.drawCall.SP_TextureState.t / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
         } else {
             mat4.identity(m);
         }
