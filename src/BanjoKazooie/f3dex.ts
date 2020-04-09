@@ -291,6 +291,7 @@ export class RSPState {
 
     public gDPSetTile(fmt: number, siz: number, line: number, tmem: number, tile: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
         this.DP_TileState[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+        this.stateChanged = true;
     }
 
     public gDPLoadTLUT(tile: number, count: number): void {

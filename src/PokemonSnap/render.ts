@@ -17,6 +17,7 @@ import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from
 import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LevelGlobals } from './actor';
+import { calcTextureScaleForShift } from '../Common/N64/RSP';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -121,8 +122,8 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const sShift = entry.tile.shifts <= 10 ? 1 / (1 << entry.tile.shifts) : (1 << (16 - entry.tile.shifts));
-            const tShift = entry.tile.shiftt <= 10 ? 1 / (1 << entry.tile.shiftt) : (1 << (16 - entry.tile.shiftt));
+            const sShift = calcTextureScaleForShift(entry.tile.shifts);
+            const tShift = calcTextureScaleForShift(entry.tile.shifts);
             m[0] = sShift / entry.width;
             m[5] = tShift / entry.height;
             if (this.material && this.material.data.flags & MaterialFlags.Scale) {
