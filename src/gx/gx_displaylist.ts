@@ -809,6 +809,7 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
     const source = `
 function runVertices(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides) {
     ${runVertices}
+    return drawCallIdx;
 }
 `;
     return compileFunction(source, `runVertices`);
