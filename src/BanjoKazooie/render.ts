@@ -75,6 +75,14 @@ vec3 Monochrome(vec3 t_Color) {
     return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
 }
 
+// Convert from 0...1 UNORM range to SNORM range
+vec3 ConvertToSignedInt(vec3 t_Input) {
+    ivec3 t_Num = ivec3(t_Input * 255.0);
+    // Sign extend
+    t_Num = t_Num << 24 >> 24;
+    return vec3(t_Num) / 127.0;
+}
+
 void main() {
     int t_BoneIndex = int(a_Position.w);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
@@ -95,7 +103,7 @@ void main() {
 
 #ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
-    vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
+    vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
     // TODO: find and pass in lighting data
