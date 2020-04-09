@@ -159,6 +159,9 @@ class SceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer.forceLoop();
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
+                for (let j = 0; j < skyboxData.sharedOutput.textureCache.textures.length; j++) {
+                    viewerTextures.push(textureToCanvas(skyboxData.sharedOutput.textureCache.textures[j]));
+                }
             }
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);

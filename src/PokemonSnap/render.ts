@@ -17,7 +17,7 @@ import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from
 import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../MathHelpers';
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LevelGlobals } from './actor';
-import { calcTextureScaleForShift } from '../Common/N64/RSP';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 export const enum SnapPass {
     MAIN = 0x01,
@@ -122,24 +122,25 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const sShift = calcTextureScaleForShift(entry.tile.shifts);
-            const tShift = calcTextureScaleForShift(entry.tile.shifts);
-            m[0] = sShift / entry.width;
-            m[5] = tShift / entry.height;
+            // pass in 1 for texture scale, since we've already rescaled the vertex coordinates
+            calcTextureMatrixFromRSPState(m, 1, 1, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
+
             if (this.material && this.material.data.flags & MaterialFlags.Scale) {
                 m[0] *= this.material.xScale();
                 m[5] *= this.material.yScale();
             }
 
             // shift by 10.2 UL coords, rescaled by texture size
-            m[12] = -entry.tile.uls / 4 / entry.width;
-            m[13] = -entry.tile.ult / 4 / entry.height;
+            let sOffset = - entry.tile.uls / 4;
+            let tOffset = - entry.tile.ult / 4;
 
             const tileFlag = textureEntryIndex === 0 ? MaterialFlags.Tile0 : MaterialFlags.Tile1;
             if (this.material && this.material.data.flags & tileFlag) {
-                m[12] = -this.material.getXShift(textureEntryIndex) / entry.width;
-                m[13] = -this.material.getYShift(textureEntryIndex) / entry.height;
+                sOffset = -this.material.getXShift(textureEntryIndex);
+                tOffset = -this.material.getYShift(textureEntryIndex);
             }
+            m[12] += sOffset / entry.width;
+            m[13] += tOffset / entry.height;
         } else {
             mat4.identity(m);
         }
@@ -462,26 +463,24 @@ export class EggProgram extends F3DEX_Program {
         // super hacky, edit beginning of vertex shader to remap attributes and add lerp
         const parts = this.vert.split("void main() {");
         this.vert = `
-        layout(location = ${EggProgram.a_Position}) in vec4 a_StartPosition;
-        layout(location = ${EggProgram.a_Color}) in vec4 a_StartColor;
-        layout(location = ${EggProgram.a_TexCoord}) in vec2 a_TexCoord;
-        layout(location = ${EggProgram.a_EndPosition}) in vec3 a_EndPosition;
-        layout(location = ${EggProgram.a_EndColor}) in vec3 a_EndColor;
+layout(location = ${EggProgram.a_EndPosition}) in vec3 a_EndPosition;
+layout(location = ${EggProgram.a_EndColor}) in vec3 a_EndColor;` +
+        parts[0] + `
+// Convert from -1...1 SNORM range to UNORM range
+vec3 ConvertToUnsignedInt(vec3 t_Input) {
+    ivec3 t_Num = ivec3(t_Input * 127.0);
+    // take mod 255
+    t_Num = t_Num & 0xFF;
+    return vec3(t_Num) / 255.0;
+}
 
-        vec3 Monochrome(vec3 t_Color) {
-            // NTSC primaries.
-            return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
-        }
-
-        void main() {
-            vec4 a_Position = vec4(mix(a_StartPosition.xyz, a_EndPosition, u_MiscComb.y), a_StartPosition.w);
-            // lerp as signed values
-            vec3 v_StartNorm = 2.0*a_StartColor.rgb - 2.0*trunc(2.0*a_StartColor.rgb);
-            vec3 v_EndNorm = 2.0*a_EndColor.rgb - 2.0*trunc(2.0*a_EndColor.rgb);
-            vec4 a_Color = vec4(mix(v_StartNorm, v_EndNorm, u_MiscComb.y), a_StartColor.a);
-            // back to unsigned
-            a_Color.rgb = mod(a_Color.rgb/2.0 + vec3(1.0), 1.0);
-` + parts[1];
+void main() {
+    vec4 t_FixedPosition = vec4(mix(a_Position.xyz, a_EndPosition, u_MiscComb.y), a_Position.w);
+    // lerp as signed values
+    vec4 t_FixedColor = vec4(mix(ConvertToSignedInt(a_Color.rgb), ConvertToSignedInt(a_EndColor), u_MiscComb.y), a_Color.a);
+    // back to unsigned
+    t_FixedColor.rgb = ConvertToUnsignedInt(t_FixedColor.rgb);
+` + parts[1].replace(/a_Position/g, 't_FixedPosition').replace(/a_Color/g, 't_FixedColor');;
     }
 }
 
