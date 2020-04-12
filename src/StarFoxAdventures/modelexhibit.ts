@@ -6,14 +6,13 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection } from './animation';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, getLocalTransformForPose, applyKeyframeToModel } from './animation';
 import { SFARenderer } from './render';
 import { ModelCollection, ModelInstance, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
-import { SFATextureCollection, SFATexture } from './textures';
-import { DataFetcher } from '../DataFetcher';
-import { dataSubarray } from './util';
+import { SFATextureCollection } from './textures';
+import { dataSubarray, createDownloadLink } from './util';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -28,7 +27,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
         super(device, animController);
     }
 
@@ -70,6 +69,13 @@ class ModelExhibitRenderer extends SFARenderer {
         return [panel];
     }
 
+    public downloadModel() {
+        if (this.modelInst !== null && this.modelInst !== undefined) {
+            const link = createDownloadLink(this.modelInst.model.modelData, `model_${this.subdir}_${this.modelNum}${this.modelInst.model.modelVersion === ModelVersion.Beta ? '_beta' : ''}.bin`);
+            link.click();
+        }
+    }
+
     public setAmapNum(num: number | null) {
         if (num === null) {
             this.amap = null;
@@ -85,6 +91,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private getAmapForModelAnim(modelAnimNum: number): DataView {
         const stride = (((this.modelInst!.model.joints.length + 8) / 8)|0) * 8;
+        // console.log(`getting amap for model ${this.modelNum} anim ${modelAnimNum} at file offset 0x${(this.amap!.byteOffset + modelAnimNum * stride).toString(16)}`)
         return dataSubarray(this.amap!, modelAnimNum * stride, stride);
     }
     
@@ -127,7 +134,6 @@ class ModelExhibitRenderer extends SFARenderer {
             if (this.anim !== null && this.anim !== undefined) {
                 try {
                     const modelAnimAmap = this.getAmapForModelAnim(this.modelAnimNum);
-                    this.modelInst.resetPose();
                     const kfTime = (this.animController.animController.getTimeInSeconds() * 8) % this.anim.keyframes.length;
                     const kf0Num = Math.floor(kfTime);
                     let kf1Num = kf0Num + 1;
@@ -138,21 +144,7 @@ class ModelExhibitRenderer extends SFARenderer {
                     const kf1 = this.anim.keyframes[kf1Num];
                     const ratio = kfTime - kf0Num;
                     const kf = interpolateKeyframes(kf0, kf1, ratio);
-                    for (let i = 0; i < kf.poses.length && i < this.modelInst.model.joints.length; i++) {
-                        const pose = kf.poses[i];
-                        const poseMtx = mat4.create();
-                        mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                        mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                        mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-                        mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                        mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-
-                        let jointNum = i;
-                        if (modelAnimAmap !== null && modelAnimAmap !== undefined) {
-                            jointNum = modelAnimAmap.getInt8(i);
-                        }
-                        this.modelInst.setJointPose(jointNum, poseMtx);
-                    }
+                    applyKeyframeToModel(kf, this.modelInst, modelAnimAmap);
                 } catch (e) {
                     console.warn(`Failed to animate model due to exception:`);
                     console.error(e);
@@ -219,6 +211,6 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, this.subdir, this.modelVersion === ModelVersion.Beta);
         const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texColl, animController, this.modelVersion);
 
-        return new ModelExhibitRenderer(device, animController, materialFactory, texColl, modelColl, animColl, amapColl, modanimColl);
+        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texColl, modelColl, animColl, amapColl, modanimColl);
     }
 }

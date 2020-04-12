@@ -451,6 +451,8 @@ export class Model {
     private createModelShapes: CreateModelShapesFunc;
     private sharedModelShapes: ModelShapes | null = null;
 
+    public modelData: DataView;
+
     public joints: Joint[] = [];
     public coarseBlends: CoarseBlend[] = [];
     public jointTfMatrices: mat4[] = [];
@@ -478,10 +480,11 @@ export class Model {
         blockData: ArrayBufferSlice,
         texColl: TextureCollection,
         private animController: SFAAnimationController,
-        private modelVersion: ModelVersion = ModelVersion.Final
+        public modelVersion: ModelVersion = ModelVersion.Final
     ) {
         let offs = 0;
         const blockDv = blockData.createDataView();
+        this.modelData = blockDv;
 
         let fields: any;
         if (this.modelVersion === ModelVersion.Beta) {
@@ -494,12 +497,11 @@ export class Model {
                 hasBones: true,
                 texOffset: 0x1c,
                 posOffset: 0x24,
-                nrmOffset: 0x2c, // ???
+                nrmOffset: 0x28, // ???
                 clrOffset: 0x2c,
                 texcoordOffset: 0x30,
                 shaderOffset: 0x34,
                 jointOffset: 0x38,
-                // weightOffset: 0x3c, // ???
                 listOffsets: 0x6c,
                 listSizes: 0x70,
                 posCount: 0x9e,
@@ -725,7 +727,9 @@ export class Model {
         let nrmBuffer = blockData;
         let nrmTypeFlags = 0;
         if (fields.hasNormals) {
+            const nrmCount = blockDv.getUint16(fields.nrmCount);
             const nrmOffset = blockDv.getUint32(fields.nrmOffset);
+            console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
             nrmBuffer = blockData.subarray(nrmOffset);
             nrmTypeFlags = blockDv.getUint8(0x24);
         }

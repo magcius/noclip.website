@@ -1,10 +1,13 @@
+import { mat4 } from 'gl-matrix';
+import { lerp, lerpAngle } from '../MathHelpers';
 import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
+import { nArray } from '../util';
+
 import { GameInfo } from './scenes';
 import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
-import { lerp, lerpAngle } from '../MathHelpers';
-import { nArray } from '../util';
+import { ModelInstance } from './models';
 
 export class SFAAnimationController {
     public animController: AnimationController = new AnimationController(60);
@@ -272,6 +275,14 @@ export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?
     return result;
 }
 
+export function getLocalTransformForPose(dst: mat4, pose: Pose) {
+    mat4.fromTranslation(dst, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
+    mat4.scale(dst, dst, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
+    mat4.rotateZ(dst, dst, pose.axes[2].rotation);
+    mat4.rotateY(dst, dst, pose.axes[1].rotation);
+    mat4.rotateX(dst, dst, pose.axes[0].rotation);
+}
+
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
     const numPoses = Math.min(kf0.poses.length, kf1.poses.length);
     const result: Keyframe = reuse !== undefined ? reuse : createKeyframe(numPoses);
@@ -281,6 +292,23 @@ export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number
     }
 
     return result;
+}
+
+export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, amap: DataView | null) {
+    modelInst.resetPose();
+
+    for (let i = 0; i < kf.poses.length && i < modelInst.model.joints.length; i++) {
+        let poseNum = i;
+        if (amap !== null) {
+            poseNum = amap.getInt8(i);
+        }
+
+        const pose = kf.poses[poseNum];
+        const poseMtx = mat4.create();
+        getLocalTransformForPose(poseMtx, pose);
+
+        modelInst.setJointPose(i, poseMtx);
+    }
 }
 
 export class AmapCollection {
@@ -307,7 +335,7 @@ export class AmapCollection {
     public getAmap(modelNum: number): DataView {
         const offs = this.amapTab.getUint32(modelNum * 4);
         const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        // console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
 }

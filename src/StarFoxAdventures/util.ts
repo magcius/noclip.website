@@ -161,9 +161,9 @@ export class LowBitReader {
     }
 }
 
-export function createDownloadLink(data: ArrayBufferSlice, filename: string, text?: string): HTMLElement {
+export function createDownloadLink(data: DataView, filename: string, text?: string): HTMLElement {
     const aEl = document.createElement('a');
-    aEl.href = URL.createObjectURL(new Blob([data.createDataView()], {type: 'application/octet-stream'}));
+    aEl.href = URL.createObjectURL(new Blob([data], {type: 'application/octet-stream'}));
     aEl.download = filename;
     if (text !== undefined) {
         aEl.append(text);
