@@ -335,7 +335,7 @@ export class AmapCollection {
     public getAmap(modelNum: number): DataView {
         const offs = this.amapTab.getUint32(modelNum * 4);
         const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
-        console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
+        // console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
 }
