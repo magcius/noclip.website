@@ -729,7 +729,7 @@ export class Model {
         if (fields.hasNormals) {
             const nrmCount = blockDv.getUint16(fields.nrmCount);
             const nrmOffset = blockDv.getUint32(fields.nrmOffset);
-            console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
+            // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
             nrmBuffer = blockData.subarray(nrmOffset);
             nrmTypeFlags = blockDv.getUint8(0x24);
         }
