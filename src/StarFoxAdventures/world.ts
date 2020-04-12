@@ -9,22 +9,21 @@ import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
-import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ, getMatrixTranslation, matrixHasUniformScale } from '../MathHelpers';
+import { getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
 
-import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
+import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFATextureCollection } from './textures';
 import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { createDownloadLink, dataSubarray, interpS16, angle16ToRads, readVec3 } from './util';
-import { ModelVersion, ModelInstance, ModelCollection } from './models';
+import { dataSubarray, readVec3 } from './util';
+import { ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
-import { SFAAnimationController, AnimCollection, AmapCollection, ModanimCollection } from './animation';
+import { SFAAnimationController } from './animation';
 import { Camera } from '../Camera';
 
 const materialParams = new MaterialParams();

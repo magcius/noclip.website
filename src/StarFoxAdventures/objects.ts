@@ -8,7 +8,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawW
 
 import { ModelInstance } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
-import { Anim, interpolateKeyframes, Keyframe } from './animation';
+import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 
 // An ObjectType is used to spawn ObjectInstance's.
@@ -557,7 +557,6 @@ export class ObjectInstance {
     public update() {
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             const poseMtx = mat4.create();
-            this.modelInst.resetPose();
             // TODO: use time values from animation data?
             const amap = this.modelInst.getAmap(this.modelAnimNum!);
             const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
@@ -570,17 +569,7 @@ export class ObjectInstance {
             const kf1 = this.anim.keyframes[kf1Num];
             const ratio = kfTime - kf0Num;
             this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
-            for (let i = 0; i < this.curKeyframe.poses.length && i < this.modelInst.model.joints.length; i++) {
-                const pose = this.curKeyframe.poses[i];
-                mat4.fromTranslation(poseMtx, [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation]);
-                mat4.scale(poseMtx, poseMtx, [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
-                mat4.rotateZ(poseMtx, poseMtx, pose.axes[2].rotation);
-                mat4.rotateY(poseMtx, poseMtx, pose.axes[1].rotation);
-                mat4.rotateX(poseMtx, poseMtx, pose.axes[0].rotation);
-
-                const jointNum = amap.getInt8(i);
-                this.modelInst.setJointPose(jointNum, poseMtx);
-            }
+            applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
         }
     }
 
