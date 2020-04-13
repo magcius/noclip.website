@@ -19,6 +19,7 @@ export class ObjectType {
     public scale: number = 1.0;
     public objClass: number;
     public modelNums: number[] = [];
+    public isDevObject: boolean = false;
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
@@ -39,6 +40,9 @@ export class ObjectType {
             const modelNum = data.getUint32(modelListOffs + i * 4);
             this.modelNums.push(modelNum);
         }
+
+        const flags = data.getUint32(0x44);
+        this.isDevObject = !!(flags & 1);
     }
 }
 
@@ -187,8 +191,6 @@ export class ObjectInstance {
         } else if (objClass === 254) {
             // e.g. MagicPlant
             this.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
-            // XXX: disable anim for now. It uses joint scaling, which is broken.
-            this.setAnim(null);
         } else if (objClass === 256 ||
             objClass === 391 ||
             objClass === 392 ||
@@ -365,8 +367,6 @@ export class ObjectInstance {
             if (scaleParam !== 0) {
                 this.scale *= scaleParam / 64;
             }
-            // XXX: disable anim for now, it's completely broken.
-            this.setAnim(null);
         } else if (objClass === 385) {
             // e.g. MMP_trenchF
             this.roll = angle16ToRads(objParams.getInt8(0x19) << 8);

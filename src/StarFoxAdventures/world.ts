@@ -297,6 +297,9 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.world.objectInstances.length; i++) {
             const obj = this.world.objectInstances[i];
 
+            if (obj.getType().isDevObject && !this.showDevObjects)
+                continue;
+
             if (obj.isInLayer(this.layerSelect.getValue())) {
                 obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
                 // TODO: additional draw steps; object furs and translucents
