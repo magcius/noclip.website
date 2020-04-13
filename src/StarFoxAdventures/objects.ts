@@ -10,6 +10,7 @@ import { ModelInstance } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
+import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 
 // An ObjectType is used to spawn ObjectInstance's.
 // Each ObjectType inherits from an ObjectClass, where it shares most of its assets and logic.
@@ -72,29 +73,15 @@ export class ObjectInstance {
         const objClass = this.objType.objClass;
         const typeNum = this.objType.typeNum;
         
-        const modelNum = this.objType.modelNums[0];
-        try {
-            const modelInst = this.world.resColl.modelColl.createModelInstance(this.world.device, this.world.materialFactory, modelNum);
-            const amap = this.world.resColl.amapColl.getAmap(modelNum);
-            modelInst.setAmap(amap);
-            this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);
-            this.modelInst = modelInst;
-
-            if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
-                this.setModelAnimNum(0);
-            }
-        } catch (e) {
-            console.warn(`Failed to load model ${modelNum} due to exception:`);
-            console.error(e);
-            this.modelInst = null;
-        }
+        this.setModelNum(0);
 
         if (objClass === 201 ||
             objClass === 204
         ) {
             // e.g. sharpclawGr
-            this.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
-        } else if (objClass === 222 ||
+            this.yaw = angle16ToRads(objParams.getInt8(0x2a) << 8);
+        } else if (objClass === 198 ||
+            objClass === 222 ||
             objClass === 227 ||
             objClass === 233 ||
             objClass === 234 ||
@@ -104,9 +91,11 @@ export class ObjectInstance {
             objClass === 283 ||
             objClass === 291 ||
             objClass === 304 ||
+            objClass === 307 ||
             objClass === 312 ||
             objClass === 313 ||
             objClass === 316 ||
+            objClass === 317 ||
             objClass === 319 ||
             objClass === 343 ||
             objClass === 344 ||
@@ -119,12 +108,16 @@ export class ObjectInstance {
             objClass === 448 ||
             objClass === 465 ||
             objClass === 487 ||
+            objClass === 490 ||
+            objClass === 491 ||
+            objClass === 492 ||
             objClass === 509 ||
             objClass === 533 ||
             objClass === 549 ||
             objClass === 576 ||
             objClass === 642 ||
             objClass === 666 ||
+            objClass === 674 ||
             objClass === 691 ||
             objClass === 693
         ) {
@@ -172,9 +165,14 @@ export class ObjectInstance {
             objClass === 445 ||
             objClass === 451 ||
             objClass === 452 ||
+            objClass === 453 ||
             objClass === 455 ||
             objClass === 457 ||
             objClass === 459 ||
+            objClass === 469 ||
+            objClass === 473 ||
+            objClass === 477 ||
+            objClass === 496 ||
             (objClass === 502 && typeNum !== 0x803) ||
             objClass === 510 ||
             objClass === 513 ||
@@ -184,7 +182,9 @@ export class ObjectInstance {
             objClass === 598 ||
             objClass === 609 ||
             objClass === 617 ||
-            objClass === 650
+            objClass === 643 ||
+            objClass === 650 ||
+            objClass === 671
         ) {
             // e.g. SC_Pressure
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
@@ -224,7 +224,8 @@ export class ObjectInstance {
         } else if (objClass === 274 ||
             objClass === 275 ||
             objClass === 447 ||
-            objClass === 456
+            objClass === 456 ||
+            objClass === 472
         ) {
             // e.g. SH_newseqob
             this.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
@@ -243,8 +244,8 @@ export class ObjectInstance {
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
         } else if (objClass === 293) {
             // e.g. curve
-            this.yaw = (objParams.getInt8(0x2c) << 8) * Math.PI / 32768;
-            this.pitch = (objParams.getInt8(0x2d) << 8) * Math.PI / 32768;
+            this.yaw = angle16ToRads(objParams.getInt8(0x2c) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x2d) << 8);
             // FIXME: mode 8 and 0x1a also have roll at 0x38
         } else if (objClass === 294 && typeNum === 77) {
             this.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
@@ -269,9 +270,9 @@ export class ObjectInstance {
             this.roll = angle16ToRads(objParams.getInt8(0x22) << 8);
         } else if (objClass === 306) {
             // e.g. WaterFallSp
-            this.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-            this.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
-            this.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
+            this.roll = angle16ToRads(objParams.getInt8(0x1a) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x1b) << 8);
+            this.yaw = angle16ToRads(objParams.getInt8(0x1c) << 8);
         } else if (objClass === 308) {
             // e.g. texscroll2
             if (world.mapInstance === null) {
@@ -316,6 +317,10 @@ export class ObjectInstance {
                     console.warn(`Couldn't find material texture for scrolling`);
                 }
             }
+        } else if (objClass === 318) {
+            // e.g. DIM2Explode
+            const modelNum = objParams.getInt8(0x18);
+            this.setModelNum(modelNum);
         } else if (objClass === 329) {
             // e.g. CFTreasWind
             const scaleParam = objParams.getInt8(0x19);
@@ -415,6 +420,24 @@ export class ObjectInstance {
             this.world.envfxMan.loadEnvfx(0x15a);
             this.world.envfxMan.loadEnvfx(0x15c);
             this.world.envfxMan.loadEnvfx(0x15f);
+        } else if (objClass === 489) {
+            // e.g. SB_Propelle
+            const modelNum = objParams.getInt8(0x1a);
+            this.setModelNum(modelNum);
+        } else if (objClass === 497) {
+            // e.g. SB_DeckDoor
+            this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
+            const modelNum = objParams.getInt8(0x19) != 0 ? 1 : 0;
+            this.setModelNum(modelNum);
+        } else if (objClass === 500) {
+            // e.g. SB_Lamp
+            if (typeNum === 0x3e4) {
+                this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+            } else {
+                this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            }
+            this.pitch = 0;
+            this.roll = 0;
         } else if (objClass === 518) {
             // e.g. PoleFlame
             this.yaw = angle16ToRads((objParams.getUint8(0x18) & 0x3f) << 10);
@@ -434,6 +457,13 @@ export class ObjectInstance {
             if (scaleParam > 1) {
                 this.scale *= scaleParam;
             }
+        } else if (objClass === 550) {
+            // e.g. VFP_lavapoo
+            let scaleParam = objParams.getInt16(0x1a);
+            if (scaleParam === 0) {
+                scaleParam = 500;
+            }
+            this.scale = 1 / (scaleParam / getRandomInt(600, 1000));
         } else if (objClass === 602) {
             // e.g. StaticCamer
             this.yaw = angle16ToRads(-objParams.getInt16(0x1c));
@@ -459,11 +489,30 @@ export class ObjectInstance {
             this.world.envfxMan.loadEnvfx(0x1ff);
             this.world.envfxMan.loadEnvfx(0x1fc);
             this.world.envfxMan.loadEnvfx(0x1fd);
+        } else if (objClass === 672) {
+            // e.g. ARWGoldRing
+            this.yaw = angle16ToRads(-0x8000);
+        } else if (objClass === 678) {
+            // e.g. ARWBigAster
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x19) << 8);
+            this.roll = angle16ToRads(objParams.getInt8(0x1a) << 8);
+        } else if (objClass === 679) {
+            // e.g. ARWProximit
+            this.yaw = angle16ToRads(getRandomInt(0, 0xffff));
+            this.pitch = angle16ToRads(getRandomInt(0, 0xffff));
+            this.roll = angle16ToRads(getRandomInt(0, 0xffff));
+        } else if (objClass === 681 ||
+            objClass === 682
+        ) {
+            // e.g. LGTDirectio
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x19) << 8);
         } else if (objClass === 683) {
             // e.g. LGTProjecte
-            this.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-            this.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-            this.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x19) << 8);
+            this.roll = angle16ToRads(objParams.getInt8(0x34) << 8);
         } else if (objClass === 214 ||
             objClass === 273 ||
             objClass === 689 ||
@@ -475,6 +524,7 @@ export class ObjectInstance {
             this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
         } else if (objClass === 282 ||
             objClass === 302 ||
+            objClass === 303 ||
             objClass === 685 ||
             objClass === 686 ||
             objClass === 687 ||
@@ -530,6 +580,26 @@ export class ObjectInstance {
     public setPosition(pos: vec3) {
         vec3.copy(this.position, pos);
         this.srtDirty = true;
+    }
+
+    public setModelNum(num: number) {
+        try {
+            const modelNum = this.objType.modelNums[num];
+
+            const modelInst = this.world.resColl.modelColl.createModelInstance(this.world.device, this.world.materialFactory, modelNum);
+            const amap = this.world.resColl.amapColl.getAmap(modelNum);
+            modelInst.setAmap(amap);
+            this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);
+            this.modelInst = modelInst;
+
+            if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
+                this.setModelAnimNum(0);
+            }
+        } catch (e) {
+            console.warn(`Failed to load model ${num} due to exception:`);
+            console.error(e);
+            this.modelInst = null;
+        }
     }
 
     public setModelAnimNum(num: number) {

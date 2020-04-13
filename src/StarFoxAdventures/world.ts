@@ -348,7 +348,7 @@ class WorldRenderer extends SFARenderer {
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private subdir: string, private mapNum: number, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, private subdir: string, private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -358,19 +358,22 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const world = await World.create(device, this.gameInfo, dataFetcher, this.subdir);
         
-        const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
-        const mapInstance = new MapInstance(mapSceneInfo);
-        await mapInstance.reloadBlocks();
+        let mapInstance: MapInstance | null = null;
+        if (this.mapNum !== null) {
+            const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
+            mapInstance = new MapInstance(mapSceneInfo);
+            await mapInstance.reloadBlocks();
 
-        // Translate map for SFA world coordinates
-        const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
-        const mapMatrix = mat4.create();
-        const mapTrans = vec3.clone(objectOrigin);
-        vec3.negate(mapTrans, mapTrans);
-        mat4.fromTranslation(mapMatrix, mapTrans);
-        mapInstance.setMatrix(mapMatrix);
+            // Translate map for SFA world coordinates
+            const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
+            const mapMatrix = mat4.create();
+            const mapTrans = vec3.clone(objectOrigin);
+            vec3.negate(mapTrans, mapTrans);
+            mat4.fromTranslation(mapMatrix, mapTrans);
+            mapInstance.setMatrix(mapMatrix);
 
-        world.setMapInstance(mapInstance);
+            world.setMapInstance(mapInstance);
+        }
 
         // Set default atmosphere: "InstallShield Blue"
         world.envfxMan.loadEnvfx(0x3c);

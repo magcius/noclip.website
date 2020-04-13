@@ -44,6 +44,7 @@ export class BlockCollection implements IBlockCollection {
     }
 
     public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
+        console.log(`Loading block collection from mod ${this.mod} subdirectory ${gameInfo.subdirs[this.mod]}`)
         this.gfxDevice = device;
         const dataFetcher = context.dataFetcher;
         this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
