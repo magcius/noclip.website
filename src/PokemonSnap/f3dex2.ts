@@ -578,6 +578,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             case F3DEX2_GBI.G_RDPTILESYNC:
             case F3DEX2_GBI.G_RDPPIPESYNC:
             case F3DEX2_GBI.G_RDPLOADSYNC:
+            case F3DEX2_GBI.G_MTX:
                 // Implementation not necessary.
                 break;
 

@@ -15,17 +15,21 @@ import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxR
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
+import { hexzero, assertExists } from '../util';
+import { DataFetcher, AbortedCallback, DataFetcherFlags } from '../DataFetcher';
+import { MathConstants, computeModelMatrixSRT } from '../MathHelpers';
+import { mat4, vec3 } from 'gl-matrix';
 
 const pathBase = `BanjoTooie`;
 
-class BKRenderer implements Viewer.SceneGfx {
+class BTRenderer implements Viewer.SceneGfx {
     public geoRenderers: GeometryRenderer[] = [];
     public geoDatas: RenderData[] = [];
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public modelCache: ModelCache) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -128,11 +132,243 @@ function findFileByID(archive: CRG1Archive, fileID: number): CRG1File | null {
     return file;
 }
 
+const cameraLengths = [0, 4, 4, 12, 12, 12, 8, 8, 4, 4, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4];
+
+function parseCamera(view: DataView, offs: number): number {
+    if (view.getUint8(offs) === 0x14)
+        offs += 5;
+    const next = view.getUint8(offs);
+    if (next === 0) {
+        offs++;
+        return offs;
+    }
+    while (true) {
+        const size = cameraLengths[view.getUint8(offs++)];
+        if (size === 0 && view.getUint8(offs) === 0) {
+            offs++;
+            break;
+        }
+        offs += size;
+    }
+    return offs;
+}
+
+interface ActorArchive {
+    Name: string;
+    Definition: ArrayBufferSlice;
+    Files: CRG1File[];
+    IsFlipbook: boolean;
+}
+
+interface StaticArchive {
+    Models: ArrayBufferSlice;
+    Flipbooks: ArrayBufferSlice;
+    Files: CRG1File[];
+}
+
+class ModelCache {
+    public archivePromiseCache = new Map<number, Promise<ActorArchive | StaticArchive | null>>();
+    public archiveCache = new Map<number, ActorArchive | StaticArchive | null>();
+    public archiveDataHolder = new Map<number, GeometryData>();
+    public cache = new GfxRenderCache();
+
+    public static staticGeometryFlag = 0x10000;
+    public static staticFlipbookMask = 0x20000;
+
+    constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
+    }
+
+    public waitForLoad(): Promise<void> {
+        const v: Promise<any>[] = [... this.archivePromiseCache.values()];
+        return Promise.all(v) as Promise<any>;
+    }
+
+    private async requestActorArchiveInternal(id: number, abortedCallback: AbortedCallback): Promise<ActorArchive | null> {
+        const archiveName = id >= 0 ? `actor/${hexzero(id, 3).toUpperCase()}_arc.crg1` : 'static_arc.crg1';
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archiveName}`, DataFetcherFlags.ALLOW_404, abortedCallback);
+
+        if (buffer.byteLength === 0) {
+            console.warn(`Could not fetch archive ${archiveName}`);
+            return null;
+        }
+
+        const arc = BYML.parse(buffer, BYML.FileType.CRG1) as ActorArchive;
+        this.archiveCache.set(id, arc);
+        return arc;
+    }
+
+    public async requestActorArchive(id: number): Promise<ActorArchive | StaticArchive | null> {
+        if (this.archivePromiseCache.has(id))
+            return this.archivePromiseCache.get(id)!;
+
+        const p = this.requestActorArchiveInternal(id, () => {
+            this.archivePromiseCache.delete(id);
+        });
+        this.archivePromiseCache.set(id, p);
+        return p;
+    }
+
+    public hasArchive(id: number): boolean {
+        return this.archiveCache.has(id) && this.archiveCache.get(id) !== null;
+    }
+
+    public getArchive(id: number): ActorArchive {
+        return assertExists(this.archiveCache.get(id)) as ActorArchive;
+    }
+
+    public getActorData(id: number): GeometryData | null {
+        if (this.archiveDataHolder.has(id))
+            return this.archiveDataHolder.get(id)!;
+
+        const arc = this.getArchive(id);
+        if (arc.Files.length === 0 || arc.IsFlipbook)
+            return null;
+
+        const geo = Geo.parseBT(arc.Files[0].Data, Geo.RenderZMode.OPA, arc.Files[1]?.Data);
+        const data = new GeometryData(this.device, this.cache, geo);
+        this.archiveDataHolder.set(id, data);
+        return data;
+
+    }
+
+    public getStaticData(id: number, isGeometry: boolean): GeometryData | null {
+        if (!isGeometry)
+            return null;
+        const flag = isGeometry ? ModelCache.staticGeometryFlag : ModelCache.staticFlipbookMask;
+        if (this.archiveDataHolder.has(id | flag))
+            return this.archiveDataHolder.get(id | flag)!;
+
+        const arc = assertExists(this.archiveCache.get(-1)) as StaticArchive;
+        const modelID = arc.Models.createDataView().getUint16(2*id);
+        if (!modelID)
+            return null;
+
+        const geo = Geo.parseBT(findFileByID(arc, modelID)!.Data, Geo.RenderZMode.OPA);
+        const data = new GeometryData(this.device, this.cache, geo);
+        this.archiveDataHolder.set(id | flag, data);
+        return data;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.cache.destroy(device);
+        for (const data of this.archiveDataHolder.values())
+            data.renderData.destroy(device);
+    }
+}
+
+async function addObjects(view: DataView, offs: number, renderer: BTRenderer): Promise<number> {
+    let actorCount = -1;
+    let actorStart = -1;
+    let staticCount = -1;
+
+    let block = view.getUint8(offs);
+    if (block === 0x0A) {
+        actorCount = view.getUint32(offs + 1);
+        offs += 5;
+        actorStart = offs;
+        for (let i = 0; i < actorCount; i++) {
+            const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
+            const id = view.getUint16(offs + 0x08);
+            if (category === 6)
+                renderer.modelCache.requestActorArchive(id);
+            offs += 0x14;
+        }
+    }
+    block = view.getUint8(offs);
+    if (block === 0x08) {
+        staticCount = view.getUint32(offs + 1);
+        offs += 5;
+        renderer.modelCache.requestActorArchive(-1);
+    }
+
+    await renderer.modelCache.waitForLoad();
+
+    for (let i = 0; i < actorCount; i++) {
+        const actorOffs = actorStart + i*0x14;
+        const pos = vec3.fromValues(
+            view.getInt16(actorOffs + 0x00),
+            view.getInt16(actorOffs + 0x02),
+            view.getInt16(actorOffs + 0x04),
+        );
+        const category = (view.getUint8(actorOffs + 0x07) >>> 1) & 0x3F;
+        const id = view.getUint16(actorOffs + 0x08);
+        const yaw = view.getUint16(actorOffs + 0x0C) >>> 7;
+
+        if (category !== 6 || !renderer.modelCache.hasArchive(id))
+            continue;
+        const data = renderer.modelCache.getActorData(id);
+        if (data === null)
+            continue;
+
+        const actor = new GeometryRenderer(renderer.modelCache.device, data);
+        mat4.fromTranslation(actor.modelMatrix, pos);
+        mat4.rotateY(actor.modelMatrix, actor.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
+        actor.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
+        renderer.geoRenderers.push(actor);
+    }
+
+    for (let i = 0; i < staticCount; i++) {
+        const id = view.getUint16(offs + 0x00) >>> 4;
+        const pos = vec3.fromValues(
+            view.getInt16(offs + 0x04),
+            view.getInt16(offs + 0x06),
+            view.getInt16(offs + 0x08),
+        );
+        const yaw = view.getUint8(offs + 0x02) * 2;
+        const roll = view.getUint8(offs + 0x03) * 2;
+        const scale = view.getUint8(offs + 0x0A) / 100.0;
+        const isGeometry =  !!(view.getUint8(offs + 0x0B) & 2);
+        offs += 0x0C;
+
+        const data = renderer.modelCache.getStaticData(id, isGeometry);
+        if (data === null)
+            continue;
+
+        const obj = new GeometryRenderer(renderer.modelCache.device, data);
+        computeModelMatrixSRT(obj.modelMatrix,
+            scale, scale, scale,
+            0, yaw * MathConstants.DEG_TO_RAD, roll * MathConstants.DEG_TO_RAD,
+            pos[0], pos[1], pos[2]
+        );
+        obj.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
+        renderer.geoRenderers.push(obj);
+    }
+
+    if (view.getUint8(offs) === 1)
+        offs++;
+    return offs;
+}
+
+async function parseSetup(setupFile: ArrayBufferSlice, renderer: BTRenderer): Promise<void> {
+    const view = setupFile.createDataView();
+    let offs = 0;
+    while (true) {
+        switch(view.getUint8(offs++)) {
+            case 2:
+            case 5:
+                continue;
+            case 1:
+                console.warn("section 1 before objects");
+                return;
+            case 4:
+                console.warn("section 4 before objects");
+                return;
+            case 6:
+                offs = parseCamera(view, offs); break;
+            case 7:
+                offs = await addObjects(view, offs, renderer);
+                return;
+            default:
+                return;
+        }
+    }
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry<Geo.BTGeoNode>): GeometryRenderer {
+    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BTRenderer, geo: Geo.Geometry<Geo.BTGeoNode>): GeometryRenderer {
         for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
 
@@ -144,12 +380,15 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`)!, BYML.FileType.CRG1);
+        const modelCache = await context.dataShare.ensureObject<ModelCache>(pathBase, async () => {
+            return new ModelCache(device, pathBase, context.dataFetcher);
+        });
+
+        const obj: any = BYML.parse(await context.dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`)!, BYML.FileType.CRG1);
 
         const viewerTextures: Viewer.Texture[] = [];
         const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-        const sceneRenderer = new BKRenderer(device, fakeTextureHolder);
+        const sceneRenderer = new BTRenderer(device, fakeTextureHolder, modelCache);
         const cache = sceneRenderer.renderHelper.getCache();
         const opaFile = findFileByID(obj, obj.OpaGeoFileID);
         if (opaFile !== null) {
@@ -182,6 +421,9 @@ class SceneDesc implements Viewer.SceneDesc {
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
         }
+
+        await parseSetup(findFileByID(obj, obj.SetupFileID)!.Data, sceneRenderer);
+
         return sceneRenderer;
     }
 }

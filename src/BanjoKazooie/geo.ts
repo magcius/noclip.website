@@ -688,7 +688,7 @@ function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boole
         const textureCount = view.getUint8(textureSetupOffs + 0x05);
         const entrySize = isTooie ? 8 : 16;
         const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * entrySize);
-        textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
+        textureData = buffer.subarray(textureDataOffs, textureSetupSize);
     }
 
     const segmentBuffers: ArrayBufferSlice[] = [];
