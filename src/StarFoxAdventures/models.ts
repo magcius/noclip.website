@@ -134,7 +134,7 @@ export class Shape {
     private hasFineSkinning = false;
     public hasBetaFineSkinning = false;
 
-    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean) {
+    constructor(private device: GfxDevice, private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], private displayList: ArrayBufferSlice, private animController: SFAAnimationController, private isDynamic: boolean, public isDevGeometry: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexData = this.vtxLoader.parseDisplayList(displayList);
         this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
@@ -396,13 +396,17 @@ class ModelShapes {
     private scratchMtx = mat4.create();
     private scratchMtx2 = mat4.create();
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], drawStep: number, showDevGeometry: boolean) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
         }
 
         const shapes = this.shapes[drawStep];
         for (let i = 0; i < shapes.length; i++) {
+            if (shapes[i].isDevGeometry && !showDevGeometry) {
+                continue;
+            }
+
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
@@ -1042,7 +1046,7 @@ export class Model {
             const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
 
             const vtxArrays = getVtxArrays(posBuffer);
-            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
+            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning, false);
             newShape.setMaterial(material);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
@@ -1094,15 +1098,12 @@ export class Model {
                     const displayList = blockData.subarray(dlInfo.offset, dlInfo.size);
     
                     try {
-                        if (curShader.flags & ShaderFlags.DevGeometry) {
-                            // Draw call disabled by shader. Contains developer geometry (representations of kill planes, invisible walls, etc.)
-                            // TODO: Implement an option to view this geometry
-                        } else if (curShader.flags & ShaderFlags.Water) {
+                        if (curShader.flags & ShaderFlags.Water) {
                             const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
-                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning);
+                            const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, self.animController, self.hasFineSkinning, !!(curShader.flags & ShaderFlags.DevGeometry));
                             newShape.setMaterial(curMaterial!);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
                             shapes.push(newShape);
@@ -1245,9 +1246,9 @@ export class ModelInstance implements BlockRenderer {
         this.skeletonDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, drawStep);
+        this.modelShapes.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, drawStep, showDevGeometry);
     }
     
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {

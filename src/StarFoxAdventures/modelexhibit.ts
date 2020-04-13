@@ -170,7 +170,7 @@ class ModelExhibitRenderer extends SFARenderer {
     }
 
     private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines

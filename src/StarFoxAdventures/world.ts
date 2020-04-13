@@ -115,6 +115,8 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
     private layerSelect: UI.Slider;
+    private showDevGeometry: boolean = false;
+    private showDevObjects: boolean = false;
 
     constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
@@ -159,6 +161,18 @@ class WorldRenderer extends SFARenderer {
         this.layerSelect.setRange(0, 16, 1);
         this.layerSelect.setValue(0);
         layerPanel.contents.append(this.layerSelect.elem);
+
+        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        showDevGeometry.onchanged = () => {
+            this.showDevGeometry = showDevGeometry.checked;
+        };
+        layerPanel.contents.append(showDevGeometry.elem);
+        
+        const showDevObjects = new UI.Checkbox("Show developer objects", false);
+        showDevObjects.onchanged = () => {
+            this.showDevObjects = showDevObjects.checked;
+        };
+        layerPanel.contents.append(showDevObjects.elem);
 
         return [timePanel, layerPanel];
     }
@@ -246,7 +260,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
 
         // Draw bones
         const drawBones = false;
@@ -275,7 +289,7 @@ class WorldRenderer extends SFARenderer {
         // Render opaques
         this.beginPass(viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, this.showDevGeometry);
         }
         
         const mtx = mat4.create();
@@ -323,7 +337,7 @@ class WorldRenderer extends SFARenderer {
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
             this.beginPass(viewerInput);
             if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, this.showDevGeometry);
             }
             this.endPass(device);
         }    

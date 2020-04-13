@@ -583,7 +583,7 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getSRT();
-            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep);
+            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep, true);
 
             // Draw bones
             const drawBones = false;

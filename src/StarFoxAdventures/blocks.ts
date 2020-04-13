@@ -25,7 +25,7 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getMaterials(): (SFAMaterial | undefined)[];
     public abstract getNumDrawSteps(): number;
-    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number): void;
+    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean): void;
     public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
     public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
 }
@@ -287,7 +287,7 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController, false);
+                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController, false, false);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
