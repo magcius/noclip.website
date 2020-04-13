@@ -140,7 +140,7 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
@@ -148,7 +148,7 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep);
+            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep, showDevGeometry);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -380,7 +380,7 @@ class MapSceneRenderer extends SFARenderer {
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         this.beginPass(viewerInput);
-        this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, false);
         this.endPass(device);
 
         this.beginPass(viewerInput);
@@ -390,7 +390,7 @@ class MapSceneRenderer extends SFARenderer {
 
         for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
             this.beginPass(viewerInput);
-            this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+            this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, false);
             this.endPass(device);
         }        
     }

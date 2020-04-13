@@ -115,6 +115,8 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
     private layerSelect: UI.Slider;
+    private showDevGeometry: boolean = false;
+    private showDevObjects: boolean = false;
 
     constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
@@ -159,6 +161,18 @@ class WorldRenderer extends SFARenderer {
         this.layerSelect.setRange(0, 16, 1);
         this.layerSelect.setValue(0);
         layerPanel.contents.append(this.layerSelect.elem);
+
+        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        showDevGeometry.onchanged = () => {
+            this.showDevGeometry = showDevGeometry.checked;
+        };
+        layerPanel.contents.append(showDevGeometry.elem);
+        
+        const showDevObjects = new UI.Checkbox("Show developer objects", false);
+        showDevObjects.onchanged = () => {
+            this.showDevObjects = showDevObjects.checked;
+        };
+        layerPanel.contents.append(showDevObjects.elem);
 
         return [timePanel, layerPanel];
     }
@@ -246,7 +260,7 @@ class WorldRenderer extends SFARenderer {
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
 
         // Draw bones
         const drawBones = false;
@@ -275,13 +289,16 @@ class WorldRenderer extends SFARenderer {
         // Render opaques
         this.beginPass(viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, this.showDevGeometry);
         }
         
         const mtx = mat4.create();
         const ctx = getDebugOverlayCanvas2D();
         for (let i = 0; i < this.world.objectInstances.length; i++) {
             const obj = this.world.objectInstances[i];
+
+            if (obj.getType().isDevObject && !this.showDevObjects)
+                continue;
 
             if (obj.isInLayer(this.layerSelect.getValue())) {
                 obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
@@ -323,7 +340,7 @@ class WorldRenderer extends SFARenderer {
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
             this.beginPass(viewerInput);
             if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
+                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, this.showDevGeometry);
             }
             this.endPass(device);
         }    
@@ -331,7 +348,7 @@ class WorldRenderer extends SFARenderer {
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private subdir: string, private mapNum: number, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    constructor(public id: string, private subdir: string, private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -341,19 +358,22 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const world = await World.create(device, this.gameInfo, dataFetcher, this.subdir);
         
-        const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
-        const mapInstance = new MapInstance(mapSceneInfo);
-        await mapInstance.reloadBlocks();
+        let mapInstance: MapInstance | null = null;
+        if (this.mapNum !== null) {
+            const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
+            mapInstance = new MapInstance(mapSceneInfo);
+            await mapInstance.reloadBlocks();
 
-        // Translate map for SFA world coordinates
-        const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
-        const mapMatrix = mat4.create();
-        const mapTrans = vec3.clone(objectOrigin);
-        vec3.negate(mapTrans, mapTrans);
-        mat4.fromTranslation(mapMatrix, mapTrans);
-        mapInstance.setMatrix(mapMatrix);
+            // Translate map for SFA world coordinates
+            const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
+            const mapMatrix = mat4.create();
+            const mapTrans = vec3.clone(objectOrigin);
+            vec3.negate(mapTrans, mapTrans);
+            mat4.fromTranslation(mapMatrix, mapTrans);
+            mapInstance.setMatrix(mapMatrix);
 
-        world.setMapInstance(mapInstance);
+            world.setMapInstance(mapInstance);
+        }
 
         // Set default atmosphere: "InstallShield Blue"
         world.envfxMan.loadEnvfx(0x3c);
