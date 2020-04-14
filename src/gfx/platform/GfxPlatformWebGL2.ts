@@ -611,7 +611,7 @@ uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;
@@ -1055,7 +1055,6 @@ void main() {
 
     public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
         const { pixelFormat, width, height, numLevels } = gfxTexture as GfxTextureP_GL;
-        const gl = this.gl;
 
         // Attachments cannot have a mip chain currently.
         assert(numLevels === 1);

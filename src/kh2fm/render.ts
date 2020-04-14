@@ -8,7 +8,7 @@ import { DeviceProgram } from "../Program";
 import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
@@ -668,7 +668,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create main render pass.
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, passRenderer, RenderPass.MAIN);
         this.renderInstManager.resetRenderInsts();
         return passRenderer;

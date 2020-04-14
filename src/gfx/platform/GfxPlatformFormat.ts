@@ -37,11 +37,11 @@ export function getFormatCompFlagsComponentCount(n: FormatCompFlags): number {
 
 export const enum FormatFlags {
     NONE       = 0b00000000,
-    NORMALIZED = 0b00000010,
-    SRGB       = 0b00000100,
-    DEPTH      = 0b00001000,
-    STENCIL    = 0b00010000,
-    RT         = 0b00100000,
+    NORMALIZED = 0b00000001,
+    SRGB       = 0b00000010,
+    DEPTH      = 0b00000100,
+    STENCIL    = 0b00001000,
+    RT         = 0b00010000,
 }
 
 export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: FormatFlags): GfxFormat {

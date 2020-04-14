@@ -5,7 +5,7 @@ import * as Bin from './bin';
 import * as BinTex from './bin_tex';
 import * as UI from '../ui';
 import * as Viewer from '../viewer';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { DeviceProgram } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
@@ -593,7 +593,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create render pass for skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, skyboxPassRenderer, RenderPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
         // Create main render pass.

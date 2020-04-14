@@ -10,7 +10,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { depthClearRenderPassDescriptor, BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -116,7 +116,7 @@ class BKRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.

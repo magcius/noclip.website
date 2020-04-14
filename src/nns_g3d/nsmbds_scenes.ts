@@ -9,7 +9,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { MDL0Renderer, G3DPass } from './render';
 import { assert, assertExists } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
@@ -57,7 +57,7 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);

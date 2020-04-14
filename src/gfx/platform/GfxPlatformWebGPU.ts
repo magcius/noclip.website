@@ -21,6 +21,7 @@ interface GfxTextureP_WebGPU extends GfxTexture {
 interface GfxAttachmentP_WebGPU extends GfxAttachment {
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
+    numSamples: number;
 }
 
 interface GfxSamplerP_WebGPU extends GfxSampler {
@@ -272,12 +273,22 @@ function translateVertexBufferFrequency(frequency: GfxVertexBufferFrequency): GP
 }
 
 function translateVertexFormat(format: GfxFormat): GPUVertexFormat {
-    if (format === GfxFormat.U8_RG)
+    if (format === GfxFormat.U8_R)
         return 'uchar2';
+    else if (format === GfxFormat.U8_RG)
+        return 'uchar2';
+    else if (format === GfxFormat.U8_RGB)
+        return 'uchar4';
     else if (format === GfxFormat.U8_RGBA)
         return 'uchar4';
     else if (format === GfxFormat.U8_RGBA_NORM)
         return 'uchar4norm';
+    else if (format === GfxFormat.S8_RGB_NORM)
+        return 'char4norm';
+    else if (format === GfxFormat.S8_RGBA_NORM)
+        return 'char4norm';
+    else if (format === GfxFormat.S16_RG)
+        return 'short2';
     else if (format === GfxFormat.F32_R)
         return 'float';
     else if (format === GfxFormat.F32_RG)
@@ -529,7 +540,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             this.renderPassDescriptor.colorAttachments = this.colorAttachments;
 
             const resolveTexture = descriptor.colorResolveTo as (GfxTextureP_WebGPU | null);
-            if (resolveTexture !== null)
+            if (resolveTexture !== null && colorAttachment.numSamples > 1)
                 dstAttachment.resolveTarget = resolveTexture.gpuTextureView;
         } else {
             this.renderPassDescriptor.colorAttachments = [];
@@ -609,6 +620,20 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     public finish(): GPUCommandBuffer {
         this.renderPassEncoder!.endPass();
         this.renderPassEncoder = null;
+
+        // Fake a resolve with a copy for non-MSAA.
+        const descriptor = this.descriptor;
+        if (descriptor.colorAttachment !== null && descriptor.colorResolveTo !== null) {
+            const colorAttachment = descriptor.colorAttachment as GfxAttachmentP_WebGPU;
+            if (colorAttachment.numSamples === 1) {
+                const colorResolveTo = descriptor.colorResolveTo as GfxTextureP_WebGPU;
+
+                const srcCopy: GPUTextureCopyView = { texture: colorAttachment.gpuTexture, arrayLayer: 0, mipLevel: 0, origin: [0, 0, 0] };
+                const dstCopy: GPUTextureCopyView = { texture: colorResolveTo.gpuTexture, arrayLayer: 0, mipLevel: 0, origin: [0, 0, 0] };
+                this.commandEncoder!.copyTextureToTexture(srcCopy, dstCopy, [colorResolveTo.width, colorResolveTo.height, 1]);
+            }
+        }
+
         return this.commandEncoder!.finish();
     }
 }
@@ -735,14 +760,15 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         });
         const gpuTextureView = gpuTexture.createView();
 
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView, numSamples };
         return attachment;
     }
 
     public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
         const { gpuTexture } = gfxTexture as GfxTextureP_WebGPU;
+        const numSamples = 1;
         const gpuTextureView = gpuTexture.createView();
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView };
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView, numSamples };
         return attachment;
     }
 
@@ -782,6 +808,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     private _createBindGroupLayout(bindingLayout: GfxBindingLayoutDescriptor): GPUBindGroupLayout {
         const entries: GPUBindGroupLayoutEntry[] = [];
+        // XXX(jstpierre): HACK FOR DAWN/GX
+        bindingLayout.numSamplers = Math.min(bindingLayout.numSamplers, 6);
 
         for (let i = 0; i < bindingLayout.numUniformBuffers; i++)
             entries.push({ binding: entries.length, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, type: 'uniform-buffer', hasDynamicOffset: true });
@@ -796,6 +824,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     public createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings {
         const bindingLayout = bindingsDescriptor.bindingLayout;
+        // XXX(jstpierre): HACK FOR DAWN/GX
+        bindingLayout.numSamplers = Math.min(bindingLayout.numSamplers, 6);
         const gpuBindGroupLayout = this._createBindGroupLayout(bindingLayout);
 
         const gpuBindGroupEntries: GPUBindGroupEntry[] = [];
@@ -821,14 +851,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuSampler });
         }
 
-        this.device.pushErrorScope('validation');
         const gpuBindGroup = this.device.createBindGroup({ layout: gpuBindGroupLayout, entries: gpuBindGroupEntries });
-        this.device.popErrorScope().then(g => {
-            if (g !== null) {
-                console.log(bindingsDescriptor, gpuBindGroupLayout, gpuBindGroupEntries);
-                debugger;
-            }
-        });
         const bindings: GfxBindingsP_WebGPU = { _T: _T.Bindings, ResourceUniqueId: this._resourceUniqueId, bindingLayout: bindingsDescriptor.bindingLayout, gpuBindGroupLayout, gpuBindGroup };
         return bindings;
     }

@@ -29,8 +29,9 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, binding = 0, location = 0;
 
-        rest = rest.replace(/layout\((.*)\)\s+uniform/g, (substr, layout) => {
-            return `layout(${layout}, set = ${set}, binding = ${binding++}) uniform`;
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform(.+{)$/gm, (substr, cap, layout, rest) => {
+            const layout2 = layout ? `${layout}, ` : ``;
+            return `layout(${layout2}set = ${set}, binding = ${binding++}) uniform ${rest}`;
         });
 
         assert(vendorInfo.separateSamplerTextures);
@@ -48,15 +49,39 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
 
         outLayout = 'layout(location = 0) ';
 
-        extraDefines = `#define gl_VertexID gl_VertexIndex`;
+        extraDefines = `#define gl_VertexID gl_VertexIndex\n`;
     }
 
     if (vendorInfo.separateSamplerTextures) {
-        rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `texture2D T_P_${samplerName}, sampler S_P_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `SAMPLER_2D(P_${samplerName})`;
+        });
+
+        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `T_${samplerName}, S_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D(T_${samplerName}, S_${samplerName})`;
         });
     } else {
-        rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `sampler2D P_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `SAMPLER_2D(P_${samplerName})`;
+        });
+
+        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return samplerName;
+        });
+
+        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }

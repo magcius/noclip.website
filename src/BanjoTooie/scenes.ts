@@ -8,7 +8,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, RenderData, GeometryData, BKLayer } from '../BanjoKazooie/render';
 import { GeometryRenderer } from './render';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -89,7 +89,7 @@ class BKRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.

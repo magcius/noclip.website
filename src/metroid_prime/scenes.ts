@@ -9,11 +9,11 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert, assertExists } from '../util';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
-import { FPSCameraController, CameraController } from '../Camera';
+import { CameraController } from '../Camera';
 import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
@@ -87,7 +87,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(RetroPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);

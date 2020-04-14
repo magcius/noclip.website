@@ -11,7 +11,7 @@ import * as BCA from './sm64ds_bca';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
@@ -512,7 +512,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);
