@@ -213,7 +213,7 @@ async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPa
     }
 }
 
-export class FakeTextureCollection {
+export class FakeTextureFetcher extends TextureFetcher {
     textures: SFATextureArray[] = [];
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
@@ -221,6 +221,9 @@ export class FakeTextureCollection {
             this.textures[num] = makeFakeTexture(device, num);
         }
         return this.textures[num];
+    }
+
+    public async loadSubdir(subdir: string) {
     }
 }
 
@@ -233,7 +236,7 @@ export class SFATextureFetcher extends TextureFetcher {
     private textableBin: DataView;
     private texpre: TextureFile | null;
     private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
-    private fakes: FakeTextureCollection = new FakeTextureCollection();
+    private fakes: FakeTextureFetcher = new FakeTextureFetcher();
 
     private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();

@@ -1,6 +1,5 @@
 import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
 import * as GX from '../gx/gx_enum';
-import { ViewerRenderInput, Viewer } from '../viewer';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind } from '../gx/gx_render';
@@ -12,7 +11,6 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { getDebugOverlayCanvas2D } from '../DebugJunk';
 import { colorFromRGBA } from '../Color';
 
 interface ShaderLayer {

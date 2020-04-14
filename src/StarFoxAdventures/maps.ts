@@ -8,7 +8,7 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { BlockRenderer, BlockFetcher, SFABlockFetcher } from './blocks';
+import { BlockRenderer, BlockFetcher, SFABlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
@@ -208,9 +208,8 @@ export class MapInstance {
     }
 }
 
-export async function loadMap(device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
+export async function loadMap(gameInfo: GameInfo, dataFetcher: DataFetcher, mapNum: number): Promise<MapSceneInfo> {
     const pathBase = gameInfo.pathBase;
-    const dataFetcher = context.dataFetcher;
     const [mapsTab, mapsBin] = await Promise.all([
         dataFetcher.fetchData(`${pathBase}/MAPS.tab`),
         dataFetcher.fetchData(`${pathBase}/MAPS.bin`),
@@ -237,9 +236,7 @@ class MapSceneRenderer extends SFARenderer {
         super(device, animController);
     }
 
-    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher): Promise<Viewer.SceneGfx> {
-        const texFetcher = await SFATextureFetcher.create(gameInfo, dataFetcher, false);
-        const blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texFetcher);
+    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, blockFetcher: BlockFetcher): Promise<Viewer.SceneGfx> {
         this.map = new MapInstance(info, blockFetcher);
         await this.map.reloadBlocks(dataFetcher);
         return this;
@@ -282,10 +279,12 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo, this.isAncient);
+        const mapSceneInfo = await loadMap(this.gameInfo, context.dataFetcher, this.mapNum);
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher);
+        const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, false);
+        const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
@@ -298,8 +297,6 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 }
 
 export class AncientMapSceneDesc implements Viewer.SceneDesc {
-    private materialFactory: MaterialFactory;
-
     constructor(public id: string, public name: string, private gameInfo: GameInfo, private mapKey: any) {
     }
     
@@ -334,7 +331,6 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const self = this;
         const mapSceneInfo: MapSceneInfo = {
             getNumCols() { return numCols; },
             getNumRows() { return numRows; },
@@ -347,7 +343,8 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         };
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo); // TODO: fix
+        const blockFetcher = await AncientBlockFetcher.create(this.gameInfo, dataFetcher, device, animController);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
