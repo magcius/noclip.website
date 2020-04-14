@@ -3,27 +3,16 @@ import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
-import { SFAModelExhibitSceneDesc } from './modelexhibit';
-import { ModelVersion } from './models';
 import { SFABlockFetcher, BlockFetcher } from './blocks';
-import { loadRes, getSubdir } from './resource';
 import { SFAWorldSceneDesc } from './world';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MaterialFactory } from './shaders';
-import { SFAAnimationController } from './animation';
-import { TextureCollection } from './textures';
 
 export interface GameInfo {
     pathBase: string;
     subdirs: {[key: number]: string};
-    makeBlockFetcher: (gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) => Promise<BlockFetcher>;
 }
 
 export const SFA_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventures',
-    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) => {
-        return await SFABlockFetcher.create(gameInfo, dataFetcher, device, materialFactory, animController, texColl);
-    },
     subdirs: {
         0: 'animtest',
         1: 'animtest',
@@ -184,11 +173,6 @@ class AncientBlockFetcher implements BlockFetcher {
 
 export const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
-        await result.create(locationNum, dataFetcher, gameInfo);
-        return result;
-    },
     subdirs: {
         0: 'animtest',
         1: 'animtest',
@@ -267,11 +251,6 @@ export const SFADEMO_GAME_INFO: GameInfo = {
 
 const ANCIENT_DP_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
-    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher) => {
-        const result = new AncientBlockFetcher();
-        await result.create(dataFetcher, gameInfo);
-        return result;
-    },
     subdirs: [], // N/A
 }
 

@@ -8,7 +8,7 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { BlockCollection, BlockRenderer, BlockFetcher } from './blocks';
+import { BlockCollection, BlockRenderer, BlockFetcher, SFABlockFetcher } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
@@ -239,7 +239,7 @@ class MapSceneRenderer extends SFARenderer {
     }
 
     public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: TextureCollection): Promise<Viewer.SceneGfx> {
-        const blockFetcher = await gameInfo.makeBlockFetcher(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texColl);
+        const blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texColl);
         this.map = new MapInstance(info, blockFetcher);
         await this.map.reloadBlocks(dataFetcher, this.device, this.materialFactory, this.animController, texColl);
         return this;
