@@ -263,11 +263,18 @@ export interface GfxBugQuirks {
     rowMajorMatricesBroken: boolean;
 }
 
+export const enum GfxClipSpaceNearZ {
+    NegativeOne,
+    Zero,
+}
+
 export interface GfxVendorInfo {
+    platformString: string;
     bugQuirks: GfxBugQuirks;
     glslVersion: string;
     explicitBindingLocations: boolean;
     separateSamplerTextures: boolean;
+    clipSpaceNearZ: GfxClipSpaceNearZ;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;

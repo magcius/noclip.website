@@ -60,7 +60,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;

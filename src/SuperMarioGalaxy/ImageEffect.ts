@@ -61,7 +61,7 @@ ${BloomPassBaseProgram.BindingsDefinition}
 in vec2 v_TexCoord;
 
 void main() {
-    gl_FragColor = texture(u_Texture, v_TexCoord);
+    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
 }
 `;
 }
@@ -78,7 +78,7 @@ float Monochrome(vec3 t_Color) {
 }
 
 void main() {
-    vec4 c = texture(u_Texture, v_TexCoord);
+    vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = (Monochrome(c.rgb) > u_Threshold) ? c : vec4(0.0);
 }
 `;
@@ -113,7 +113,7 @@ void main() {
                 const theta = ofs + (MathConstants.TAU * (j / count));
                 const x = invAspect * radius * Math.cos(theta), y = radius * Math.sin(theta);
                 this.frag += `
-    c += (texture(u_Texture, v_TexCoord + vec2(${x.toFixed(5)}, -1.0 * ${y.toFixed(5)})).rgb * ${intensityVar});`;
+    c += (texture(SAMPLER_2D(u_Texture), v_TexCoord + vec2(${x.toFixed(5)}, -1.0 * ${y.toFixed(5)})).rgb * ${intensityVar});`;
             }
             this.frag += `
     f += TevOverflow(c);`;
@@ -138,7 +138,7 @@ class BloomPassBlur2Program extends BloomPassBlurProgram {
         this.frag += `
     f = clamp(f, 0.0, 1.0);
     // Combine pass.
-    f += texture(u_Texture, v_TexCoord).rgb;
+    f += texture(SAMPLER_2D(u_Texture), v_TexCoord).rgb;
     f *= u_BloomIntensity;
     gl_FragColor = vec4(f, 1.0);
 }

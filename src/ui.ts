@@ -1798,6 +1798,9 @@ class StatisticsPanel extends Panel {
         const camPositionY = this.viewer.camera.worldMatrix[13].toFixed(2);
         const camPositionZ = this.viewer.camera.worldMatrix[14].toFixed(2);
         this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
+
+        const vendorInfo = this.viewer.gfxDevice.queryVendorInfo();
+        this.fpsGraph.drawText(`Platform: ${vendorInfo.platformString}`);
     }
 }
 

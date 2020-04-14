@@ -280,7 +280,8 @@ export class Viewer {
 
         const camera = this.camera;
 
-        // Hack in projection for now until we have that unfolded from RenderState.
+        camera.clipSpaceNearZ = this.gfxDevice.queryVendorInfo().clipSpaceNearZ;
+
         camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
         camera.fovY = this.fovY;
