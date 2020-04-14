@@ -10,7 +10,7 @@ import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
+import { TextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
@@ -21,7 +21,7 @@ import { DataFetcher } from '../DataFetcher';
 import { Data } from 'pako';
 
 export abstract class BlockFetcher {
-    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockRenderer | null>;
+    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;
 }
 
 export abstract class BlockRenderer {
@@ -37,11 +37,11 @@ export class BlockCollection {
     private bin: ArrayBufferSlice;
     private blockRenderers: BlockRenderer[] = [];
 
-    private constructor(private isAncient: boolean, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texColl: TextureCollection) {
+    private constructor(private isAncient: boolean, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, isAncient: boolean, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockCollection> {
-        const self = new BlockCollection(isAncient, device, materialFactory, animController, texColl);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, isAncient: boolean, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher): Promise<BlockCollection> {
+        const self = new BlockCollection(isAncient, device, materialFactory, animController, texFetcher);
 
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
@@ -68,9 +68,9 @@ export class BlockCollection {
             if (uncomp === null)
                 return null;
             if (this.isAncient) {
-                this.blockRenderers[num] = new AncientBlockRenderer(this.device, uncomp, this.texColl, this.animController);
+                this.blockRenderers[num] = new AncientBlockRenderer(this.device, uncomp, this.texFetcher, this.animController);
             } else {
-                this.blockRenderers[num] = new ModelInstance(new Model(this.device, this.materialFactory, uncomp, this.texColl, this.animController));
+                this.blockRenderers[num] = new ModelInstance(new Model(this.device, this.materialFactory, uncomp, this.texFetcher, this.animController));
             }
         }
 
@@ -89,13 +89,12 @@ function getModFileNum(mod: number): number {
 export class SFABlockFetcher implements BlockFetcher {
     private trkblkTab: DataView;
     private blockColls: BlockCollection[] = [];
-    private texColls: {[subdir: string]: TextureCollection} = {};
 
-    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController) {
-        const self = new SFABlockFetcher(gameInfo, device, materialFactory, animController);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher) {
+        const self = new SFABlockFetcher(gameInfo, device, materialFactory, animController, texFetcher);
 
         const pathBase = gameInfo.pathBase;
         self.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
@@ -117,22 +116,14 @@ export class SFABlockFetcher implements BlockFetcher {
     private async fetchBlockCollection(mod: number, dataFetcher: DataFetcher): Promise<BlockCollection> {
         if (this.blockColls[mod] === undefined) {
             const subdir = getSubdir(mod, this.gameInfo);
-            const texColl = await this.fetchTextureCollection(subdir, dataFetcher);
+            await this.texFetcher.loadSubdir(subdir, dataFetcher);
             const modNum = getModFileNum(mod);
             const tabPath = `${subdir}/mod${modNum}.tab`;
             const binPath = `${subdir}/mod${modNum}.zlb.bin`;
-            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, false, this.device, this.materialFactory, this.animController, texColl);
+            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, false, this.device, this.materialFactory, this.animController, this.texFetcher);
         }
 
         return this.blockColls[mod];
-    }
-
-    private async fetchTextureCollection(subdir: string, dataFetcher: DataFetcher): Promise<TextureCollection> {
-        if (this.texColls[subdir] === undefined) {
-            this.texColls[subdir] = await SFATextureCollection.create(this.gameInfo, dataFetcher, subdir, false);
-        }
-
-        return this.texColls[subdir];
     }
 }
 
@@ -141,7 +132,7 @@ export class AncientBlockRenderer implements BlockRenderer {
     public yTranslate: number = 0;
 
     // TODO: move this stuff to models.ts
-    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texColl: TextureCollection, private animController: SFAAnimationController) {
+    constructor(device: GfxDevice, blockData: ArrayBufferSlice, texFetcher: TextureFetcher, private animController: SFAAnimationController) {
         let offs = 0;
         const blockDv = blockData.createDataView();
 
@@ -389,7 +380,7 @@ export class AncientBlockRenderer implements BlockRenderer {
                         factory: new MaterialFactory(device),
                         shader,
                         gxMaterial: mb.finish(),
-                        textures: [makeMaterialTexture(texColl.getTexture(device, shader.layers[0].texId!, true))],
+                        textures: [makeMaterialTexture(texFetcher.getTexture(device, shader.layers[0].texId!, true))],
                         setupMaterialParams: () => {},
                         rebuild: () => {},
                     }

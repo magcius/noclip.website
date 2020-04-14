@@ -19,7 +19,20 @@ export interface SFATextureArray {
     textures: SFATexture[];
 }
 
-export abstract class TextureCollection {
+abstract class OldTextureCollection {
+    public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
+    public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
+        const texArray = this.getTextureArray(device, num, alwaysUseTex1);
+        if (texArray) {
+            return texArray.textures[0];
+        } else {
+            return null;
+        }
+    }
+}
+
+export abstract class TextureFetcher {
+    public abstract async loadSubdir(subdir: string, dataFetcher: DataFetcher): Promise<void>;
     public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
     public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
@@ -174,6 +187,15 @@ class TextureFile {
     constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string, private isBeta: boolean) {
     }
 
+    public hasTexture(num: number): boolean {
+        if (num < 0 || num >= this.tab.byteLength * 4) {
+            return false;
+        }
+
+        const tabValue = this.tab.getUint32(num * 4);
+        return isValidTextureTabValue(tabValue);
+    }
+
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
             try {
@@ -203,7 +225,7 @@ async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPa
     }
 }
 
-export class FakeTextureCollection extends TextureCollection {
+export class FakeTextureCollection extends OldTextureCollection {
     textures: SFATextureArray[] = [];
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
@@ -214,7 +236,7 @@ export class FakeTextureCollection extends TextureCollection {
     }
 }
 
-export class SFATextureCollection extends TextureCollection {
+class OldSFATextureCollection extends OldTextureCollection {
     private textableBin: DataView;
     private texpre: TextureFile | null;
     private tex0: TextureFile | null;
@@ -225,8 +247,8 @@ export class SFATextureCollection extends TextureCollection {
         super();
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, isBeta: boolean): Promise<SFATextureCollection> {
-        const self = new SFATextureCollection(gameInfo, isBeta);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, isBeta: boolean): Promise<OldSFATextureCollection> {
+        const self = new OldSFATextureCollection(gameInfo, isBeta);
 
         const pathBase = self.gameInfo.pathBase;
         const [textableBin, texpre, tex0, tex1] = await Promise.all([
@@ -272,5 +294,90 @@ export class SFATextureCollection extends TextureCollection {
         }
 
         return file.getTextureArray(device, texId);
+    }
+}
+
+interface SubdirTextureFiles {
+    tex0: TextureFile | null;
+    tex1: TextureFile | null;
+}
+
+export class SFATextureFetcher extends TextureFetcher {
+    private textableBin: DataView;
+    private texpre: TextureFile | null;
+    private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
+    private fakes: FakeTextureCollection = new FakeTextureCollection();
+
+    private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
+        super();
+    }
+
+    // This code assumes that a texture with a given ID is identical in all subdirectories
+    // that contain a copy of it. If this is not the case, incorrect textures will appear.
+
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, isBeta: boolean): Promise<SFATextureFetcher> {
+        const self = new SFATextureFetcher(gameInfo, isBeta);
+
+        const pathBase = self.gameInfo.pathBase;
+        const [textableBin, texpre] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
+            fetchTextureFile(dataFetcher,
+                `${pathBase}/TEXPRE.tab`,
+                `${pathBase}/TEXPRE.bin`, false), // TEXPRE is never beta
+        ]);
+        self.textableBin = textableBin!.createDataView();
+        self.texpre = texpre;
+
+        return self;
+    }
+
+    public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+        if (this.subdirTextureFiles[subdir] === undefined) {
+            const pathBase = this.gameInfo.pathBase;
+            const [tex0, tex1] = await Promise.all([
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX0.tab`,
+                    `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX1.tab`,
+                    `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
+            ]);
+
+            this.subdirTextureFiles[subdir] = { tex0, tex1 };
+        }
+    }
+
+    public getTextureArray(device: GfxDevice, texId: number, alwaysUseTex1: boolean): SFATextureArray | null {
+        const file = this.getTextureFile(texId, alwaysUseTex1);
+
+        if (file.file === null) {
+            console.warn(`Texture ID ${texId} was not found in any loaded subdirectories (${Object.keys(this.subdirTextureFiles)})`);
+            return this.fakes.getTextureArray(device, texId);
+        }
+
+        return file.file.getTextureArray(device, texId);
+    }
+
+    private getTextureFile(texId: number, useTex1: boolean): {texId: number, file: TextureFile | null} {
+        if (!useTex1) {
+            const textableValue = this.textableBin.getUint16(texId * 2);
+            if (texId < 3000 || textableValue == 0) {
+                texId = textableValue;
+            } else {
+                texId = textableValue + 1;
+                return {texId, file: this.texpre};
+            }
+        }
+
+        for (let subdir in this.subdirTextureFiles) {
+            const files = this.subdirTextureFiles[subdir];
+
+            const file = useTex1 ? files.tex1 : files.tex0;
+            if (file != null && file.hasTexture(texId)) {
+                return {texId, file};
+            }
+        }
+
+        return {texId, file: null};
     }
 }

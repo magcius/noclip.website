@@ -13,7 +13,6 @@ import * as GX from '../gx/gx_enum';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './shaders';
-import { TextureCollection, SFATextureCollection } from './textures';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
 import { LowBitReader, dataSubarray, ViewState, arrayBufferSliceFromDataView, dataCopy, readVec3 } from './util';
@@ -22,6 +21,7 @@ import { loadRes } from './resource';
 import { GXMaterial } from '../gx/gx_material';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { TextureFetcher } from './textures';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -331,7 +331,7 @@ interface Water {
 }
 
 type CreateModelShapesFunc = () => ModelShapes;
-type BuildMaterialFunc = (shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
+type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
 
 interface FineSkinningConfig {
     numPieces: number;
@@ -482,7 +482,7 @@ export class Model {
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
-        texColl: TextureCollection,
+        texFetcher: TextureFetcher,
         private animController: SFAAnimationController,
         public modelVersion: ModelVersion = ModelVersion.Final
     ) {
@@ -1028,7 +1028,7 @@ export class Model {
             bits.drop(4);
             const shaderNum = bits.get(6);
             const shader = shaders[shaderNum];
-            const material = buildSpecialMaterial(shader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+            const material = buildSpecialMaterial(shader, texFetcher, texIds, fields.alwaysUseTex1, fields.isMapBlock);
 
             bits.drop(4);
             const vcd = readVertexDesc(bits, shader);
@@ -1067,7 +1067,7 @@ export class Model {
             function setShader(num: number) {
                 curShader = shaders[num];
                 if (self.materials[num] === undefined) {
-                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texColl, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texFetcher, texIds, fields.alwaysUseTex1, fields.isMapBlock);
                 }
                 curMaterial = self.materials[num];
             }
@@ -1391,11 +1391,11 @@ export class ModelCollection {
     private modelsBin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    private constructor(private texColl: TextureCollection, private animController: SFAAnimationController, private gameInfo: GameInfo, private modelVersion: ModelVersion) {
+    private constructor(private texFetcher: TextureFetcher, private animController: SFAAnimationController, private gameInfo: GameInfo, private modelVersion: ModelVersion) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texColl: SFATextureCollection, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelCollection> {
-        const self = new ModelCollection(texColl, animController, gameInfo, modelVersion);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelCollection> {
+        const self = new ModelCollection(texFetcher, animController, gameInfo, modelVersion);
 
         const pathBase = self.gameInfo.pathBase;
         const [modelsTab, modelsBin] = await Promise.all([
@@ -1423,7 +1423,7 @@ export class ModelCollection {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texColl, this.animController, this.modelVersion);
+            this.models[num] = new Model(device, materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
         }
 
         return this.models[num];

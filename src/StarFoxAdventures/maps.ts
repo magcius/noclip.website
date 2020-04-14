@@ -8,13 +8,12 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { BlockCollection, BlockRenderer, BlockFetcher, SFABlockFetcher } from './blocks';
+import { BlockRenderer, BlockFetcher, SFABlockFetcher } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
-import { Material } from '../SuperMario64DS/sm64ds_bmd';
-import { TextureCollection, SFATextureCollection } from './textures';
+import { SFATextureFetcher } from './textures';
 
 export interface BlockInfo {
     mod: number;
@@ -183,7 +182,7 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public async reloadBlocks(dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) {
+    public async reloadBlocks(dataFetcher: DataFetcher) {
         this.clearBlocks();
         for (let z = 0; z < this.numRows; z++) {
             const row: (BlockRenderer | null)[] = [];
@@ -196,7 +195,7 @@ export class MapInstance {
                 }
 
                 try {
-                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher, device, materialFactory, animController, texColl);
+                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
                     if (blockRenderer) {
                         row.push(blockRenderer);
                     }
@@ -238,10 +237,11 @@ class MapSceneRenderer extends SFARenderer {
         super(device, animController);
     }
 
-    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: TextureCollection): Promise<Viewer.SceneGfx> {
-        const blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texColl);
+    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher): Promise<Viewer.SceneGfx> {
+        const texFetcher = await SFATextureFetcher.create(gameInfo, dataFetcher, false);
+        const blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texFetcher);
         this.map = new MapInstance(info, blockFetcher);
-        await this.map.reloadBlocks(dataFetcher, this.device, this.materialFactory, this.animController, texColl);
+        await this.map.reloadBlocks(dataFetcher);
         return this;
     }
 
@@ -282,11 +282,10 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, 'swaphol' /* TODO */, false);
         const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo, this.isAncient);
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, texColl);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
