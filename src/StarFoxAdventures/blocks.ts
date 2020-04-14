@@ -11,15 +11,16 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { TextureCollection, SFATextureCollection, FakeTextureCollection } from './textures';
-import { getSubdir } from './resource';
+import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
 import { Shape, Model, ModelInstance } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
+import { DataFetcher } from '../DataFetcher';
 
 export abstract class BlockFetcher {
-    public abstract getBlock(mod: number, sub: number): ArrayBufferSlice | null;
+    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockRenderer | null>;
 }
 
 export abstract class BlockRenderer {
@@ -30,55 +31,97 @@ export abstract class BlockRenderer {
     public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
 }
 
-export interface IBlockCollection {
-    getBlock(mod: number, sub: number): BlockRenderer | null;
-}
+export class BlockCollection {
+    private tab: DataView;
+    private bin: ArrayBufferSlice;
+    private blockRenderers: BlockRenderer[] = [];
 
-export class BlockCollection implements IBlockCollection {
-    gfxDevice: GfxDevice;
-    blockRenderers: BlockRenderer[] = []; // Address by blockRenderers[sub]
-    blockFetcher: BlockFetcher;
-    texColl: TextureCollection;
-
-    constructor(private mod: number, private isAncient: boolean, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    private constructor(private isAncient: boolean) {
     }
 
-    public async create(device: GfxDevice, context: SceneContext, gameInfo: GameInfo) {
-        console.log(`Loading block collection from mod ${this.mod} subdirectory ${gameInfo.subdirs[this.mod]}`)
-        this.gfxDevice = device;
-        const dataFetcher = context.dataFetcher;
-        this.blockFetcher = await gameInfo.makeBlockFetcher(this.mod, dataFetcher, gameInfo);
-        if (this.isAncient) {
-            this.texColl = new FakeTextureCollection();
-        } else {
-            const subdir = getSubdir(this.mod, gameInfo);
-            try {
-                this.texColl = await SFATextureCollection.create(gameInfo, dataFetcher, subdir, false); // TODO: support beta blocks (swapcircle)
-            } catch (e) {
-                console.warn(`Failed to load textures for subdirectory ${subdir}. Using fake textures instead. Exception:`);
-                console.error(e);
-                this.texColl = new FakeTextureCollection();
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, isAncient: boolean): Promise<BlockCollection> {
+        const self = new BlockCollection(isAncient);
+
+        const pathBase = gameInfo.pathBase;
+        const [tab, bin] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/${tabPath}`),
+            dataFetcher.fetchData(`${pathBase}/${binPath}`),
+        ]);
+        self.tab = tab.createDataView();
+        self.bin = bin;
+
+        return self;
+    }
+
+    public getBlockRenderer(num: number, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): BlockRenderer | null {
+        if (this.blockRenderers[num] === undefined) {
+            const tabValue = this.tab.getUint32(num * 4);
+            if (!(tabValue & 0x10000000)) {
+                return null;
             }
-        }
-    }
 
-    public getBlockRenderer(device: GfxDevice, sub: number): BlockRenderer | null {
-        if (this.blockRenderers[sub] === undefined) {
-            const uncomp = this.blockFetcher.getBlock(this.mod, sub);
+            const blockOffset = tabValue & 0xffffff;
+            const blockBin = this.bin.subarray(blockOffset);
+            const uncomp = loadRes(blockBin);
+
             if (uncomp === null)
                 return null;
             if (this.isAncient) {
-                this.blockRenderers[sub] = new AncientBlockRenderer(device, uncomp, this.texColl, this.animController);
+                this.blockRenderers[num] = new AncientBlockRenderer(device, uncomp, texColl, animController);
             } else {
-                this.blockRenderers[sub] = new ModelInstance(new Model(device, this.materialFactory, uncomp, this.texColl, this.animController));
+                this.blockRenderers[num] = new ModelInstance(new Model(device, materialFactory, uncomp, texColl, animController));
             }
         }
 
-        return this.blockRenderers[sub];
+        return this.blockRenderers[num];
+    }
+}
+
+function getModFileNum(mod: number): number {
+    if (mod < 5) { // This is strange, but it matches the original game.
+        return mod;
+    } else {
+        return mod + 1;
+    }
+}
+
+export class SFABlockFetcher implements BlockFetcher {
+    private trkblkTab: DataView;
+    private blockColls: BlockCollection[] = [];
+
+    private constructor(private gameInfo: GameInfo) {
     }
 
-    public getBlock(mod: number, sub: number): BlockRenderer | null {
-        return this.getBlockRenderer(this.gfxDevice, sub);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher) {
+        const self = new SFABlockFetcher(gameInfo);
+
+        const pathBase = gameInfo.pathBase;
+        self.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
+
+        return self;
+    }
+
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockRenderer | null> {
+        if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
+            return null;
+        }
+
+        const blockColl = await this.fetchBlockCollection(mod, dataFetcher);
+        const trkblk = this.trkblkTab.getUint16(mod * 2);
+        const blockNum = trkblk + sub;
+        return blockColl.getBlockRenderer(blockNum, device, materialFactory, animController, texColl);
+    }
+
+    private async fetchBlockCollection(mod: number, dataFetcher: DataFetcher): Promise<BlockCollection> {
+        if (this.blockColls[mod] === undefined) {
+            const subdir = getSubdir(mod, this.gameInfo);
+            const modNum = getModFileNum(mod);
+            const tabPath = `${subdir}/mod${modNum}.tab`;
+            const binPath = `${subdir}/mod${modNum}.zlb.bin`;
+            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, false);
+        }
+
+        return this.blockColls[mod];
     }
 }
 

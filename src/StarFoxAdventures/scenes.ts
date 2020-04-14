@@ -5,100 +5,20 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
 import { SFAModelExhibitSceneDesc } from './modelexhibit';
 import { ModelVersion } from './models';
-import { BlockFetcher } from './blocks';
+import { SFABlockFetcher, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFAWorldSceneDesc } from './world';
 
 export interface GameInfo {
     pathBase: string;
     subdirs: {[key: number]: string};
-    makeBlockFetcher: (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => Promise<BlockFetcher>;
-}
-
-class SFABlockFetcher implements BlockFetcher {
-    public blocksTab: DataView;
-    public blocksBin: ArrayBufferSlice;
-    public trkblkTab: DataView;
-    public locationNum: number;
-
-    constructor(private isDeletedMap: boolean) {
-    }
-
-    public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
-        this.locationNum = locationNum;
-        const pathBase = gameInfo.pathBase;
-        this.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
-        const subdir = getSubdir(locationNum, gameInfo);
-        if (this.isDeletedMap) {
-            console.log(`isDeletedMap; subdir ${subdir}`);
-            // this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-            // this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
-            const [blocksTab, blocksBin] = await Promise.all([
-                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`),
-                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`),
-            ]);
-            this.blocksTab = blocksTab.createDataView();
-            this.blocksBin = blocksBin;
-        } else {
-            const [blocksTab, blocksBin] = await Promise.all([
-                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`),
-                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`),
-            ]);
-            this.blocksTab = blocksTab.createDataView();
-            this.blocksBin = blocksBin;
-        }
-    }
-
-    public getBlock(mod: number, sub: number): ArrayBufferSlice | null {
-        if (this.isDeletedMap) {
-            // Different handling for blocks from the demo version's deleted maps
-            // Find a workable block number...
-            let firstBlockNum = 0;
-            for (let i = 0; i < this.blocksTab.byteLength/4; i++) {
-                if (this.blocksTab.getUint32(i * 4) == 0x10000000)
-                    break;
-                firstBlockNum++;
-            }
-
-            const num = firstBlockNum + sub;
-            if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
-                return null;
-            }
-            const tabValue = this.blocksTab.getUint32(num * 4);
-            if (!(tabValue & 0x10000000)) {
-                return null;
-            }
-            const blockOffset = tabValue & 0xFFFFFF;
-            console.log(`Loading deleted block from offset 0x${blockOffset.toString(16)} (location num ${this.locationNum})`);
-            const blocksBinPart = this.blocksBin.slice(blockOffset);
-            return blocksBinPart;
-        }
-
-        if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
-            return null;
-        }
-        const trkblk = this.trkblkTab.getUint16(mod * 2);
-        const blockNum = trkblk + sub;
-        if (blockNum < 0 || blockNum * 4 >= this.blocksTab.byteLength) {
-            return null;
-        }
-        const tabValue = this.blocksTab.getUint32(blockNum * 4);
-        if (!(tabValue & 0x10000000)) {
-            return null;
-        }
-        const blockOffset = tabValue & 0xFFFFFF;
-        const blocksBinPart = this.blocksBin.slice(blockOffset);
-        const uncomp = loadRes(blocksBinPart);
-        return uncomp;
-    }
+    makeBlockFetcher: (gameInfo: GameInfo, dataFetcher: DataFetcher) => Promise<BlockFetcher>;
 }
 
 export const SFA_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventures',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher(false);
-        await result.create(locationNum, dataFetcher, gameInfo);
-        return result;
+    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher) => {
+        return await SFABlockFetcher.create(gameInfo, dataFetcher);
     },
     subdirs: {
         0: 'animtest',
@@ -343,64 +263,12 @@ export const SFADEMO_GAME_INFO: GameInfo = {
 
 const ANCIENT_DP_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
+    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher) => {
         const result = new AncientBlockFetcher();
         await result.create(dataFetcher, gameInfo);
         return result;
     },
     subdirs: [], // N/A
-}
-
-function getModNumber(locationNum: number): number {
-    if (locationNum < 5) // This is strange, but it matches the decompilation.
-        return locationNum
-    else
-        return locationNum + 1
-}
-
-class BlockExhibitFetcher implements BlockFetcher {
-    blocksTab: DataView;
-    blocksBin: ArrayBufferSlice;
-    public blockOffsets: number[] = [];
-
-    constructor(public useCompression: boolean) {
-    }
-
-    public async create(dataFetcher: DataFetcher, directory: string, blocksTabName: string, blocksBinName: string) {
-        this.blocksTab = (await dataFetcher.fetchData(`${directory}/${blocksTabName}`)).createDataView();
-        this.blocksBin = await dataFetcher.fetchData(`${directory}/${blocksBinName}`);
-        let offs = 0;
-        while (offs < this.blocksTab.byteLength) {
-            const tabValue = this.blocksTab.getUint32(offs);
-            if (tabValue == 0xFFFFFFFF) {
-                break;
-            }
-            if (this.useCompression) {
-                if ((tabValue >> 24) == 0x10) {
-                    this.blockOffsets.push(tabValue & 0xFFFFFF);
-                }
-            } else {
-                this.blockOffsets.push(tabValue);
-            }
-            offs += 4;
-        }
-        console.log(`Loaded ${this.blockOffsets.length} blocks`)
-    }
-
-    public getBlock(num: number): ArrayBufferSlice | null {
-        if (num < 0 || num >= this.blockOffsets.length) {
-            return null;
-        }
-        const blockOffset = this.blockOffsets[num];
-        // console.log(`Loading block from offset 0x${blockOffset.toString(16)}`);
-        const blocksBinPart = this.blocksBin.slice(blockOffset);
-        if (this.useCompression) {
-            const uncomp = loadRes(blocksBinPart);
-            return uncomp;
-        } else {
-            return blocksBinPart;
-        }
-    }
 }
 
 const sceneDescs = [
@@ -646,9 +514,6 @@ const sceneDescs = [
     // ...
     // new SFAMapDesc(109, 'demo109', 'Early Map', SFADEMO_GAME_INFO, false),
     // (end)
-
-    // 'Ancient Block Exhibits',
-    // new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),
 
     'Ancient Maps',
     new AncientMapSceneDesc('ancient0', "Ancient Unknown Pit Room", ANCIENT_DP_GAME_INFO, 0),

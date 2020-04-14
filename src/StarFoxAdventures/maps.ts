@@ -8,10 +8,13 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { BlockCollection, BlockRenderer, IBlockCollection } from './blocks';
+import { BlockCollection, BlockRenderer, BlockFetcher } from './blocks';
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
+import { DataFetcher } from '../DataFetcher';
+import { Material } from '../SuperMario64DS/sm64ds_bmd';
+import { TextureCollection, SFATextureCollection } from './textures';
 
 export interface BlockInfo {
     mod: number;
@@ -73,7 +76,6 @@ function getBlockTable(mapInfo: MapInfo): (BlockInfo | null)[][] {
 interface MapSceneInfo {
     getNumCols(): number;
     getNumRows(): number;
-    getBlockCollection(mod: number): Promise<IBlockCollection>;
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
     getOrigin(): number[];
 }
@@ -88,11 +90,10 @@ export class MapInstance {
     private matrix: mat4 = mat4.create();
     private numRows: number;
     private numCols: number;
-    private blockCollections: IBlockCollection[] = [];
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
     private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(public info: MapSceneInfo) {
+    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
@@ -182,7 +183,7 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public async reloadBlocks() {
+    public async reloadBlocks(dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) {
         this.clearBlocks();
         for (let z = 0; z < this.numRows; z++) {
             const row: (BlockRenderer | null)[] = [];
@@ -195,12 +196,7 @@ export class MapInstance {
                 }
 
                 try {
-                    if (this.blockCollections[blockInfo.mod] == undefined) {
-                        this.blockCollections[blockInfo.mod] = await this.info.getBlockCollection(blockInfo.mod);
-                    }
-                    const blockColl = this.blockCollections[blockInfo.mod];
-
-                    const blockRenderer = blockColl.getBlock(blockInfo.mod, blockInfo.sub);
+                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher, device, materialFactory, animController, texColl);
                     if (blockRenderer) {
                         row.push(blockRenderer);
                     }
@@ -210,121 +206,6 @@ export class MapInstance {
                 }
             }
         }
-    }
-
-    public openEditor(): void {
-        const newWin = window.open('about:blank');
-        if (!newWin) {
-            console.warn(`Failed to open editor. Please allow pop-up windows and try again.`);
-            return;
-        }
-        newWin.onload = () => {
-            const inputs: HTMLInputElement[][] = [];
-            for (let y = 0; y < this.numRows; y++) {
-                const row: HTMLInputElement[] = [];
-                inputs.push(row);
-                for (let x = 0; x < this.numCols; x++) {
-                    const blockInfo = this.blockInfoTable[y][x];
-                    const inputEl = newWin.document.createElement('input');
-                    inputEl.setAttribute('type', 'text');
-                    inputEl.setAttribute('value', `${blockInfo != null ? `${blockInfo.mod}.${blockInfo.sub}` : -1}`);
-                    row.push(inputEl);
-                }
-            }
-
-            const tableEl = newWin.document.createElement('table');
-            newWin.document.body.appendChild(tableEl);
-            for (let y = 0; y < this.numRows; y++) {
-                const trEl = newWin.document.createElement('tr');
-                tableEl.appendChild(trEl);
-                for (let x = 0 ; x < this.numCols; x++) {
-                    const tdEl = newWin.document.createElement('td');
-                    trEl.appendChild(tdEl);
-                    tdEl.appendChild(inputs[y][x]);
-                }
-            }
-
-            const jsonEl = newWin.document.createElement('textarea');
-            jsonEl.setAttribute('rows', '60');
-            jsonEl.setAttribute('cols', '100');
-            const updateJson = () => {
-                let topRow = -1
-                let leftCol = -1
-                let rightCol = -1
-                let bottomRow = -1
-                for (let row = 0; row < this.numRows; row++) {
-                    for (let col = 0; col < this.numCols; col++) {
-                        const info = this.blockInfoTable[row][col];
-                        if (info != null) {
-                            if (topRow == -1) {
-                                topRow = row;
-                            }
-                            bottomRow = row;
-                            if (leftCol == -1) {
-                                leftCol = col;
-                            } else if (col < leftCol) {
-                                leftCol = col;
-                            }
-                            if (rightCol == -1) {
-                                rightCol = col;
-                            } else if (col > rightCol) {
-                                rightCol = col;
-                            }
-                        }
-                    }
-                }
-
-                if (topRow == -1) {
-                    // No blocks found
-                    jsonEl.textContent = '[]';
-                    return;
-                }
-
-                let json = '[';
-                for (let row = topRow; row <= bottomRow; row++) {
-                    json += row != topRow ? ',\n' : '\n';
-                    json += JSON.stringify(this.blockInfoTable[row].slice(leftCol, rightCol + 1),
-                        (key, value) => {
-                            if (Array.isArray(value)) {
-                                return value;
-                            } else if (value === null) {
-                                return null;
-                            } else if (typeof value != 'object') {
-                                return null;
-                            } else {
-                                return `${value.mod}.${value.sub}`;
-                            }                
-                        });
-                }
-                json += '\n]';
-                jsonEl.textContent = json;
-            };
-
-            const submitEl = newWin.document.createElement('input');
-            submitEl.setAttribute('type', 'submit');
-            newWin.document.body.appendChild(submitEl);
-            submitEl.onclick = async() => {
-                console.log(`Reloading blocks...`);
-                for (let y = 0; y < this.numRows; y++) {
-                    for (let x = 0; x < this.numCols; x++) {
-                        const newValue = inputs[y][x].value.split('.', 2);
-                        if (newValue.length == 2) {
-                            const newMod = Number.parseInt(newValue[0]);
-                            const newSub = Number.parseInt(newValue[1]);
-                            this.blockInfoTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
-                        } else {
-                            this.blockInfoTable[y][x] = null;
-                        }
-                    }
-                }
-                updateJson();
-                await this.reloadBlocks();
-            };
-
-            const divEl = newWin.document.createElement('div');
-            newWin.document.body.appendChild(divEl);
-            divEl.appendChild(jsonEl);
-        };
     }
 }
 
@@ -341,11 +222,6 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
     return {
         getNumCols() { return mapInfo.blockCols; },
         getNumRows() { return mapInfo.blockRows; },
-        async getBlockCollection(mod: number): Promise<IBlockCollection> {
-            const blockColl = new BlockCollection(mod, isAncient, materialFactory, animController);
-            await blockColl.create(device, context, gameInfo);
-            return blockColl;
-        },
         getBlockInfoAt(col: number, row: number): BlockInfo | null {
             return blockTable[row][col];
         },
@@ -358,13 +234,14 @@ export async function loadMap(device: GfxDevice, materialFactory: MaterialFactor
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
+    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
         super(device, animController);
     }
 
-    public async create(info: MapSceneInfo): Promise<Viewer.SceneGfx> {
-        this.map = new MapInstance(info);
-        await this.map.reloadBlocks();
+    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: TextureCollection): Promise<Viewer.SceneGfx> {
+        const blockFetcher = await gameInfo.makeBlockFetcher(gameInfo, dataFetcher);
+        this.map = new MapInstance(info, blockFetcher);
+        await this.map.reloadBlocks(dataFetcher, this.device, this.materialFactory, this.animController, texColl);
         return this;
     }
 
@@ -405,10 +282,11 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
+        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, 'swaphol' /* TODO */, false);
         const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo, this.isAncient);
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, texColl);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
@@ -484,44 +362,6 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
         mapRenderer.setMatrix(matrix);
 
-        return mapRenderer;
-    }
-}
-
-export class SFASandboxDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo, private isAncient = false) {
-    }
-    
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        console.log(`Creating scene for ${this.name} ...`);
-
-        const materialFactory = new MaterialFactory(device);
-        const animController = new SFAAnimationController();
-        const COLS = 20;
-        const ROWS = 20;
-        const blockTable: (BlockInfo | null)[][] = nArray(ROWS, () => nArray(COLS, () => null));
-
-        const self = this;
-        const mapSceneInfo: MapSceneInfo = {
-            getNumCols() { return COLS; },
-            getNumRows() { return ROWS; },
-            async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, self.isAncient, materialFactory, animController);
-                await blockColl.create(device, context, self.gameInfo);
-                return blockColl;
-            },
-            getBlockInfoAt(col: number, row: number): BlockInfo | null {
-                return blockTable[row][col];
-            },
-            getOrigin(): number[] {
-                return [0, 0];
-            }
-        };
-
-        console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
-
-        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo);
         return mapRenderer;
     }
 }
