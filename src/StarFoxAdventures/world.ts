@@ -25,6 +25,7 @@ import { ModelInstance } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
 import { Camera } from '../Camera';
+import { SFABlockFetcher } from './blocks';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -55,6 +56,7 @@ function getCamPos(v: vec3, camera: Camera): void {
 export class World {
     public animController: SFAAnimationController;
     public envfxMan: EnvfxManager;
+    public blockFetcher: SFABlockFetcher;
     public mapInstance: MapInstance | null = null;
     public materialFactory: MaterialFactory;
     public objectMan: ObjectManager;
@@ -71,6 +73,7 @@ export class World {
         self.animController = new SFAAnimationController();
         self.materialFactory = new MaterialFactory(device);
         self.resColl = await ResourceCollection.create(gameInfo, dataFetcher, subdir, self.animController);
+        self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
         self.objectMan = await ObjectManager.create(self, dataFetcher, false);
         self.envfxMan = await EnvfxManager.create(self, dataFetcher);
 
@@ -361,8 +364,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
             const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
-            mapInstance = new MapInstance(mapSceneInfo);
-            await mapInstance.reloadBlocks();
+            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher);
+            await mapInstance.reloadBlocks(dataFetcher);
 
             // Translate map for SFA world coordinates
             const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);

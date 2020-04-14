@@ -92,7 +92,8 @@ export class ResourceCollection {
     public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, animController: SFAAnimationController): Promise<ResourceCollection> {
         const self = new ResourceCollection(gameInfo, subdir, animController);
 
-        self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, subdir, false); // TODO: support beta
+        self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
+        await self.texFetcher.loadSubdir(subdir, dataFetcher);
         self.modelColl = await ModelCollection.create(gameInfo, dataFetcher, subdir, self.texFetcher, self.animController)
         self.animColl = await AnimCollection.create(self.gameInfo, dataFetcher, subdir);
         self.amapColl = await AmapCollection.create(self.gameInfo, dataFetcher);

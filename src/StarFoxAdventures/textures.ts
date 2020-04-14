@@ -347,8 +347,8 @@ export class SFATextureFetcher extends TextureFetcher {
         }
     }
 
-    public getTextureArray(device: GfxDevice, texId: number, alwaysUseTex1: boolean): SFATextureArray | null {
-        const file = this.getTextureFile(texId, alwaysUseTex1);
+    public getTextureArray(device: GfxDevice, texId: number, useTex1: boolean): SFATextureArray | null {
+        const file = this.getTextureFile(texId, useTex1);
 
         if (file.file === null) {
             console.warn(`Texture ID ${texId} was not found in any loaded subdirectories (${Object.keys(this.subdirTextureFiles)})`);
