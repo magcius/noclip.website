@@ -1,7 +1,6 @@
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import * as Viewer from '../viewer';
-import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
@@ -10,7 +9,7 @@ import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { TextureFetcher, SFATextureFetcher, FakeTextureFetcher } from './textures';
+import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
@@ -18,7 +17,6 @@ import { Shape, Model, ModelInstance } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
-import { Data } from 'pako';
 
 export abstract class BlockFetcher {
     public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;

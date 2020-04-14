@@ -11,8 +11,8 @@ import { SFARenderer } from './render';
 import { ModelCollection, ModelInstance, ModelVersion } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
-import { SFATextureCollection } from './textures';
 import { dataSubarray, createDownloadLink } from './util';
+import { TextureFetcher, SFATextureFetcher } from './textures';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -27,7 +27,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texColl: SFATextureCollection, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
         super(device, animController);
     }
 
@@ -208,9 +208,10 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const modanimColl = await ModanimCollection.create(this.gameInfo, context.dataFetcher);
         const amapColl = await AmapCollection.create(this.gameInfo, context.dataFetcher);
         const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
-        const texColl = await SFATextureCollection.create(this.gameInfo, context.dataFetcher, this.subdir, this.modelVersion === ModelVersion.Beta);
-        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texColl, animController, this.modelVersion);
+        const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, this.modelVersion === ModelVersion.Beta);
+        await texFetcher.loadSubdir(this.subdir, context.dataFetcher);
+        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texFetcher, animController, this.modelVersion);
 
-        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texColl, modelColl, animColl, amapColl, modanimColl);
+        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelColl, animColl, amapColl, modanimColl);
     }
 }

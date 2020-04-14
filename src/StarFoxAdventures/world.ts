@@ -363,7 +363,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
-            const mapSceneInfo = await loadMap(device, world.materialFactory, world.animController, context, this.mapNum, this.gameInfo);
+            const mapSceneInfo = await loadMap(this.gameInfo, dataFetcher, this.mapNum);
             mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher);
             await mapInstance.reloadBlocks(dataFetcher);
 

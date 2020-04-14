@@ -1,9 +1,6 @@
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
-import { SFABlockFetcher, BlockFetcher } from './blocks';
 import { SFAWorldSceneDesc } from './world';
 
 export interface GameInfo {
@@ -434,7 +431,6 @@ const sceneDescs = [
     new AncientMapSceneDesc('ancient13', "Ancient DarkIce Mines Boss Room", ANCIENT_DP_GAME_INFO, 13),
     new AncientMapSceneDesc('ancient14', "Ancient CloudRunner Fortress Race", ANCIENT_DP_GAME_INFO, 14),
     new AncientMapSceneDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
-    // new SFASandboxDesc('ancientdp', 'Ancient Map Sandbox', ANCIENT_DP_GAME_INFO, true),
 ];
 
 const id = 'sfa';

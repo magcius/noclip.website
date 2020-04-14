@@ -274,6 +274,18 @@ export class SFATextureFetcher extends TextureFetcher {
             ]);
 
             this.subdirTextureFiles[subdir] = { tex0, tex1 };
+
+            // XXX: These maps need additional textures to be loaded
+            if (subdir === 'clouddungeon') {
+                await this.loadSubdir('crfort', dataFetcher);
+            } else if (subdir === 'desert') {
+                await this.loadSubdir('dfptop', dataFetcher);
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'linkb' || subdir === 'linkf') {
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'swapholbot' || subdir === 'shop') {
+                await this.loadSubdir('swaphol', dataFetcher);
+            }
         }
     }
 
