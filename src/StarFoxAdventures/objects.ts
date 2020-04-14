@@ -303,7 +303,7 @@ export class ObjectInstance {
                                 fail = false;
                                 // Found the texture! Make it scroll now.
                                 console.log(`Making texId ${targetTexId} scroll!`);
-                                const theTexture = this.world.resColl.texColl.getTexture(this.world.device, targetTexId, true)!;
+                                const theTexture = this.world.resColl.texFetcher.getTexture(this.world.device, targetTexId, true)!;
                                 const dxPerFrame = (speedX << 16) / theTexture.width;
                                 const dyPerFrame = (speedY << 16) / theTexture.height;
                                 layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);

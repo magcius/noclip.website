@@ -5,9 +5,9 @@ import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 
 import { GameInfo } from './scenes';
 import { DataFetcher } from '../DataFetcher';
-import { SFATextureCollection } from './textures';
 import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
 import { ModelCollection } from './models';
+import { TextureFetcher, SFATextureFetcher } from './textures';
 
 class ZLBHeader {
     public static readonly SIZE = 16;
@@ -78,7 +78,7 @@ export function getSubdir(locationNum: number, gameInfo: GameInfo): string {
 }
 
 export class ResourceCollection {
-    public texColl: SFATextureCollection;
+    public texFetcher: TextureFetcher;
     public modelColl: ModelCollection;
     public animColl: AnimCollection;
     public amapColl: AmapCollection;
@@ -92,8 +92,9 @@ export class ResourceCollection {
     public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, animController: SFAAnimationController): Promise<ResourceCollection> {
         const self = new ResourceCollection(gameInfo, subdir, animController);
 
-        self.texColl = await SFATextureCollection.create(self.gameInfo, dataFetcher, subdir, false); // TODO: support beta
-        self.modelColl = await ModelCollection.create(gameInfo, dataFetcher, subdir, self.texColl, self.animController)
+        self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
+        await self.texFetcher.loadSubdir(subdir, dataFetcher);
+        self.modelColl = await ModelCollection.create(gameInfo, dataFetcher, subdir, self.texFetcher, self.animController)
         self.animColl = await AnimCollection.create(self.gameInfo, dataFetcher, subdir);
         self.amapColl = await AmapCollection.create(self.gameInfo, dataFetcher);
         self.modanimColl = await ModanimCollection.create(self.gameInfo, dataFetcher);

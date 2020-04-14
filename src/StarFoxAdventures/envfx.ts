@@ -3,9 +3,9 @@ import { DataFetcher } from '../DataFetcher';
 import { GfxDevice} from '../gfx/platform/GfxPlatform';
 
 import { GameInfo } from './scenes';
-import { TextureCollection, SFATexture, SFATextureCollection } from './textures';
+import { SFATexture } from './textures';
 import { dataSubarray } from './util';
-import { ObjectInstance, ObjectManager } from './objects';
+import { ObjectInstance } from './objects';
 import { World } from './world';
 
 enum EnvfxType {
@@ -62,7 +62,7 @@ export class EnvfxManager {
             for (let i = 0; i < 8; i++) {
                 const texId = BASE + texIds[i];
                 console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
-                this.atmosphere.textures[i] = this.world.resColl.texColl.getTexture(this.world.device, texId, false);
+                this.atmosphere.textures[i] = this.world.resColl.texFetcher.getTexture(this.world.device, texId, false);
             }
         } else if (fields.type === EnvfxType.Skyscape) {
             this.skyscape.objects = [];

@@ -19,7 +19,8 @@ export interface SFATextureArray {
     textures: SFATexture[];
 }
 
-export abstract class TextureCollection {
+export abstract class TextureFetcher {
+    public abstract async loadSubdir(subdir: string, dataFetcher: DataFetcher): Promise<void>;
     public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
     public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
@@ -174,6 +175,15 @@ class TextureFile {
     constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string, private isBeta: boolean) {
     }
 
+    public hasTexture(num: number): boolean {
+        if (num < 0 || num * 4 >= this.tab.byteLength) {
+            return false;
+        }
+
+        const tabValue = this.tab.getUint32(num * 4);
+        return isValidTextureTabValue(tabValue);
+    }
+
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
         if (this.textures[num] === undefined) {
             try {
@@ -203,7 +213,7 @@ async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPa
     }
 }
 
-export class FakeTextureCollection extends TextureCollection {
+export class FakeTextureFetcher extends TextureFetcher {
     textures: SFATextureArray[] = [];
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
@@ -212,65 +222,105 @@ export class FakeTextureCollection extends TextureCollection {
         }
         return this.textures[num];
     }
+
+    public async loadSubdir(subdir: string) {
+    }
 }
 
-export class SFATextureCollection extends TextureCollection {
+interface SubdirTextureFiles {
+    tex0: TextureFile | null;
+    tex1: TextureFile | null;
+}
+
+export class SFATextureFetcher extends TextureFetcher {
     private textableBin: DataView;
     private texpre: TextureFile | null;
-    private tex0: TextureFile | null;
-    private tex1: TextureFile | null;
-    private fakes: FakeTextureCollection = new FakeTextureCollection();
+    private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
+    private fakes: FakeTextureFetcher = new FakeTextureFetcher();
 
     private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, isBeta: boolean): Promise<SFATextureCollection> {
-        const self = new SFATextureCollection(gameInfo, isBeta);
+    // This code assumes that a texture with a given ID is identical in all subdirectories
+    // that contain a copy of it. If this is not the case, incorrect textures will appear.
+
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, isBeta: boolean): Promise<SFATextureFetcher> {
+        const self = new SFATextureFetcher(gameInfo, isBeta);
 
         const pathBase = self.gameInfo.pathBase;
-        const [textableBin, texpre, tex0, tex1] = await Promise.all([
+        const [textableBin, texpre] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
             fetchTextureFile(dataFetcher,
                 `${pathBase}/TEXPRE.tab`,
                 `${pathBase}/TEXPRE.bin`, false), // TEXPRE is never beta
-            fetchTextureFile(dataFetcher,
-                `${pathBase}/${subdir}/TEX0.tab`,
-                `${pathBase}/${subdir}/TEX0.bin`, self.isBeta),
-            fetchTextureFile(dataFetcher,
-                `${pathBase}/${subdir}/TEX1.tab`,
-                `${pathBase}/${subdir}/TEX1.bin`, self.isBeta),
         ]);
         self.textableBin = textableBin!.createDataView();
         self.texpre = texpre;
-        self.tex0 = tex0;
-        self.tex1 = tex1;
 
         return self;
     }
 
-    public getTextureArray(device: GfxDevice, texId: number, alwaysUseTex1: boolean = false): SFATextureArray | null {
-        let file: TextureFile | null;
-        if (alwaysUseTex1) {
-            file = this.tex1;
-        } else {
+    public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+        if (this.subdirTextureFiles[subdir] === undefined) {
+            const pathBase = this.gameInfo.pathBase;
+            const [tex0, tex1] = await Promise.all([
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX0.tab`,
+                    `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX1.tab`,
+                    `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
+            ]);
+
+            this.subdirTextureFiles[subdir] = { tex0, tex1 };
+
+            // XXX: These maps need additional textures to be loaded
+            if (subdir === 'clouddungeon') {
+                await this.loadSubdir('crfort', dataFetcher);
+            } else if (subdir === 'desert') {
+                await this.loadSubdir('dfptop', dataFetcher);
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'linkb' || subdir === 'linkf') {
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'swapholbot' || subdir === 'shop') {
+                await this.loadSubdir('swaphol', dataFetcher);
+            }
+        }
+    }
+
+    public getTextureArray(device: GfxDevice, texId: number, useTex1: boolean): SFATextureArray | null {
+        const file = this.getTextureFile(texId, useTex1);
+
+        if (file.file === null) {
+            console.warn(`Texture ID ${texId} was not found in any loaded subdirectories (${Object.keys(this.subdirTextureFiles)})`);
+            return this.fakes.getTextureArray(device, file.texNum);
+        }
+
+        return file.file.getTextureArray(device, file.texNum);
+    }
+
+    private getTextureFile(texId: number, useTex1: boolean): {texNum: number, file: TextureFile | null} {
+        let texNum = texId;
+        if (!useTex1) {
             const textableValue = this.textableBin.getUint16(texId * 2);
-            console.log(`texid ${texId} translated to textable value ${textableValue}`);
             if (texId < 3000 || textableValue == 0) {
-                texId = textableValue;
-                file = this.tex0;
-                console.log(`translated to tex0 num ${texId}`);
+                texNum = textableValue;
             } else {
-                texId = textableValue + 1;
-                file = this.texpre;
-                console.log(`translated to texpre num ${texId}`);
+                texNum = textableValue + 1;
+                return {texNum, file: this.texpre};
             }
         }
 
-        if (file === null) {
-            return this.fakes.getTextureArray(device, texId);
+        for (let subdir in this.subdirTextureFiles) {
+            const files = this.subdirTextureFiles[subdir];
+
+            const file = useTex1 ? files.tex1 : files.tex0;
+            if (file !== null && file.hasTexture(texNum)) {
+                return {texNum, file};
+            }
         }
 
-        return file.getTextureArray(device, texId);
+        return {texNum, file: null};
     }
 }
