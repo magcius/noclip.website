@@ -683,7 +683,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTextureSample(index: number, coord: string): string {
-        return `texture(u_Texture[${index}], ${coord}, TextureLODBias(${index}))`;
+        return `texture(SAMPLER_2D(u_Texture[${index}]), ${coord}, TextureLODBias(${index}))`;
     }
 
     private generateIndTexStage(indTexStageIndex: number): string {

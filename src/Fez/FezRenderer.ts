@@ -70,7 +70,7 @@ in vec3 v_Normal;
 void main() {
     vec2 t_DiffuseTexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
     t_DiffuseTexCoord = t_DiffuseTexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
-    vec4 t_DiffuseMapColor = texture(u_Texture[0], t_DiffuseTexCoord.xy);
+    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(u_Texture[0]), t_DiffuseTexCoord.xy);
 
     float t_LightFalloff = clamp(dot(u_LightDirection.xyz, v_Normal.xyz), 0.0, 1.0);
     float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
@@ -81,7 +81,7 @@ void main() {
     // Add in the shadow texture
     vec2 t_ShadowTexCoord = ((v_ShadowTexCoord.xy / v_ShadowTexCoord.z) * vec2(0.5)) + vec2(0.5);
     t_ShadowTexCoord = t_ShadowTexCoord.xy * u_ShadowTexScaleBias.xy + u_ShadowTexScaleBias.zw;
-    vec4 t_ShadowMapColor = texture(u_Texture[1], t_ShadowTexCoord);
+    vec4 t_ShadowMapColor = texture(SAMPLER_2D(u_Texture[1]), t_ShadowTexCoord);
     vec4 t_ShadowMul = 1.0 - (t_ShadowMapColor * 0.25);
     gl_FragColor.rgb *= t_ShadowMul.rgb;
 }

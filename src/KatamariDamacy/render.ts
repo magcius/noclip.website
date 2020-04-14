@@ -108,7 +108,7 @@ ${KatamariDamacyProgram.reflectionDeclarations}
 void main() {
     vec4 t_Color;
 
-    t_Color = texture(u_Texture[0], v_TexCoord);
+    t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
 
     // Basic fake directional.

@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -151,11 +151,11 @@ uniform sampler2D u_Texture[3];
 
         switch (which) {
         case 0: // Texture 0 has TexCoord 0
-            return `texture(u_Texture[0], v_TexCoord0)`;
+            return `texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0)`;
         case 1: // Texture 1 has TexCoord 1
-            return `texture(u_Texture[1], v_TexCoord1)`;
+            return `texture(SAMPLER_2D(u_Texture[1]), v_TexCoord1)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input. TODO(jstpierre): Add a material setting for this.
-            return `texture(u_Texture[2], v_TexCoord2)`;
+            return `texture(SAMPLER_2D(u_Texture[2]), v_TexCoord2)`;
         case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
             console.warn("Accessing procedural texture slot");
             return `vec4(1.0)`;
@@ -272,7 +272,6 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 
-in vec3 v_Lighting;
 in vec3 v_FogColor;
 in vec3 v_Normal;
 in float v_Depth;
@@ -326,8 +325,6 @@ out vec2 v_TexCoord2;
 out vec3 v_FogColor;
 out vec3 v_Normal;
 out float v_Depth;
-out float v_DrawDistance;
-out float v_FogStart;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -689,7 +686,7 @@ function translateDataType(dataType: CMB.DataType, size: number, normalized: boo
 
     const formatTypeFlags = translateDataTypeFlags(dataType);
     const formatCompFlags = size as FormatCompFlags;
-    const formatFlags = normalized ? FormatFlags.NORMALIZED : FormatFlags.NONE;
+    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.NORMALIZED : FormatFlags.NONE;
     return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
 }
 

@@ -111,8 +111,8 @@ void main() {
 `;
     public frag = `
 precision mediump float;
-in vec2 v_TexCoord;
 in vec4 v_Color;
+in vec2 v_TexCoord;
 
 void main() {
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);

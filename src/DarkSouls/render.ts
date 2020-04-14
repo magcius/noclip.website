@@ -299,7 +299,7 @@ void main() {
     private buildTexAccess(texParam: MTDTexture): string {
         const texAssign = getTexAssign(this.mtd, texParam.name);
         assert(texAssign > -1);
-        return `texture(u_Texture[${texAssign}], v_TexCoord[${texParam.uvNumber}])`;
+        return `texture(SAMPLER_2D(u_Texture[${texAssign}]), v_TexCoord[${texParam.uvNumber}])`;
     }
 
     private genDiffuse(): string {

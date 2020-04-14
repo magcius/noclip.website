@@ -176,24 +176,24 @@ void main() {
 
     // Trying out some ind stuff
     vec2 t_BodyIndCoord = v_TexCoord.xy + vec2(u_BodyIndMapOffsS, u_BodyIndMapOffsT);
-    vec2 t_BodyIndTex = (texture(u_Texture[2], t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_BodyIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_BodyIndTex = rotateZ(t_BodyIndTex, u_BodyMapIndAngle);
     t_BodyIndTex *= u_BodyMapIndScale;
     vec2 t_BodyTexCoord = (v_TexCoord.xy) + t_BodyIndTex;
 
-    vec4 t_BodyColor = texture(u_Texture[0], t_BodyTexCoord);
+    vec4 t_BodyColor = texture(SAMPLER_2D(u_Texture[0]), t_BodyTexCoord);
     gl_FragColor *= t_BodyColor;
 
     // Sample pore map.
     vec2 t_PoreIndCoord = v_TexCoord.xy + vec2(u_PoreIndMapOffsS, u_PoreIndMapOffsT);
-    vec2 t_PoreIndTex = (texture(u_Texture[2], t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    vec2 t_PoreIndTex = (texture(SAMPLER_2D(u_Texture[2]), t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_PoreIndTex = rotateZ(t_PoreIndTex, u_PoreMapIndAngle);
     t_PoreIndTex *= u_PoreMapIndScale;
 
     vec2 t_PoreTexCoord = (v_TexCoord.xy * u_PoreMapScale) + t_PoreIndTex;
-    vec4 t_PoreMask = texture(u_Texture[1], t_PoreTexCoord).rrrg;
+    vec4 t_PoreMask = texture(SAMPLER_2D(u_Texture[1]), t_PoreTexCoord).rrrg;
     t_PoreMask.a += u_PoreBaseAlpha;
     gl_FragColor *= t_PoreMask;
 }

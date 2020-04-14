@@ -52,7 +52,7 @@ void main() {
     tc = fract(tc * v_TexRepeat) / v_TexRepeat;
     tc = clamp(tc, v_TexClip.xz + u_AnimOffset.xy, v_TexClip.yw + u_AnimOffset.xy);
     tc = tc * v_TexScaleOffset.xy + v_TexScaleOffset.zw;
-    t_Color = texture(u_Texture, tc);
+    t_Color = texture(SAMPLER_2D(u_Texture), tc);
 #endif
 
 #ifdef USE_VERTEX_COLOR
