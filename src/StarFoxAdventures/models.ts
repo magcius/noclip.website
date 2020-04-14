@@ -1067,7 +1067,7 @@ export class Model {
             function setShader(num: number) {
                 curShader = shaders[num];
                 if (self.materials[num] === undefined) {
-                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texFetcher, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
                 }
                 curMaterial = self.materials[num];
             }

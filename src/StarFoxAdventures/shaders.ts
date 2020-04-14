@@ -6,7 +6,7 @@ import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
-import { SFATexture, TextureCollection, SFATextureCollection } from './textures';
+import { SFATexture, TextureFetcher } from './textures';
 import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
@@ -216,7 +216,7 @@ class StandardMaterial implements SFAMaterial {
     private cprevIsValid = false;
     private aprevIsValid = false;
 
-    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texColl: TextureCollection, private isMapBlock: boolean) {
+    constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
         this.rebuild();
     }
 
@@ -241,7 +241,7 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setUsePnMtxIdx(true);
             this.addTevStageForTextureWithWhiteKonst(0);
             for (let i = 0; i < this.shader.layers.length; i++) {
-                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+                this.textures.push(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
             }
         } else {
             this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
@@ -517,10 +517,10 @@ class StandardMaterial implements SFAMaterial {
             mat4.copy(dst, itm1);
         };
 
-        this.textures[2] = makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[0].texId!, true));
+        this.textures[2] = makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true));
         this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
-        this.textures[0] = makeMaterialTexture(this.texColl.getTexture(this.device, 0x600, false));
+        this.textures[0] = makeMaterialTexture(this.texFetcher.getTexture(this.device, 0x600, false));
 
         const pttexmtx2 = mat4.create();
         this.postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
@@ -734,7 +734,7 @@ class StandardMaterial implements SFAMaterial {
             this.addTevStageForMultVtxColor();
 
             for (let i = 0; i < this.shader.layers.length; i++) {
-                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+                this.textures.push(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
             }
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
@@ -747,7 +747,7 @@ class StandardMaterial implements SFAMaterial {
             }
 
             for (let i = 0; i < this.shader.layers.length; i++) {
-                this.textures.push(makeMaterialTexture(this.texColl.getTexture(this.device, this.shader.layers[i].texId!, true)));
+                this.textures.push(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
             }
 
             if (this.shader.flags & ShaderFlags.Reflective) {
@@ -783,11 +783,11 @@ export class MaterialFactory {
         return this.scrollingTexMtxs.length - 1;
     }
 
-    public buildMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
-        return new StandardMaterial(this.device, this, shader, texColl, isMapBlock);
+    public buildMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
+        return new StandardMaterial(this.device, this, shader, texFetcher, isMapBlock);
     }
     
-    public buildWaterMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
+    public buildWaterMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('WaterMaterial');
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
@@ -925,7 +925,7 @@ export class MaterialFactory {
         };
     }
 
-    public buildFurMaterial(shader: Shader, texColl: TextureCollection, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
+    public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('FurMaterial');
         const textures = [] as SFAMaterialTexture[];
         const texMtx: TexMtx[] = [];
@@ -934,7 +934,7 @@ export class MaterialFactory {
     
         // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
         // but then it replaces texmap 0 with shader layer 0 before drawing...
-        textures[0] = makeMaterialTexture(texColl.getTexture(this.device, shader.layers[0].texId!, alwaysUseTex1));
+        textures[0] = makeMaterialTexture(texFetcher.getTexture(this.device, shader.layers[0].texId!, alwaysUseTex1));
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
         mb.setTevDirect(0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);

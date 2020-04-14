@@ -301,7 +301,7 @@ export class SFATextureFetcher extends TextureFetcher {
             const files = this.subdirTextureFiles[subdir];
 
             const file = useTex1 ? files.tex1 : files.tex0;
-            if (file != null && file.hasTexture(texId)) {
+            if (file !== null && file.hasTexture(texNum)) {
                 return {texNum, file};
             }
         }
