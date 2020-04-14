@@ -239,7 +239,7 @@ class MapSceneRenderer extends SFARenderer {
     }
 
     public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, texColl: TextureCollection): Promise<Viewer.SceneGfx> {
-        const blockFetcher = await gameInfo.makeBlockFetcher(gameInfo, dataFetcher);
+        const blockFetcher = await gameInfo.makeBlockFetcher(gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texColl);
         this.map = new MapInstance(info, blockFetcher);
         await this.map.reloadBlocks(dataFetcher, this.device, this.materialFactory, this.animController, texColl);
         return this;
@@ -339,11 +339,6 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         const mapSceneInfo: MapSceneInfo = {
             getNumCols() { return numCols; },
             getNumRows() { return numRows; },
-            async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, true, materialFactory, animController);
-                await blockColl.create(device, context, self.gameInfo);
-                return blockColl;
-            },
             getBlockInfoAt(col: number, row: number): BlockInfo | null {
                 return blockTable[row][col];
             },
@@ -353,7 +348,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         };
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        await mapRenderer.create(mapSceneInfo);
+        await mapRenderer.create(mapSceneInfo); // TODO: fix
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.

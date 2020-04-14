@@ -36,11 +36,11 @@ export class BlockCollection {
     private bin: ArrayBufferSlice;
     private blockRenderers: BlockRenderer[] = [];
 
-    private constructor(private isAncient: boolean) {
+    private constructor(private isAncient: boolean, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texColl: TextureCollection) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, isAncient: boolean): Promise<BlockCollection> {
-        const self = new BlockCollection(isAncient);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, isAncient: boolean, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockCollection> {
+        const self = new BlockCollection(isAncient, device, materialFactory, animController, texColl);
 
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
@@ -53,7 +53,7 @@ export class BlockCollection {
         return self;
     }
 
-    public getBlockRenderer(num: number, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): BlockRenderer | null {
+    public getBlockRenderer(num: number): BlockRenderer | null {
         if (this.blockRenderers[num] === undefined) {
             const tabValue = this.tab.getUint32(num * 4);
             if (!(tabValue & 0x10000000)) {
@@ -67,9 +67,9 @@ export class BlockCollection {
             if (uncomp === null)
                 return null;
             if (this.isAncient) {
-                this.blockRenderers[num] = new AncientBlockRenderer(device, uncomp, texColl, animController);
+                this.blockRenderers[num] = new AncientBlockRenderer(this.device, uncomp, this.texColl, this.animController);
             } else {
-                this.blockRenderers[num] = new ModelInstance(new Model(device, materialFactory, uncomp, texColl, animController));
+                this.blockRenderers[num] = new ModelInstance(new Model(this.device, this.materialFactory, uncomp, this.texColl, this.animController));
             }
         }
 
@@ -89,11 +89,11 @@ export class SFABlockFetcher implements BlockFetcher {
     private trkblkTab: DataView;
     private blockColls: BlockCollection[] = [];
 
-    private constructor(private gameInfo: GameInfo) {
+    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texColl: TextureCollection) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher) {
-        const self = new SFABlockFetcher(gameInfo);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) {
+        const self = new SFABlockFetcher(gameInfo, device, materialFactory, animController, texColl);
 
         const pathBase = gameInfo.pathBase;
         self.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
@@ -101,7 +101,7 @@ export class SFABlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection): Promise<BlockRenderer | null> {
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null> {
         if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
             return null;
         }
@@ -109,7 +109,7 @@ export class SFABlockFetcher implements BlockFetcher {
         const blockColl = await this.fetchBlockCollection(mod, dataFetcher);
         const trkblk = this.trkblkTab.getUint16(mod * 2);
         const blockNum = trkblk + sub;
-        return blockColl.getBlockRenderer(blockNum, device, materialFactory, animController, texColl);
+        return blockColl.getBlockRenderer(blockNum);
     }
 
     private async fetchBlockCollection(mod: number, dataFetcher: DataFetcher): Promise<BlockCollection> {
@@ -118,7 +118,7 @@ export class SFABlockFetcher implements BlockFetcher {
             const modNum = getModFileNum(mod);
             const tabPath = `${subdir}/mod${modNum}.tab`;
             const binPath = `${subdir}/mod${modNum}.zlb.bin`;
-            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, false);
+            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, false, this.device, this.materialFactory, this.animController, this.texColl);
         }
 
         return this.blockColls[mod];

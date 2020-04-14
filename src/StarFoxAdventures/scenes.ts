@@ -8,17 +8,21 @@ import { ModelVersion } from './models';
 import { SFABlockFetcher, BlockFetcher } from './blocks';
 import { loadRes, getSubdir } from './resource';
 import { SFAWorldSceneDesc } from './world';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { MaterialFactory } from './shaders';
+import { SFAAnimationController } from './animation';
+import { TextureCollection } from './textures';
 
 export interface GameInfo {
     pathBase: string;
     subdirs: {[key: number]: string};
-    makeBlockFetcher: (gameInfo: GameInfo, dataFetcher: DataFetcher) => Promise<BlockFetcher>;
+    makeBlockFetcher: (gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) => Promise<BlockFetcher>;
 }
 
 export const SFA_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventures',
-    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher) => {
-        return await SFABlockFetcher.create(gameInfo, dataFetcher);
+    makeBlockFetcher: async (gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texColl: TextureCollection) => {
+        return await SFABlockFetcher.create(gameInfo, dataFetcher, device, materialFactory, animController, texColl);
     },
     subdirs: {
         0: 'animtest',
