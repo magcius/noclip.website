@@ -101,7 +101,9 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
 }
 
 function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
-    if (format === GfxFormat.U8_RGBA_NORM)
+    if (format === GfxFormat.U8_RGBA_RT)
+        return 'bgra8unorm';
+    else if (format === GfxFormat.U8_RGBA_NORM)
         return 'rgba8unorm';
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
@@ -205,7 +207,7 @@ function translateBlendState(blendState: GfxChannelBlendState): GPUBlendDescript
 
 function translateColorState(attachmentState: GfxAttachmentState): GPUColorStateDescriptor {
     return { 
-        format: 'rgba8unorm',
+        format: 'bgra8unorm',
         colorBlend: translateBlendState(attachmentState.rgbBlendState),
         alphaBlend: translateBlendState(attachmentState.alphaBlendState),
         writeMask: attachmentState.colorWriteMask,
@@ -634,7 +636,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public clipSpaceNearZ = GfxClipSpaceNearZ.Zero;
 
     constructor(private adapter: GPUAdapter, private device: GPUDevice, private canvasContext: GPUCanvasContext, private glslang: Glslang) {
-        this._swapChain = this.canvasContext.configureSwapChain({ device, format: 'rgba8unorm' });
+        this._swapChain = this.canvasContext.configureSwapChain({ device, format: 'bgra8unorm' });
         this._fallbackTexture = this.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         this._fallbackSampler = this.createSampler({
             wrapS: GfxWrapMode.CLAMP,
@@ -658,7 +660,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTextureView = gpuTexture.createView();
         const texture: GfxTextureP_WebGPU = { _T: _T.Texture, ResourceUniqueId: 0,
             gpuTexture, gpuTextureView,
-            pixelFormat: GfxFormat.U8_RGBA_NORM,
+            pixelFormat: GfxFormat.U8_RGBA_RT,
             width: 0,
             height: 0,
             numLevels: 1,

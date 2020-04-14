@@ -10,7 +10,7 @@ export class ColorTexture {
     public width: number = 0;
     public height: number = 0;
 
-    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_RT) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number): boolean {
@@ -39,7 +39,7 @@ export class ColorAttachment {
     public height: number = 0;
     public numSamples: number = 0;
 
-    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_RT) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): boolean {
