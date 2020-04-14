@@ -112,7 +112,7 @@ const defaultBlendState: GfxChannelBlendState = {
 
 export const defaultMegaState: GfxMegaStateDescriptor = {
     attachmentsState: [{
-        colorWriteMask: GfxColorWriteMask.ALL,
+        colorWriteMask: GfxColorWriteMask.COLOR,
         rgbBlendState: defaultBlendState,
         alphaBlendState: defaultBlendState,
     }],

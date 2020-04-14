@@ -1,5 +1,6 @@
 
 import { mat4 } from "gl-matrix";
+import { GfxClipSpaceNearZ } from "../platform/GfxPlatform";
 
 const mtxOpenGLFromD3D = mat4.fromValues(
     1, 0,  0, 0,
@@ -23,4 +24,14 @@ const mtxD3DFromOpenGL = mat4.fromValues(
 // Converts a projection matrix from OpenGL-style Z range [-1, 1] to D3D-style Z range [0, 1]
 export function projectionMatrixD3DFromOpenGL(m: mat4): void {
     mat4.mul(m, mtxD3DFromOpenGL, m);
+}
+
+export function projectionMatrixConvertClipSpaceNearZ(m: mat4, dst: GfxClipSpaceNearZ, src: GfxClipSpaceNearZ): void {
+    if (dst === src)
+        return;
+
+    if (dst === GfxClipSpaceNearZ.NegativeOne)
+        projectionMatrixOpenGLFromD3D(m);
+    else if (dst === GfxClipSpaceNearZ.Zero)
+        projectionMatrixD3DFromOpenGL(m);
 }

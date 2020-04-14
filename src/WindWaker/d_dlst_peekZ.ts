@@ -155,13 +155,13 @@ void main() {
 }
 `;
             const fullscreenFS: string = `
-uniform highp sampler2D u_Texture;
+uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 out uint o_Output;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     o_Output = uint(color.r * 4294967295.0);
 }
 `;

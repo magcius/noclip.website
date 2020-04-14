@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple, GfxAttachmentDescriptor } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
 
@@ -582,10 +582,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _blackTexture!: WebGLTexture;
 
     // GfxVendorInfo
+    public platformString: string = 'WebGL2';
     public bugQuirks = new GfxBugQuirksImpl();
     public glslVersion = `#version 300 es`;
     public explicitBindingLocations = false;
     public separateSamplerTextures = false;
+    public clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
 
     constructor(public gl: WebGL2RenderingContext) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
@@ -709,7 +711,7 @@ void main() {
             if (this._scTexture !== null)
                 this._destroyTexture(this._scTexture);
 
-            this._scTexture = this._createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this._scWidth, this._scHeight, 1));
+            this._scTexture = this._createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_RT, this._scWidth, this._scHeight, 1));
             gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(this._scTexture));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -779,6 +781,7 @@ void main() {
         case GfxFormat.U8_RGB_SRGB:
             return WebGL2RenderingContext.SRGB8;
         case GfxFormat.U8_RGBA_NORM:
+        case GfxFormat.U8_RGBA_RT:
             return WebGL2RenderingContext.RGBA8;
         case GfxFormat.U8_RGBA_SRGB:
             return WebGL2RenderingContext.SRGB8_ALPHA8;

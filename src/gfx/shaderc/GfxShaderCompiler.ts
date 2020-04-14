@@ -23,6 +23,7 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 
     const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
+    let extraDefines = '';
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
@@ -41,11 +42,13 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
 ` : '';
         });
 
-        rest = rest.replace(/^varying/gm, (substr, layout) => {
-            return `layout(location = ${location++}) varying`;
+        rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
+            return `layout(location = ${location++}) ${tok}`;
         });
 
         outLayout = 'layout(location = 0) ';
+
+        extraDefines = `#define gl_VertexID gl_VertexIndex`;
     }
 
     if (vendorInfo.separateSamplerTextures) {
@@ -94,21 +97,30 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 
     const hasFragColor = rest.includes('gl_FragColor');
 
-    return `
+    let concat = `
 ${vendorInfo.glslVersion}
 ${precision}
 #define ${type.toUpperCase()}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
+${extraDefines}
 ${hasFragColor ? `
 #define gl_FragColor o_color
-${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
+${type === 'frag' ? `out vec4 o_color;` : ''}
 ` : ``}
 ${matrixDefines}
 ${definesString}
 ${rest}
 `.trim();
+
+    if (vendorInfo.explicitBindingLocations && type === 'frag') {
+        concat = concat.replace(/^\b(out)\b/gm, (substr, tok) => {
+            return `layout(location = 0) ${tok}`;
+        });
+    }
+
+    return concat;
 }
 
 interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {

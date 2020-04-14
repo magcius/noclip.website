@@ -3,12 +3,18 @@ import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ } from './MathHelpers';
-import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
+import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
+
+// TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
 export class Camera {
+    public clipSpaceNearZ: GfxClipSpaceNearZ;
+
     // Converts to view space from world space.
     // Should be called viewFromWorldMatrix
     public viewMatrix = mat4.create();
@@ -90,13 +96,16 @@ export class Camera {
     private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
         this.frustum.setViewFrustum(left, right, bottom, top, n, f, this.isOrthographic);
         this.frustum.updateWorldFrustum(this.worldMatrix);
+
         if (this.isOrthographic) {
             computeProjectionMatrixFromCuboid(this.projectionMatrix, left, right, bottom, top, n, f);
-            reverseDepthForOrthographicProjectionMatrix(this.projectionMatrix);
+            reverseDepthForPerspectiveProjectionMatrix(this.projectionMatrix);
         } else {
             computeProjectionMatrixFromFrustum(this.projectionMatrix, left, right, bottom, top, n, f);
-            reverseDepthForPerspectiveProjectionMatrix(this.projectionMatrix);
+            reverseDepthForOrthographicProjectionMatrix(this.projectionMatrix);
         }
+        projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
+
         this.updateClipFromWorld();
     }
 

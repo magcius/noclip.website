@@ -54,7 +54,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             textureHolder.setTextureOverride('tou_k_dummy', { width: 1, height: 1, flipY: false, gfxTexture });
         }
 
-        return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
+        return new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
     }
 }
 

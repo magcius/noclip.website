@@ -36,11 +36,12 @@ export function getFormatCompFlagsComponentCount(n: FormatCompFlags): number {
 }
 
 export const enum FormatFlags {
-    NONE       = 0x00,
-    NORMALIZED = 0x01,
-    SRGB       = 0x02,
-    DEPTH      = 0x04,
-    STENCIL    = 0x08,
+    NONE       = 0b00000000,
+    NORMALIZED = 0b00000010,
+    SRGB       = 0b00000100,
+    DEPTH      = 0b00001000,
+    STENCIL    = 0b00010000,
+    RT         = 0b00100000,
 }
 
 export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: FormatFlags): GfxFormat {
@@ -97,6 +98,9 @@ export enum GfxFormat {
     D24_S8         = makeFormat(FormatTypeFlags.D24S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
     D32F           = makeFormat(FormatTypeFlags.D32,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
     D32F_S8        = makeFormat(FormatTypeFlags.D32S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
+
+    // Special RT formats for preferred backend support.
+    U8_RGBA_RT     = makeFormat(FormatTypeFlags.U8,    FormatCompFlags.COMP_RGBA, FormatFlags.RT),
 }
 
 export function getFormatCompFlags(fmt: GfxFormat): FormatCompFlags {
