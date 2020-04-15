@@ -213,6 +213,7 @@ class StandardMaterial implements SFAMaterial {
     private texGenSrc = GX.TexGenSrc.TEX0;
     private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
     private postTexMtxNum = 0;
+    private ambColors: ColorFunc[] = [];
     private kcolors: ColorFunc[] = [];
     private kcolorNum = 0;
     private cprevIsValid = false;
@@ -285,13 +286,15 @@ class StandardMaterial implements SFAMaterial {
         }
 
         if (this.shader.flags & ShaderFlags.DisableChan0) {
-            // TODO: AMB0 = solid white is enforced here
+            this.ambColors[0] = undefined; // AMB0 is solid white
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            // TODO: AMB0 = solid white is enforced here
+            this.ambColors[0] = undefined; // AMB0 is solid white
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
-            // TODO: Set AMB0 to sky/environment ambient color
+            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.skyColor);
+            };
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
@@ -324,9 +327,13 @@ class StandardMaterial implements SFAMaterial {
             }
         }
 
-        // TODO: use sky/environment ambient lighting
-        colorFromRGBA(params.u_Color[ColorKind.AMB0], 1.0, 1.0, 1.0, 1.0);
-        colorFromRGBA(params.u_Color[ColorKind.AMB1], 1.0, 1.0, 1.0, 1.0);
+        for (let i = 0; i < 2; i++) {
+            if (this.ambColors[i] !== undefined) {
+                this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
 
         for (let i = 0; i < 4; i++) {
             if (this.kcolors[i] !== undefined) {
