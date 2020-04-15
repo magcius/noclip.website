@@ -7,11 +7,12 @@ import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform'
 
 import { SFATexture, TextureFetcher } from './textures';
 import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA } from '../Color';
+import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
+import { nArray } from '../util';
 
 interface ShaderLayer {
     texId: number | null;
@@ -186,7 +187,8 @@ export interface SFAMaterial {
     rebuild: () => void;
 }
 
-type TexMtx = ((dst: mat4, viewState: ViewState) => void) | undefined;
+type TexMtxFunc = ((dst: mat4, viewState: ViewState) => void) | undefined;
+type ColorFunc = ((dst: Color, viewState: ViewState) => void) | undefined;
 
 interface ScrollingTexMtx {
     x: number;
@@ -201,9 +203,9 @@ class StandardMaterial implements SFAMaterial {
     public gxMaterial: GXMaterial;
     public textures: SFAMaterialTexture[] = [];
     private mb: GXMaterialBuilder;
-    private texMtx: TexMtx[] = [];
-    private postTexMtx: TexMtx[] = [];
-    private indTexMtx: TexMtx[] = [];
+    private texMtx: TexMtxFunc[] = [];
+    private postTexMtx: TexMtxFunc[] = [];
+    private indTexMtx: TexMtxFunc[] = [];
     private tevStage = 0;
     private indStageId = GX.IndTexStageID.STAGE0;
     private texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -211,6 +213,8 @@ class StandardMaterial implements SFAMaterial {
     private texGenSrc = GX.TexGenSrc.TEX0;
     private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
     private postTexMtxNum = 0;
+    private kcolors: ColorFunc[] = [];
+    private kcolorNum = 0;
     private cprevIsValid = false;
     private aprevIsValid = false;
 
@@ -231,6 +235,8 @@ class StandardMaterial implements SFAMaterial {
         this.texGenSrc = GX.TexGenSrc.TEX0;
         this.postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
         this.postTexMtxNum = 0;
+        this.kcolors = [];
+        this.kcolorNum = 0;
         this.cprevIsValid = false;
         this.aprevIsValid = false;
         
@@ -321,6 +327,21 @@ class StandardMaterial implements SFAMaterial {
         // TODO: use sky/environment ambient lighting
         colorFromRGBA(params.u_Color[ColorKind.AMB0], 1.0, 1.0, 1.0, 1.0);
         colorFromRGBA(params.u_Color[ColorKind.AMB1], 1.0, 1.0, 1.0, 1.0);
+
+        for (let i = 0; i < 4; i++) {
+            if (this.kcolors[i] !== undefined) {
+                this.kcolors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+    }
+
+    private addKColor(colorFunc: ColorFunc): number {
+        const kcnum = this.kcolorNum;
+        this.kcolors[kcnum] = colorFunc;
+        this.kcolorNum++;
+        return kcnum;
     }
     
     private addTevStagesForTextureWithSkyAmbient(scrollingTexMtx?: number) {
@@ -338,13 +359,16 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
-        // mb.setTevKColor (does not exist)
-        // TODO: The game multiplies by a sky-related ambient color
-        // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
+        // TODO: use ambient sky color
+        const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+            colorCopy(dst, viewState.skyColor);
+        });
+        this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+
         // Stage 1: Multiply vertex color by ambient sky color
         this.mb.setTevDirect(this.tevStage);
         this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.ONE /*GX.CombineColorInput.KONST*/, GX.CC.RASC, GX.CC.ZERO);
+        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.KONST, GX.CC.RASC, GX.CC.ZERO);
         this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -926,7 +950,7 @@ export class MaterialFactory {
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('FurMaterial');
         const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtx[] = [];
+        const texMtx: TexMtxFunc[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
     
