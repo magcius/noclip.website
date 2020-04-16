@@ -208,7 +208,7 @@ export class evt_disasm_ctx {
         }
 
         // Try to guess.
-        if (type === undefined) {
+        if (type === undefined && addr >= this.baseAddress) {
             const str = readString(this.rel, addr - this.baseAddress, 0xFF, true);
             if (str.length > 3 && str.split('').every((c) => c.charCodeAt(0) > 0x20 && c.charCodeAt(0) <= 0x7F))
                 return `"${str}"`;
