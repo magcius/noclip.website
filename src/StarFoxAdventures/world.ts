@@ -192,19 +192,13 @@ class WorldRenderer extends SFARenderer {
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.world.materialFactory.update(this.animController);
+        this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         this.beginPass(viewerInput, true);
 
-        const atmos = this.world.envfxMan.atmosphere;
-        let texNum = this.timeSelect.getValue()|0;
-        if (texNum < 0) {
-            texNum = 0;
-        } else if (texNum >= atmos.textures.length) {
-            texNum = atmos.textures.length - 1;
-        }
-        const tex = atmos.textures[texNum]!;
+        const tex = this.world.envfxMan.getAtmosphereTexture()!;
         materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
         materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
         materialParams.m_TextureMapping[0].width = tex.width;

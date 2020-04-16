@@ -799,7 +799,7 @@ export class MaterialFactory {
 
     public getOutdoorAmbientColor(): Color {
         if (this.envfxMan !== undefined) {
-            return this.envfxMan.atmosphere.outdoorAmbientColor;
+            return this.envfxMan.getOutdoorAmbientColor();
         } else {
             return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
         }

@@ -251,11 +251,13 @@ export class Shape {
                 animController: this.animController,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
-                outdoorAmbientColor: this.material.factory.getOutdoorAmbientColor(),
+                outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
             };
         }
 
         this.viewState.viewerInput = viewerInput;
+        this.viewState.outdoorAmbientColor = this.material.factory.getOutdoorAmbientColor();
+
         mat4.mul(this.scratchMtx, boneMatrices[this.pnMatrixMap[0]], modelMatrix);
         this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
