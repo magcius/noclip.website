@@ -411,7 +411,7 @@ class Main {
         prepareFrameDebugOverlayCanvas2D();
 
         // Needs to be called before this.viewer.update()
-        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
+        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
         this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
 
