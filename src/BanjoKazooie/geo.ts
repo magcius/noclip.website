@@ -60,6 +60,9 @@ export interface Geometry<N extends GeoNode> {
     modelPoints: ModelPoint[];
     sharedOutput: F3DEX.RSPSharedOutput;
     rootNode: N;
+
+    normals?: vec3[];
+    softwareLighting?: SoftwareLightingEffect[];
 }
 
 export const enum VertexEffectType {
@@ -288,6 +291,12 @@ export interface GeoNode {
     runDL: (addr: number) => void;
 }
 
+export interface SoftwareLightingEffect {
+    startVertex: number;
+    vertexCount: number;
+    bone: number;
+}
+
 type nodeBuilder<N extends GeoNode> = (bone: number, parent: number, ctx: GeoContext<N>) => N;
 
 interface GeoContext<N extends GeoNode> {
@@ -305,6 +314,8 @@ interface GeoContext<N extends GeoNode> {
     nodeStack: N[];
     buildSortNodes: boolean;
     nodeBuilder: nodeBuilder<N>;
+
+    softwareLighting?: SoftwareLightingEffect[];
 }
 
 export class BKGeoNode implements GeoNode {
@@ -509,19 +520,23 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
             }
         } else if (cmd === 0x02) {
             // Bone.
+            const geoOffset = view.getUint8(geoIdx + 0x08);
             const boneIndex = view.getInt8(geoIdx + 0x09);
             const parentNode = peekGeoNode(context);
 
-            pushGeoNode(context, boneIndex, parentNode.boneIndex);
-            runGeoLayout(context, geoIdx + view.getUint8(geoIdx + 0x08));
-            popGeoNode(context);
-        } else if (cmd === 0x03) {
+            // tooie has a bunch of these with zero offset, which seem to do nothing
+            if (geoOffset !== 0) {
+                pushGeoNode(context, boneIndex, parentNode.boneIndex);
+                runGeoLayout(context, geoIdx + geoOffset);
+                popGeoNode(context);
+            }
+        } else if (cmd === 0x03 || cmd === 0x11) {
             // DL.
             const segmentStart = view.getUint16(geoIdx + 0x08);
             const triCount = view.getUint16(geoIdx + 0x0A);
             runDL(context, 0x09000000 + segmentStart * 0x08);
-        } else if (cmd === 0x05) {
-            // Skinned DL (?)
+        } else if (cmd === 0x05 || cmd === 0x12) {
+            // Skinned DL
             // Does something fancy with matrices.
 
             const node = peekGeoNode(context);
@@ -598,9 +613,82 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
                 setMipmapTiles(node.rspState, wrapMode === 1 ? TexCM.CLAMP : TexCM.WRAP);
             else
                 node.runDL((7 << 24) | (2-wrapMode)*0x60);
-        } else {
-            // TODO: new geo layout commands
-            assert(peekGeoNode(context) instanceof BTGeoNode);
+        } else if (cmd === 0x16 || cmd === 0x18) {
+            runDL(context, 0x09000000 + view.getUint16(geoIdx + 0x08) * 0x08);
+            let idx = 0x0A;
+            while (true) {
+                const segmentStart = view.getUint16(geoIdx + idx);
+                if (segmentStart === 0) // 0 after the first indicates the end
+                    break;
+                runDL(context, 0x09000000 + segmentStart * 0x08);
+                idx += 0x02;
+            }
+        }
+        if (cmd > 0x10) {
+            const node = peekGeoNode(context);
+            assert(node instanceof BTGeoNode);
+            assert(node.boneIndex >= 0 && (node.parentIndex >= 0 || cmd === 0x11))
+            switch (cmd) {
+                case 0x11: {
+                    if (!(view.getUint16(geoIdx + 0x0E) & 1))
+                        break;
+                    context.softwareLighting!.push({
+                        startVertex: view.getUint16(geoIdx + 0x0A),
+                        vertexCount: view.getUint16(geoIdx + 0x0C),
+                        bone: node.boneIndex,
+                    });
+                } break;
+                case 0x12:
+                case 0x18: {
+                    if (!(view.getUint16(geoIdx + 0x2E) & 1))
+                        break;
+                    let startVertex = view.getUint16(geoIdx + 0x2C);
+                    let vertexCount = 0;
+
+                    let idx = 0;
+                    while (true) {
+                        if (view.getUint16(geoIdx + idx + 0x08) === 0)
+                            break;
+                        vertexCount = view.getUint16(geoIdx + idx + 0x20);
+                        if (vertexCount > 0)
+                            context.softwareLighting!.push({startVertex, vertexCount, bone: node.boneIndex});
+                        startVertex += vertexCount;
+
+                        vertexCount = view.getUint16(geoIdx + idx + 0x14);
+                        if (vertexCount > 0)
+                            context.softwareLighting!.push({startVertex, vertexCount, bone: node.parentIndex});
+                        startVertex += vertexCount;
+                        idx += 2;
+                    }
+                } break;
+                // only active for the other lighting effects
+                // case 0x15: {
+                //     const count = view.getUint16(geoIdx + 0x08);
+                //     let startVertex = view.getUint16(geoIdx + 0x0A);
+                //     for (let i = 0; i < count; i++) {
+                //         const vertexCount = view.getUint16(geoIdx + 4*i + 0x0E);
+                //         context.softwareLighting!.push({
+                //             startVertex,
+                //             vertexCount,
+                //             bone: view.getInt16(geoIdx + 4*i + 0x0C),
+                //         });
+                //         startVertex += vertexCount;
+                //     }
+                // }
+                case 0x17: {
+                    if (!(view.getUint16(geoIdx + 0x0E) & 1))
+                        break;
+                    let startVertex = view.getUint16(geoIdx + 0x08);
+                    let vertexCount = view.getUint16(geoIdx + 0x0A);
+                    if (vertexCount > 0)
+                        context.softwareLighting!.push({startVertex, vertexCount, bone: node.boneIndex});
+                    startVertex += vertexCount;
+
+                    vertexCount = view.getUint16(geoIdx + 0x0C);
+                    if (vertexCount > 0)
+                        context.softwareLighting!.push({startVertex, vertexCount, bone: node.parentIndex});
+                } break;
+            }
         }
 
         if (nextSiblingOffs === 0)
@@ -650,34 +738,6 @@ function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boole
         animationSetup = { translationScale, bones };
     }
 
-    const vertexBoneTableOffs = view.getUint32(0x28);
-    let vertexBoneTable: VertexBoneTable | null = null;
-    if (vertexBoneTableOffs !== 0) {
-        assert(animationSetup !== null); // not sure what this would mean
-        const vertexBoneEntries: VertexBoneEntry[] = [];
-        const tableCount = view.getUint16(vertexBoneTableOffs);
-        let tableOffs = vertexBoneTableOffs + 0x04;
-        for (let i = 0; i < tableCount; i++) {
-            const x = view.getInt16(tableOffs + 0x00);
-            const y = view.getInt16(tableOffs + 0x02);
-            const z = view.getInt16(tableOffs + 0x04);
-            const position = vec3.fromValues(x, y, z);
-
-            const boneID = view.getInt8(tableOffs + 0x06);
-            const boneVertexCount = view.getUint8(tableOffs + 0x07);
-            tableOffs += 0x08;
-
-            // When -1, it just takes the model matrix... no entry required.
-            if (boneID !== -1) {
-                const vertexIDs = buffer.createTypedArray(Uint16Array, tableOffs, boneVertexCount, Endianness.BIG_ENDIAN);
-                vertexBoneEntries.push({ position, boneID, vertexIDs });
-            }
-
-            tableOffs += 0x02 * boneVertexCount;
-        }
-        vertexBoneTable = { vertexBoneEntries };
-    }
-
     const vertexDataOffs = view.getUint32(0x10);
     const vertexCount = isTooie ? view.getUint16(vertexDataOffs + 0x16) / 2 : view.getUint16(0x32);
     const vertexData = buffer.subarray(vertexDataOffs + 0x18, vertexCount * 0x10);
@@ -713,7 +773,7 @@ function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boole
         zMode,
 
         animationSetup,
-        vertexBoneTable,
+        vertexBoneTable: null,
         modelPoints,
 
         nodeStack: [],
@@ -733,6 +793,35 @@ function btBuilder(bone: number, parent: number, ctx: GeoContext<BTGeoNode>): BT
 
 export function parseBK(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry<BKGeoNode> {
     const context = commonSetup(buffer, false, bkBuilder, zMode);
+
+    const view = buffer.createDataView();
+    const vertexBoneTableOffs = view.getUint32(0x28);
+    if (vertexBoneTableOffs !== 0) {
+        assert(context.animationSetup !== null); // not sure what this would mean
+        const vertexBoneEntries: VertexBoneEntry[] = [];
+        const tableCount = view.getUint16(vertexBoneTableOffs);
+        let tableOffs = vertexBoneTableOffs + 0x04;
+        for (let i = 0; i < tableCount; i++) {
+            const x = view.getInt16(tableOffs + 0x00);
+            const y = view.getInt16(tableOffs + 0x02);
+            const z = view.getInt16(tableOffs + 0x04);
+            const position = vec3.fromValues(x, y, z);
+
+            const boneID = view.getInt8(tableOffs + 0x06);
+            const boneVertexCount = view.getUint8(tableOffs + 0x07);
+            tableOffs += 0x08;
+
+            // When -1, it just takes the model matrix... no entry required.
+            if (boneID !== -1) {
+                const vertexIDs = buffer.createTypedArray(Uint16Array, tableOffs, boneVertexCount, Endianness.BIG_ENDIAN);
+                vertexBoneEntries.push({ position, boneID, vertexIDs });
+            }
+
+            tableOffs += 0x02 * boneVertexCount;
+        }
+        context.vertexBoneTable = { vertexBoneEntries };
+    }
+
     const renderModeIndex = zMode + (opaque ? 0 : 3);
     context.segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
     return parse<BKGeoNode>(buffer, context);
@@ -741,14 +830,55 @@ export function parseBK(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bo
 export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureData?: ArrayBufferSlice): Geometry<BTGeoNode> {
     const context = commonSetup(buffer, true, btBuilder, zMode, textureData);
 
-    let mipmapIndex = 0;
     const view = buffer.createDataView();
+    const vertexBoneTableOffs = view.getUint32(0x28);
+    if (vertexBoneTableOffs !== 0) {
+        assert(context.animationSetup !== null); // not sure what this would mean
+        const vertexBoneEntries: VertexBoneEntry[] = [];
+        const hasNorms = view.getUint16(vertexBoneTableOffs + 0x00) !== 0;
+        const tableCount = view.getUint16(vertexBoneTableOffs + 0x02);
+        let tableOffs = vertexBoneTableOffs + 0x04;
+        for (let i = 0; i < tableCount; i++) {
+            const boneID = view.getInt16(tableOffs + 0x00);
+            const posCount = view.getInt16(tableOffs + 0x02);
+            const normCount = view.getInt16(tableOffs + 0x04);
+            tableOffs += 0x06;
+
+            let currPos = tableOffs;
+            tableOffs += 0x06 * posCount;
+            if (hasNorms)
+                tableOffs += 0x04 * normCount;
+            let entryStart = tableOffs;
+
+            let position = vec3.create();
+            while (true) {
+                const idx = view.getInt16(tableOffs);
+                if (idx < 0) {
+                    const vertexIDs = buffer.createTypedArray(Uint16Array, entryStart, (tableOffs - entryStart) / 2, Endianness.BIG_ENDIAN);
+                    vec3.set(position, view.getInt16(currPos), view.getInt16(currPos + 2), view.getInt16(currPos + 4));
+                    // ignoring normals for now
+                    if (boneID !== -1)
+                        vertexBoneEntries.push({ position, boneID, vertexIDs });
+                    currPos += 0x06;
+                    entryStart = tableOffs + 2;
+                }
+                tableOffs += 2;
+                if (idx === -2)
+                    break;
+            }
+        }
+        context.vertexBoneTable = { vertexBoneEntries };
+    }
+
+    let mipmapIndex = 0;
     const geoFlags = view.getUint16(0x0A);
     if (geoFlags & GeoFlags.CI8Mipmaps)
         mipmapIndex = 1;
     else if (geoFlags & GeoFlags.RGBA16Mipmaps)
         mipmapIndex = 2;
     context.segmentBuffers[7] = mipmapSegments[mipmapIndex];
+
+    context.softwareLighting = [];
 
     // build data map for the f3dex2 interpreter
     const ranges: DataRange[] = [];
@@ -757,7 +887,22 @@ export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureDat
             ranges.push({ start: i << 24, data: context.segmentBuffers[i] });
     }
     context.dataMap = new DataMap(ranges);
-    return parse<BTGeoNode>(buffer, context);
+    const geo = parse<BTGeoNode>(buffer, context);
+    if (context.softwareLighting && context.softwareLighting.length > 0) {
+        geo.softwareLighting = context.softwareLighting;
+        const normalOffset = view.getUint32(0x38);
+        geo.normals = [];
+        for (let i = 0; i < context.sharedOutput.vertices.length; i++) {
+            const n = vec3.fromValues(
+                view.getInt8(normalOffset + 4 * i + 0),
+                view.getInt8(normalOffset + 4 * i + 1),
+                view.getInt8(normalOffset + 4 * i + 2),
+            );
+            vec3.normalize(n, n);
+            geo.normals.push(n);
+        }
+    }
+    return geo;
 }
 
 export function parse<N extends GeoNode>(buffer: ArrayBufferSlice, geoContext: GeoContext<N>): Geometry<N> {

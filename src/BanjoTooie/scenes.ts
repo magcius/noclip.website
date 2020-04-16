@@ -42,12 +42,7 @@ class BTRenderer implements Viewer.SceneGfx {
 
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
-        enableCullingCheckbox.onchanged = () => {
-            for (let i = 0; i < this.geoRenderers.length; i++)
-                this.geoRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
@@ -225,7 +220,7 @@ class ModelCache {
             return null;
 
         const geo = Geo.parseBT(arc.Files[0].Data, Geo.RenderZMode.OPA, arc.Files[1]?.Data);
-        const data = new GeometryData(this.device, this.cache, geo);
+        const data = new GeometryData(this.device, this.cache, geo, id);
         this.archiveDataHolder.set(id, data);
         return data;
 
@@ -244,7 +239,7 @@ class ModelCache {
             return null;
 
         const geo = Geo.parseBT(findFileByID(arc, modelID)!.Data, Geo.RenderZMode.OPA);
-        const data = new GeometryData(this.device, this.cache, geo);
+        const data = new GeometryData(this.device, this.cache, geo, id | flag);
         this.archiveDataHolder.set(id | flag, data);
         return data;
     }

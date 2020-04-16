@@ -11,8 +11,8 @@ import { mat4, vec3, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderer';
-import { VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from '../BanjoKazooie/geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers';
+import { VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { RenderData, F3DEX_Program, GeometryData } from '../BanjoKazooie/render';
 import { randomRange } from '../BanjoKazooie/particles';
@@ -166,17 +166,26 @@ function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32A
     }
 }
 
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x1000);
-    const cullBack = !!(m & 0x2000);
-    if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
-    else if (cullFront)
-        return GfxCullMode.FRONT;
-    else if (cullBack)
-        return GfxCullMode.BACK;
-    else
-        return GfxCullMode.NONE;
+const lightingScratch = mat4.create();
+const lightingX = vec3.create();
+const lightingY = vec3.create();
+function applySoftwareLighting(effects: SoftwareLightingEffect[], vertexBuffer: Float32Array, normals: vec3[], joints: mat4[], lookAt: mat4): void {
+    for (let i = 0; i < effects.length; i++) {
+        mat4.transpose(lightingScratch, joints[effects[i].bone]);
+
+        getMatrixAxisX(lightingX, lookAt);
+        transformVec3Mat4w0(lightingX, lightingScratch, lightingX);
+        normToLength(lightingX, 1)
+
+        getMatrixAxisY(lightingY, lookAt);
+        transformVec3Mat4w0(lightingY, lightingScratch, lightingY);
+        normToLength(lightingY, 1)
+
+        for (let vtx = effects[i].startVertex; vtx < effects[i].startVertex + effects[i].vertexCount; vtx++) {
+            vertexBuffer[vtx * 10 + 4] = 31 * (1 + vec3.dot(lightingX, normals[vtx]));
+            vertexBuffer[vtx * 10 + 5] = 31 * (1 + vec3.dot(lightingY, normals[vtx]));
+        }
+    }
 }
 
 const viewMatrixScratch = mat4.create();
@@ -206,7 +215,6 @@ class DrawCallInstance {
         }
 
         this.megaStateFlags = F3DEX2.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
-        this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
 
@@ -240,11 +248,6 @@ class DrawCallInstance {
 
         this.program = program;
         this.gfxProgram = null;
-    }
-
-    public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
-        this.megaStateFlags.cullMode = cullMode;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -570,13 +573,6 @@ class GeoNodeRenderer {
         }
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].setBackfaceCullingEnabled(v);
-    }
-
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setVertexColorsEnabled(v);
@@ -720,7 +716,7 @@ const xluSortScratch: XLUSortState = {
 const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
-const lookatScratch = vec3.create();
+const lookatScratch = nArray(2, () => vec3.create());
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -843,10 +839,6 @@ export class GeometryRenderer {
             geoNodeRenderer.children.push(this.buildGeoNodeRenderer(node.children[i]));
 
         return geoNodeRenderer;
-    }
-
-    public setBackfaceCullingEnabled(v: boolean): void {
-        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -996,8 +988,8 @@ export class GeometryRenderer {
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
 
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
-        mat4.getTranslation(lookatScratch, this.modelMatrix);
-        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.distance(depthScratch, lookatScratch));
+        mat4.getTranslation(lookatScratch[0], this.modelMatrix);
+        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.distance(depthScratch, lookatScratch[0]));
 
         const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
@@ -1008,20 +1000,17 @@ export class GeometryRenderer {
 
         if (computeLookAt) {
             // compute lookat X and Y in view space, since that's the transform the shader will have
-            mat4.getTranslation(lookatScratch, this.modelMatrix);
-            vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
+            transformVec3Mat4w0(lookatScratch[0], viewerInput.camera.viewMatrix, lookatScratch[0]);
 
-            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
-            offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
+            mat4.targetTo(modelViewScratch, Vec3Zero, lookatScratch[0], Vec3UnitY);
+            offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[1], modelViewScratch[2]);
+            offs += fillVec4(mappedF32, offs, modelViewScratch[4], modelViewScratch[5], modelViewScratch[6]);
         }
 
         // TODO: make sure the underlying vertex data gets modified only once per frame
-        let reuploadVertices = false;
 
         // hope these are mutually exclusive
         if (this.vertexEffects.length > 0) {
-            reuploadVertices = true;
             for (let i = 0; i < this.vertexEffects.length; i++) {
                 const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
@@ -1031,20 +1020,31 @@ export class GeometryRenderer {
             }
         }
 
-        if (this.geometryData.geo.vertexBoneTable !== null) {
-            this.calcBoneToModel();
-            reuploadVertices = true;
-            const boneEntries = this.geometryData.geo.vertexBoneTable.vertexBoneEntries;
-            for (let i = 0; i < boneEntries.length; i++) {
-                vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
-                for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
-                    const vertexID = boneEntries[i].vertexIDs[j];
-                    this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
-                    this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
-                    this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
-                }
-            }
+        if (this.geometryData.geo.softwareLighting && this.geometryData.geo.softwareLighting.length > 0) {
+            // generate a new lookat in world space
+            mat4.getTranslation(lookatScratch[0], this.modelMatrix);
+            mat4.getTranslation(lookatScratch[1], viewerInput.camera.worldMatrix);
+            mat4.targetTo(modelViewScratch, lookatScratch[1], lookatScratch[0], Vec3UnitY);
+            applySoftwareLighting(this.geometryData.geo.softwareLighting, this.vertexBufferData, this.geometryData.geo.normals!, this.boneToWorldMatrixArray, modelViewScratch);
         }
+
+        // disabled until we have animations
+        // if (this.geometryData.geo.vertexBoneTable !== null) {
+        //     this.calcBoneToModel();
+        //     const boneEntries = this.geometryData.geo.vertexBoneTable.vertexBoneEntries;
+        //     for (let i = 0; i < boneEntries.length; i++) {
+        //         // transformVec3Mat4w1(boneTransformScratch, this.boneToModelMatrixArray[boneEntries[i].boneID], boneEntries[i].position);
+        //         // vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
+        //         vec3.random(boneTransformScratch);
+        //         vec3.scale(boneTransformScratch, boneTransformScratch, 200)
+        //         for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
+        //             const vertexID = boneEntries[i].vertexIDs[j];
+        //             this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+        //             this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+        //             this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+        //         }
+        //     }
+        // }
         if (this.geometryData.dynamic) {
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));

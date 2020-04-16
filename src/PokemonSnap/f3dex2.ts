@@ -151,10 +151,12 @@ export class RSPState {
         const view = this.dataMap.getView(dramAddr);
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, i * 0x10);
-            this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
             if (this.preloaded) {
-                this.vertexCache[v0 + i].outputIndex = ((dramAddr - range.start) >>> 4) + i;
+                const outIndex = ((dramAddr - range.start) >>> 4) + i;
+                this.sharedOutput.vertices[outIndex].matrixIndex = this.SP_MatrixIndex;
+                this.vertexCache[v0 + i].outputIndex = outIndex;
             } else {
+                this.vertexCache[v0 + i].matrixIndex = this.SP_MatrixIndex;
                 // scale texture coordinates by *current* texture state
                 this.vertexCache[v0 + i].tx *= this.SP_TextureState.s;
                 this.vertexCache[v0 + i].ty *= this.SP_TextureState.t;

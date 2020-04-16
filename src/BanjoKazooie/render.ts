@@ -876,9 +876,9 @@ export class GeometryData {
     public dynamic: boolean;
 
     // forget any game specific data in the geometry, for now
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput);
-        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null;
+        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0);
     }
 }
 const geoNodeScratch = vec3.create();
