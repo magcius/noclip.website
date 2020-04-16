@@ -464,7 +464,7 @@ function mtxModeIsUsingProjMap(mode: TexMtxMapMode): boolean {
 function patchBMD(bmd: BMD): void {
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
-        if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
+        if (shape.displayFlags !== ShapeDisplayFlags.MULTI)
             continue;
 
         const material = bmd.mat3.materialEntries[shape.materialIndex];

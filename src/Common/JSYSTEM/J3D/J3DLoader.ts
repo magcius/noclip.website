@@ -362,7 +362,6 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const rotationX = view.getInt16(jointDataTableIdx + 0x10) / 0x7FFF * Math.PI;
         const rotationY = view.getInt16(jointDataTableIdx + 0x12) / 0x7FFF * Math.PI;
         const rotationZ = view.getInt16(jointDataTableIdx + 0x14) / 0x7FFF * Math.PI;
-        console.log(i, remapTable[i], name, hexzero0x(view.getInt16(jointDataTableIdx + 0x10)), hexzero0x(view.getInt16(jointDataTableIdx + 0x12)), hexzero0x(view.getInt16(jointDataTableIdx + 0x14)));
         const translationX = view.getFloat32(jointDataTableIdx + 0x18);
         const translationY = view.getFloat32(jointDataTableIdx + 0x1C);
         const translationZ = view.getFloat32(jointDataTableIdx + 0x20);
