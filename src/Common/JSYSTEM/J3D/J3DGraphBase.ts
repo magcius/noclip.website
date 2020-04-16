@@ -1384,7 +1384,6 @@ export class J3DModelInstance {
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
 
-                mat4.identity(dst);
                 mat4.mul(dst, worldToViewMatrix, dst);
             }
         }
