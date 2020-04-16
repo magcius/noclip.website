@@ -1,6 +1,6 @@
 import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
-import { Color, colorNewFromRGBA, colorToCSS } from '../Color';
+import { Color, colorNewFromRGBA, colorToCSS, colorCopy, colorNewCopy } from '../Color';
 import { nArray } from '../util';
 
 import { SFATexture } from './textures';
@@ -26,6 +26,7 @@ export class EnvfxManager {
     public atmosphere = new Atmosphere();
     public skyscape = new Skyscape();
     private timeOfDay = 4;
+    private overrideOutdoorAmbient: Color | null = null;
 
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
@@ -48,7 +49,19 @@ export class EnvfxManager {
     }
 
     public getOutdoorAmbientColor(): Color {
-        return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+        if (this.overrideOutdoorAmbient !== null) {
+            return this.overrideOutdoorAmbient;
+        } else {
+            return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+        }
+    }
+
+    public setOverrideOutdoorAmbientColor(color: Color | null) {
+        if (color !== null) {
+            this.overrideOutdoorAmbient = colorNewCopy(color);
+        } else {
+            this.overrideOutdoorAmbient = null;
+        }
     }
 
     public getAtmosphereTexture(): SFATexture | null {
