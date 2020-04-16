@@ -17,6 +17,7 @@ import { Shape, Model, ModelInstance } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
+import { Color } from '../Color';
 
 export abstract class BlockFetcher {
     public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;

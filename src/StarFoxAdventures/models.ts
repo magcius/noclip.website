@@ -22,7 +22,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextureFetcher } from './textures';
-import { colorNewFromRGBA } from '../Color';
+import { colorNewFromRGBA, Color } from '../Color';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -251,7 +251,7 @@ export class Shape {
                 animController: this.animController,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
-                skyColor: colorNewFromRGBA(1.0, 0.0, 0.0, 1.0), // TODO: get ambient sky color from environment
+                outdoorAmbientColor: this.material.factory.getOutdoorAmbientColor(),
             };
         }
 

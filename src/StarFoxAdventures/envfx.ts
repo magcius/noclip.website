@@ -7,6 +7,7 @@ import { SFATexture } from './textures';
 import { dataSubarray } from './util';
 import { ObjectInstance } from './objects';
 import { World } from './world';
+import { Color, colorNewFromRGBA } from '../Color';
 
 enum EnvfxType {
     Atmosphere = 5,
@@ -15,6 +16,7 @@ enum EnvfxType {
 
 class Atmosphere {
     public textures: (SFATexture | null)[] = [];
+    public outdoorAmbientColor: Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
 }
 
 class Skyscape { // Clouds, mountains, etc.
@@ -64,6 +66,14 @@ export class EnvfxManager {
                 console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
                 this.atmosphere.textures[i] = this.world.resColl.texFetcher.getTexture(this.world.device, texId, false);
             }
+
+            this.atmosphere.outdoorAmbientColor = colorNewFromRGBA(
+                data.getUint8(0xc) / 255,
+                data.getUint8(0x14) / 255,
+                data.getUint8(0x1c) / 255,
+                1.0
+            );
+            console.log(`outdoor ambient color = ${this.atmosphere.outdoorAmbientColor.r}, ${this.atmosphere.outdoorAmbientColor.g}, ${this.atmosphere.outdoorAmbientColor.b}`);
         } else if (fields.type === EnvfxType.Skyscape) {
             this.skyscape.objects = [];
 

@@ -7,12 +7,13 @@ import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform'
 
 import { SFATexture, TextureFetcher } from './textures';
 import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
-import { mat4, vec4 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
 import { nArray } from '../util';
+import { EnvfxManager } from './envfx';
 
 interface ShaderLayer {
     texId: number | null;
@@ -94,7 +95,7 @@ export enum ShaderFlags {
     LongFur = 0x10000, // 16 layers
     DisableChan0 = 0x40000,
     StreamingVideo = 0x20000,
-    AmbientLit = 0x40000,
+    IndoorOutdoorBlend = 0x40000, // Occurs near cave entrances and windows. Requires special handling for lighting.
     Water = 0x80000000,
 }
 
@@ -293,7 +294,7 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.ambColors[0] = (dst: Color, viewState: ViewState) => {
-                colorCopy(dst, viewState.skyColor);
+                colorCopy(dst, viewState.outdoorAmbientColor);
             };
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
@@ -351,7 +352,7 @@ class StandardMaterial implements SFAMaterial {
         return kcnum;
     }
     
-    private addTevStagesForTextureWithSkyAmbient(scrollingTexMtx?: number) {
+    private addTevStagesForIndoorOutdoorBlend(scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
@@ -366,13 +367,12 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
-        // TODO: use ambient sky color
         const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
-            colorCopy(dst, viewState.skyColor);
+            colorCopy(dst, viewState.outdoorAmbientColor);
         });
         this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
 
-        // Stage 1: Multiply vertex color by ambient sky color
+        // Stage 1: Multiply vertex color by outdoor ambient color
         this.mb.setTevDirect(this.tevStage);
         this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
         this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.KONST, GX.CC.RASC, GX.CC.ZERO);
@@ -390,7 +390,7 @@ class StandardMaterial implements SFAMaterial {
 
         // Stage 3: Multiply by texture
         this.mb.setTevDirect(this.tevStage + 2);
-        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
+        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorIn(this.tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
         this.mb.setTevAlphaIn(this.tevStage + 2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
         this.mb.setTevColorOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -768,8 +768,8 @@ class StandardMaterial implements SFAMaterial {
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
                 const layer = this.shader.layers[i];
-                if (this.shader.flags & ShaderFlags.AmbientLit) {
-                    this.addTevStagesForTextureWithSkyAmbient(layer.scrollingTexMtx);
+                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                    this.addTevStagesForIndoorOutdoorBlend(layer.scrollingTexMtx);
                 } else {
                     this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, layer.scrollingTexMtx);
                 }
@@ -794,7 +794,15 @@ export class MaterialFactory {
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
-    constructor(private device: GfxDevice) {
+    constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
+    }
+
+    public getOutdoorAmbientColor(): Color {
+        if (this.envfxMan !== undefined) {
+            return this.envfxMan.atmosphere.outdoorAmbientColor;
+        } else {
+            return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+        }
     }
 
     public update(animController: SFAAnimationController) {
@@ -819,7 +827,7 @@ export class MaterialFactory {
     public buildWaterMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('WaterMaterial');
         const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtx[] = [];
+        const texMtx: TexMtxFunc[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
         
@@ -1026,7 +1034,7 @@ export class MaterialFactory {
         mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, !!(shader.flags & ShaderFlags.AmbientLit), GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, !!(shader.flags & ShaderFlags.IndoorOutdoorBlend), GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setCullMode(GX.CullMode.BACK);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);

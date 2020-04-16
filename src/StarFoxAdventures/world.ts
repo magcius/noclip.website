@@ -71,11 +71,11 @@ export class World {
         const self = new World(device, gameInfo, subdir);
         
         self.animController = new SFAAnimationController();
-        self.materialFactory = new MaterialFactory(device);
+        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
+        self.materialFactory = new MaterialFactory(device, self.envfxMan);
         self.resColl = await ResourceCollection.create(gameInfo, dataFetcher, subdir, self.animController);
         self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
         self.objectMan = await ObjectManager.create(self, dataFetcher, false);
-        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
 
         return self;
     }

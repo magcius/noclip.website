@@ -177,5 +177,5 @@ export interface ViewState {
     animController: SFAAnimationController;
     modelViewMtx: mat4;
     invModelViewMtx: mat4;
-    skyColor: Color;
+    outdoorAmbientColor: Color;
 }
