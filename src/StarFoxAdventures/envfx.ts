@@ -91,12 +91,12 @@ export class EnvfxManager {
             }
 
             this.atmosphere.outdoorAmbientColors[0] = outdoorAmbColors[0];
-            this.atmosphere.outdoorAmbientColors[1] = outdoorAmbColors[0];
+            this.atmosphere.outdoorAmbientColors[1] = outdoorAmbColors[1];
             this.atmosphere.outdoorAmbientColors[2] = outdoorAmbColors[1];
             this.atmosphere.outdoorAmbientColors[3] = outdoorAmbColors[2];
-            this.atmosphere.outdoorAmbientColors[4] = outdoorAmbColors[3];
-            this.atmosphere.outdoorAmbientColors[5] = outdoorAmbColors[0];
-            this.atmosphere.outdoorAmbientColors[6] = outdoorAmbColors[0];
+            this.atmosphere.outdoorAmbientColors[4] = outdoorAmbColors[2];
+            this.atmosphere.outdoorAmbientColors[5] = outdoorAmbColors[3];
+            this.atmosphere.outdoorAmbientColors[6] = outdoorAmbColors[3];
             this.atmosphere.outdoorAmbientColors[7] = outdoorAmbColors[0];
         } else if (fields.type === EnvfxType.Skyscape) {
             this.skyscape.objects = [];
