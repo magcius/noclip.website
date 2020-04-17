@@ -1,8 +1,8 @@
 import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
-import { GfxDevice} from '../gfx/platform/GfxPlatform';
+import { Color, colorNewFromRGBA, colorToCSS, colorCopy, colorNewCopy } from '../Color';
+import { nArray } from '../util';
 
-import { GameInfo } from './scenes';
 import { SFATexture } from './textures';
 import { dataSubarray } from './util';
 import { ObjectInstance } from './objects';
@@ -15,6 +15,7 @@ enum EnvfxType {
 
 class Atmosphere {
     public textures: (SFATexture | null)[] = [];
+    public outdoorAmbientColors: Color[] = nArray(8, () => colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
 }
 
 class Skyscape { // Clouds, mountains, etc.
@@ -24,6 +25,8 @@ class Skyscape { // Clouds, mountains, etc.
 export class EnvfxManager {
     public atmosphere = new Atmosphere();
     public skyscape = new Skyscape();
+    private timeOfDay = 4;
+    private overrideOutdoorAmbient: Color | null = null;
 
     private envfxactBin: DataView;
     private readonly ENVFX_SIZE = 0x60;
@@ -38,6 +41,36 @@ export class EnvfxManager {
         self.envfxactBin = (await dataFetcher.fetchData(`${pathBase}/ENVFXACT.bin`)).createDataView();
         
         return self;
+    }
+
+    public setTimeOfDay(time: number) {
+        //console.log(`setting time of day ${time}`);
+        this.timeOfDay = time;
+    }
+
+    public getAmbientColor(ambienceNum: number): Color {
+        if (this.overrideOutdoorAmbient !== null) {
+            return this.overrideOutdoorAmbient;
+        } else {
+            if (ambienceNum === 0) {
+                return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+            } else {
+                // TODO
+                return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+            }
+        }
+    }
+
+    public setOverrideOutdoorAmbientColor(color: Color | null) {
+        if (color !== null) {
+            this.overrideOutdoorAmbient = colorNewCopy(color);
+        } else {
+            this.overrideOutdoorAmbient = null;
+        }
+    }
+
+    public getAtmosphereTexture(): SFATexture | null {
+        return this.atmosphere.textures[this.timeOfDay];
     }
 
     public loadEnvfx(index: number) {
@@ -64,6 +97,25 @@ export class EnvfxManager {
                 console.log(`loading atmosphere texture ${i}: 0x${texId.toString(16)}`);
                 this.atmosphere.textures[i] = this.world.resColl.texFetcher.getTexture(this.world.device, texId, false);
             }
+
+            const outdoorAmbColors: Color[] = [];
+            for (let i = 0; i < 4; i++) {
+                outdoorAmbColors[i] = colorNewFromRGBA(
+                    data.getUint8(0xc + i) / 255,
+                    data.getUint8(0x14 + i) / 255,
+                    data.getUint8(0x1c + i) / 255,
+                    1.0
+                );
+            }
+
+            this.atmosphere.outdoorAmbientColors[0] = outdoorAmbColors[0];
+            this.atmosphere.outdoorAmbientColors[1] = outdoorAmbColors[1];
+            this.atmosphere.outdoorAmbientColors[2] = outdoorAmbColors[1];
+            this.atmosphere.outdoorAmbientColors[3] = outdoorAmbColors[2];
+            this.atmosphere.outdoorAmbientColors[4] = outdoorAmbColors[2];
+            this.atmosphere.outdoorAmbientColors[5] = outdoorAmbColors[3];
+            this.atmosphere.outdoorAmbientColors[6] = outdoorAmbColors[3];
+            this.atmosphere.outdoorAmbientColors[7] = outdoorAmbColors[0];
         } else if (fields.type === EnvfxType.Skyscape) {
             this.skyscape.objects = [];
 

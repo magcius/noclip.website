@@ -11,7 +11,7 @@ import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from 
 import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
+import { getMatrixAxisZ } from '../MathHelpers';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -21,11 +21,12 @@ import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance } from './models';
+import { ModelInstance, ModelViewState } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
-import { Camera } from '../Camera';
 import { SFABlockFetcher } from './blocks';
+import { colorNewFromRGBA } from '../Color';
+import { getCamPos } from './util';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -49,10 +50,6 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-function getCamPos(v: vec3, camera: Camera): void {
-    getMatrixTranslation(v, camera.worldMatrix);
-}
-
 export class World {
     public animController: SFAAnimationController;
     public envfxMan: EnvfxManager;
@@ -71,11 +68,11 @@ export class World {
         const self = new World(device, gameInfo, subdir);
         
         self.animController = new SFAAnimationController();
-        self.materialFactory = new MaterialFactory(device);
+        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
+        self.materialFactory = new MaterialFactory(device, self.envfxMan);
         self.resColl = await ResourceCollection.create(gameInfo, dataFetcher, subdir, self.animController);
         self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
         self.objectMan = await ObjectManager.create(self, dataFetcher, false);
-        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
 
         return self;
     }
@@ -117,7 +114,9 @@ class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
+    private enableAmbient: boolean = true;
     private layerSelect: UI.Slider;
+    private showObjects: boolean = true;
     private showDevGeometry: boolean = false;
     private showDevObjects: boolean = false;
 
@@ -156,8 +155,20 @@ class WorldRenderer extends SFARenderer {
         this.timeSelect.setValue(4);
         timePanel.contents.append(this.timeSelect.elem);
 
+        const enableAmbient = new UI.Checkbox("Enable ambient lighting", true);
+        enableAmbient.onchanged = () => {
+            this.enableAmbient = enableAmbient.checked;
+        };
+        timePanel.contents.append(enableAmbient.elem);
+
         const layerPanel = new UI.Panel();
         layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
+
+        const showObjects = new UI.Checkbox("Show objects", true);
+        showObjects.onchanged = () => {
+            this.showObjects = showObjects.checked;
+        };
+        layerPanel.contents.append(showObjects.elem);
 
         this.layerSelect = new UI.Slider();
         this.layerSelect.setLabel('Layer');
@@ -165,17 +176,17 @@ class WorldRenderer extends SFARenderer {
         this.layerSelect.setValue(0);
         layerPanel.contents.append(this.layerSelect.elem);
 
-        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
-        showDevGeometry.onchanged = () => {
-            this.showDevGeometry = showDevGeometry.checked;
-        };
-        layerPanel.contents.append(showDevGeometry.elem);
-        
         const showDevObjects = new UI.Checkbox("Show developer objects", false);
         showDevObjects.onchanged = () => {
             this.showDevObjects = showDevObjects.checked;
         };
         layerPanel.contents.append(showDevObjects.elem);
+
+        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        showDevGeometry.onchanged = () => {
+            this.showDevGeometry = showDevGeometry.checked;
+        };
+        layerPanel.contents.append(showDevGeometry.elem);
 
         return [timePanel, layerPanel];
     }
@@ -192,19 +203,18 @@ class WorldRenderer extends SFARenderer {
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
         this.world.materialFactory.update(this.animController);
+        this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
+        if (!this.enableAmbient) {
+            this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
+        } else {
+            this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
+        }
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         this.beginPass(viewerInput, true);
 
-        const atmos = this.world.envfxMan.atmosphere;
-        let texNum = this.timeSelect.getValue()|0;
-        if (texNum < 0) {
-            texNum = 0;
-        } else if (texNum >= atmos.textures.length) {
-            texNum = atmos.textures.length - 1;
-        }
-        const tex = atmos.textures[texNum]!;
+        const tex = this.world.envfxMan.getAtmosphereTexture()!;
         materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
         materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
         materialParams.m_TextureMapping[0].width = tex.width;
@@ -263,7 +273,11 @@ class WorldRenderer extends SFARenderer {
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0,
+        };
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
 
         // Draw bones
         const drawBones = false;
@@ -296,20 +310,23 @@ class WorldRenderer extends SFARenderer {
         }
         
         const mtx = mat4.create();
-        const ctx = getDebugOverlayCanvas2D();
-        for (let i = 0; i < this.world.objectInstances.length; i++) {
-            const obj = this.world.objectInstances[i];
 
-            if (obj.getType().isDevObject && !this.showDevObjects)
-                continue;
-
-            if (obj.isInLayer(this.layerSelect.getValue())) {
-                obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
-                // TODO: additional draw steps; object furs and translucents
+        if (this.showObjects) {
+            const ctx = getDebugOverlayCanvas2D();
+            for (let i = 0; i < this.world.objectInstances.length; i++) {
+                const obj = this.world.objectInstances[i];
     
-                const drawLabels = false;
-                if (drawLabels) {
-                    drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                if (obj.getType().isDevObject && !this.showDevObjects)
+                    continue;
+    
+                if (obj.isInLayer(this.layerSelect.getValue())) {
+                    obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+                    // TODO: additional draw steps; object furs and translucents
+        
+                    const drawLabels = false;
+                    if (drawLabels) {
+                        drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                    }
                 }
             }
         }

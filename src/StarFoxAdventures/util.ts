@@ -2,6 +2,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { ViewerRenderInput } from '../viewer';
 import { SFAAnimationController } from './animation';
 import { mat4, vec3 } from 'gl-matrix';
+import { Color } from '../Color';
+import { Camera } from '../Camera';
+import { getMatrixTranslation } from '../MathHelpers';
 
 export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
     return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
@@ -171,9 +174,14 @@ export function createDownloadLink(data: DataView, filename: string, text?: stri
     return aEl;
 }
 
+export function getCamPos(v: vec3, camera: Camera): void {
+    getMatrixTranslation(v, camera.worldMatrix);
+}
+
 export interface ViewState {
     viewerInput: ViewerRenderInput;
     animController: SFAAnimationController;
     modelViewMtx: mat4;
     invModelViewMtx: mat4;
+    outdoorAmbientColor: Color;
 }

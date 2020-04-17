@@ -11,7 +11,9 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA } from '../Color';
+import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
+import { nArray } from '../util';
+import { EnvfxManager } from './envfx';
 
 interface ShaderLayer {
     texId: number | null;
@@ -93,7 +95,7 @@ export enum ShaderFlags {
     LongFur = 0x10000, // 16 layers
     DisableChan0 = 0x40000,
     StreamingVideo = 0x20000,
-    AmbientLit = 0x40000,
+    IndoorOutdoorBlend = 0x40000, // Occurs near cave entrances and windows. Requires special handling for lighting.
     Water = 0x80000000,
 }
 
@@ -186,7 +188,8 @@ export interface SFAMaterial {
     rebuild: () => void;
 }
 
-type TexMtx = ((dst: mat4, viewState: ViewState) => void) | undefined;
+type TexMtxFunc = ((dst: mat4, viewState: ViewState) => void) | undefined;
+type ColorFunc = ((dst: Color, viewState: ViewState) => void) | undefined;
 
 interface ScrollingTexMtx {
     x: number;
@@ -201,9 +204,9 @@ class StandardMaterial implements SFAMaterial {
     public gxMaterial: GXMaterial;
     public textures: SFAMaterialTexture[] = [];
     private mb: GXMaterialBuilder;
-    private texMtx: TexMtx[] = [];
-    private postTexMtx: TexMtx[] = [];
-    private indTexMtx: TexMtx[] = [];
+    private texMtx: TexMtxFunc[] = [];
+    private postTexMtx: TexMtxFunc[] = [];
+    private indTexMtx: TexMtxFunc[] = [];
     private tevStage = 0;
     private indStageId = GX.IndTexStageID.STAGE0;
     private texcoordId = GX.TexCoordID.TEXCOORD0;
@@ -211,6 +214,9 @@ class StandardMaterial implements SFAMaterial {
     private texGenSrc = GX.TexGenSrc.TEX0;
     private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
     private postTexMtxNum = 0;
+    private ambColors: ColorFunc[] = [];
+    private kcolors: ColorFunc[] = [];
+    private kcolorNum = 0;
     private cprevIsValid = false;
     private aprevIsValid = false;
 
@@ -231,13 +237,15 @@ class StandardMaterial implements SFAMaterial {
         this.texGenSrc = GX.TexGenSrc.TEX0;
         this.postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
         this.postTexMtxNum = 0;
+        this.kcolors = [];
+        this.kcolorNum = 0;
         this.cprevIsValid = false;
         this.aprevIsValid = false;
         
         if (!this.isMapBlock) {
             // Not a map block. Just do basic texturing.
             this.mb.setUsePnMtxIdx(true);
-            this.addTevStageForTextureWithWhiteKonst(0);
+            this.addTevStageForTextureWithWhiteKonst(0, true);
             for (let i = 0; i < this.shader.layers.length; i++) {
                 this.textures.push(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
             }
@@ -279,13 +287,16 @@ class StandardMaterial implements SFAMaterial {
         }
 
         if (this.shader.flags & ShaderFlags.DisableChan0) {
-            // TODO: AMB0 = solid white is enforced here
+            this.ambColors[0] = undefined; // AMB0 is solid white
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            // TODO: AMB0 = solid white is enforced here
+            this.ambColors[0] = undefined; // AMB0 is solid white
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
-            // TODO: Set AMB0 to sky/environment ambient color
+            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
             this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
@@ -318,12 +329,31 @@ class StandardMaterial implements SFAMaterial {
             }
         }
 
-        // TODO: use sky/environment ambient lighting
-        colorFromRGBA(params.u_Color[ColorKind.AMB0], 1.0, 1.0, 1.0, 1.0);
-        colorFromRGBA(params.u_Color[ColorKind.AMB1], 1.0, 1.0, 1.0, 1.0);
+        for (let i = 0; i < 2; i++) {
+            if (this.ambColors[i] !== undefined) {
+                this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+
+        for (let i = 0; i < 4; i++) {
+            if (this.kcolors[i] !== undefined) {
+                this.kcolors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+    }
+
+    private addKColor(colorFunc: ColorFunc): number {
+        const kcnum = this.kcolorNum;
+        this.kcolors[kcnum] = colorFunc;
+        this.kcolorNum++;
+        return kcnum;
     }
     
-    private addTevStagesForTextureWithSkyAmbient(scrollingTexMtx?: number) {
+    private addTevStagesForIndoorOutdoorBlend(scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
@@ -338,13 +368,15 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
-        // mb.setTevKColor (does not exist)
-        // TODO: The game multiplies by a sky-related ambient color
-        // mb.setTevKColorSel(tevStage, GX.KonstColorSel.KCSEL_K0);
-        // Stage 1: Multiply vertex color by ambient sky color
+        const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+            colorCopy(dst, viewState.outdoorAmbientColor);
+        });
+        this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+
+        // Stage 1: Multiply vertex color by outdoor ambient color
         this.mb.setTevDirect(this.tevStage);
         this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.ONE /*GX.CombineColorInput.KONST*/, GX.CC.RASC, GX.CC.ZERO);
+        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.KONST, GX.CC.RASC, GX.CC.ZERO);
         this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -359,7 +391,7 @@ class StandardMaterial implements SFAMaterial {
 
         // Stage 3: Multiply by texture
         this.mb.setTevDirect(this.tevStage + 2);
-        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO /* GX_COLOR_NULL */);
+        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR_ZERO);
         this.mb.setTevColorIn(this.tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
         this.mb.setTevAlphaIn(this.tevStage + 2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
         this.mb.setTevColorOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -421,9 +453,7 @@ class StandardMaterial implements SFAMaterial {
         this.texGenSrc++;
     }
 
-    private addTevStageForTextureWithWhiteKonst(colorInMode: number, scrollingTexMtx?: number) {
-        // TODO: handle color. map block renderer always passes opaque white to this function.
-        
+    private addTevStageForTextureWithWhiteKonst(colorInMode: number, kcolor?: boolean, scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
@@ -438,11 +468,19 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
+        if (kcolor) {
+            const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            });
+            this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+        }
+
         this.mb.setTevDirect(this.tevStage);
         this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+
         switch (colorInMode) {
         case 0:
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE /* GX.CC.KONST */, GX.CC.ZERO);
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO);
             break;
         default:
             console.warn(`Unhandled colorInMode ${colorInMode}`);
@@ -724,7 +762,7 @@ class StandardMaterial implements SFAMaterial {
 
     private addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
-            this.addTevStageForTextureWithWhiteKonst(0, this.shader.layers[0].scrollingTexMtx);
+            this.addTevStageForTextureWithWhiteKonst(0, undefined, this.shader.layers[0].scrollingTexMtx);
             if (this.shader.flags & ShaderFlags.Reflective) {
                 this.addTevStagesForReflectiveFloor();
             }
@@ -737,8 +775,8 @@ class StandardMaterial implements SFAMaterial {
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
                 const layer = this.shader.layers[i];
-                if (this.shader.flags & ShaderFlags.AmbientLit) {
-                    this.addTevStagesForTextureWithSkyAmbient(layer.scrollingTexMtx);
+                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                    this.addTevStagesForIndoorOutdoorBlend(layer.scrollingTexMtx);
                 } else {
                     this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, layer.scrollingTexMtx);
                 }
@@ -763,7 +801,15 @@ export class MaterialFactory {
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
-    constructor(private device: GfxDevice) {
+    constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
+    }
+
+    public getAmbientColor(ambienceNum: number): Color {
+        if (this.envfxMan !== undefined) {
+            return this.envfxMan.getAmbientColor(ambienceNum);
+        } else {
+            return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+        }
     }
 
     public update(animController: SFAAnimationController) {
@@ -788,7 +834,7 @@ export class MaterialFactory {
     public buildWaterMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('WaterMaterial');
         const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtx[] = [];
+        const texMtx: TexMtxFunc[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
         
@@ -926,9 +972,10 @@ export class MaterialFactory {
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
         const mb = new GXMaterialBuilder('FurMaterial');
         const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtx[] = [];
+        const texMtx: TexMtxFunc[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
+        const ambColors: ColorFunc[] = [];
     
         // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
         // but then it replaces texmap 0 with shader layer 0 before drawing...
@@ -942,7 +989,6 @@ export class MaterialFactory {
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
         // Ind Stage 0: Waviness
-        // TODO: animate waviness to make grass sway back and forth
         textures[2] = this.getWavyTexture();
         texMtx[1] = (dst: mat4, viewState: ViewState) => {
             mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
@@ -995,7 +1041,24 @@ export class MaterialFactory {
         mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, !!(shader.flags & ShaderFlags.AmbientLit), GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        if (shader.flags & ShaderFlags.DisableChan0) {
+            ambColors[0] = undefined; // AMB0 is solid white
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else if ((shader.flags & 1) || (shader.flags & 0x800) || (shader.flags & 0x1000)) {
+            ambColors[0] = undefined; // AMB0 is solid white
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        // FIXME: Objects have different rules for color-channels than map blocks
+        if (isMapBlock) {
+            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
         mb.setCullMode(GX.CullMode.BACK);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
@@ -1022,6 +1085,14 @@ export class MaterialFactory {
                 for (let i = 0; i < 3; i++) {
                     if (indTexMtx[i] !== undefined) {
                         mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
+                    }
+                }
+                
+                for (let i = 0; i < 2; i++) {
+                    if (ambColors[i] !== undefined) {
+                        ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
+                    } else {
+                        colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
                     }
                 }
             },

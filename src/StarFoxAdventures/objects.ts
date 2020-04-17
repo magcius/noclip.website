@@ -6,7 +6,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
-import { ModelInstance } from './models';
+import { ModelInstance, ModelViewState } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
@@ -21,6 +21,7 @@ export class ObjectType {
     public objClass: number;
     public modelNums: number[] = [];
     public isDevObject: boolean = false;
+    public ambienceNum: number = 0;
 
     constructor(public typeNum: number, private data: DataView, private isEarlyObject: boolean) {
         // FIXME: where are these fields for early objects?
@@ -44,6 +45,8 @@ export class ObjectType {
 
         const flags = data.getUint32(0x44);
         this.isDevObject = !!(flags & 1);
+
+        this.ambienceNum = data.getUint8(0x8e);
     }
 }
 
@@ -64,8 +67,19 @@ export class ObjectInstance {
     private layerVals0x3: number;
     private layerVals0x5: number;
 
+    private ambienceNum: number = 0;
+
     constructor(private world: World, private objType: ObjectType, private objParams: DataView, posInMap: vec3) {
         this.scale = objType.scale;
+
+        const ambienceParam = (objParams.getUint8(0x5) & 0x18) >>> 3;
+        if (ambienceParam !== 0) {
+            this.ambienceNum = ambienceParam - 1;
+            console.log(`ambience for ${this.objType.name} set by objparams: ${this.ambienceNum}`);
+        } else {
+            this.ambienceNum = objType.ambienceNum;
+            console.log(`ambience for ${this.objType.name} set by objtype: ${this.ambienceNum}`);
+        }
         
         this.layerVals0x3 = objParams.getUint8(0x3);
         this.layerVals0x5 = objParams.getUint8(0x5);
@@ -653,7 +667,11 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getSRT();
-            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep, true);
+            const modelViewState: ModelViewState = {
+                showDevGeometry: true,
+                ambienceNum: this.ambienceNum,
+            };
+            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep, modelViewState);
 
             // Draw bones
             const drawBones = false;
