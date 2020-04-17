@@ -265,12 +265,11 @@ export class Shape {
         this.material.setupMaterialParams(this.materialParams, this.viewState);
 
         // XXX: test lighting
-        colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White);
-        //getCamPos(this.materialParams.u_Lights[0].Position, viewerInput.camera);
-        this.materialParams.u_Lights[0].Position = vec3.create(); // All light information is in view space. This centers the light on the camera.
-        this.materialParams.u_Lights[0].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
-        this.materialParams.u_Lights[0].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
-        this.materialParams.u_Lights[0].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
+        // colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White);
+        // this.materialParams.u_Lights[0].Position = vec3.create(); // All light information is in view space. This centers the light on the camera.
+        // this.materialParams.u_Lights[0].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+        // this.materialParams.u_Lights[0].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
+        // this.materialParams.u_Lights[0].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
 
         for (let i = 0; i < 3; i++) {
             if (this.overrideIndMtx[i] !== undefined) {

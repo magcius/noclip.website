@@ -296,8 +296,8 @@ class StandardMaterial implements SFAMaterial {
             this.ambColors[0] = (dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             };
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
-            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
