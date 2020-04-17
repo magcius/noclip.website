@@ -164,9 +164,8 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        const usesSkinning = shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX;
-
-        if (!usesSkinning)
+        const multi = shape.displayFlags === ShapeDisplayFlags.MULTI;
+        if (!multi)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
         for (let p = 0; p < shape.mtxGroups.length; p++) {
@@ -201,7 +200,7 @@ export class ShapeInstance {
             this.shapeData.shapeHelpers[p].setOnRenderInst(renderInst);
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
 
-            if (usesSkinning)
+            if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
             renderInstManager.submitRenderInst(renderInst);

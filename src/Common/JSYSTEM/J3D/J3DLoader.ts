@@ -392,7 +392,7 @@ export const enum ShapeDisplayFlags {
     NORMAL = 0,
     BILLBOARD = 1,
     Y_BILLBOARD = 2,
-    USE_PNMTXIDX = 3,
+    MULTI = 3,
 }
 
 export interface Shape {

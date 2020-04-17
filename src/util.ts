@@ -34,6 +34,10 @@ export function readString(buffer: ArrayBufferSlice, offs: number, length: numbe
     return S;
 }
 
+export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): string {
+    return new TextDecoder(encoding).decode(new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength));
+}
+
 // Requires that multiple is a power of two.
 export function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
@@ -61,6 +65,13 @@ export function leftPad(S: string, spaces: number, ch: string = '0'): string {
 export function hexzero(n: number, spaces: number): string {
     let S = n.toString(16);
     return leftPad(S, spaces);
+}
+
+export function hexzero0x(n: number, spaces: number = 8): string {
+    if (n < 0)
+        return `-0x${hexzero(-n, spaces)}`;
+    else
+        return `0x${hexzero(n, spaces)}`;
 }
 
 export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
