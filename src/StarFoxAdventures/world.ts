@@ -11,7 +11,7 @@ import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from 
 import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
-import { getMatrixAxisZ, getMatrixTranslation } from '../MathHelpers';
+import { getMatrixAxisZ } from '../MathHelpers';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -24,9 +24,9 @@ import { dataSubarray, readVec3 } from './util';
 import { ModelInstance, ModelViewState } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
-import { Camera } from '../Camera';
 import { SFABlockFetcher } from './blocks';
 import { colorNewFromRGBA } from '../Color';
+import { getCamPos } from './util';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -48,10 +48,6 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
 
 function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
-}
-
-function getCamPos(v: vec3, camera: Camera): void {
-    getMatrixTranslation(v, camera.worldMatrix);
 }
 
 export class World {

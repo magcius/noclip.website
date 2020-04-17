@@ -8,7 +8,7 @@ import { SceneContext } from '../SceneBase';
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, getLocalTransformForPose, applyKeyframeToModel } from './animation';
 import { SFARenderer } from './render';
-import { ModelCollection, ModelInstance, ModelVersion } from './models';
+import { ModelCollection, ModelInstance, ModelVersion, ModelViewState } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink } from './util';
@@ -170,7 +170,11 @@ class ModelExhibitRenderer extends SFARenderer {
     }
 
     private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0,
+        };
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
