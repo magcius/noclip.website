@@ -974,6 +974,7 @@ export class MaterialFactory {
         const texMtx: TexMtxFunc[] = [];
         const postTexMtx: (mat4 | undefined)[] = [];
         const indTexMtx: (mat4 | undefined)[] = [];
+        const ambColors: ColorFunc[] = [];
     
         // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
         // but then it replaces texmap 0 with shader layer 0 before drawing...
@@ -987,7 +988,6 @@ export class MaterialFactory {
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
         // Ind Stage 0: Waviness
-        // TODO: animate waviness to make grass sway back and forth
         textures[2] = this.getWavyTexture();
         texMtx[1] = (dst: mat4, viewState: ViewState) => {
             mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
@@ -1040,7 +1040,24 @@ export class MaterialFactory {
         mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
     
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, !!(shader.flags & ShaderFlags.IndoorOutdoorBlend), GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        if (shader.flags & ShaderFlags.DisableChan0) {
+            ambColors[0] = undefined; // AMB0 is solid white
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else if ((shader.flags & 1) || (shader.flags & 0x800) || (shader.flags & 0x1000)) {
+            ambColors[0] = undefined; // AMB0 is solid white
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        // FIXME: Objects have different rules for color-channels than map blocks
+        if (isMapBlock) {
+            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
         mb.setCullMode(GX.CullMode.BACK);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
@@ -1067,6 +1084,14 @@ export class MaterialFactory {
                 for (let i = 0; i < 3; i++) {
                     if (indTexMtx[i] !== undefined) {
                         mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
+                    }
+                }
+                
+                for (let i = 0; i < 2; i++) {
+                    if (ambColors[i] !== undefined) {
+                        ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
+                    } else {
+                        colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
                     }
                 }
             },
