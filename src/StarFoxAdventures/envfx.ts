@@ -48,11 +48,16 @@ export class EnvfxManager {
         this.timeOfDay = time;
     }
 
-    public getOutdoorAmbientColor(): Color {
+    public getAmbientColor(ambienceNum: number): Color {
         if (this.overrideOutdoorAmbient !== null) {
             return this.overrideOutdoorAmbient;
         } else {
-            return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+            if (ambienceNum === 0) {
+                return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+            } else {
+                // TODO
+                return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+            }
         }
     }
 

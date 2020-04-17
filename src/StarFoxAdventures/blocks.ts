@@ -13,7 +13,7 @@ import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
-import { Shape, Model, ModelInstance } from './models';
+import { Shape, Model, ModelInstance, ModelViewState } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
@@ -26,9 +26,9 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getMaterials(): (SFAMaterial | undefined)[];
     public abstract getNumDrawSteps(): number;
-    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean): void;
-    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
-    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture): void;
+    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, modelViewState: ModelViewState): void;
+    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, modelViewState: ModelViewState): void;
+    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, modelViewState: ModelViewState): void;
 }
 
 export class BlockCollection {
@@ -432,13 +432,13 @@ export class AncientBlockRenderer implements BlockRenderer {
         return 1;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, modelViewState: ModelViewState) {
         if (drawStep !== 0) {
             return;
         }
 
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, [mat4.create()]);
+            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, [mat4.create()], modelViewState);
         }
     }
     

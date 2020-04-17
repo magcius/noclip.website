@@ -245,7 +245,7 @@ class StandardMaterial implements SFAMaterial {
         if (!this.isMapBlock) {
             // Not a map block. Just do basic texturing.
             this.mb.setUsePnMtxIdx(true);
-            this.addTevStageForTextureWithWhiteKonst(0);
+            this.addTevStageForTextureWithWhiteKonst(0, true);
             for (let i = 0; i < this.shader.layers.length; i++) {
                 this.textures.push(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
             }
@@ -452,9 +452,7 @@ class StandardMaterial implements SFAMaterial {
         this.texGenSrc++;
     }
 
-    private addTevStageForTextureWithWhiteKonst(colorInMode: number, scrollingTexMtx?: number) {
-        // TODO: handle color. map block renderer always passes opaque white to this function.
-        
+    private addTevStageForTextureWithWhiteKonst(colorInMode: number, kcolor?: boolean, scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
@@ -469,11 +467,19 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
+        if (kcolor) {
+            const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            });
+            this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+        }
+
         this.mb.setTevDirect(this.tevStage);
         this.mb.setTevOrder(this.tevStage, this.texcoordId, this.texmapId, GX.RasColorChannelID.COLOR0A0);
+
         switch (colorInMode) {
         case 0:
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.ONE /* GX.CC.KONST */, GX.CC.ZERO);
+            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO);
             break;
         default:
             console.warn(`Unhandled colorInMode ${colorInMode}`);
@@ -755,7 +761,7 @@ class StandardMaterial implements SFAMaterial {
 
     private addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
-            this.addTevStageForTextureWithWhiteKonst(0, this.shader.layers[0].scrollingTexMtx);
+            this.addTevStageForTextureWithWhiteKonst(0, undefined, this.shader.layers[0].scrollingTexMtx);
             if (this.shader.flags & ShaderFlags.Reflective) {
                 this.addTevStagesForReflectiveFloor();
             }
@@ -797,9 +803,9 @@ export class MaterialFactory {
     constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
     }
 
-    public getOutdoorAmbientColor(): Color {
+    public getAmbientColor(ambienceNum: number): Color {
         if (this.envfxMan !== undefined) {
-            return this.envfxMan.getOutdoorAmbientColor();
+            return this.envfxMan.getAmbientColor(ambienceNum);
         } else {
             return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
         }

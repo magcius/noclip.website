@@ -14,6 +14,7 @@ import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
+import { ModelViewState } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -144,11 +145,16 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
+        const modelViewState: ModelViewState = {
+            showDevGeometry,
+            ambienceNum: 0,
+        };
+
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep, showDevGeometry);
+            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -158,11 +164,16 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
 
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0, // TODO
+        };
+
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -171,12 +182,17 @@ export class MapInstance {
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0,
+        };
 
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture);
+            b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();

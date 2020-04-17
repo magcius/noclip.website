@@ -21,7 +21,7 @@ import { SFARenderer } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance } from './models';
+import { ModelInstance, ModelViewState } from './models';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
 import { Camera } from '../Camera';
@@ -277,7 +277,11 @@ class WorldRenderer extends SFARenderer {
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, true);
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0,
+        };
+        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
 
         // Draw bones
         const drawBones = false;
