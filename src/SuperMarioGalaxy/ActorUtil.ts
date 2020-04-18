@@ -19,6 +19,7 @@ import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
 import { addSleepControlForLiveActor, isExistStageSwitchAppear, SwitchFunctorEventListener, getSwitchWatcherHolder, SwitchCallback, isExistStageSwitchA, isExistStageSwitchB, isExistStageSwitchDead } from "./Switch";
+import { AreaObj } from "./AreaObj";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -29,6 +30,10 @@ const scratchQuat = quat.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
+}
+
+export function connectToSceneSun(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x24, 5, DrawBufferType.SUN, -1);
 }
 
 export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -1075,4 +1080,10 @@ export function isOnSwitchB(sceneObjHolder: SceneObjHolder, actor: LiveActor): b
 
 export function isOnSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
     return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchAppear(sceneObjHolder);
+}
+
+export function getAreaObj(sceneObjHolder: SceneObjHolder, managerName: string, pos: vec3): AreaObj | null {
+    if (sceneObjHolder.areaObjContainer === null)
+        return null;
+    return sceneObjHolder.areaObjContainer.getAreaObj(managerName, pos);
 }
