@@ -154,8 +154,8 @@ export class Shape {
     }
 
     private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.gxMaterial) {
-            this.gxMaterial = this.material.gxMaterial;
+        if (this.gxMaterial !== this.material.getGXMaterial()) {
+            this.gxMaterial = this.material.getGXMaterial();
             this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
         }
     }
