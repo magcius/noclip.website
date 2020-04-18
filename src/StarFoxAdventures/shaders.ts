@@ -199,10 +199,12 @@ interface ScrollingTexMtx {
 const MAX_SCROLL = 0x100000;
 
 interface TevStage {
+    kind: 'TevStage';
     id: number;
 }
 
 interface IndTexStage {
+    kind: 'IndTexStage';
     id: number;
 }
 
@@ -211,6 +213,7 @@ function getIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
 }
 
 interface TexMap {
+    kind: 'TexMap';
     id: number;
 }
 
@@ -223,6 +226,7 @@ function getTexGenSrc(texMap: TexMap): GX.TexGenSrc {
 }
 
 interface TexCoord {
+    kind: 'TexCoord';
     id: number;
 }
 
@@ -231,6 +235,7 @@ function getTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
 }
 
 interface PostTexMtx {
+    kind: 'PostTexMtx';
     id: number;
 }
 
@@ -239,6 +244,7 @@ function getPostTexGenMatrix(postTexMtx: PostTexMtx): GX.PostTexGenMatrix {
 }
 
 interface IndTexMtx {
+    kind: 'IndTexMtx';
     id: number;
 }
 
@@ -247,6 +253,7 @@ function getIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
 }
 
 interface KonstColor {
+    kind: 'KonstColor';
     id: number;
 }
 
@@ -299,7 +306,7 @@ abstract class MaterialBase implements SFAMaterial {
             throw Error(`Too many TEV stages`);
         }
         this.tevStageNum++;
-        return { id };
+        return { kind: 'TevStage', id };
     }
 
     protected genIndTexStage(): IndTexStage {
@@ -308,20 +315,20 @@ abstract class MaterialBase implements SFAMaterial {
             throw Error(`Too many indirect texture stages`);
         }
         this.indTexStageNum++;
-        return { id };
+        return { kind: 'IndTexStage', id };
     }
 
-    protected genTexMap(texture: SFAMaterialTexture) {
+    protected genTexMap(texture: SFAMaterialTexture): TexMap {
         const id = this.texMaps.length;
         if (id >= 8) {
             throw Error(`Too many texture maps`);
         }
         this.texMaps.push(texture);
-        return { id };
+        return { kind: 'TexMap', id };
     }
 
     protected genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
-        const texCoord = { id: this.texCoordNum };
+        const texCoord: TexCoord = { kind: 'TexCoord', id: this.texCoordNum };
         if (texCoord.id >= 8) {
             throw Error(`Too many texture coordinates`);
         }
@@ -336,7 +343,7 @@ abstract class MaterialBase implements SFAMaterial {
             throw Error(`Too many post-transform texture matrices`);
         }
         this.postTexMtxs.push(func);
-        return { id };
+        return { kind: 'PostTexMtx', id };
     }
 
     protected genIndTexMtx(func: TexMtxFunc): IndTexMtx {
@@ -345,7 +352,7 @@ abstract class MaterialBase implements SFAMaterial {
             throw Error(`Too many indirect texture matrices`);
         }
         this.indTexMtxs.push(func);
-        return { id };
+        return { kind: 'IndTexMtx', id };
     }
 
     protected genKonstColor(func: ColorFunc): KonstColor {
@@ -354,7 +361,7 @@ abstract class MaterialBase implements SFAMaterial {
             throw Error(`Too many konst colors`);
         }
         this.konstColors.push(func);
-        return { id };
+        return { kind: 'KonstColor', id };
     }
 
     protected setTevOrder(stage: TevStage, texCoord: TexCoord | null = null, texMap: TexMap | null = null, channelId: GX.RasColorChannelID = GX.RasColorChannelID.COLOR_ZERO) {
@@ -430,7 +437,6 @@ class StandardMaterial extends MaterialBase {
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
         super(factory, shader);
-        this.rebuild();
     }
 
     protected rebuildInternal() {
@@ -1006,6 +1012,101 @@ class WaterMaterial extends MaterialBase {
     }
 }
 
+class FurMaterial extends MaterialBase {
+    public constructor(private device: GfxDevice, factory: MaterialFactory, shader: Shader, private texFetcher: TextureFetcher, private isMapBlock: boolean) {
+        super(factory, shader);
+    }
+
+    protected rebuildInternal() {
+        // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
+        // but then it replaces texmap 0 with shader layer 0 before drawing...
+        const texMap0 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+        const texCoord0 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
+
+        const stage0 = this.genTevStage();
+        this.mb.setTevDirect(stage0.id);
+        this.setTevOrder(stage0, texCoord0, texMap0, GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+    
+        // Ind Stage 0: Waviness
+        const texMap2 = this.genTexMap(this.factory.getWavyTexture());
+        this.texMtx[1] = (dst: mat4, viewState: ViewState) => {
+            mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
+            mat4SetValue(dst, 0, 0, 0.0125);
+            mat4SetValue(dst, 1, 1, 0.0125);
+        };
+
+        const texCoord2 = this.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
+        const indStage0 = this.genIndTexStage();
+        this.setIndTexOrder(indStage0, texCoord2, texMap2);
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+    
+        // Stage 1: Fur map
+        const texMap1 = this.genTexMap({ kind: 'fur-map' });
+
+        // This texture matrix, when combined with a POS tex-gen, creates
+        // texture coordinates that increase linearly on the model's XZ plane.
+        const texmtx0 = mat4FromRowMajor(
+            0.1, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.1, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        );
+        this.texMtx[0] = (dst: mat4) => { mat4.copy(dst, texmtx0); };
+
+        const stage1 = this.genTevStage();
+        const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
+        // Ind tex matrix 0 is set by the fur renderer. See prepareToRenderFurs.
+        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        this.setTevOrder(stage1, texCoord1, texMap1);
+        this.mb.setTevKColorSel(stage1.id, GX.KonstColorSel.KCSEL_4_8);
+        this.setTevColorFormula(stage1, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV, GX.CC.CPREV, GX.TevOp.SUB, GX.TevBias.ADDHALF);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        
+        // Stage 2: Distance fade
+        const texMap3 = this.genTexMap(this.factory.getRampTexture());
+        this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
+            mat4.set(dst,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                1/30, 0.0, 0.0, 0.0,
+                25/3, 0.0, 0.0, 0.0 // TODO: this matrix can be tweaked to extend the draw distance, which may be desirable on high-res displays 
+            );
+            mat4.mul(dst, dst, viewState.modelViewMtx);
+        };
+        const stage2 = this.genTevStage();
+        const texCoord3 = this.genTexCoord(GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
+        this.mb.setTevDirect(stage2.id);
+        this.setTevOrder(stage2, texCoord3, texMap3);
+        this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+    
+        if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+            this.ambColors[0] = undefined; // AMB0 is solid white
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            this.ambColors[0] = undefined; // AMB0 is solid white
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        } else {
+            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        // FIXME: Objects have different rules for color-channels than map blocks
+        if (this.isMapBlock) {
+            this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        }
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        this.mb.setCullMode(GX.CullMode.BACK);
+        this.mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+        this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+    }
+}
+
 export class MaterialFactory {
     private rampTexture: SFAMaterialTexture = null;
     private causticTexture: SFAMaterialTexture = null;
@@ -1049,139 +1150,7 @@ export class MaterialFactory {
     }
 
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
-        const mb = new GXMaterialBuilder('FurMaterial');
-        const textures = [] as SFAMaterialTexture[];
-        const texMtx: TexMtxFunc[] = [];
-        const postTexMtx: (mat4 | undefined)[] = [];
-        const indTexMtx: (mat4 | undefined)[] = [];
-        const ambColors: ColorFunc[] = [];
-    
-        // FIXME: ??? fade ramp in texmap 0? followed by lighting-related textures...
-        // but then it replaces texmap 0 with shader layer 0 before drawing...
-        textures[0] = makeMaterialTexture(texFetcher.getTexture(this.device, shader.layers[0].texId!, alwaysUseTex1));
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-        mb.setTevDirect(0);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-        // Ind Stage 0: Waviness
-        textures[2] = this.getWavyTexture();
-        texMtx[1] = (dst: mat4, viewState: ViewState) => {
-            mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
-            mat4SetValue(dst, 0, 0, 0.0125);
-            mat4SetValue(dst, 1, 1, 0.0125);
-        };
-
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
-        mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
-        mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-    
-        // Stage 1: Fur map
-        textures[1] = { kind: 'fur-map' };
-
-        // This texture matrix, when combined with a POS tex-gen, creates
-        // texture coordinates that increase linearly on the model's XZ plane.
-        const texmtx0 = mat4FromRowMajor(
-            0.1, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.1, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        );
-        texMtx[0] = (dst: mat4) => { mat4.copy(dst, texmtx0); };
-
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
-        mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
-        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8);
-        mb.setTevColorIn(1, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV, GX.CC.CPREV);
-        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
-        mb.setTevColorOp(1, GX.TevOp.SUB, GX.TevBias.ADDHALF, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        
-        // Stage 2: Distance fade
-        textures[3] = this.getRampTexture();
-        texMtx[2] = (dst: mat4, viewState: ViewState) => {
-            mat4.set(dst,
-                0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0,
-                1/30, 0.0, 0.0, 0.0,
-                25/3, 0.0, 0.0, 0.0 // TODO: this matrix can be tweaked to extend the draw distance, which may be desirable on high-res displays 
-            );
-            mat4.mul(dst, dst, viewState.modelViewMtx);
-        };
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
-        mb.setTevDirect(2);
-        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
-        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
-        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-    
-        if (shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-            ambColors[0] = undefined; // AMB0 is solid white
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else if ((shader.flags & 1) || (shader.flags & 0x800) || (shader.flags & 0x1000)) {
-            ambColors[0] = undefined; // AMB0 is solid white
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else {
-            ambColors[0] = (dst: Color, viewState: ViewState) => {
-                colorCopy(dst, viewState.outdoorAmbientColor);
-            };
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        }
-        // FIXME: Objects have different rules for color-channels than map blocks
-        if (isMapBlock) {
-            mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        }
-        mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-
-        mb.setCullMode(GX.CullMode.BACK);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-    
-        const gxMat = mb.finish();
-        return {
-            factory: this,
-            shader,
-            getGXMaterial() { return gxMat; },
-            setupMaterialParams: (params: MaterialParams, viewState: ViewState) => {
-                for (let i = 0; i < 10; i++) {
-                    if (texMtx[i] !== undefined) {
-                        texMtx[i]!(params.u_TexMtx[i], viewState);
-                    }
-                }
-                
-                for (let i = 0; i < 20; i++) {
-                    if (postTexMtx[i] !== undefined) {
-                        mat4.copy(params.u_PostTexMtx[i], postTexMtx[i]!);
-                    }
-                }
-    
-                for (let i = 0; i < 3; i++) {
-                    if (indTexMtx[i] !== undefined) {
-                        mat4.copy(params.u_IndTexMtx[i], indTexMtx[i]!);
-                    }
-                }
-                
-                for (let i = 0; i < 2; i++) {
-                    if (ambColors[i] !== undefined) {
-                        ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
-                    } else {
-                        colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
-                    }
-                }
-            },
-            rebuild: () => {
-                throw Error(`rebuild not implemented for fur shader`);
-            },
-            getTexture: (num: number) => {
-                return textures[num];
-            },
-        };
+        return new FurMaterial(this.device, this, shader, texFetcher, isMapBlock);
     }
 
     public getFurFactory(): FurFactory {
