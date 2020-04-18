@@ -207,7 +207,8 @@ export class Shape {
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
 
         for (let i = 0; i < 8; i++) {
-            const tex = this.material.textures[i];
+            const tex = this.material.getTexture(i);
+            
             if (tex === undefined || tex === null) {
                 this.materialParams.m_TextureMapping[i].reset();
             } else if (tex.kind === 'fb-color-downscaled-8x' || tex.kind === 'fb-color-downscaled-2x') {
