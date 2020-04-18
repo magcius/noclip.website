@@ -200,6 +200,10 @@ interface ScrollingTexMtx {
 
 const MAX_SCROLL = 0x100000;
 
+interface TevStage {
+    id: number;
+}
+
 interface TexMap {
     id: number;
 }
@@ -232,7 +236,6 @@ class StandardMaterial implements SFAMaterial {
     public gxMaterial: GXMaterial;
     private mb: GXMaterialBuilder;
     private texMtx: TexMtxFunc[] = [];
-    private tevStage = 0;
     private indStageId = GX.IndTexStageID.STAGE0;
     private texcoordId = GX.TexCoordID.TEXCOORD0;
     private texGenSrc = GX.TexGenSrc.TEX0;
@@ -245,12 +248,12 @@ class StandardMaterial implements SFAMaterial {
     }
 
     public rebuild() {
-        this.mb = new GXMaterialBuilder('Standard');
+        this.mb = new GXMaterialBuilder();
+        this.tevStageNum = 0;
         this.texMaps = [];
         this.texMtx = [];
         this.postTexMtxs = [];
         this.indTexMtxs = [];
-        this.tevStage = 0;
         this.indStageId = GX.IndTexStageID.STAGE0;
         this.texcoordId = GX.TexCoordID.TEXCOORD0;
         this.texMaps = [];
@@ -365,6 +368,14 @@ class StandardMaterial implements SFAMaterial {
         return this.texMaps[num];
     }
 
+    private tevStageNum = 0;
+
+    private genTevStage(): TevStage {
+        const id = this.tevStageNum;
+        this.tevStageNum++;
+        return { id };
+    }
+
     private texMaps: SFAMaterialTexture[] = [];
 
     private genTexMap(texture: SFAMaterialTexture) {
@@ -396,6 +407,16 @@ class StandardMaterial implements SFAMaterial {
         this.konstColors.push(func);
         return { id };
     }
+
+    private setTevColorFormula(stage: TevStage, a: GX.CC, b: GX.CC, c: GX.CC, d: GX.CC, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
+        this.mb.setTevColorIn(stage.id, a, b, c, d);
+        this.mb.setTevColorOp(stage.id, op, bias, scale, clamp, reg);
+    }
+    
+    private setTevAlphaFormula(stage: TevStage, a: GX.CA, b: GX.CA, c: GX.CA, d: GX.CA, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
+        this.mb.setTevAlphaIn(stage.id, a, b, c, d);
+        this.mb.setTevAlphaOp(stage.id, op, bias, scale, clamp, reg);
+    }
     
     private addTevStagesForIndoorOutdoorBlend(texMap: TexMap, scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
@@ -409,36 +430,31 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
+        // Stage 0: Multiply vertex color by outdoor ambient color
+        const stage0 = this.genTevStage();
         const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
             colorCopy(dst, viewState.outdoorAmbientColor);
         });
-        this.mb.setTevKColorSel(this.tevStage, getKonstColorSel(kcnum));
+        this.mb.setTevKColorSel(stage0.id, getKonstColorSel(kcnum));
+        this.mb.setTevDirect(stage0.id);
+        this.mb.setTevOrder(stage0.id, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.KONST, GX.CC.RASC, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
-        // Stage 1: Multiply vertex color by outdoor ambient color
-        this.mb.setTevDirect(this.tevStage);
-        this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.KONST, GX.CC.RASC, GX.CC.ZERO);
-        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        // Stage 1: Blend previous stage with vertex color by vertex alpha
+        const stage1 = this.genTevStage();
+        this.mb.setTevDirect(stage1.id);
+        this.mb.setTevOrder(stage1.id, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage1, GX.CC.CPREV, GX.CC.RASC, GX.CC.RASA, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
-        // Stage 2: Blend previous stage with vertex color by vertex alpha
-        this.mb.setTevDirect(this.tevStage + 1);
-        this.mb.setTevOrder(this.tevStage + 1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage + 1, GX.CC.CPREV, GX.CC.RASC, GX.CC.RASA, GX.CC.ZERO);
-        this.mb.setTevAlphaIn(this.tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-        this.mb.setTevColorOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        // Stage 2: Multiply by texture
+        const stage2 = this.genTevStage();
+        this.mb.setTevDirect(stage2.id);
+        this.mb.setTevOrder(stage2.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR_ZERO);
+        this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
 
-        // Stage 3: Multiply by texture
-        this.mb.setTevDirect(this.tevStage + 2);
-        this.mb.setTevOrder(this.tevStage + 2, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR_ZERO);
-        this.mb.setTevColorIn(this.tevStage + 2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
-        this.mb.setTevAlphaIn(this.tevStage + 2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-        this.mb.setTevColorOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage + 2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-        this.tevStage += 3;
         this.texcoordId++;
         this.texGenSrc++;
     }
@@ -455,36 +471,42 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
-        this.mb.setTevDirect(this.tevStage);
-        this.mb.setTevOrder(this.tevStage, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
+        const stage = this.genTevStage();
+
+        this.mb.setTevDirect(stage.id);
+        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
         // Only modes 0 and 9 occur in map blocks. Other modes
         // occur in object and character models.
+        let cc: GX.CC[];
         switch (mode) {
         case 0:
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+            cc = [GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO];
             break;
         case 1: // Default case in original executable
-        this.mb.setTevColorIn(this.tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            // FIXME: double-check
+            cc = [GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO];
             break;
         case 9:
-            this.mb.setTevColorIn(this.tevStage, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+            cc = [GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO];
             break;
         default:
             console.warn(`Unhandled tev color-in mode ${mode}`);
+            cc = [GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO];
             break;
         }
 
+        let ca: GX.CA[];
         if (!this.aprevIsValid) {
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+            ca = [GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO];
             this.aprevIsValid = true;
         } else {
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+            ca = [GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO];
         }
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        this.setTevColorFormula(stage, cc[0], cc[1], cc[2], cc[3]);
+        this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
 
-        this.tevStage++;
         this.texcoordId++;
         this.texGenSrc++;
     }
@@ -501,36 +523,41 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
+        const stage = this.genTevStage();
+
         if (kcolor) {
             const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             });
-            this.mb.setTevKColorSel(this.tevStage, getKonstColorSel(kcnum));
+            this.mb.setTevKColorSel(stage.id, getKonstColorSel(kcnum));
         }
 
-        this.mb.setTevDirect(this.tevStage);
-        this.mb.setTevOrder(this.tevStage, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevDirect(stage.id);
+        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
 
+        let cc: GX.CC[];
         switch (colorInMode) {
         case 0:
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO);
+            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         default:
             console.warn(`Unhandled colorInMode ${colorInMode}`);
+            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         }
 
+        let ca: GX.CA[];
         if (!this.aprevIsValid) {
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+            ca = [GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO];
             this.aprevIsValid = true;
         } else {
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+            ca = [GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO];
         }
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        
+        this.setTevColorFormula(stage, cc[0], cc[1], cc[2], cc[3]);
+        this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
 
-        this.tevStage++;
         this.texcoordId++;
         this.texGenSrc++;
     }
@@ -538,20 +565,23 @@ class StandardMaterial implements SFAMaterial {
     private addTevStageForMultVtxColor() {
         // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
 
-        this.mb.setTevDirect(this.tevStage);
-        this.mb.setTevOrder(this.tevStage, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevKAlphaSel(this.tevStage, GX.KonstAlphaSel.KASEL_1); // TODO: handle non-opaque alpha
-        if (this.tevStage === 0 || !this.cprevIsValid) {
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+        const stage = this.genTevStage();
+        this.mb.setTevDirect(stage.id);
+        this.mb.setTevOrder(stage.id, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevKAlphaSel(stage.id, GX.KonstAlphaSel.KASEL_1); // TODO: handle non-opaque alpha
+        let cc: GX.CC[];
+        let ca: GX.CA[];
+        if (stage.id === 0 || !this.cprevIsValid) {
+            cc = [GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC];
+            ca = [GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST];
         } else {
-            this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
-            this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO);
+            cc = [GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO];
+            ca = [GX.CA.ZERO, GX.CA.APREV, GX.CA.KONST, GX.CA.ZERO];
         }
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        this.setTevColorFormula(stage, cc[0], cc[1], cc[2], cc[3]);
+        this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
-        this.tevStage++;
     }
     
     private addTevStagesForLava() {
@@ -629,35 +659,31 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
         this.mb.setTevIndirect(2, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        // TODO: set and use tev kcolor
-        this.mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_4_8); // TODO
-        this.mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_4_8); // TODO
+        const stage0 = this.genTevStage();
+        const stage1 = this.genTevStage();
 
-        this.mb.setTevDirect(0);
+        // TODO: set and use tev kcolor
+        this.mb.setTevKAlphaSel(stage0.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
+        this.mb.setTevKColorSel(stage1.id, GX.KonstColorSel.KCSEL_4_8); // TODO
+
+        this.mb.setTevDirect(stage0.id);
         const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R];
-        this.mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, getTexMapID(texMap2), GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
-        this.mb.setTevAlphaIn(0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-        this.mb.setTevSwapMode(0, undefined, swap3);
-        this.mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4, true, GX.Register.PREV);
+        this.mb.setTevOrder(stage0.id, GX.TexCoordID.TEXCOORD0, getTexMapID(texMap2), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevSwapMode(stage0.id, undefined, swap3);
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4);
         this.cprevIsValid = true;
 
-        this.mb.setTevOrder(1, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        this.mb.setTevColorIn(1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
-        this.mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-        this.mb.setTevSwapMode(1, undefined, undefined);
-        this.mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevOrder(stage1.id, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        this.setTevColorFormula(stage1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
-        this.mb.setTevOrder(2, GX.TexCoordID.TEXCOORD3, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
-        this.mb.setTevColorIn(2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
-        this.mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-        this.mb.setTevSwapMode(2, undefined, undefined);
-        this.mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        const stage2 = this.genTevStage();
+        this.mb.setTevOrder(stage2.id, GX.TexCoordID.TEXCOORD3, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
+        this.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        this.mb.setTevSwapMode(stage2.id, undefined, undefined);
 
-        this.tevStage = 3;
         this.texGenSrc = 4;
         this.texcoordId = 4;
         this.indStageId = 2;
@@ -729,7 +755,8 @@ class StandardMaterial implements SFAMaterial {
         });
         this.mb.setTexCoordGen(this.texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx2));
 
-        this.mb.setTevIndirect(this.tevStage, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        const stage0 = this.genTevStage();
+        this.mb.setTevIndirect(stage0.id, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
 
         this.mb.setIndTexOrder(this.indStageId + 1, this.texcoordId + 3, getTexMapID(texMap1));
         this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
@@ -749,44 +776,35 @@ class StandardMaterial implements SFAMaterial {
         });
         this.mb.setTexCoordGen(this.texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx3));
 
-        this.mb.setTevIndirect(this.tevStage + 1, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        const stage1 = this.genTevStage();
+        this.mb.setTevIndirect(stage1.id, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        this.mb.setTevOrder(this.tevStage, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
-        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-        this.mb.setTevSwapMode(this.tevStage, undefined, undefined);
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        this.mb.setTevOrder(stage0.id, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         this.cprevIsValid = true;
 
-        this.mb.setTevOrder(this.tevStage + 1, this.texcoordId + 1, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
-        this.mb.setTevColorIn(this.tevStage + 1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
-        this.mb.setTevAlphaIn(this.tevStage + 1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-        this.mb.setTevSwapMode(this.tevStage + 1, undefined, undefined);
-        this.mb.setTevColorOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage + 1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        
+        this.mb.setTevOrder(stage1.id, this.texcoordId + 1, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
         this.indStageId += 2;
         this.texcoordId += 4;
-        this.tevStage += 2;
     }
 
     private addTevStagesForReflectiveFloor() {
         const texMap0 = this.genTexMap({ kind: 'fb-color-downscaled-8x' });
         this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
-        this.mb.setTevDirect(this.tevStage);
-        this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_2_8);
-        this.mb.setTevOrder(this.tevStage, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
-        this.mb.setTevColorIn(this.tevStage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
-        this.mb.setTevAlphaIn(this.tevStage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-        this.mb.setTevSwapMode(this.tevStage, undefined, undefined);
-        this.mb.setTevColorOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        this.mb.setTevAlphaOp(this.tevStage, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        const stage = this.genTevStage();
+        this.mb.setTevDirect(stage.id);
+        this.mb.setTevKColorSel(stage.id, GX.KonstColorSel.KCSEL_2_8);
+        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
+        this.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         this.cprevIsValid = true;
 
         this.texcoordId++;
-        this.tevStage++;
     }
 
     private addTevStagesForNonLava() {
