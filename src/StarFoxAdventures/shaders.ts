@@ -200,6 +200,14 @@ interface ScrollingTexMtx {
 
 const MAX_SCROLL = 0x100000;
 
+interface KonstColor {
+    id: number;
+}
+
+function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
+    return GX.KonstColorSel.KCSEL_K0 + kcolor.id;
+}
+
 class StandardMaterial implements SFAMaterial {
     public gxMaterial: GXMaterial;
     public textures: SFAMaterialTexture[] = [];
@@ -215,8 +223,6 @@ class StandardMaterial implements SFAMaterial {
     private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
     private postTexMtxNum = 0;
     private ambColors: ColorFunc[] = [];
-    private kcolors: ColorFunc[] = [];
-    private kcolorNum = 0;
     private cprevIsValid = false;
     private aprevIsValid = false;
 
@@ -237,8 +243,7 @@ class StandardMaterial implements SFAMaterial {
         this.texGenSrc = GX.TexGenSrc.TEX0;
         this.postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
         this.postTexMtxNum = 0;
-        this.kcolors = [];
-        this.kcolorNum = 0;
+        this.konstColors = [];
         this.cprevIsValid = false;
         this.aprevIsValid = false;
         
@@ -338,19 +343,20 @@ class StandardMaterial implements SFAMaterial {
         }
 
         for (let i = 0; i < 4; i++) {
-            if (this.kcolors[i] !== undefined) {
-                this.kcolors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
+            if (this.konstColors[i] !== undefined) {
+                this.konstColors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
             } else {
                 colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
             }
         }
     }
 
-    private addKColor(colorFunc: ColorFunc): number {
-        const kcnum = this.kcolorNum;
-        this.kcolors[kcnum] = colorFunc;
-        this.kcolorNum++;
-        return kcnum;
+    private konstColors: ColorFunc[] = [];
+
+    private genKonstColor(func: ColorFunc): KonstColor {
+        const id = this.konstColors.length;
+        this.konstColors.push(func);
+        return { id };
     }
     
     private addTevStagesForIndoorOutdoorBlend(scrollingTexMtx?: number) {
@@ -368,10 +374,10 @@ class StandardMaterial implements SFAMaterial {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
 
-        const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+        const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
             colorCopy(dst, viewState.outdoorAmbientColor);
         });
-        this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+        this.mb.setTevKColorSel(this.tevStage, getKonstColorSel(kcnum));
 
         // Stage 1: Multiply vertex color by outdoor ambient color
         this.mb.setTevDirect(this.tevStage);
@@ -469,10 +475,10 @@ class StandardMaterial implements SFAMaterial {
         }
 
         if (kcolor) {
-            const kcnum = this.addKColor((dst: Color, viewState: ViewState) => {
+            const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             });
-            this.mb.setTevKColorSel(this.tevStage, GX.KonstColorSel.KCSEL_K0 + kcnum);
+            this.mb.setTevKColorSel(this.tevStage, getKonstColorSel(kcnum));
         }
 
         this.mb.setTevDirect(this.tevStage);
