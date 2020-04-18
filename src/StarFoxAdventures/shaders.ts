@@ -212,6 +212,18 @@ function getTexMapID(texMap: TexMap): GX.TexMapID {
     return GX.TexMapID.TEXMAP0 + texMap.id;
 }
 
+function getTexGenSrc(texMap: TexMap): GX.TexGenSrc {
+    return GX.TexGenSrc.TEX0 + texMap.id;
+}
+
+interface TexCoord {
+    id: number;
+}
+
+function getTexCoordID(texCoord: TexCoord): GX.TexCoordID {
+    return GX.TexCoordID.TEXCOORD0 + texCoord.id;
+}
+
 interface PostTexMtx {
     id: number;
 }
@@ -222,6 +234,10 @@ function getPostTexGenMatrix(postTexMtx: PostTexMtx): GX.PostTexGenMatrix {
 
 interface IndTexMtx {
     id: number;
+}
+
+function getIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+    return GX.IndTexMtxID._0 + indTexMtx.id;
 }
 
 interface KonstColor {
@@ -237,7 +253,6 @@ class StandardMaterial implements SFAMaterial {
     private mb: GXMaterialBuilder;
     private texMtx: TexMtxFunc[] = [];
     private indStageId = GX.IndTexStageID.STAGE0;
-    private texcoordId = GX.TexCoordID.TEXCOORD0;
     private texGenSrc = GX.TexGenSrc.TEX0;
     private ambColors: ColorFunc[] = [];
     private cprevIsValid = false;
@@ -255,7 +270,7 @@ class StandardMaterial implements SFAMaterial {
         this.postTexMtxs = [];
         this.indTexMtxs = [];
         this.indStageId = GX.IndTexStageID.STAGE0;
-        this.texcoordId = GX.TexCoordID.TEXCOORD0;
+        this.texCoordNum = 0;
         this.texMaps = [];
         this.texGenSrc = GX.TexGenSrc.TEX0;
         this.konstColors = [];
@@ -384,6 +399,15 @@ class StandardMaterial implements SFAMaterial {
         return { id };
     }
 
+    private texCoordNum = 0;
+
+    private genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
+        const texCoord = { id: this.texCoordNum };
+        this.texCoordNum++;
+        this.mb.setTexCoordGen(getTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
+        return texCoord;
+    }
+
     private postTexMtxs: TexMtxFunc[] = [];
 
     private genPostTexMtx(func: TexMtxFunc): PostTexMtx {
@@ -419,15 +443,16 @@ class StandardMaterial implements SFAMaterial {
     }
     
     private addTevStagesForIndoorOutdoorBlend(texMap: TexMap, scrollingTexMtx?: number) {
+        let texCoord;
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
         } else {
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
         }
 
         // Stage 0: Multiply vertex color by outdoor ambient color
@@ -451,30 +476,30 @@ class StandardMaterial implements SFAMaterial {
         // Stage 2: Multiply by texture
         const stage2 = this.genTevStage();
         this.mb.setTevDirect(stage2.id);
-        this.mb.setTevOrder(stage2.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevOrder(stage2.id, getTexCoordID(texCoord), getTexMapID(texMap), GX.RasColorChannelID.COLOR_ZERO);
         this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
 
-        this.texcoordId++;
         this.texGenSrc++;
     }
 
     private addTevStagesForTextureWithMode(mode: number, texMap: TexMap, scrollingTexMtx?: number) {
+        let texCoord;
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
         } else {
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
         }
 
         const stage = this.genTevStage();
 
         this.mb.setTevDirect(stage.id);
-        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
         // Only modes 0 and 9 occur in map blocks. Other modes
         // occur in object and character models.
         let cc: GX.CC[];
@@ -507,20 +532,20 @@ class StandardMaterial implements SFAMaterial {
         this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
 
-        this.texcoordId++;
         this.texGenSrc++;
     }
 
     private addTevStageForTextureWithWhiteKonst(colorInMode: number, texMap: TexMap, kcolor?: boolean, scrollingTexMtx?: number) {
+        let texCoord;
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
         } else {
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
+            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
         }
 
         const stage = this.genTevStage();
@@ -533,7 +558,7 @@ class StandardMaterial implements SFAMaterial {
         }
 
         this.mb.setTevDirect(stage.id);
-        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
 
         let cc: GX.CC[];
         switch (colorInMode) {
@@ -558,7 +583,6 @@ class StandardMaterial implements SFAMaterial {
         this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
 
-        this.texcoordId++;
         this.texGenSrc++;
     }
 
@@ -619,7 +643,7 @@ class StandardMaterial implements SFAMaterial {
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         const texMap2 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
 
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        const texCoord3 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
 
         const pttexmtx0 = mat4.create();
         mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
@@ -644,23 +668,23 @@ class StandardMaterial implements SFAMaterial {
         const postTexMtx2 = this.genPostTexMtx((dst: mat4) => {
             mat4.copy(dst, pttexmtx2);
         });
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx2));
+        const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx2));
 
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx0));
+        const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx0));
         
-        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, getTexMapID(texMap1));
+        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, getTexCoordID(texCoord1), getTexMapID(texMap1));
         this.mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-
-        this.mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
-
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx1));
-
-        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, getTexMapID(texMap1));
-        this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
-        this.mb.setTevIndirect(2, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         const stage0 = this.genTevStage();
         const stage1 = this.genTevStage();
+        const stage2 = this.genTevStage();
+        this.mb.setTevIndirect(stage1.id, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx0), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+
+        const texCoord2 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx1));
+
+        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE1, getTexCoordID(texCoord2), getTexMapID(texMap1));
+        this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
+        this.mb.setTevIndirect(stage2.id, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: set and use tev kcolor
         this.mb.setTevKAlphaSel(stage0.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
@@ -668,7 +692,7 @@ class StandardMaterial implements SFAMaterial {
 
         this.mb.setTevDirect(stage0.id);
         const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.R];
-        this.mb.setTevOrder(stage0.id, GX.TexCoordID.TEXCOORD0, getTexMapID(texMap2), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage0.id, getTexCoordID(texCoord0), getTexMapID(texMap2), GX.RasColorChannelID.COLOR0A0);
         this.mb.setTevSwapMode(stage0.id, undefined, swap3);
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
         this.setTevAlphaFormula(stage0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_4);
@@ -678,14 +702,11 @@ class StandardMaterial implements SFAMaterial {
         this.setTevColorFormula(stage1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
         this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
-        const stage2 = this.genTevStage();
-        this.mb.setTevOrder(stage2.id, GX.TexCoordID.TEXCOORD3, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevOrder(stage2.id, getTexCoordID(texCoord3), getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
         this.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-        this.mb.setTevSwapMode(stage2.id, undefined, undefined);
 
         this.texGenSrc = 4;
-        this.texcoordId = 4;
         this.indStageId = 2;
     }
     
@@ -706,7 +727,7 @@ class StandardMaterial implements SFAMaterial {
             mat4.mul(dst, postRotate0, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
-        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx0));
+        const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx0));
         
         const pttexmtx1 = mat4FromRowMajor(
             0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
@@ -721,22 +742,11 @@ class StandardMaterial implements SFAMaterial {
             mat4.mul(dst, postRotate1, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
-        this.mb.setTexCoordGen(this.texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx1));
+        const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx1));
         
         const texMap0 = this.genTexMap(this.factory.getCausticTexture());
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
-
-        const itm1 = mat4FromRowMajor(
-            0.5, 0.0, 0.0, 0.0,
-            0.0, 0.5, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        );
-        this.indTexMtxs[1] = (dst: mat4) => { mat4.copy(dst, itm1); };
-
-        this.mb.setIndTexOrder(this.indStageId, this.texcoordId + 2, getTexMapID(texMap1));
-        this.mb.setIndTexScale(this.indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
-
+        
         const rot67deg = mat4.create();
         mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
         const postRotate2 = mat4.create();
@@ -753,13 +763,20 @@ class StandardMaterial implements SFAMaterial {
             mat4.mul(dst, postRotate2, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
-        this.mb.setTexCoordGen(this.texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx2));
+        const texCoord2 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx2));
 
-        const stage0 = this.genTevStage();
-        this.mb.setTevIndirect(stage0.id, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        const itm1 = mat4FromRowMajor(
+            0.5, 0.0, 0.0, 0.0,
+            0.0, 0.5, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        );
+        const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
+            mat4.copy(dst, itm1);
+        });
 
-        this.mb.setIndTexOrder(this.indStageId + 1, this.texcoordId + 3, getTexMapID(texMap1));
-        this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+        this.mb.setIndTexOrder(this.indStageId, getTexCoordID(texCoord2), getTexMapID(texMap1));
+        this.mb.setIndTexScale(this.indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
 
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
@@ -774,37 +791,41 @@ class StandardMaterial implements SFAMaterial {
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
         });
-        this.mb.setTexCoordGen(this.texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx3));
+        const texCoord3 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx3));
+
+        const stage0 = this.genTevStage();
+        this.mb.setTevIndirect(stage0.id, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+
+        this.mb.setIndTexOrder(this.indStageId + 1, getTexCoordID(texCoord3), getTexMapID(texMap1));
+        this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+
 
         const stage1 = this.genTevStage();
-        this.mb.setTevIndirect(stage1.id, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage1.id, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        this.mb.setTevOrder(stage0.id, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage0.id, getTexCoordID(texCoord0), getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
         this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         this.cprevIsValid = true;
 
-        this.mb.setTevOrder(stage1.id, this.texcoordId + 1, getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
+        this.mb.setTevOrder(stage1.id, getTexCoordID(texCoord1), getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
         this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
 
         this.indStageId += 2;
-        this.texcoordId += 4;
     }
 
     private addTevStagesForReflectiveFloor() {
         const texMap0 = this.genTexMap({ kind: 'fb-color-downscaled-8x' });
-        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
+        const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
         const stage = this.genTevStage();
         this.mb.setTevDirect(stage.id);
         this.mb.setTevKColorSel(stage.id, GX.KonstColorSel.KCSEL_2_8);
-        this.mb.setTevOrder(stage.id, this.texcoordId, getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
+        this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
         this.setTevColorFormula(stage, GX.CC.ZERO, GX.CC.TEXC, GX.CC.KONST, GX.CC.CPREV);
         this.setTevAlphaFormula(stage, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
         this.cprevIsValid = true;
-
-        this.texcoordId++;
     }
 
     private addTevStagesForNonLava() {
