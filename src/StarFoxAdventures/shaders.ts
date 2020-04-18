@@ -253,7 +253,6 @@ class StandardMaterial implements SFAMaterial {
     private mb: GXMaterialBuilder;
     private texMtx: TexMtxFunc[] = [];
     private indStageId = GX.IndTexStageID.STAGE0;
-    private texGenSrc = GX.TexGenSrc.TEX0;
     private ambColors: ColorFunc[] = [];
     private cprevIsValid = false;
     private aprevIsValid = false;
@@ -272,7 +271,6 @@ class StandardMaterial implements SFAMaterial {
         this.indStageId = GX.IndTexStageID.STAGE0;
         this.texCoordNum = 0;
         this.texMaps = [];
-        this.texGenSrc = GX.TexGenSrc.TEX0;
         this.konstColors = [];
         this.cprevIsValid = false;
         this.aprevIsValid = false;
@@ -281,7 +279,8 @@ class StandardMaterial implements SFAMaterial {
             // Not a map block. Just do basic texturing.
             this.mb.setUsePnMtxIdx(true);
             const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-            this.addTevStageForTextureWithWhiteKonst(0, texMap, true);
+            const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
+            this.addTevStageForTextureWithWhiteKonst(0, texMap, texCoord, true);
         } else {
             this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
                 // Flipped
@@ -441,20 +440,21 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setTevAlphaIn(stage.id, a, b, c, d);
         this.mb.setTevAlphaOp(stage.id, op, bias, scale, clamp, reg);
     }
-    
-    private addTevStagesForIndoorOutdoorBlend(texMap: TexMap, scrollingTexMtx?: number) {
-        let texCoord;
+
+    private genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
             const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
             });
 
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
+            return this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap), undefined, undefined, getPostTexGenMatrix(postTexMtx));
         } else {
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
+            return this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap));
         }
-
+    }
+    
+    private addTevStagesForIndoorOutdoorBlend(texMap: TexMap, texCoord: TexCoord) {
         // Stage 0: Multiply vertex color by outdoor ambient color
         const stage0 = this.genTevStage();
         const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
@@ -479,27 +479,14 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setTevOrder(stage2.id, getTexCoordID(texCoord), getTexMapID(texMap), GX.RasColorChannelID.COLOR_ZERO);
         this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
-
-        this.texGenSrc++;
     }
 
-    private addTevStagesForTextureWithMode(mode: number, texMap: TexMap, scrollingTexMtx?: number) {
-        let texCoord;
-        if (scrollingTexMtx !== undefined) {
-            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
-            const postTexMtx = this.genPostTexMtx((dst: mat4) => {
-                mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
-            });
-
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
-        } else {
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
-        }
-
+    private addTevStagesForTextureWithMode(mode: number, texMap: TexMap, texCoord: TexCoord) {
         const stage = this.genTevStage();
 
         this.mb.setTevDirect(stage.id);
         this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap), GX.RasColorChannelID.COLOR0A0);
+
         // Only modes 0 and 9 occur in map blocks. Other modes
         // occur in object and character models.
         let cc: GX.CC[];
@@ -531,23 +518,9 @@ class StandardMaterial implements SFAMaterial {
         this.setTevColorFormula(stage, cc[0], cc[1], cc[2], cc[3]);
         this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
-
-        this.texGenSrc++;
     }
 
-    private addTevStageForTextureWithWhiteKonst(colorInMode: number, texMap: TexMap, kcolor?: boolean, scrollingTexMtx?: number) {
-        let texCoord;
-        if (scrollingTexMtx !== undefined) {
-            const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
-            const postTexMtx = this.genPostTexMtx((dst: mat4) => {
-                mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
-            });
-
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc, undefined, undefined, getPostTexGenMatrix(postTexMtx));
-        } else {
-            texCoord = this.genTexCoord(GX.TexGenType.MTX2x4, this.texGenSrc);
-        }
-
+    private addTevStageForTextureWithWhiteKonst(colorInMode: number, texMap: TexMap, texCoord: TexCoord, kcolor?: boolean) {
         const stage = this.genTevStage();
 
         if (kcolor) {
@@ -582,8 +555,6 @@ class StandardMaterial implements SFAMaterial {
         this.setTevColorFormula(stage, cc[0], cc[1], cc[2], cc[3]);
         this.setTevAlphaFormula(stage, ca[0], ca[1], ca[2], ca[3]);
         this.cprevIsValid = true;
-
-        this.texGenSrc++;
     }
 
     private addTevStageForMultVtxColor() {
@@ -706,7 +677,6 @@ class StandardMaterial implements SFAMaterial {
         this.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
-        this.texGenSrc = 4;
         this.indStageId = 2;
     }
     
@@ -799,7 +769,6 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setIndTexOrder(this.indStageId + 1, getTexCoordID(texCoord3), getTexMapID(texMap1));
         this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
 
-
         const stage1 = this.genTevStage();
         this.mb.setTevIndirect(stage1.id, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
@@ -831,23 +800,27 @@ class StandardMaterial implements SFAMaterial {
     private addTevStagesForNonLava() {
         if (this.shader.layers.length === 2 && (this.shader.layers[1].tevMode & 0x7f) === 9) {
             const texMap0 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+            const texCoord0 = this.genScrollableTexCoord(texMap0, this.shader.layers[0].scrollingTexMtx);
             const texMap1 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
+            const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
 
-            this.addTevStageForTextureWithWhiteKonst(0, texMap0, undefined, this.shader.layers[0].scrollingTexMtx);
+            this.addTevStageForTextureWithWhiteKonst(0, texMap0, texCoord0);
             if (this.shader.flags & ShaderFlags.Reflective) {
                 this.addTevStagesForReflectiveFloor();
             }
-            this.addTevStagesForTextureWithMode(9, texMap1, this.shader.layers[1].scrollingTexMtx);
+            this.addTevStagesForTextureWithMode(9, texMap1, texCoord1);
             this.addTevStageForMultVtxColor();
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
-                const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
-
                 const layer = this.shader.layers[i];
+
+                const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
+                const texCoord = this.genScrollableTexCoord(texMap, layer.scrollingTexMtx);
+
                 if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-                    this.addTevStagesForIndoorOutdoorBlend(texMap, layer.scrollingTexMtx);
+                    this.addTevStagesForIndoorOutdoorBlend(texMap, texCoord);
                 } else {
-                    this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, texMap, layer.scrollingTexMtx);
+                    this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, texMap, texCoord);
                 }
             }
 

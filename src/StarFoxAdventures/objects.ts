@@ -75,10 +75,10 @@ export class ObjectInstance {
         const ambienceParam = (objParams.getUint8(0x5) & 0x18) >>> 3;
         if (ambienceParam !== 0) {
             this.ambienceNum = ambienceParam - 1;
-            console.log(`ambience for ${this.objType.name} set by objparams: ${this.ambienceNum}`);
+            // console.log(`ambience for ${this.objType.name} set by objparams: ${this.ambienceNum}`);
         } else {
             this.ambienceNum = objType.ambienceNum;
-            console.log(`ambience for ${this.objType.name} set by objtype: ${this.ambienceNum}`);
+            // console.log(`ambience for ${this.objType.name} set by objtype: ${this.ambienceNum}`);
         }
         
         this.layerVals0x3 = objParams.getUint8(0x3);
