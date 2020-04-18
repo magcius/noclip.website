@@ -204,6 +204,14 @@ interface TevStage {
     id: number;
 }
 
+interface IndTexStage {
+    id: number;
+}
+
+function getIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
+    return GX.IndTexStageID.STAGE0 + indTexStage.id;
+}
+
 interface TexMap {
     id: number;
 }
@@ -252,7 +260,6 @@ class StandardMaterial implements SFAMaterial {
     public gxMaterial: GXMaterial;
     private mb: GXMaterialBuilder;
     private texMtx: TexMtxFunc[] = [];
-    private indStageId = GX.IndTexStageID.STAGE0;
     private ambColors: ColorFunc[] = [];
     private cprevIsValid = false;
     private aprevIsValid = false;
@@ -264,11 +271,11 @@ class StandardMaterial implements SFAMaterial {
     public rebuild() {
         this.mb = new GXMaterialBuilder();
         this.tevStageNum = 0;
+
         this.texMaps = [];
         this.texMtx = [];
         this.postTexMtxs = [];
         this.indTexMtxs = [];
-        this.indStageId = GX.IndTexStageID.STAGE0;
         this.texCoordNum = 0;
         this.texMaps = [];
         this.konstColors = [];
@@ -387,6 +394,14 @@ class StandardMaterial implements SFAMaterial {
     private genTevStage(): TevStage {
         const id = this.tevStageNum;
         this.tevStageNum++;
+        return { id };
+    }
+
+    private indTexStageNum = 0;
+
+    private genIndTexStage(): IndTexStage {
+        const id = this.indTexStageNum;
+        this.indTexStageNum++;
         return { id };
     }
 
@@ -643,8 +658,9 @@ class StandardMaterial implements SFAMaterial {
 
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx0));
         
-        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, getTexCoordID(texCoord1), getTexMapID(texMap1));
-        this.mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+        const indStage0 = this.genIndTexStage();
+        this.mb.setIndTexOrder(getIndTexStageID(indStage0), getTexCoordID(texCoord1), getTexMapID(texMap1));
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
 
         const stage0 = this.genTevStage();
         const stage1 = this.genTevStage();
@@ -653,9 +669,10 @@ class StandardMaterial implements SFAMaterial {
 
         const texCoord2 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx1));
 
-        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE1, getTexCoordID(texCoord2), getTexMapID(texMap1));
-        this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
-        this.mb.setTevIndirect(stage2.id, GX.IndTexStageID.STAGE1, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        const indStage1 = this.genIndTexStage();
+        this.mb.setIndTexOrder(getIndTexStageID(indStage1), getTexCoordID(texCoord2), getTexMapID(texMap1));
+        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
+        this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         // TODO: set and use tev kcolor
         this.mb.setTevKAlphaSel(stage0.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
@@ -676,8 +693,6 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setTevOrder(stage2.id, getTexCoordID(texCoord3), getTexMapID(texMap0), GX.RasColorChannelID.COLOR_ZERO);
         this.setTevColorFormula(stage2, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-
-        this.indStageId = 2;
     }
     
     private addTevStagesForCaustic() {
@@ -745,8 +760,9 @@ class StandardMaterial implements SFAMaterial {
             mat4.copy(dst, itm1);
         });
 
-        this.mb.setIndTexOrder(this.indStageId, getTexCoordID(texCoord2), getTexMapID(texMap1));
-        this.mb.setIndTexScale(this.indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
+        const indStage0 = this.genIndTexStage();
+        this.mb.setIndTexOrder(getIndTexStageID(indStage0), getTexCoordID(texCoord2), getTexMapID(texMap1));
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
 
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
@@ -764,13 +780,14 @@ class StandardMaterial implements SFAMaterial {
         const texCoord3 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx3));
 
         const stage0 = this.genTevStage();
-        this.mb.setTevIndirect(stage0.id, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage0.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
 
-        this.mb.setIndTexOrder(this.indStageId + 1, getTexCoordID(texCoord3), getTexMapID(texMap1));
-        this.mb.setIndTexScale(this.indStageId + 1, GX.IndTexScale._1, GX.IndTexScale._1);
+        const indStage1 = this.genIndTexStage();
+        this.mb.setIndTexOrder(getIndTexStageID(indStage1), getTexCoordID(texCoord3), getTexMapID(texMap1));
+        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
 
         const stage1 = this.genTevStage();
-        this.mb.setTevIndirect(stage1.id, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.T, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         this.mb.setTevOrder(stage0.id, getTexCoordID(texCoord0), getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
@@ -780,8 +797,6 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setTevOrder(stage1.id, getTexCoordID(texCoord1), getTexMapID(texMap0), GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.RASA, GX.CC.TEXA, GX.CC.CPREV);
         this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
-
-        this.indStageId += 2;
     }
 
     private addTevStagesForReflectiveFloor() {
