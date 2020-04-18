@@ -166,20 +166,34 @@ interface MaterialAnimationTrackKeyframe {
     rotation: AnimationTrackComponent;
 }
 
-const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale = mat4.create();
+const trans = mat4.create(), rot = mat4.create(), scale = mat4.create();
 
-const _t = vec3.create();
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, centerS: number, centerT: number): void {
-    function t(x: number, y: number, z: number = 0): vec3 { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
-    mat4.fromTranslation(dst, t(0.5 * centerS * scaleS, (0.5 * centerT - 1.0) * scaleT, 0.0));
-    mat4.fromZRotation(rot, MathConstants.DEG_TO_RAD * -rotation);
-    mat4.fromTranslation(trans1, t(-0.5 * centerS * scaleS, -(0.5 * centerT - 1.0) * scaleT, 0.0));
+    const theta = MathConstants.DEG_TO_RAD * -rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    dst[12] = scaleS * (0.5 * centerS);
+    dst[13] = scaleT * (0.5 * centerT - 1.0);
+
+    rot[0]  =  cosR;
+    rot[4]  = -sinR;
+
+    rot[1]  =  sinR;
+    rot[5]  =  cosR;
+
+    trans[12] = scaleS * -(0.5 * centerS);
+    trans[13] = scaleT * -(0.5 * centerT - 1.0);
+
+    scale[0] = scaleS;
+    scale[5] = scaleT;
+
     mat4.mul(rot, rot, dst);
-    mat4.mul(rot, trans1, rot);
-    mat4.fromScaling(scale, t(scaleS, scaleT, 1.0));
-    mat4.fromTranslation(trans2, t(translationS, -translationT, 0.0));
+    mat4.mul(rot, trans, rot);
     mat4.mul(dst, scale, rot);
-    mat4.mul(dst, trans2, dst);
+
+    dst[12] += translationS;
+    dst[13] += -translationT;
 }
 
 export function parse(buffer: ArrayBufferSlice): TTYDWorld {
