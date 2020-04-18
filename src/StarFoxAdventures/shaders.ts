@@ -200,6 +200,18 @@ interface ScrollingTexMtx {
 
 const MAX_SCROLL = 0x100000;
 
+interface PostTexMtx {
+    id: number;
+}
+
+function getPostTexGenMatrix(postTexMtx: PostTexMtx): GX.PostTexGenMatrix {
+    return GX.PostTexGenMatrix.PTTEXMTX0 + 3 * postTexMtx.id;
+}
+
+interface IndTexMtx {
+    id: number;
+}
+
 interface KonstColor {
     id: number;
 }
@@ -213,15 +225,11 @@ class StandardMaterial implements SFAMaterial {
     public textures: SFAMaterialTexture[] = [];
     private mb: GXMaterialBuilder;
     private texMtx: TexMtxFunc[] = [];
-    private postTexMtx: TexMtxFunc[] = [];
-    private indTexMtx: TexMtxFunc[] = [];
     private tevStage = 0;
     private indStageId = GX.IndTexStageID.STAGE0;
     private texcoordId = GX.TexCoordID.TEXCOORD0;
     private texmapId = GX.TexMapID.TEXMAP0;
     private texGenSrc = GX.TexGenSrc.TEX0;
-    private postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
-    private postTexMtxNum = 0;
     private ambColors: ColorFunc[] = [];
     private cprevIsValid = false;
     private aprevIsValid = false;
@@ -234,15 +242,13 @@ class StandardMaterial implements SFAMaterial {
         this.mb = new GXMaterialBuilder('Standard');
         this.textures = [];
         this.texMtx = [];
-        this.postTexMtx = [];
-        this.indTexMtx = [];
+        this.postTexMtxs = [];
+        this.indTexMtxs = [];
         this.tevStage = 0;
         this.indStageId = GX.IndTexStageID.STAGE0;
         this.texcoordId = GX.TexCoordID.TEXCOORD0;
         this.texmapId = GX.TexMapID.TEXMAP0;
         this.texGenSrc = GX.TexGenSrc.TEX0;
-        this.postTexMtxId = GX.PostTexGenMatrix.PTTEXMTX0;
-        this.postTexMtxNum = 0;
         this.konstColors = [];
         this.cprevIsValid = false;
         this.aprevIsValid = false;
@@ -323,14 +329,14 @@ class StandardMaterial implements SFAMaterial {
         }
         
         for (let i = 0; i < 3; i++) {
-            if (this.indTexMtx[i] !== undefined) {
-                this.indTexMtx[i]!(params.u_IndTexMtx[i], viewState);
+            if (this.indTexMtxs[i] !== undefined) {
+                this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
             }
         }
 
         for (let i = 0; i < 20; i++) {
-            if (this.postTexMtx[i] !== undefined) {
-                this.postTexMtx[i]!(params.u_PostTexMtx[i], viewState);
+            if (this.postTexMtxs[i] !== undefined) {
+                this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
             }
         }
 
@@ -351,6 +357,22 @@ class StandardMaterial implements SFAMaterial {
         }
     }
 
+    private postTexMtxs: TexMtxFunc[] = [];
+
+    private genPostTexMtx(func: TexMtxFunc): PostTexMtx {
+        const id = this.postTexMtxs.length;
+        this.postTexMtxs.push(func);
+        return { id };
+    }
+
+    private indTexMtxs: TexMtxFunc[] = [];
+
+    private genIndTexMtx(func: TexMtxFunc): IndTexMtx {
+        const id = this.indTexMtxs.length;
+        this.indTexMtxs.push(func);
+        return { id };
+    }
+
     private konstColors: ColorFunc[] = [];
 
     private genKonstColor(func: ColorFunc): KonstColor {
@@ -362,14 +384,11 @@ class StandardMaterial implements SFAMaterial {
     private addTevStagesForIndoorOutdoorBlend(scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
-            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+            const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
-            };
+            });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
-
-            this.postTexMtxNum++;
-            this.postTexMtxId += 3;
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
         } else {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
@@ -412,14 +431,11 @@ class StandardMaterial implements SFAMaterial {
     private addTevStagesForTextureWithMode(mode: number, scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
-            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+            const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
-            };
+            });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
-            
-            this.postTexMtxNum++;
-            this.postTexMtxId += 3;
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
         } else {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
@@ -462,14 +478,11 @@ class StandardMaterial implements SFAMaterial {
     private addTevStageForTextureWithWhiteKonst(colorInMode: number, kcolor?: boolean, scrollingTexMtx?: number) {
         if (scrollingTexMtx !== undefined) {
             const scroll = this.factory.scrollingTexMtxs[scrollingTexMtx];
-            this.postTexMtx[this.postTexMtxNum] = (dst: mat4) => {
+            const postTexMtx = this.genPostTexMtx((dst: mat4) => {
                 mat4.fromTranslation(dst, [scroll.x / MAX_SCROLL, scroll.y / MAX_SCROLL, 0]);
-            };
+            });
 
-            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, this.postTexMtxId);
-
-            this.postTexMtxNum++;
-            this.postTexMtxId += 3;
+            this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx));
         } else {
             this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX2x4, this.texGenSrc, GX.TexGenMatrix.IDENTITY);
         }
@@ -531,7 +544,7 @@ class StandardMaterial implements SFAMaterial {
     private addTevStagesForLava() {
         const warpParam = 1.0; // TODO: is this animated?
 
-        this.indTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+        const indTexMtx0 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.animController.envAnimValue1);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * viewState.animController.envAnimValue0);
@@ -543,9 +556,9 @@ class StandardMaterial implements SFAMaterial {
                 0.0, 0.0, 0.0, 1.0
             );
             mat4.copy(dst, itm0);
-        };
+        });
 
-        this.indTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+        const indTexMtx1 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.animController.envAnimValue0);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * -viewState.animController.envAnimValue1);
@@ -557,46 +570,48 @@ class StandardMaterial implements SFAMaterial {
                 0.0, 0.0, 0.0, 1.0
             );
             mat4.copy(dst, itm1);
-        };
+        });
 
         this.textures[2] = makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true));
         this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
 
         this.textures[0] = makeMaterialTexture(this.texFetcher.getTexture(this.device, 0x600, false));
 
-        const pttexmtx2 = mat4.create();
-        this.postTexMtx[2] = (dst: mat4) => { mat4.copy(dst, pttexmtx2); };
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX2);
-
-        this.textures[1] = this.factory.getWavyTexture();
-
         const pttexmtx0 = mat4.create();
         mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
-        this.postTexMtx[0] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx0 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, pttexmtx0);
             mat4SetValue(dst, 1, 3, 0.125 * viewState.animController.envAnimValue1);
-        };
-
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX0);
-        
-        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
-        this.mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
-
-        this.mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+        });
 
         const pttexmtx1 = mat4.create();
         mat4.fromScaling(pttexmtx1, [1.2, 1.2, 1.0]);
         const rot45deg = mat4.create();
         mat4.fromZRotation(rot45deg, Math.PI / 4);
         mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
-        this.postTexMtx[1] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx1 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, pttexmtx1);
             const v = 0.0625 * viewState.animController.envAnimValue0;
             mat4SetValue(dst, 0, 3, v);
             mat4SetValue(dst, 1, 3, v);
-        };
+        });
 
-        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTTEXMTX1);
+        const pttexmtx2 = mat4.create();
+        const postTexMtx2 = this.genPostTexMtx((dst: mat4) => {
+            mat4.copy(dst, pttexmtx2);
+        });
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx2));
+
+        this.textures[1] = this.factory.getWavyTexture();
+
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx0));
+        
+        this.mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1);
+        this.mb.setIndTexScale(GX.IndTexStageID.STAGE0, GX.IndTexScale._1, GX.IndTexScale._1);
+
+        this.mb.setTevIndirect(1, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
+
+        this.mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, getPostTexGenMatrix(postTexMtx1));
 
         this.mb.setIndTexOrder(GX.IndTexStageID.STAGE1, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP1);
         this.mb.setIndTexScale(GX.IndTexStageID.STAGE1, GX.IndTexScale._1, GX.IndTexScale._1);
@@ -649,12 +664,12 @@ class StandardMaterial implements SFAMaterial {
         );
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
-        this.postTexMtx[this.postTexMtxNum] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx0 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.mul(dst, pttexmtx0, viewState.invModelViewMtx);
             mat4.mul(dst, postRotate0, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-        };
-        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId);
+        });
+        this.mb.setTexCoordGen(this.texcoordId, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx0));
         
         const pttexmtx1 = mat4FromRowMajor(
             0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
@@ -664,12 +679,12 @@ class StandardMaterial implements SFAMaterial {
         );
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
-        this.postTexMtx[this.postTexMtxNum + 1] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx1 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.mul(dst, pttexmtx1, viewState.invModelViewMtx);
             mat4.mul(dst, postRotate1, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-        };
-        this.mb.setTexCoordGen(this.texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3);
+        });
+        this.mb.setTexCoordGen(this.texcoordId + 1, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx1));
         
         this.textures[this.texmapId] = this.factory.getCausticTexture();
 
@@ -679,7 +694,7 @@ class StandardMaterial implements SFAMaterial {
             0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 1.0
         );
-        this.indTexMtx[1] = (dst: mat4) => { mat4.copy(dst, itm1); };
+        this.indTexMtxs[1] = (dst: mat4) => { mat4.copy(dst, itm1); };
 
         this.mb.setIndTexOrder(this.indStageId, this.texcoordId + 2, this.texmapId + 1);
         this.mb.setIndTexScale(this.indStageId, GX.IndTexScale._1, GX.IndTexScale._1);
@@ -688,7 +703,7 @@ class StandardMaterial implements SFAMaterial {
         mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
         const postRotate2 = mat4.create();
         mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
-        this.postTexMtx[this.postTexMtxNum + 2] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx2 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             const pttexmtx2 = mat4FromRowMajor(
                 0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.animController.envAnimValue0,
                 0.0,  0.01, 0.0,  0.0,
@@ -699,8 +714,8 @@ class StandardMaterial implements SFAMaterial {
             mat4.mul(dst, pttexmtx2, viewState.invModelViewMtx);
             mat4.mul(dst, postRotate2, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-        };
-        this.mb.setTexCoordGen(this.texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3*2);
+        });
+        this.mb.setTexCoordGen(this.texcoordId + 2, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx2));
 
         this.mb.setTevIndirect(this.tevStage, this.indStageId, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
 
@@ -709,18 +724,18 @@ class StandardMaterial implements SFAMaterial {
 
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
-        this.postTexMtx[this.postTexMtxNum + 3] = (dst: mat4, viewState: ViewState) => {
+        const postTexMtx3 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             const pttexmtx3 = mat4FromRowMajor(
                 0.01, 0.0,  0.0,  0.01 * mapOriginX,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.animController.envAnimValue1,
                 0.0,  0.0,  0.0,  1.0
-            )
+            );
             mat4.mul(dst, pttexmtx3, viewState.invModelViewMtx);
             mat4.mul(dst, postRotate3, dst);
             mat4SetRow(dst, 2, 0.0, 0.0, 0.0, 1.0);
-        };
-        this.mb.setTexCoordGen(this.texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, this.postTexMtxId + 3*3);
+        });
+        this.mb.setTexCoordGen(this.texcoordId + 3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx3));
 
         this.mb.setTevIndirect(this.tevStage + 1, this.indStageId + 1, GX.IndTexFormat._8, GX.IndTexBiasSel.T, GX.IndTexMtxID._1, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
@@ -744,8 +759,6 @@ class StandardMaterial implements SFAMaterial {
         this.texcoordId += 4;
         this.texmapId += 2;
         this.tevStage += 2;
-        this.postTexMtxId += 3 * 4;
-        this.postTexMtxNum += 4;
     }
 
     private addTevStagesForReflectiveFloor() {
