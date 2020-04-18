@@ -22,9 +22,18 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 export interface TTYDWorld {
     information: Information;
     textureNameTable: string[];
+    fogData: FogData;
     rootNode: SceneGraphNode;
     materials: Material[];
     animations: AnimationEntry[];
+}
+
+export interface FogData {
+    enabled: boolean;
+    mode: number; // TODO(jstpierre): Fog modes
+    startZ: number;
+    endZ: number;
+    color: Color;
 }
 
 export interface Information {
@@ -143,8 +152,8 @@ interface MaterialAnimation {
 interface MaterialAnimationTrack {
     materialName: string;
     texGenIndex: number;
-    skewS: number;
-    skewT: number;
+    centerS: number;
+    centerT: number;
     frames: MaterialAnimationTrackKeyframe[];
 }
 
@@ -160,11 +169,11 @@ interface MaterialAnimationTrackKeyframe {
 const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale = mat4.create();
 
 const _t = vec3.create();
-function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
+function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, centerS: number, centerT: number): void {
     function t(x: number, y: number, z: number = 0): vec3 { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
-    mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
+    mat4.fromTranslation(dst, t(0.5 * centerS * scaleS, (0.5 * centerT - 1.0) * scaleT, 0.0));
     mat4.fromZRotation(rot, MathConstants.DEG_TO_RAD * -rotation);
-    mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));
+    mat4.fromTranslation(trans1, t(-0.5 * centerS * scaleS, -(0.5 * centerT - 1.0) * scaleT, 0.0));
     mat4.mul(rot, rot, dst);
     mat4.mul(rot, trans1, rot);
     mat4.fromScaling(scale, t(scaleS, scaleT, 1.0));
@@ -226,6 +235,21 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         textureNameTable[i] = textureName;
         textureTableIdx += 0x04;
     }
+    //#endregion
+
+    //#region fog_table
+    const fogEnabled = !!view.getUint32(fog_tableOffs + 0x00);
+    const fogMode = view.getUint32(fog_tableOffs + 0x04);
+    const fogStartZ = view.getFloat32(fog_tableOffs + 0x08);
+    const fogEndZ = view.getFloat32(fog_tableOffs + 0x0C);
+    const fogColor = colorNewFromRGBA8(view.getUint32(fog_tableOffs + 0x10));
+    const fogData: FogData = {
+        enabled: fogEnabled,
+        mode: fogMode,
+        startZ: fogStartZ,
+        endZ: fogEndZ,
+        color: fogColor,
+    };
     //#endregion
 
     //#region animation_table
@@ -321,8 +345,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 const materialNameOffs = mainDataOffs + view.getUint32(trackEntryIdx + 0x00);
                 const materialName = readString(buffer, materialNameOffs, 0x40, true);
                 const texGenIndex = view.getUint32(trackEntryIdx + 0x04);
-                const skewS = view.getFloat32(trackEntryIdx + 0x08);
-                const skewT = view.getFloat32(trackEntryIdx + 0x0C);
+                const centerS = view.getFloat32(trackEntryIdx + 0x08);
+                const centerT = view.getFloat32(trackEntryIdx + 0x0C);
                 const frameCount = view.getUint32(trackEntryIdx + 0x10);
                 trackEntryIdx += 0x14;
 
@@ -349,7 +373,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 }
 
                 materialTrackTableIdx += 0x04;
-                tracks.push({ materialName, texGenIndex, skewS, skewT, frames });
+                tracks.push({ materialName, texGenIndex, centerS, centerT, frames });
             }
 
             materialAnimation = { tracks };
@@ -435,10 +459,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const scaleS = view.getFloat32(xformTableIdx + 0x08);
             const scaleT = view.getFloat32(xformTableIdx + 0x0C);
             const rotation = view.getFloat32(xformTableIdx + 0x10);
-            const skewS = view.getFloat32(xformTableIdx + 0x14);
-            const skewT = view.getFloat32(xformTableIdx + 0x18);
+            const centerS = view.getFloat32(xformTableIdx + 0x14);
+            const centerT = view.getFloat32(xformTableIdx + 0x18);
             texMtx[backwardsIndex] = mat4.create();
-            calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
+            calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, centerS, centerT);
 
             samplerEntryTableIdx += 0x04;
             xformTableIdx += 0x1C;
@@ -996,7 +1020,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
-    return { information, textureNameTable, rootNode, materials, animations };
+    return { information, textureNameTable, fogData, rootNode, materials, animations };
 }
 
 export const enum LoopMode {
@@ -1120,14 +1144,14 @@ export class MaterialAnimator {
 
         const d = (k1.time - k0.time);
         let t = d > 0 ? (animFrame - k0.time) / d : 0;
-        const skewS = this.track.skewS;
-        const skewT = this.track.skewT;
+        const centerS = this.track.centerS;
+        const centerT = this.track.centerT;
         const scaleS = interpKeyframes(k0.scaleS, k1.scaleT, t, d);
         const scaleT = interpKeyframes(k0.scaleT, k1.scaleT, t, d);
         const rotation = interpKeyframes(k0.rotation, k1.rotation, t, d);
         const translationS = interpKeyframes(k0.translationS, k1.translationS, t, d);
         const translationT = interpKeyframes(k0.translationT, k1.translationT, t, d);
-        calcTexMtx(dst, translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
+        calcTexMtx(dst, translationS, translationT, scaleS, scaleT, rotation, centerS, centerT);
     }
 }
 
