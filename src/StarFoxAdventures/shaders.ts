@@ -255,39 +255,172 @@ function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor.id;
 }
 
-class StandardMaterial implements SFAMaterial {
+class MaterialBase {
+    protected mb: GXMaterialBuilder;
+    protected texMtx: TexMtxFunc[] = [];
+    protected ambColors: ColorFunc[] = [];
+
+    private tevStageNum: number;
+    private indTexStageNum: number;
+    private texMaps: SFAMaterialTexture[];
+    private texCoordNum: number;
+    private postTexMtxs: TexMtxFunc[];
+    private indTexMtxs: TexMtxFunc[];
+    private konstColors: ColorFunc[];
+
+    constructor(private name: string | null = null) {
+        this.reset();
+    }
+
+    protected reset() {
+        this.mb = new GXMaterialBuilder(this.name);
+        this.texMtx = [];
+        this.ambColors = [];
+        this.tevStageNum = 0;
+        this.indTexStageNum = 0;
+        this.texMaps = [];
+        this.texCoordNum = 0;
+        this.postTexMtxs = [];
+        this.indTexMtxs = [];
+        this.konstColors = [];
+    }
+    
+    protected genTevStage(): TevStage {
+        const id = this.tevStageNum;
+        if (id >= 8) {
+            throw Error(`Too many TEV stages`);
+        }
+        this.tevStageNum++;
+        return { id };
+    }
+
+    protected genIndTexStage(): IndTexStage {
+        const id = this.indTexStageNum;
+        if (id >= 4) {
+            throw Error(`Too many indirect texture stages`);
+        }
+        this.indTexStageNum++;
+        return { id };
+    }
+
+    protected genTexMap(texture: SFAMaterialTexture) {
+        const id = this.texMaps.length;
+        if (id >= 8) {
+            throw Error(`Too many texture maps`);
+        }
+        this.texMaps.push(texture);
+        return { id };
+    }
+
+    protected genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
+        const texCoord = { id: this.texCoordNum };
+        if (texCoord.id >= 8) {
+            throw Error(`Too many texture coordinates`);
+        }
+        this.texCoordNum++;
+        this.mb.setTexCoordGen(getTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
+        return texCoord;
+    }
+
+    protected genPostTexMtx(func: TexMtxFunc): PostTexMtx {
+        const id = this.postTexMtxs.length;
+        if (id >= 20) {
+            throw Error(`Too many post-transform texture matrices`);
+        }
+        this.postTexMtxs.push(func);
+        return { id };
+    }
+
+    protected genIndTexMtx(func: TexMtxFunc): IndTexMtx {
+        const id = this.indTexMtxs.length;
+        if (id >= 3) {
+            throw Error(`Too many indirect texture matrices`);
+        }
+        this.indTexMtxs.push(func);
+        return { id };
+    }
+
+    protected genKonstColor(func: ColorFunc): KonstColor {
+        const id = this.konstColors.length;
+        if (id >= 4) {
+            throw Error(`Too many konst colors`);
+        }
+        this.konstColors.push(func);
+        return { id };
+    }
+
+    protected setTevOrder(stage: TevStage, texCoord: TexCoord | null = null, texMap: TexMap | null = null, channelId: GX.RasColorChannelID = GX.RasColorChannelID.COLOR_ZERO) {
+        this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap), channelId);
+    }
+
+    protected setTevColorFormula(stage: TevStage, a: GX.CC, b: GX.CC, c: GX.CC, d: GX.CC, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
+        this.mb.setTevColorIn(stage.id, a, b, c, d);
+        this.mb.setTevColorOp(stage.id, op, bias, scale, clamp, reg);
+    }
+    
+    protected setTevAlphaFormula(stage: TevStage, a: GX.CA, b: GX.CA, c: GX.CA, d: GX.CA, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
+        this.mb.setTevAlphaIn(stage.id, a, b, c, d);
+        this.mb.setTevAlphaOp(stage.id, op, bias, scale, clamp, reg);
+    }
+
+    protected setIndTexOrder(indTexStage: IndTexStage, texCoord: TexCoord | null = null, texMap: TexMap | null = null) {
+        this.mb.setIndTexOrder(getIndTexStageID(indTexStage), getTexCoordID(texCoord), getTexMapID(texMap));
+    }
+    
+    public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
+        for (let i = 0; i < 10; i++) {
+            if (this.texMtx[i] !== undefined) {
+                this.texMtx[i]!(params.u_TexMtx[i], viewState);
+            }
+        }
+        
+        for (let i = 0; i < 3; i++) {
+            if (this.indTexMtxs[i] !== undefined) {
+                this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
+            }
+        }
+
+        for (let i = 0; i < 20; i++) {
+            if (this.postTexMtxs[i] !== undefined) {
+                this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
+            }
+        }
+
+        for (let i = 0; i < 2; i++) {
+            if (this.ambColors[i] !== undefined) {
+                this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+
+        for (let i = 0; i < 4; i++) {
+            if (this.konstColors[i] !== undefined) {
+                this.konstColors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
+            } else {
+                colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
+            }
+        }
+    }
+    
+    public getTexture(num: number): SFAMaterialTexture {
+        return this.texMaps[num];
+    }
+}
+
+class StandardMaterial extends MaterialBase implements SFAMaterial {
     public gxMaterial: GXMaterial;
-    private mb: GXMaterialBuilder;
-    private texMtx: TexMtxFunc[] = [];
-    private ambColors: ColorFunc[] = [];
+
     private cprevIsValid = false;
     private aprevIsValid = false;
 
-    private tevStageNum = 0;
-    private indTexStageNum = 0;
-    private texMaps: SFAMaterialTexture[] = [];
-    private texCoordNum = 0;
-    private postTexMtxs: TexMtxFunc[] = [];
-    private indTexMtxs: TexMtxFunc[] = [];
-    private konstColors: ColorFunc[] = [];
-
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
+        super();
         this.rebuild();
     }
 
     public rebuild() {
-        this.mb = new GXMaterialBuilder();
-        this.tevStageNum = 0;
-
-        this.texMaps = [];
-        this.texMtx = [];
-        this.postTexMtxs = [];
-        this.indTexMtxs = [];
-        this.texCoordNum = 0;
-        this.texMaps = [];
-        this.konstColors = [];
-        this.cprevIsValid = false;
-        this.aprevIsValid = false;
+        this.reset();
         
         if (!this.isMapBlock) {
             // Not a map block. Just do basic texturing.
@@ -354,128 +487,6 @@ class StandardMaterial implements SFAMaterial {
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
 
         this.gxMaterial = this.mb.finish();
-    }
-
-    public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
-        for (let i = 0; i < 10; i++) {
-            if (this.texMtx[i] !== undefined) {
-                this.texMtx[i]!(params.u_TexMtx[i], viewState);
-            }
-        }
-        
-        for (let i = 0; i < 3; i++) {
-            if (this.indTexMtxs[i] !== undefined) {
-                this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
-            }
-        }
-
-        for (let i = 0; i < 20; i++) {
-            if (this.postTexMtxs[i] !== undefined) {
-                this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
-            }
-        }
-
-        for (let i = 0; i < 2; i++) {
-            if (this.ambColors[i] !== undefined) {
-                this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], viewState);
-            } else {
-                colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
-            }
-        }
-
-        for (let i = 0; i < 4; i++) {
-            if (this.konstColors[i] !== undefined) {
-                this.konstColors[i]!(params.u_Color[ColorKind.K0 + i], viewState);
-            } else {
-                colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
-            }
-        }
-    }
-
-    public getTexture(num: number): SFAMaterialTexture {
-        return this.texMaps[num];
-    }
-
-    private genTevStage(): TevStage {
-        const id = this.tevStageNum;
-        if (id >= 8) {
-            throw Error(`Too many TEV stages`);
-        }
-        this.tevStageNum++;
-        return { id };
-    }
-
-    private genIndTexStage(): IndTexStage {
-        const id = this.indTexStageNum;
-        if (id >= 4) {
-            throw Error(`Too many indirect texture stages`);
-        }
-        this.indTexStageNum++;
-        return { id };
-    }
-
-    private genTexMap(texture: SFAMaterialTexture) {
-        const id = this.texMaps.length;
-        if (id >= 8) {
-            throw Error(`Too many texture maps`);
-        }
-        this.texMaps.push(texture);
-        return { id };
-    }
-
-    private genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
-        const texCoord = { id: this.texCoordNum };
-        if (texCoord.id >= 8) {
-            throw Error(`Too many texture coordinates`);
-        }
-        this.texCoordNum++;
-        this.mb.setTexCoordGen(getTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
-        return texCoord;
-    }
-
-    private genPostTexMtx(func: TexMtxFunc): PostTexMtx {
-        const id = this.postTexMtxs.length;
-        if (id >= 20) {
-            throw Error(`Too many post-transform texture matrices`);
-        }
-        this.postTexMtxs.push(func);
-        return { id };
-    }
-
-    private genIndTexMtx(func: TexMtxFunc): IndTexMtx {
-        const id = this.indTexMtxs.length;
-        if (id >= 3) {
-            throw Error(`Too many indirect texture matrices`);
-        }
-        this.indTexMtxs.push(func);
-        return { id };
-    }
-
-    private genKonstColor(func: ColorFunc): KonstColor {
-        const id = this.konstColors.length;
-        if (id >= 4) {
-            throw Error(`Too many konst colors`);
-        }
-        this.konstColors.push(func);
-        return { id };
-    }
-
-    private setTevOrder(stage: TevStage, texCoord: TexCoord | null = null, texMap: TexMap | null = null, channelId: GX.RasColorChannelID = GX.RasColorChannelID.COLOR_ZERO) {
-        this.mb.setTevOrder(stage.id, getTexCoordID(texCoord), getTexMapID(texMap), channelId);
-    }
-
-    private setTevColorFormula(stage: TevStage, a: GX.CC, b: GX.CC, c: GX.CC, d: GX.CC, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
-        this.mb.setTevColorIn(stage.id, a, b, c, d);
-        this.mb.setTevColorOp(stage.id, op, bias, scale, clamp, reg);
-    }
-    
-    private setTevAlphaFormula(stage: TevStage, a: GX.CA, b: GX.CA, c: GX.CA, d: GX.CA, op: GX.TevOp = GX.TevOp.ADD, bias: GX.TevBias = GX.TevBias.ZERO, scale: GX.TevScale = GX.TevScale.SCALE_1, clamp: boolean = true, reg: GX.Register = GX.Register.PREV) {
-        this.mb.setTevAlphaIn(stage.id, a, b, c, d);
-        this.mb.setTevAlphaOp(stage.id, op, bias, scale, clamp, reg);
-    }
-
-    private setIndTexOrder(indTexStage: IndTexStage, texCoord: TexCoord | null = null, texMap: TexMap | null = null) {
-        this.mb.setIndTexOrder(getIndTexStageID(indTexStage), getTexCoordID(texCoord), getTexMapID(texMap));
     }
 
     private genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {
