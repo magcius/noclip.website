@@ -1457,11 +1457,41 @@ function tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder: SceneObjHolder,
     // tryTalkNearPlayer(actor);
 }
 
+class RemovableTurtle {
+    public partsModel: PartsModel;
+    // public jetTurtle: JetTurtle;
+
+    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, isShiny: boolean) {
+        if (isShiny) {
+            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'KouraShiny', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+        } else {
+            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'Koura', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+        }
+
+        // this.partsModel.isAttached = true;
+        this.partsModel.initFixedPositionRelative(vec3.set(scratchVec3, -5.85, -68.0, 30.0));
+        this.partsModel.makeActorDead(sceneObjHolder);
+    }
+
+    public tryAttach(sceneObjHolder: SceneObjHolder): void {
+        if (isDead(this.partsModel))
+            this.partsModel.makeActorAppeared(sceneObjHolder);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, isShiny: boolean): void {
+        if (isShiny)
+            sceneObjHolder.modelCache.requestObjectData('KouraShiny');
+        else
+            sceneObjHolder.modelCache.requestObjectData('Koura');
+    }
+}
+
 const enum PenguinNrv { Wait, Dive }
 
 export class Penguin extends NPCActor<PenguinNrv> {
     private arg0: number;
     private diveCounter: number = 0;
+    private removableTurtle: RemovableTurtle | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1481,6 +1511,11 @@ export class Penguin extends NPCActor<PenguinNrv> {
         }
 
         this.arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+        if (this.arg0 === 4) {
+            this.removableTurtle = new RemovableTurtle(sceneObjHolder, this, false);
+            this.removableTurtle.tryAttach(sceneObjHolder);
+        }
+
         if (this.arg0 === 0) {
             this.waitAction = `SitDown`;
         } else if (this.arg0 === 1) {
@@ -1541,6 +1576,14 @@ export class Penguin extends NPCActor<PenguinNrv> {
                 this.setNerve(PenguinNrv.Wait);
             }
         }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+
+        const arg0 = getJMapInfoArg0(infoIter);
+        if (arg0 === 4)
+            RemovableTurtle.requestArchives(sceneObjHolder, false);
     }
 }
 
