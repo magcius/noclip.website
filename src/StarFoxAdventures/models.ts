@@ -22,7 +22,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextureFetcher } from './textures';
-import { colorNewFromRGBA, Color, White, colorCopy } from '../Color';
+import { colorNewFromRGBA } from '../Color';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -154,8 +154,8 @@ export class Shape {
     }
 
     private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.gxMaterial) {
-            this.gxMaterial = this.material.gxMaterial;
+        if (this.gxMaterial !== this.material.getGXMaterial()) {
+            this.gxMaterial = this.material.getGXMaterial();
             this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
         }
     }
@@ -207,7 +207,8 @@ export class Shape {
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
 
         for (let i = 0; i < 8; i++) {
-            const tex = this.material.textures[i];
+            const tex = this.material.getTexture(i);
+            
             if (tex === undefined || tex === null) {
                 this.materialParams.m_TextureMapping[i].reset();
             } else if (tex.kind === 'fb-color-downscaled-8x' || tex.kind === 'fb-color-downscaled-2x') {
@@ -1402,51 +1403,117 @@ export class ModelInstance implements BlockRenderer {
     }
 }
 
-export class ModelCollection {
-    private modelsTab: DataView;
-    private modelsBin: ArrayBufferSlice;
+class ModelsFile {
+    private tab: DataView;
+    private bin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    private constructor(private texFetcher: TextureFetcher, private animController: SFAAnimationController, private gameInfo: GameInfo, private modelVersion: ModelVersion) {
+    private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelCollection> {
-        const self = new ModelCollection(texFetcher, animController, gameInfo, modelVersion);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, device: GfxDevice, materialFactory: MaterialFactory, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion): Promise<ModelsFile> {
+        const self = new ModelsFile(device, materialFactory, texFetcher, animController, modelVersion);
 
-        const pathBase = self.gameInfo.pathBase;
-        const [modelsTab, modelsBin] = await Promise.all([
+        const pathBase = gameInfo.pathBase;
+        const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
         ]);
-        self.modelsTab = modelsTab.createDataView();
-        self.modelsBin = modelsBin;
+        self.tab = tab.createDataView();
+        self.bin = bin;
 
         return self;
     }
 
-    public getNumModels() {
-        return (this.modelsTab.byteLength / 4)|0;
+    public hasModel(num: number): boolean {
+        if (num < 0 || num * 4 >= this.tab.byteLength) {
+            return false;
+        }
+
+        return this.tab.getUint32(num * 4) !== 0;
     }
 
-    public loadModel(device: GfxDevice, materialFactory: MaterialFactory, num: number): Model {
+    public getNumModels(): number {
+        return (this.tab.byteLength / 4)|0;
+    }
+
+    public getModel(num: number): Model {
         if (this.models[num] === undefined) {
             console.log(`Loading model #${num} ...`);
     
-            const modelTabValue = this.modelsTab.getUint32(num * 4);
+            const modelTabValue = this.tab.getUint32(num * 4);
             if (modelTabValue === 0) {
                 throw Error(`Model #${num} not found`);
             }
     
             const modelOffs = modelTabValue & 0xffffff;
-            const modelData = loadRes(this.modelsBin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(device, materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
+            const modelData = loadRes(this.bin.subarray(modelOffs + 0x24));
+            this.models[num] = new Model(this.device, this.materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
         }
 
         return this.models[num];
     }
+}
 
-    public createModelInstance(device: GfxDevice, materialFactory: MaterialFactory, num: number): ModelInstance {
-        const model = this.loadModel(device, materialFactory, num);
+export class ModelFetcher {
+    private files: {[subdir: string]: ModelsFile} = {};
+
+    private constructor(private device: GfxDevice, private gameInfo: GameInfo, private texFetcher: TextureFetcher, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
+    }
+
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: TextureFetcher, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
+        const self = new ModelFetcher(device, gameInfo, texFetcher, materialFactory, animController, modelVersion);
+
+        return self;
+    }
+
+    public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+        if (this.files[subdir] === undefined) {
+            this.files[subdir] = await ModelsFile.create(this.gameInfo, dataFetcher, subdir, this.device, this.materialFactory, this.texFetcher, this.animController, this.modelVersion);
+
+            // XXX: These maps require additional model files to be loaded
+            if (subdir === 'shipbattle') {
+                await this.loadSubdir('', dataFetcher);
+            } else if (subdir === 'shop') {
+                await this.loadSubdir('swaphol', dataFetcher);
+            }
+        }
+    }
+
+    public getNumModels() {
+        let result = 0;
+        for (let s in this.files) {
+            const file = this.files[s];
+            result = Math.max(result, file.getNumModels());
+        }
+        return result;
+    }
+
+    private getModelsFileWithModel(modelNum: number): ModelsFile | null {
+        for (let s in this.files) {
+            if (this.files[s].hasModel(modelNum)) {
+                return this.files[s];
+            }
+        }
+
+        return null;
+    }
+
+    public getModel(num: number): Model | null {
+        const file = this.getModelsFileWithModel(num);
+        if (file === null) {
+            console.warn(`Model ID ${num} was not found in any loaded subdirectories (${Object.keys(this.files)})`);
+            return null;
+        }
+
+        return file.getModel(num);
+    }
+
+    public createModelInstance(num: number): ModelInstance {
+        const model = this.getModel(num);
+        if (model === null) {
+            throw Error(`Model ${num} not found`);
+        }
         return new ModelInstance(model);
     }
 }

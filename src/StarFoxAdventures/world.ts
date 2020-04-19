@@ -70,7 +70,7 @@ export class World {
         self.animController = new SFAAnimationController();
         self.envfxMan = await EnvfxManager.create(self, dataFetcher);
         self.materialFactory = new MaterialFactory(device, self.envfxMan);
-        self.resColl = await ResourceCollection.create(gameInfo, dataFetcher, subdir, self.animController);
+        self.resColl = await ResourceCollection.create(device, gameInfo, dataFetcher, subdir, self.materialFactory, self.animController);
         self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
         self.objectMan = await ObjectManager.create(self, dataFetcher, false);
 
@@ -212,51 +212,52 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        this.beginPass(viewerInput, true);
-
-        const tex = this.world.envfxMan.getAtmosphereTexture()!;
-        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
-        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
-        materialParams.m_TextureMapping[0].width = tex.width;
-        materialParams.m_TextureMapping[0].height = tex.height;
-        materialParams.m_TextureMapping[0].lodBias = 0.0;
-        mat4.identity(materialParams.u_TexMtx[0]);
-
-        // Extract pitch
-        const cameraFwd = vec3.create();
-        getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
-        vec3.negate(cameraFwd, cameraFwd);
-        const camPitch = vecPitch(cameraFwd);
-        const camRoll = Math.PI / 2;
-
         // Draw atmosphere
-        // FIXME: This implementation is adapted from the game, but correctness is not verified.
-        // We should probably use a different technique, since this one works poorly in VR.
-        // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-        const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
-        const t0 = (pitchFactor + fovRollFactor) / tex.height;
-        const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
-        // TODO: Verify to make sure the sky isn't upside-down!
+        const tex = this.world.envfxMan.getAtmosphereTexture();
+        if (tex !== null && tex !== undefined) {
+            this.beginPass(viewerInput, true);
+            materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+            materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+            materialParams.m_TextureMapping[0].width = tex.width;
+            materialParams.m_TextureMapping[0].height = tex.height;
+            materialParams.m_TextureMapping[0].lodBias = 0.0;
+            mat4.identity(materialParams.u_TexMtx[0]);
 
-        this.ddraw.beginDraw();
-        this.ddraw.begin(GX.Command.DRAW_QUADS);
-        this.ddraw.position3f32(-1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.position3f32(-1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-        this.ddraw.position3f32(1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-        this.ddraw.position3f32(1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.end();
+            // Extract pitch
+            const cameraFwd = vec3.create();
+            getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
+            vec3.negate(cameraFwd, cameraFwd);
+            const camPitch = vecPitch(cameraFwd);
+            const camRoll = Math.PI / 2;
 
-        const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-        submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
+            // FIXME: This implementation is adapted from the game, but correctness is not verified.
+            // We should probably use a different technique, since this one works poorly in VR.
+            // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
+            const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+            const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
+            const t0 = (pitchFactor + fovRollFactor) / tex.height;
+            const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
+            // TODO: Verify to make sure the sky isn't upside-down!
 
-        this.ddraw.endAndUpload(device, renderInstManager);
-        
-        this.endPass(device);
+            this.ddraw.beginDraw();
+            this.ddraw.begin(GX.Command.DRAW_QUADS);
+            this.ddraw.position3f32(-1, -1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.ddraw.position3f32(-1, 1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.ddraw.position3f32(1, 1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.ddraw.position3f32(1, -1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.ddraw.end();
+
+            const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
+
+            this.ddraw.endAndUpload(device, renderInstManager);
+            
+            this.endPass(device);
+        }
         
         // Draw skyscape
         this.beginPass(viewerInput);
@@ -396,7 +397,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         }
 
         // Set default atmosphere: "InstallShield Blue"
-        world.envfxMan.loadEnvfx(0x3c);
+        // world.envfxMan.loadEnvfx(0x3c);
 
         const [romlistFile] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),

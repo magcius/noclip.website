@@ -283,6 +283,8 @@ export class SFATextureFetcher extends TextureFetcher {
                 await this.loadSubdir('volcano', dataFetcher);
             } else if (subdir === 'linkb' || subdir === 'linkf') {
                 await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'shipbattle') {
+                await this.loadSubdir('', dataFetcher);
             } else if (subdir === 'swapholbot' || subdir === 'shop') {
                 await this.loadSubdir('swaphol', dataFetcher);
             }

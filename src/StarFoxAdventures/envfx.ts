@@ -14,7 +14,7 @@ enum EnvfxType {
 }
 
 class Atmosphere {
-    public textures: (SFATexture | null)[] = [];
+    public textures: (SFATexture | null)[] = nArray(8, () => null);
     public outdoorAmbientColors: Color[] = nArray(8, () => colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
 }
 
