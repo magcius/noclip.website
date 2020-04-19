@@ -166,16 +166,34 @@ interface MaterialAnimationTrackKeyframe {
     rotation: AnimationTrackComponent;
 }
 
+const trans = mat4.create(), rot = mat4.create(), scale = mat4.create();
+
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, centerS: number, centerT: number): void {
-    assert(rotation === 0.0);
+    const theta = MathConstants.DEG_TO_RAD * -rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
 
-    mat4.identity(dst);
+    dst[12] = scaleS * (0.5 * centerS);
+    dst[13] = scaleT * (0.5 * centerT - 1.0);
 
-    dst[0] = scaleS;
-    dst[5] = scaleT;
+    rot[0]  =  cosR;
+    rot[4]  = -sinR;
 
-    dst[12] = translationS;
-    dst[13] = -translationT;
+    rot[1]  =  sinR;
+    rot[5]  =  cosR;
+
+    trans[12] = scaleS * -(0.5 * centerS);
+    trans[13] = scaleT * -(0.5 * centerT - 1.0);
+
+    scale[0] = scaleS;
+    scale[5] = scaleT;
+
+    mat4.mul(rot, rot, dst);
+    mat4.mul(rot, trans, rot);
+    mat4.mul(dst, scale, rot);
+
+    dst[12] += translationS;
+    dst[13] += -translationT;
 }
 
 export function parse(buffer: ArrayBufferSlice): TTYDWorld {
