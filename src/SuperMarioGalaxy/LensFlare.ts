@@ -9,14 +9,13 @@ import { JMapInfoIter, getJMapInfoArg0 } from "./JMapInfo";
 import { fallback } from "../util";
 import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { isFirstStep } from "./Spine";
-import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1 } from "../MathHelpers";
+import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
 import { divideByW } from "../Camera";
 import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { DepthStencilAttachment } from "../gfx/helpers/RenderTargetHelpers";
-import { compareDepthValues, reverseDepthForClearValue } from "../gfx/helpers/ReversedDepthHelpers";
+import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { getCamYdir } from "./MiscActor";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);
@@ -114,9 +113,6 @@ export class BrightObjBase {
     }
 
     private checkVisible(sceneObjHolder: SceneObjHolder, checkArg: BrightObjCheckArg, position: vec3, viewerInput: ViewerRenderInput): void {
-        const ctx = getDebugOverlayCanvas2D();
-        drawWorldSpacePoint(ctx, viewerInput.camera, position);
-
         project(scratchVec4, position, viewerInput);
         calcScreenPosition(scratchVec2, scratchVec4, viewerInput);
 
