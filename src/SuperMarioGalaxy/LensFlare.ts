@@ -317,6 +317,7 @@ class LensFlareRing extends LensFlareModel {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'LensFlare');
         this.fadeStep = 0.05;
+        vec3.set(this.scale, 0.135, 0.135, 0.135);
     }
 
     protected appearAnim(sceneObjHolder: SceneObjHolder): void {
