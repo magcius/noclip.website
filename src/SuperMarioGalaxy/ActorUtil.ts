@@ -32,6 +32,10 @@ export function connectToScene(sceneObjHolder: SceneObjHolder, nameObj: NameObj,
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, movementType, calcAnimType, drawBufferType, drawType);
 }
 
+export function connectToSceneAreaObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x0D, -1, -1, -1);
+}
+
 export function connectToSceneSun(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x24, 5, DrawBufferType.SUN, -1);
 }

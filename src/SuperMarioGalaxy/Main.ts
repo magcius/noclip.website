@@ -827,6 +827,7 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new WaterAreaMgr(sceneObjHolder));
         this.managers.push(new ImageEffectAreaMgr(sceneObjHolder));
         this.managers.push(new AreaObjMgr(sceneObjHolder, 'LensFlareArea'));
+        this.managers.push(new AreaObjMgr(sceneObjHolder, 'SwitchArea'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {

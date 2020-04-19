@@ -8140,8 +8140,6 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
                 if (this.group.objArray[i].waitStep > leader.waitStep)
                     leader = this.group.objArray[i];
 
-            console.log('leader check', this.group.objArray.length, leader);
-
             this.isLeader = (leader === this);
         }
     }
@@ -8212,5 +8210,33 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('FirePressure');
+    }
+}
+
+export class TimerSwitch extends LiveActor {
+    private timerArg: number;
+    private timer: number = -1;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'TimerSwitch');
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.timerArg = assertExists(getJMapInfoArg0(infoIter));
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter); // needStageSwitchWriteB
+        useStageSwitchWriteB(sceneObjHolder, this, infoIter); // needStageSwitchReadB
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.timer < 0 && isOnSwitchB(sceneObjHolder, this))
+            this.timer = this.timerArg;
+
+        if (this.timer > 0) {
+            this.timer -= getDeltaTimeFrames(viewerInput);
+            if (this.timer < 1.0) {
+                this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+                this.makeActorDead(sceneObjHolder);
+            }
+        }
     }
 }

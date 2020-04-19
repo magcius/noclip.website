@@ -8,6 +8,7 @@ import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
 import { vecKillElement } from "./ActorUtil";
 import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForLiveActor } from "./Switch";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx
@@ -59,6 +60,11 @@ class AreaFormCube implements AreaFormBase {
 
         if (type === AreaFormType.CubeGround)
             this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder): void {
+        const ctx = getDebugOverlayCanvas2D();
+        drawWorldSpaceAABB(ctx, sceneObjHolder.viewerInput.camera, this.aabb, this.worldMatrix);
     }
 
     private calcWorldMtx(dst: mat4): void {
@@ -180,7 +186,7 @@ class AreaFormBowl implements AreaFormBase {
 export class AreaObj extends NameObj {
     private form: AreaFormBase;
     private aliveScenario: boolean = true;
-    private switchCtrl: StageSwitchCtrl;
+    protected switchCtrl: StageSwitchCtrl;
     public isValid: boolean = true;
     public isAwake: boolean = true;
 
