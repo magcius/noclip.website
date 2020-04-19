@@ -7924,8 +7924,8 @@ class Sun extends LiveActor {
 
 export class BrightSun extends LiveActor {
     private brightObj = new BrightObjBase();
-    private sun: Sun;
     private checkArg = new BrightObjCheckArg();
+    private sun: Sun;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, "BrightSun");
@@ -7974,5 +7974,27 @@ export class BrightSun extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         Sun.requestArchives(sceneObjHolder, infoIter);
+    }
+}
+
+export class BrightObj extends LiveActor {
+    private brightObj = new BrightObjBase();
+    private checkArg = new BrightObjCheckArg();
+    private radius: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.radius = fallback(getJMapInfoArg0(infoIter), 100.0);
+        connectToScene(sceneObjHolder, this, 0x21, -1, -1, DrawType.BRIGHT_SUN);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, this.radius, viewerInput);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
