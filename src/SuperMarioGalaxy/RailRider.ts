@@ -586,4 +586,18 @@ export class RailRider {
             */
         }
     }
+
+    public debugDrawRailLine(camera: Camera, nPoints: number = 100): void {
+        const totalLength = this.getTotalLength();
+        const speed = totalLength / nPoints;
+        const ctx = getDebugOverlayCanvas2D();
+
+        for (let i = 0; i < nPoints; i++) {
+            const coord0 = this.bezierRail.normalizePos((i - 1) * speed, 1);
+            const coord1 = this.bezierRail.normalizePos(i * speed, 1);
+            this.bezierRail.calcPos(scratchVec3b, coord0);
+            this.bezierRail.calcPos(scratchVec3c, coord1);
+            drawWorldSpaceLine(ctx, camera, scratchVec3b, scratchVec3c, Magenta, 1);
+        }
+    }
 }

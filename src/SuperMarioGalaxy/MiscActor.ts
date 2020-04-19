@@ -6,7 +6,7 @@ import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, creat
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
 import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White } from '../Color';
+import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Green, Yellow, OpaqueBlack, Red } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
@@ -36,7 +36,8 @@ import { isInWater } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround, Triangle } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
-import { BrightObjBase, BrightObjCheckArg, addBrightObj, calcScreenPosition } from './LensFlare';
+import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -3133,6 +3134,12 @@ export class FishGroup extends LiveActor {
 
 const enum SeaGullNrv { HoverFront, HoverLeft, HoverRight }
 
+function explerp(dst: vec3, target: vec3, k: number): void {
+    dst[0] += (target[0] - dst[0]) * k;
+    dst[1] += (target[1] - dst[1]) * k;
+    dst[2] += (target[2] - dst[2]) * k;
+}
+
 class SeaGull extends LiveActor<SeaGullNrv> {
     private direction: boolean;
     private updatePosCounter: number;
@@ -3177,7 +3184,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         this.initNerve(SeaGullNrv.HoverFront);
     }
 
-    private updateHover(): void {
+    private updateHover(deltaTimeFrames: number): void {
         if (Math.abs(this.bankRotation) > 0.01) {
             vec3.negate(this.upVec, this.gravityVector);
 
@@ -3186,7 +3193,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * this.bankRotation, this.axisZ);
             vec3.transformMat4(this.axisY, this.upVec, scratchMatrix);
 
-            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * -0.01 * this.bankRotation, this.upVec);
+            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * -0.01 * this.bankRotation * deltaTimeFrames, this.upVec);
             vec3.transformMat4(this.axisZ, this.axisZ, scratchMatrix);
         }
 
@@ -3213,6 +3220,29 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         }
     }
 
+    private debugDraw(viewerInput: Viewer.ViewerRenderInput): void {
+        const ctx = getDebugOverlayCanvas2D();
+
+        this.seaGullGroup.railRider!.debugDrawRailLine(viewerInput.camera, 50);
+
+        drawWorldSpaceBasis(ctx, viewerInput.camera, this.getBaseMtx()!);
+
+        for (let i = 0; i < this.seaGullGroup.points.length; i++) {
+            const p = this.seaGullGroup.points[i];
+            if (i === this.chasePointIndex)
+                drawWorldSpacePoint(ctx, viewerInput.camera, p, Green, 10);
+            else
+                drawWorldSpacePoint(ctx, viewerInput.camera, p, Yellow, 4);
+        }
+
+        if (this.getCurrentNerve() === SeaGullNrv.HoverFront)
+            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, OpaqueBlack, 10);
+        else if (this.getCurrentNerve() === SeaGullNrv.HoverRight)
+            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, Green, 10);
+        else if (this.getCurrentNerve() === SeaGullNrv.HoverLeft)
+            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, Red, 10);
+    }
+
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
@@ -3220,7 +3250,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(0, 60);
 
-            this.bankRotation *= 0.995 * deltaTimeFrames;
+            this.bankRotation *= Math.pow(0.995, deltaTimeFrames);
             if (isGreaterStep(this, this.hoverStep)) {
                 const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
                 vec3.subtract(scratchVec3, chasePoint, this.translation);
@@ -3251,10 +3281,48 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         }
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerRenderInput: Viewer.ViewerRenderInput): void {
-        super.control(sceneObjHolder, viewerRenderInput);
+    private dryBirdCam = false;
+    private cameraCenter = vec3.create();
+    private cameraEye = vec3.create();
+    private cameraK = 1/8;
+    private currentZoom = 1000;
+    private camera(k: number = this.cameraK): void {
+        // Camera hax
+        vec3.copy(scratchVec3a, this.axisZ);
+        vec3.set(scratchVec3b, 0, 1, 0);
 
-        this.updateHover();
+        // XZ plane
+        vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
+        // Jam the direction vector by this a ton to smooth out the Y axis.
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3c, 1);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        vec3.scaleAndAdd(scratchVec3a, this.translation, scratchVec3a, -this.currentZoom);
+        scratchVec3a[1] += 500;
+
+        explerp(this.cameraEye, scratchVec3a, k);
+        explerp(this.cameraCenter, this.translation, k);
+    }
+
+    private debug = false;
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.dryBirdCam) {
+            this.camera();
+
+            const camera = viewerInput.camera;
+            mat4.lookAt(camera.viewMatrix, this.cameraEye, this.cameraCenter, scratchVec3b);
+            mat4.invert(camera.worldMatrix, camera.viewMatrix);
+            camera.worldMatrixUpdated();
+        }
+
+        if (this.debug)
+            this.debugDraw(viewerInput);
+
+        super.control(sceneObjHolder, viewerInput);
+
+        this.updateHover(getDeltaTimeFrames(viewerInput));
+
+        vec3.scale(this.velocity, this.velocity, 0.99);
 
         if (vec3.squaredLength(this.velocity) > 10*10)
             normToLength(this.velocity, 10);
