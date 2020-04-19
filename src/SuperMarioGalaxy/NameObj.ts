@@ -1,5 +1,5 @@
 
-import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffer";
+import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
 import { GfxTexture, GfxDevice } from "../gfx/platform/GfxPlatform";
@@ -8,6 +8,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
+import { mat4 } from "gl-matrix";
 
 export const enum MovementType {
 }
@@ -117,7 +118,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
         // Default implementation; nothing.
     }
 
@@ -244,8 +245,18 @@ export class SceneNameObjListExecutor {
             const executeInfo = this.nameObjExecuteInfos[i];
             const nameObj = executeInfo.nameObj;
 
-            if (this.nameObjExecuteInfos[i].drawBufferType !== -1)
-                nameObj.calcViewAndEntry(sceneObjHolder, viewerInput);
+            if (this.nameObjExecuteInfos[i].drawBufferType !== -1) {
+                // HACK: Supply an ortho view matrix for 2D camera types.
+                // Need to find a better place to put this... executeDrawAll is a hack...
+
+                const group = this.drawBufferHolder.groups[this.nameObjExecuteInfos[i].drawBufferType];
+                if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_3D)
+                    nameObj.calcViewAndEntry(sceneObjHolder, viewerInput.camera, viewerInput.camera.viewMatrix);
+                else if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_2D)
+                    nameObj.calcViewAndEntry(sceneObjHolder, null, null);
+                else
+                    throw "whoops";
+            }
 
             if (this.nameObjExecuteInfos[i].drawType !== -1) {
                 // If this is an execute draw, then set up our filter key correctly...
@@ -257,8 +268,8 @@ export class SceneNameObjListExecutor {
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
-        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport);
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, cameraType: DrawCameraType): void {
+        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport, cameraType);
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {

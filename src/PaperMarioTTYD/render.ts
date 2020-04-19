@@ -319,7 +319,7 @@ class NodeInstance {
             if (depthBias !== 1.0) {
                 let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(ub_SceneParams);
-                fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+                fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
                 projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
                 sceneParams.u_Projection[10] *= depthBias;

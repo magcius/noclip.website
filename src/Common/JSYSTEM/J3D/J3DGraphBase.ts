@@ -8,7 +8,7 @@ import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
-import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
 import { TextureMapping } from '../../../TextureHolder';
 import AnimationController from '../../../AnimationController';
 import { nArray, assert, assertExists } from '../../../util';
@@ -39,7 +39,7 @@ export class ShapeInstanceState {
     public drawViewMatrixVisibility: boolean[] = [];
 
     // The camera's view matrix.
-    public worldToViewMatrix: mat4;
+    public worldToViewMatrix = mat4.create();
 }
 
 class ShapeData {
@@ -996,7 +996,6 @@ export class JointMatrixCalcNoAnm {
 export type JointMatrixCalcCallback = (dst: mat4, i: number, jnt1: Joint) => void;
 
 const bboxScratch = new AABB();
-const scratchViewMatrix = mat4.create();
 export class J3DModelInstance {
     public name: string = '';
     public visible: boolean = true;
@@ -1045,7 +1044,6 @@ export class J3DModelInstance {
         const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
-        this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1257,21 +1255,23 @@ export class J3DModelInstance {
         this.calcJointToWorld();
     }
 
-    public calcView(camera: Camera): void {
+    public calcView(camera: Camera | null, viewMatrix: mat4 | null): void {
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
         // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
         // render. In theory, we could cull billboards using the bounding sphere.
         const disableCulling = this.modelData.hasBillboard;
-        computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, camera);
+
+        if (viewMatrix !== null)
+            mat4.copy(this.shapeInstanceState.worldToViewMatrix, viewMatrix);
 
         const jnt1 = this.modelData.bmd.jnt1;
         for (let i = 0; i < this.modelData.bmd.jnt1.joints.length; i++) {
             const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[i];
 
             // TODO(jstpierre): Use shape visibility if the bbox is empty (?).
-            if (disableCulling || jnt1.joints[i].bbox.isEmpty()) {
+            if (camera === null || disableCulling || jnt1.joints[i].bbox.isEmpty()) {
                 this.jointVisibility[i] = true;
             } else {
                 // Frustum cull.
@@ -1484,7 +1484,7 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         this.calcAnim(viewerInput.camera);
-        this.calcView(viewerInput.camera);
+        this.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.isAnyShapeVisible())

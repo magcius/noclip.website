@@ -188,7 +188,7 @@ export class DrawBufferGroup {
 }
 
 export class DrawBufferHolder {
-    private groups: DrawBufferGroup[] = [];
+    public groups: DrawBufferGroup[] = [];
 
     constructor(table: DrawBufferInitialTableEntry[]) {
         for (let i = 0; i < table.length; i++) {
@@ -211,10 +211,12 @@ export class DrawBufferHolder {
         return this.groups[drawBufferType].tableEntry.LightType;
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, cameraType: DrawCameraType): void {
         for (let i = 0; i < this.groups.length; i++) {
             const group = this.groups[i];
             if (group === undefined)
+                continue;
+            if (group.tableEntry.DrawCameraType !== cameraType)
                 continue;
             this.drawOpa(device, renderInstManager, camera, viewport, i);
             this.drawXlu(device, renderInstManager, camera, viewport, i);

@@ -136,8 +136,8 @@ export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParam
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewportWidth: number, viewportHeight: number, useLODBias: boolean= true): void {
-    mat4.copy(sceneParams.u_Projection, camera.projectionMatrix);
+export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, useLODBias: boolean= true): void {
+    mat4.copy(sceneParams.u_Projection, projectionMatrix);
 
     if (useLODBias) {
         // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
@@ -513,13 +513,16 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8, },
 ];
 
-const sceneParams = new SceneParams();
-export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, useLODBias: boolean = true, sceneParamsScratch = sceneParams): void {
-    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight, useLODBias);
-
+export function fillSceneParamsOnTemplate(renderInst: GfxRenderInst, sceneParams: SceneParams): void {
     let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
     const d = renderInst.mapUniformBufferF32(ub_SceneParams);
-    fillSceneParamsData(d, offs, sceneParamsScratch);
+    fillSceneParamsData(d, offs, sceneParams);
+}
+
+const sceneParams = new SceneParams();
+export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, useLODBias: boolean = true, sceneParamsScratch = sceneParams): void {
+    fillSceneParams(sceneParamsScratch, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, useLODBias);
+    fillSceneParamsOnTemplate(renderInst, sceneParamsScratch);
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {

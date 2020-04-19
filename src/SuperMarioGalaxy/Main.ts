@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate, fillSceneParamsData, fillSceneParamsOnTemplate, SceneParams, fillSceneParams } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -42,6 +42,8 @@ import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
 import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
+import { LensFlareDirector, DrawSyncManager } from './LensFlare';
+import { DrawCameraType } from './DrawBuffer';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -67,6 +69,7 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
         return false;
 }
 
+const sceneParams = new SceneParams();
 export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
 
@@ -193,7 +196,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         this.sceneObjHolder.viewerInput = viewerInput;
 
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
@@ -201,16 +204,18 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         camera.setClipPlanes(100, 800000);
 
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.sceneObjHolder.drawSyncManager.beginFrame(device, this.mainRenderTarget.depthStencilAttachment);
+
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
 
-        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
         this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture!;
 
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
+        const template3D = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, true);
+        fillSceneParamsOnTemplate(template3D, sceneParams);
 
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
@@ -226,9 +231,21 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture!);
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
-        // Push to the renderinst.
-        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport);
+        // Draw our render insts.
         this.drawAllEffects(viewerInput);
+
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_3D);
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+
+        const template2D = this.renderHelper.pushTemplateRenderInst();
+        computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        fillSceneParamsOnTemplate(template2D, sceneParams);
+
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         // TODO(jstpierre): Make this generic to ImageEffectDirector.
         let bloomParameterBufferOffs = -1;
@@ -391,15 +408,26 @@ export class SMGRenderer implements Viewer.SceneGfx {
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
-            passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
+            passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template3D, bloomParameterBufferOffs);
         }
 
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
         this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
+        device.submitPass(passRenderer);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        // GameScene::draw2D()
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
+
+        // exceuteDrawList2DNormal()
+        this.drawOpa(passRenderer, DrawBufferType._3D_MODEL_FOR_2D);
+        this.drawXlu(passRenderer, DrawBufferType._3D_MODEL_FOR_2D);
+
+        device.submitPass(passRenderer);
+
+        this.sceneObjHolder.drawSyncManager.endFrame(device, this.mainRenderTarget.depthStencilAttachment);
+
         this.renderHelper.renderInstManager.resetRenderInsts();
-        return passRenderer;
+        return null;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -798,6 +826,7 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new LightAreaHolder(sceneObjHolder));
         this.managers.push(new WaterAreaMgr(sceneObjHolder));
         this.managers.push(new ImageEffectAreaMgr(sceneObjHolder));
+        this.managers.push(new AreaObjMgr(sceneObjHolder, 'LensFlareArea'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -823,6 +852,7 @@ export const enum SceneObj {
     AreaObjContainer        = 0x0D,
     ImageEffectSystemHolder = 0x1D,
     BloomEffect             = 0x1E,
+    LensFlareDirector       = 0x25,
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
@@ -856,6 +886,7 @@ export class SceneObjHolder {
     public areaObjContainer: AreaObjContainer | null = null;
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
+    public lensFlareDirector: LensFlareDirector | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -868,6 +899,9 @@ export class SceneObjHolder {
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
+
+    // Other singletons that are not SceneObjHolder.
+    public drawSyncManager = new DrawSyncManager();
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
@@ -896,6 +930,8 @@ export class SceneObjHolder {
             return this.imageEffectSystemHolder;
         else if (sceneObj === SceneObj.BloomEffect)
             return this.bloomEffect;
+        else if (sceneObj === SceneObj.LensFlareDirector)
+            return this.lensFlareDirector;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.PlanetGravityManager)
@@ -936,6 +972,8 @@ export class SceneObjHolder {
             this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
         else if (sceneObj === SceneObj.BloomEffect)
             this.bloomEffect = new BloomEffect(this);
+        else if (sceneObj === SceneObj.LensFlareDirector)
+            this.lensFlareDirector = new LensFlareDirector(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)

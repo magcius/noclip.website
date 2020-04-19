@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat } from "gl-matrix";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -152,6 +152,10 @@ export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolde
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x03, -1, -1, -1);
 }
 
+export function connectToScene3DModelFor2D(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x0E, 0x0D, DrawBufferType._3D_MODEL_FOR_2D, -1);
+}
+
 export function getJointMtx(actor: LiveActor, i: number): mat4 {
     return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray[i];
 }
@@ -174,6 +178,11 @@ export function isBckStopped(actor: LiveActor): boolean {
 export function getBckFrameMax(actor: LiveActor): number {
     const bckCtrl = actor.modelManager!.getBckCtrl();
     return bckCtrl.endFrame;
+}
+
+export function getBrkFrameMax(actor: LiveActor): number {
+    const brkCtrl = actor.modelManager!.getBrkCtrl();
+    return brkCtrl.endFrame;
 }
 
 // TODO(jstpierre): Remove.
@@ -351,6 +360,11 @@ export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
     const ctrl = actor.modelManager!.getBtkCtrl();
     ctrl.currentTimeInFrames = frame;
     ctrl.speedInFrames = 0.0;
+}
+
+export function setBrkRate(actor: LiveActor, rate: number): void {
+    const ctrl = actor.modelManager!.getBrkCtrl();
+    ctrl.speedInFrames = rate;
 }
 
 export function setBrkFrameAndStop(actor: LiveActor, frame: number): void {
@@ -1082,8 +1096,28 @@ export function isOnSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActo
     return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchAppear(sceneObjHolder);
 }
 
-export function getAreaObj(sceneObjHolder: SceneObjHolder, managerName: string, pos: vec3): AreaObj | null {
+export function getAreaObj<T extends AreaObj = AreaObj>(sceneObjHolder: SceneObjHolder, managerName: string, pos: vec3): T | null {
     if (sceneObjHolder.areaObjContainer === null)
         return null;
     return sceneObjHolder.areaObjContainer.getAreaObj(managerName, pos);
+}
+
+export function getCamPos(v: vec3, camera: Camera): void {
+    getMatrixTranslation(v, camera.worldMatrix);
+}
+
+export function getPlayerPos(v: vec3, sceneObjHolder: SceneObjHolder): void {
+    getMatrixTranslation(v, sceneObjHolder.viewerInput.camera.worldMatrix);
+}
+
+export function hideModel(actor: LiveActor): void {
+    actor.visibleModel = false;
+}
+
+export function showModel(actor: LiveActor): void {
+    actor.visibleModel = true;
+}
+
+export function isHiddenModel(actor: LiveActor): boolean {
+    return !actor.visibleModel;
 }

@@ -609,19 +609,22 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.modelManager.calcAnim(viewerInput);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
         if (this.modelInstance === null)
             return;
 
-        this.modelInstance.calcView(viewerInput.camera);
+        if (viewMatrix !== null)
+            this.modelInstance.calcView(camera, camera.viewMatrix);
+        else
+            this.modelInstance.calcView(null, null);
 
-        const visible = this.visibleModel && this.getActorVisible(viewerInput.camera);
+        const visible = this.visibleModel && this.getActorVisible(camera);
         this.modelInstance.visible = visible;
         if (!visible)
             return;
 
         if (this.actorLightCtrl !== null) {
-            this.actorLightCtrl.loadLight(this.modelInstance, viewerInput.camera);
+            this.actorLightCtrl.loadLight(this.modelInstance, camera);
         } else {
             // If we don't have an individualized actor light control, then load the default area light.
             // This is basically what DrawBufferExecuter::draw() and DrawBufferGroup::draw() effectively do.
@@ -645,7 +648,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 // it's loaded in either DrawBufferExecuter or DrawBufferGroup, which run before the material
                 // DL, so the actor will overwrite the ambient light. I'm quite sure this is a bug in the
                 // original game engine, honestly.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
+                lightInfo.setOnModelInstance(this.modelInstance, camera, false);
             }
         }
     }

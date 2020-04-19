@@ -12,8 +12,8 @@ import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
 import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj";
 import { NameObj } from "./NameObj";
-import { isHiddenModel } from "./MiscActor";
 import { lerp } from "../MathHelpers";
+import { isHiddenModel } from "./ActorUtil";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = fallback(infoIter.getValueNumber(`${prefix}R`), 0) / 0xFF;

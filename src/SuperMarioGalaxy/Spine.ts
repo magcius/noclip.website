@@ -67,6 +67,8 @@ export class Spine<Nerve extends number = number> {
     }
 
     public getCurrentNerve(): Nerve {
+        if (this.nextNerve !== null)
+            return this.nextNerve;
         return this.currentNerve;
     }
 }

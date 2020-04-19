@@ -2,11 +2,11 @@
 import { NameObj } from "./NameObj";
 import { OceanBowl } from "./OceanBowl";
 import { SceneObjHolder } from "./Main";
-import { connectToSceneScreenEffectMovement } from "./ActorUtil";
+import { connectToSceneScreenEffectMovement, getCamPos } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3 } from "gl-matrix";
-import { OceanRing, getCamPos, isEqualStageName } from "./MiscActor";
+import { OceanRing, isEqualStageName } from "./MiscActor";
 import { JMapInfoIter } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";

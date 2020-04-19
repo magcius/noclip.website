@@ -8,10 +8,10 @@ import { assert, readString, hexzero, nArray } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { vec3 } from "gl-matrix";
-import { CombineParams, TextureCache, decodeCombineParams } from "../Common/N64/RDP";
+import { CombineParams, decodeCombineParams } from "../Common/N64/RDP";
 import { loadVertexFromView } from "../Common/N64/RSP";
 import { TextFilt, TexCM } from "../Common/N64/Image";
-import { colorFromRGBA, Color, colorNewCopy, White } from "../Color";
+import { colorFromRGBA, colorNewCopy, White } from "../Color";
 
 const pathBase = `GoldenEye007`;
 

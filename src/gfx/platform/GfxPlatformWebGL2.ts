@@ -1943,6 +1943,8 @@ void main() {
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
         }
 
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
         this._resolveAttachmentsChanged = false;
     }
 

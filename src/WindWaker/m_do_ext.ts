@@ -98,7 +98,7 @@ export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelI
     }
 
     modelInstance.calcAnim(viewerInput.camera);
-    modelInstance.calcView(viewerInput.camera);
+    modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
     renderInstManager.setCurrentRenderInstList(drawListSet[0]);
     modelInstance.drawOpa(device, renderInstManager, viewerInput.camera, viewerInput.viewport);

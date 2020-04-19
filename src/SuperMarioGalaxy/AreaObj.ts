@@ -177,7 +177,7 @@ class AreaFormBowl implements AreaFormBase {
     }
 }
 
-export abstract class AreaObj extends NameObj {
+export class AreaObj extends NameObj {
     private form: AreaFormBase;
     private aliveScenario: boolean = true;
     private switchCtrl: StageSwitchCtrl;
@@ -205,12 +205,17 @@ export abstract class AreaObj extends NameObj {
             this.isValid = false;
         }
 
+        this.parseArgs(infoIter);
+
         sceneObjHolder.create(SceneObj.AreaObjContainer);
         const areaObjMgr = sceneObjHolder.areaObjContainer!.getManager(this.getManagerName());
         areaObjMgr.entry(this);
 
         // TODO(jstpierre): addSleepControl
-        addSleepControlForLiveActor
+        // addSleepControlForLiveActor
+    }
+
+    protected parseArgs(infoIter: JMapInfoIter): void {
     }
 
     public awake(sceneObjHolder: SceneObjHolder): void {
@@ -239,7 +244,9 @@ export abstract class AreaObj extends NameObj {
         return this.form.isInVolume(v);
     }
 
-    public abstract getManagerName(): string;
+    public getManagerName(): string {
+        return this.name;
+    }
 }
 
 export class AreaObjMgr<T extends AreaObj> extends NameObj {

@@ -12,6 +12,7 @@ import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGl
 import { SwitchSynchronizer } from './Switch';
 import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere } from './MiscMap';
 import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
+import { createLensFlareArea, requestLensFlareArchives } from './LensFlare';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -675,6 +676,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("BloomCylinder",                createBloomCylinder),
     E("BloomSphere",                  createBloomSphere),
 
+    E("LensFlareArea",                createLensFlareArea,  requestLensFlareArchives),
+
     N("WaterArea"),
     N("SwitchArea"),
     N("SwitchCube"),
@@ -722,7 +725,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("DepthOfFieldCube"),
     N("ShootingStarArea"),
     N("GlaringLightAreaCylinder"),
-    N("LensFlareArea"),
     N("BigBubbleCameraBox"),
     N("BigBubbleCameraCylinder"),
     N("BigBubbleMoveLimitterPlane"),
