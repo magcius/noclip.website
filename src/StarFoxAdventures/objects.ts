@@ -101,20 +101,30 @@ export class ObjectInstance {
             objClass === 234 ||
             objClass === 235 ||
             objClass === 238 ||
+            objClass === 248 ||
             objClass === 280 ||
             objClass === 283 ||
             objClass === 291 ||
             objClass === 304 ||
             objClass === 307 ||
+            objClass === 309 ||
             objClass === 312 ||
             objClass === 313 ||
             objClass === 316 ||
             objClass === 317 ||
             objClass === 319 ||
+            objClass === 320 ||
+            objClass === 321 ||
+            objClass === 332 ||
             objClass === 343 ||
             objClass === 344 ||
+            objClass === 373 ||
             objClass === 387 ||
             objClass === 389 ||
+            objClass === 416 ||
+            objClass === 418 ||
+            objClass === 419 ||
+            objClass === 420 ||
             objClass === 423 ||
             objClass === 424 ||
             objClass === 437 ||
@@ -126,10 +136,15 @@ export class ObjectInstance {
             objClass === 491 ||
             objClass === 492 ||
             objClass === 509 ||
+            objClass === 523 ||
             objClass === 533 ||
             objClass === 549 ||
             objClass === 576 ||
+            objClass === 616 ||
+            objClass === 622 ||
             objClass === 642 ||
+            objClass === 645 ||
+            objClass === 646 ||
             objClass === 666 ||
             objClass === 674 ||
             objClass === 691 ||
@@ -140,6 +155,12 @@ export class ObjectInstance {
         } else if (objClass === 207) {
             // e.g. CannonClawO
             this.yaw = angle16ToRads(objParams.getInt8(0x28) << 8);
+        } else if (objClass === 209) {
+            // e.g. TumbleWeedB
+            this.roll = angle16ToRads((objParams.getUint8(0x18) - 127) * 128);
+            this.pitch = angle16ToRads((objParams.getUint8(0x19) - 127) * 128);
+            this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+            this.scale = objParams.getFloat32(0x1c);
         } else if (objClass === 213) {
             // e.g. Kaldachom
             this.scale = 0.5 + objParams.getInt8(0x28) / 15;
@@ -175,7 +196,10 @@ export class ObjectInstance {
             }
         } else if (objClass === 251 ||
             objClass === 285 ||
+            objClass === 347 ||
+            objClass === 363 ||
             objClass === 393 ||
+            objClass === 427 ||
             objClass === 445 ||
             objClass === 451 ||
             objClass === 452 ||
@@ -194,17 +218,27 @@ export class ObjectInstance {
             objClass === 579 ||
             objClass === 597 ||
             objClass === 598 ||
+            objClass === 599 ||
             objClass === 609 ||
+            objClass === 614 ||
             objClass === 617 ||
+            objClass === 619 ||
+            (objClass === 620 && typeNum !== 0x86a && typeNum !== 0x86b) ||
+            objClass === 623 ||
+            objClass === 641 ||
             objClass === 643 ||
             objClass === 650 ||
+            objClass === 660 ||
             objClass === 671
         ) {
             // e.g. SC_Pressure
             this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
         } else if (objClass === 254) {
             // e.g. MagicPlant
-            this.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
+            this.yaw = angle16ToRads(objParams.getInt8(0x1d) << 8);
+        } else if (objClass === 255) {
+            // e.g. MagicDustMi
+            this.setModelNum(objParams.getInt8(0x26));
         } else if (objClass === 256 ||
             objClass === 391 ||
             objClass === 392 ||
@@ -221,6 +255,11 @@ export class ObjectInstance {
         ) {
             // e.g. WarpPoint, SmallBasket, LargeCrate
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+        } else if (objClass === 266) {
+            // e.g. Fall_Ladder
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            this.position[1] += objParams.getInt16(0x1a);
+            this.setModelNum(objParams.getInt8(0x19));
         } else if (objClass === 269) {
             // e.g. PortalSpell
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
@@ -237,6 +276,7 @@ export class ObjectInstance {
             }
         } else if (objClass === 274 ||
             objClass === 275 ||
+            objClass === 417 ||
             objClass === 447 ||
             objClass === 456 ||
             objClass === 472
@@ -262,8 +302,8 @@ export class ObjectInstance {
             this.pitch = angle16ToRads(objParams.getInt8(0x2d) << 8);
             // FIXME: mode 8 and 0x1a also have roll at 0x38
         } else if (objClass === 294 && typeNum === 77) {
-            this.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
-            this.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
+            this.yaw = angle16ToRads(objParams.getInt8(0x3d) << 8);
+            this.pitch = angle16ToRads(objParams.getInt8(0x3e) << 8);
         } else if (objClass === 296) {
             let objScale = objParams.getUint8(0x1c);
             if (objScale < 10) {
@@ -273,6 +313,12 @@ export class ObjectInstance {
             this.scale *= objScale;
             this.yaw = angle16ToRads((objParams.getUint8(0x1d) & 0x3f) << 10)
             // TODO: set model # and animation
+        } else if (objClass === 297) {
+            // e.g. CampFire
+            const scaleParam = objParams.getUint8(0x1a);
+            if (scaleParam !== 0) {
+                this.scale = 0.01 * scaleParam;
+            }
         } else if (objClass === 298 && [888, 889].includes(typeNum)) {
             // e.g. WM_krazoast
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
@@ -345,11 +391,20 @@ export class ObjectInstance {
                 objScale = 4 * scaleParam;
             }
             this.scale *= objScale / 90;
+        } else if (objClass === 330) {
+            // e.g. CFPowerBase
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            const modelParam = objParams.getInt16(0x1e);
+            if (modelParam === 0x55) {
+                this.setModelNum(2);
+            } else if (modelParam === 0x56) {
+                this.setModelNum(1);
+            }
         } else if (objClass === 346) {
             // e.g. SH_BombWall
-            this.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
-            this.pitch = objParams.getInt16(0x1c) * Math.PI / 32768;
-            this.roll = objParams.getInt16(0x1e) * Math.PI / 32768;
+            this.yaw = angle16ToRads(objParams.getInt16(0x1a));
+            this.pitch = angle16ToRads(objParams.getInt16(0x1c));
+            this.roll = angle16ToRads(objParams.getInt16(0x1e));
             let objScale = objParams.getInt8(0x2d);
             if (objScale === 0) {
                 objScale = 20;
@@ -400,6 +455,17 @@ export class ObjectInstance {
             this.world.envfxMan.loadEnvfx(0x23f);
             this.world.envfxMan.loadEnvfx(0x240);
             this.world.envfxMan.loadEnvfx(0x241);
+        } else if (objClass === 415) {
+            // e.g. NW_treebrid
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            this.pitch = angle16ToRads(objParams.getInt16(0x1a));
+            this.roll = angle16ToRads(objParams.getInt16(0x1c));
+        } else if (objClass === 421) {
+            // e.g. NW_levcontr
+            this.world.envfxMan.loadEnvfx(0xb4);
+            this.world.envfxMan.loadEnvfx(0xb5);
+            this.world.envfxMan.loadEnvfx(0xb6);
+            this.world.envfxMan.loadEnvfx(0xb7);
         } else if (objClass === 429) {
             // e.g. ThornTail
             this.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
@@ -488,6 +554,11 @@ export class ObjectInstance {
         ) {
             // e.g. MSPlantingS
             this.yaw = angle16ToRads(objParams.getUint8(0x1f) << 8);
+        } else if (objClass === 535 ||
+            objClass === 613
+        ) {
+            // e.g. DR_Creator
+            this.yaw = angle16ToRads(objParams.getInt8(0x1e) << 8);
         } else if (objClass === 627) {
             // e.g. FlameMuzzle
             const scaleParam = objParams.getInt16(0x1c);
@@ -497,12 +568,49 @@ export class ObjectInstance {
             this.roll = 0;
             this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
             this.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
+        } else if (objClass === 644) {
+            // e.g. SPMapDR
+            this.yaw = angle16ToRads(objParams.getUint8(0x1a) << 8);
+            this.pitch = angle16ToRads(objParams.getUint8(0x1b) << 8);
+            this.setModelNum(objParams.getInt8(0x18));
+        } else if (objClass === 648) {
+            // e.g. SPDrape
+            this.yaw = angle16ToRads(objParams.getInt8(0x18) << 8);
+            const scaleParam = objParams.getInt16(0x1a);
+            if (scaleParam !== 0) {
+                this.scale = 10 * scaleParam / 32767.0;
+            }
         } else if (objClass === 653) {
             // e.g. WCLevelCont
             this.world.envfxMan.loadEnvfx(0x1fb);
             this.world.envfxMan.loadEnvfx(0x1ff);
             this.world.envfxMan.loadEnvfx(0x1fc);
             this.world.envfxMan.loadEnvfx(0x1fd);
+        } else if (objClass === 656) {
+            // e.g. WCPushBlock
+            this.setModelNum(objParams.getInt8(0x19));
+        } else if (objClass === 657) {
+            // e.g. WCTile
+            this.position[1] += 25.0;
+            this.setModelNum(objParams.getInt8(0x19));
+        } else if (objClass === 659) {
+            // e.g. CFSunTemple
+            this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
+            this.pitch = angle16ToRads(objParams.getUint8(0x19) << 8);
+            this.roll = angle16ToRads(objParams.getUint8(0x1a) << 8);
+            this.setModelNum(objParams.getInt8(0x21));
+        } else if (objClass === 654 ||
+            objClass === 658 ||
+            objClass === 661 ||
+            objClass === 662 ||
+            objClass === 663
+        ) {
+            // e.g. WCTempleDia
+            this.yaw = angle16ToRads(objParams.getUint8(0x18) << 8);
+            this.setModelNum(objParams.getInt8(0x19));
+        } else if (objClass === 664) {
+            // e.g. WCFloorTile
+            this.yaw = angle16ToRads(-0x4000);
         } else if (objClass === 672) {
             // e.g. ARWGoldRing
             this.yaw = angle16ToRads(-0x8000);

@@ -22,8 +22,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextureFetcher } from './textures';
-import { colorNewFromRGBA, Color, White, colorCopy } from '../Color';
-import { torchSmokeConfig } from '../BanjoKazooie/particles';
+import { colorNewFromRGBA } from '../Color';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -1471,6 +1470,13 @@ export class ModelFetcher {
     public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
         if (this.files[subdir] === undefined) {
             this.files[subdir] = await ModelsFile.create(this.gameInfo, dataFetcher, subdir, this.device, this.materialFactory, this.texFetcher, this.animController, this.modelVersion);
+
+            // XXX: These maps require additional model files to be loaded
+            if (subdir === 'shipbattle') {
+                await this.loadSubdir('', dataFetcher);
+            } else if (subdir === 'shop') {
+                await this.loadSubdir('swaphol', dataFetcher);
+            }
         }
     }
 

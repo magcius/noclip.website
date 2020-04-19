@@ -8,7 +8,7 @@ import { SceneContext } from '../SceneBase';
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, getLocalTransformForPose, applyKeyframeToModel } from './animation';
 import { SFARenderer } from './render';
-import { ModelCollection, ModelInstance, ModelVersion, ModelViewState } from './models';
+import { ModelFetcher, ModelInstance, ModelVersion, ModelViewState } from './models';
 import { MaterialFactory } from './shaders';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink } from './util';
@@ -27,7 +27,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private displayBones: boolean = false;
 
-    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelColl: ModelCollection, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
         super(device, animController);
     }
 
@@ -106,7 +106,7 @@ class ModelExhibitRenderer extends SFARenderer {
                 this.modelAnimNum = 0;
                 this.modanim = this.modanimColl.getModanim(this.modelNum);
                 this.amap = this.amapColl.getAmap(this.modelNum);
-                this.modelInst = this.modelColl.createModelInstance(device, this.materialFactory, this.modelNum);
+                this.modelInst = this.modelFetcher.createModelInstance(this.modelNum);
                 console.log(`Loaded model ${this.modelNum}`);
                 console.log(`Model ${this.modelNum} has ${this.modelInst.model.joints.length} joints`);
             } catch (e) {
@@ -214,8 +214,9 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, this.modelVersion === ModelVersion.Beta);
         await texFetcher.loadSubdir(this.subdir, context.dataFetcher);
-        const modelColl = await ModelCollection.create(this.gameInfo, context.dataFetcher, this.subdir, texFetcher, animController, this.modelVersion);
+        const modelFetcher = await ModelFetcher.create(device, this.gameInfo, context.dataFetcher, texFetcher, materialFactory, animController, this.modelVersion);
+        await modelFetcher.loadSubdir(this.subdir, context.dataFetcher);
 
-        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelColl, animColl, amapColl, modanimColl);
+        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelFetcher, animColl, amapColl, modanimColl);
     }
 }
