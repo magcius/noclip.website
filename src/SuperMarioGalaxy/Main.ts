@@ -250,7 +250,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // TODO(jstpierre): Make this generic to ImageEffectDirector.
         let bloomParameterBufferOffs = -1;
         if (this.sceneObjHolder.imageEffectSystemHolder !== null && this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
-            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.sceneObjHolder.bloomEffect!);
+            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.uniformBuffer, this.sceneObjHolder.bloomEffect!);
         }
 
         // Now that we've completed our UBOs, upload.

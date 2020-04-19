@@ -20,6 +20,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
+import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 
 const scratchVec3 = vec3.create();
 
@@ -237,8 +238,7 @@ export class BloomPostFXRenderer {
         }), fullscreenMegaState));
     }
 
-    public allocateParameterBuffer(renderInstManager: GfxRenderInstManager, bloomEffect: BloomEffect): number {
-        const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+    public allocateParameterBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer, bloomEffect: BloomEffect): number {
         const parameterBufferOffs = uniformBuffer.allocateChunk(4);
         const d = uniformBuffer.mapBufferF32(parameterBufferOffs, 4);
 
