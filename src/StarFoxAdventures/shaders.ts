@@ -440,6 +440,9 @@ class StandardMaterial extends MaterialBase {
     }
 
     protected rebuildInternal() {
+        this.cprevIsValid = false;
+        this.aprevIsValid = false;
+        
         if (!this.isMapBlock) {
             // Not a map block. Just do basic texturing.
             this.mb.setUsePnMtxIdx(true);
