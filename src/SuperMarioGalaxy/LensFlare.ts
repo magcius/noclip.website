@@ -397,11 +397,11 @@ export class LensFlareDirector extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, "LensFlareDirector");
 
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+
         this.ring = new LensFlareRing(dynamicSpawnZoneAndLayer, sceneObjHolder);
         this.glow = new LensFlareGlow(dynamicSpawnZoneAndLayer, sceneObjHolder);
         this.line = new LensFlareLine(dynamicSpawnZoneAndLayer, sceneObjHolder);
-
-        connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
     public addBrightObj(brightObj: BrightObjBase): void {
