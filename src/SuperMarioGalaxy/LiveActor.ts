@@ -4,7 +4,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder, SceneObj } from "./Main";
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, ResourceHolder } from "./Main";
 import { GfxTexture } from "../gfx/platform/GfxPlatform";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
@@ -19,7 +19,7 @@ import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor } from "./ActorUtil";
+import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor, connectToScene } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
 import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
@@ -388,6 +388,8 @@ export interface ZoneAndLayer {
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
 
 export const enum MessageType {
+    FirePressureRadiate_StartWait            = 0x68,
+    FirePressureRadiate_StartSyncWait        = 0x69,
     TicoRail_StartTalk                       = 0xCE,
     MapPartsRailMover_TryRotate              = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
@@ -760,5 +762,102 @@ export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
 
     public registerActor(obj: T): void {
         this.registerObj(obj);
+    }
+}
+
+export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
+    private pendingMessageType: MessageType | null = null;
+    private pendingHitSensor: HitSensor | null = null;
+    private pendingSensorName: string | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder, public zoneId: number, public infoId: number, name: string, maxCount: number) {
+        super(sceneObjHolder, name, maxCount);
+        connectToScene(sceneObjHolder, this, 0x06, -1, -1, -1);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.pendingMessageType !== null) {
+            for (let i = 0; i < this.objArray.length; i++) {
+                const actor = this.objArray[i];
+                const sensor = actor.getSensor(this.pendingSensorName!);
+                actor.receiveMessage(sceneObjHolder, this.pendingMessageType, sensor, this.pendingHitSensor!);
+            }
+
+            this.pendingMessageType = null;
+            this.pendingHitSensor = null;
+            this.pendingSensorName = null;
+        }
+    }
+
+    public sendMsgToGroupMember(messageType: MessageType, hitSensor: HitSensor, sensorName: string): void {
+        this.pendingMessageType = messageType;
+        this.pendingHitSensor = hitSensor;
+        this.pendingSensorName = sensorName;
+    }
+}
+
+export function getJMapInfoClippingGroupID(infoIter: JMapInfoIter): number | null {
+    return infoIter.getValueNumberNoInit('ClippingGroupId');
+}
+
+export function getJMapInfoGroupID(infoIter: JMapInfoIter): number | null {
+    const groupId = infoIter.getValueNumberNoInit('GroupId');
+    if (groupId !== null)
+        return groupId;
+
+    return getJMapInfoClippingGroupID(infoIter);
+}
+
+export class LiveActorGroupArray extends NameObj {
+    private groups: MsgSharedGroup<LiveActor>[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'LiveActorGroupArray');
+    }
+
+    public getLiveActorGroup<T extends LiveActor>(actor: T): MsgSharedGroup<T> | null {
+        for (let i = 0; i < this.groups.length; i++) {
+            const group = this.groups[i];
+            for (let j = 0; j < group.objArray.length; j++)
+                if (group.objArray[j] === actor)
+                    return group as MsgSharedGroup<T>;
+        }
+
+        return null;
+    }
+
+    public findGroup<T extends LiveActor>(zoneId: number, groupId: number): MsgSharedGroup<T> | null {
+        for (let i = 0; i < this.groups.length; i++) {
+            const group = this.groups[i];
+            if (group.zoneId === zoneId && group.infoId === groupId)
+                return group as MsgSharedGroup<T>;
+        }
+
+        return null;
+    }
+
+    public createGroup<T extends LiveActor>(sceneObjHolder: SceneObjHolder, zoneId: number, infoId: number, groupName: string, maxCount: number): MsgSharedGroup<T> {
+        const group = new MsgSharedGroup<T>(sceneObjHolder, zoneId, infoId, groupName, maxCount);
+        this.groups.push(group);
+        return group;
+    }
+
+    public entry<T extends LiveActor>(sceneObjHolder: SceneObjHolder, actor: T, infoIter: JMapInfoIter, groupName: string | null, maxCount: number): MsgSharedGroup<T> | null {
+        const zoneId = actor.zoneAndLayer.zoneId;
+        const groupId = getJMapInfoGroupID(infoIter);
+        if (groupId === null)
+            return null;
+
+        let group = this.findGroup<T>(zoneId, groupId);
+        if (group === null) {
+            if (groupName === null)
+                groupName = `group${groupId}`;
+
+            group = this.createGroup<T>(sceneObjHolder, zoneId, groupId, groupName, maxCount);
+        }
+        group.registerActor(actor);
+        return group;
     }
 }

@@ -15,11 +15,11 @@ import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from '.
 import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isGreaterEqualStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
-import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType, isDead } from './LiveActor';
+import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType, isDead, MsgSharedGroup } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -8064,5 +8064,153 @@ export class BrightObj extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}
+
+const enum FirePressureRadiateNrv { Relax, Wait, PrepareToRadiate, Radiate, RadiateMargin, SyncWait, }
+
+export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
+    private effectHostMtx = mat4.create();
+    private waitStep: number;
+    private radiateStep: number;
+    private isLeader: boolean = false;
+    private group: MsgSharedGroup<FirePressureRadiate> | null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'FirePressureRadiate');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'FirePressure');
+        connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder, this);
+
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'body', 8, 70.0, vec3.set(scratchVec3, 0.0, 30.0, 0.0));
+
+        // addHitSensorAtJointMapObj
+        // addHitSensorCallbackEnemyAttack
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostMtx(this, 'Fire', this.effectHostMtx);
+        setEffectHostMtx(this, 'FireInd', this.effectHostMtx);
+
+        // getJMapInfoArg0
+        this.waitStep = fallback(getJMapInfoArg1(infoIter), 300);
+        this.radiateStep = fallback(getJMapInfoArg2(infoIter), 300);
+
+        // TODO(jstpierre): JointController
+
+        calcGravity(sceneObjHolder, this);
+        // setGroupClipping
+
+        this.group = joinToGroupArray(sceneObjHolder, this, infoIter, 'FirePressureRadiate', 16);
+
+        // tryRegisterDemoCast
+
+        if (useStageSwitchWriteA(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffA(sceneObjHolder, this, this.startWait.bind(this), this.startRelax.bind(this));
+            this.initNerve(FirePressureRadiateNrv.Relax);
+        } else {
+            this.initNerve(FirePressureRadiateNrv.Wait);
+        }
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter))
+            this.makeActorDead(sceneObjHolder);
+        else
+            this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.FirePressureRadiate_StartSyncWait) {
+            this.setNerve(FirePressureRadiateNrv.Wait);
+            return true;
+        } else if (messageType === MessageType.FirePressureRadiate_StartWait) {
+            this.setNerve(FirePressureRadiateNrv.SyncWait);
+            return true;
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (this.group !== null) {
+            let leader: FirePressureRadiate | null = this.group.objArray[0];
+
+            for (let i = 1; i < this.group.objArray.length; i++)
+                if (this.group.objArray[i].waitStep > leader.waitStep)
+                    leader = this.group.objArray[i];
+
+            console.log('leader check', this.group.objArray.length, leader);
+
+            this.isLeader = (leader === this);
+        }
+    }
+
+    private calcRadiateEffectMtx(): void {
+        const mtx = getJointMtxByName(this, 'Cannon3')!;
+        mat4.copy(this.effectHostMtx, mtx);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FirePressureRadiateNrv, deltaTimeFrames: number): void {
+        if (currentNerve === FirePressureRadiateNrv.Wait) {
+            if (isGreaterEqualStep(this, this.waitStep))
+                this.setNerve(FirePressureRadiateNrv.PrepareToRadiate);
+        } else if (currentNerve === FirePressureRadiateNrv.PrepareToRadiate) {
+            if (isFirstStep(this))
+                startBck(this, 'FireShotStart');
+
+            if (isGreaterEqualStep(this, 34))
+                this.setNerve(FirePressureRadiateNrv.Radiate);
+        } else if (currentNerve === FirePressureRadiateNrv.Radiate) {
+            if (isBckOneTimeAndStopped(this)) {
+                this.calcRadiateEffectMtx();
+                startBck(this, 'FireShot');
+            }
+
+            if (isGreaterEqualStep(this, 25)) {
+                // validateHitSensor
+                // reset timer
+            }
+
+            if (isGreaterEqualStep(this, this.radiateStep)) {
+                this.setNerve(FirePressureRadiateNrv.RadiateMargin);
+            }
+        } else if (currentNerve === FirePressureRadiateNrv.RadiateMargin) {
+            if (isFirstStep(this))
+                startBck(this, 'FireShotEnd');
+
+            if (isGreaterEqualStep(this, 50)) {
+                // invalidateHitSensor
+
+                if (this.group !== null)
+                    this.setNerve(FirePressureRadiateNrv.SyncWait);
+                else
+                    this.setNerve(FirePressureRadiateNrv.Wait);
+
+                if (this.isLeader) {
+                    const sensor = this.getSensor('body')!;
+                    this.group!.sendMsgToGroupMember(MessageType.FirePressureRadiate_StartSyncWait, sensor, 'body');
+                }
+            }
+        } else if (currentNerve === FirePressureRadiateNrv.SyncWait) {
+            if (this.isLeader && isGreaterEqualStep(this, 60)) {
+                const sensor = this.getSensor('body')!;
+                this.group!.sendMsgToGroupMember(MessageType.FirePressureRadiate_StartWait, sensor, 'body');
+            }
+        }
+    }
+
+    private startWait(sceneObjHolder: SceneObjHolder): void {
+        if (this.getCurrentNerve() !== FirePressureRadiateNrv.Wait)
+            this.setNerve(FirePressureRadiateNrv.Wait);
+    }
+
+    private startRelax(sceneObjHolder: SceneObjHolder): void {
+        if (this.getCurrentNerve() !== FirePressureRadiateNrv.Relax)
+            this.setNerve(FirePressureRadiateNrv.Relax);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('FirePressure');
     }
 }

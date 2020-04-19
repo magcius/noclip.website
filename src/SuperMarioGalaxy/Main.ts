@@ -31,7 +31,7 @@ import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
@@ -850,6 +850,7 @@ export const enum SceneObj {
     SwitchWatcherHolder     = 0x0B,
     SleepControllerHolder   = 0x0C,
     AreaObjContainer        = 0x0D,
+    LiveActorGroupArray     = 0x0E,
     ImageEffectSystemHolder = 0x1D,
     BloomEffect             = 0x1E,
     LensFlareDirector       = 0x25,
@@ -884,6 +885,7 @@ export class SceneObjHolder {
     public switchWatcherHolder: SwitchWatcherHolder | null = null;
     public sleepControllerHolder: SleepControllerHolder | null = null;
     public areaObjContainer: AreaObjContainer | null = null;
+    public liveActorGroupArray: LiveActorGroupArray | null = null;
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
@@ -934,6 +936,8 @@ export class SceneObjHolder {
             return this.lensFlareDirector;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
+        else if (sceneObj === SceneObj.LiveActorGroupArray)
+            return this.liveActorGroupArray;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
         else if (sceneObj === SceneObj.CoinRotater)
@@ -976,6 +980,8 @@ export class SceneObjHolder {
             this.lensFlareDirector = new LensFlareDirector(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
+        else if (sceneObj === SceneObj.LiveActorGroupArray)
+            this.liveActorGroupArray = new LiveActorGroupArray(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
         else if (sceneObj === SceneObj.CoinRotater)

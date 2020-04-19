@@ -9,6 +9,7 @@ import { LiveActor } from "./LiveActor";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
+import { assert } from "../util";
 
 export const enum MovementType {
 }
@@ -173,6 +174,8 @@ export class NameObjGroup<T extends NameObj> extends NameObj {
 
     protected registerObj(obj: T): void {
         this.objArray.push(obj);
+
+        assert(this.objArray.length <= this.maxCount);
     }
 }
 

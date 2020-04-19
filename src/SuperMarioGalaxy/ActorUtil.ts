@@ -1,9 +1,9 @@
 
 // Utilities for various actor implementations.
 
-import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType } from "./LiveActor";
+import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType, LiveActorGroupArray, MsgSharedGroup } from "./LiveActor";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { SceneObjHolder } from "./Main";
+import { SceneObjHolder, SceneObj } from "./Main";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { DrawType, DrawBufferType, CalcAnimType, MovementType, NameObj } from "./NameObj";
 import { assertExists } from "../util";
@@ -93,15 +93,19 @@ export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObj
 }
 
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT, -1);
+}
+
+export function connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -1120,4 +1124,9 @@ export function showModel(actor: LiveActor): void {
 
 export function isHiddenModel(actor: LiveActor): boolean {
     return !actor.visibleModel;
+}
+
+export function joinToGroupArray<T extends LiveActor>(sceneObjHolder: SceneObjHolder, actor: T, infoIter: JMapInfoIter, groupName: string | null, maxCount: number): MsgSharedGroup<T> | null {
+    sceneObjHolder.create(SceneObj.LiveActorGroupArray);
+    return sceneObjHolder.liveActorGroupArray!.entry(sceneObjHolder, actor, infoIter, groupName, maxCount);
 }
