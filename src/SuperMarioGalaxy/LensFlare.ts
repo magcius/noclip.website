@@ -189,6 +189,10 @@ class LensFlareArea extends AreaObj {
     protected parseArgs(infoIter: JMapInfoIter): void {
         this.flags = fallback(getJMapInfoArg0(infoIter), -1);
     }
+
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.create(SceneObj.LensFlareDirector);
+    }
 }
 
 class TriggerChecker {
@@ -501,6 +505,7 @@ export function requestLensFlareArchives(sceneObjHolder: SceneObjHolder, infoIte
 }
 
 export function addBrightObj(sceneObjHolder: SceneObjHolder, brightObj: BrightObjBase): void {
-    sceneObjHolder.create(SceneObj.LensFlareDirector);
-    sceneObjHolder.lensFlareDirector!.addBrightObj(brightObj);
+    if (sceneObjHolder.lensFlareDirector === null)
+        return;
+    sceneObjHolder.lensFlareDirector.addBrightObj(brightObj);
 }

@@ -213,9 +213,14 @@ export class AreaObj extends NameObj {
 
         // TODO(jstpierre): addSleepControl
         // addSleepControlForLiveActor
+
+        this.postCreate(sceneObjHolder);
     }
 
     protected parseArgs(infoIter: JMapInfoIter): void {
+    }
+
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
     }
 
     public awake(sceneObjHolder: SceneObjHolder): void {
