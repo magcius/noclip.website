@@ -28,6 +28,7 @@ export const enum DrawType {
     ASTRO_DOME_SKY_CLEAR           = 0x1E,
     ASTRO_DOME_ORBIT               = 0x1F,
     OCEAN_BOWL_BLOOM_DRAWER        = 0x21,
+    BRIGHT_SUN                     = 0x39,
     WATER_CAMERA_FILTER            = 0x3A,
 
     EFFECT_DRAW_3D                 = 0x47,
