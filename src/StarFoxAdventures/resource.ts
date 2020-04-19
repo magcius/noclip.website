@@ -6,8 +6,10 @@ import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { GameInfo } from './scenes';
 import { DataFetcher } from '../DataFetcher';
 import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
-import { ModelCollection } from './models';
+import { ModelFetcher, ModelVersion } from './models';
 import { TextureFetcher, SFATextureFetcher } from './textures';
+import { MaterialFactory } from './shaders';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class ZLBHeader {
     public static readonly SIZE = 16;
@@ -79,22 +81,23 @@ export function getSubdir(locationNum: number, gameInfo: GameInfo): string {
 
 export class ResourceCollection {
     public texFetcher: TextureFetcher;
-    public modelColl: ModelCollection;
+    public modelFetcher: ModelFetcher;
     public animColl: AnimCollection;
     public amapColl: AmapCollection;
     public modanimColl: ModanimCollection;
     public tablesTab: DataView;
     public tablesBin: DataView;
 
-    constructor(private gameInfo: GameInfo, private subdir: string, private animController: SFAAnimationController) {
+    constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdir: string, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, animController: SFAAnimationController): Promise<ResourceCollection> {
-        const self = new ResourceCollection(gameInfo, subdir, animController);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
+        const self = new ResourceCollection(device, gameInfo, subdir, materialFactory, animController);
 
         self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
         await self.texFetcher.loadSubdir(subdir, dataFetcher);
-        self.modelColl = await ModelCollection.create(gameInfo, dataFetcher, subdir, self.texFetcher, self.animController)
+        self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final)
+        await self.modelFetcher.loadSubdir(subdir, dataFetcher);
         self.animColl = await AnimCollection.create(self.gameInfo, dataFetcher, subdir);
         self.amapColl = await AmapCollection.create(self.gameInfo, dataFetcher);
         self.modanimColl = await ModanimCollection.create(self.gameInfo, dataFetcher);

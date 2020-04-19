@@ -600,7 +600,7 @@ export class ObjectInstance {
         try {
             const modelNum = this.objType.modelNums[num];
 
-            const modelInst = this.world.resColl.modelColl.createModelInstance(this.world.device, this.world.materialFactory, modelNum);
+            const modelInst = this.world.resColl.modelFetcher.createModelInstance(modelNum);
             const amap = this.world.resColl.amapColl.getAmap(modelNum);
             modelInst.setAmap(amap);
             this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);

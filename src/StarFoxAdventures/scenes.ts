@@ -298,7 +298,7 @@ const sceneDescs = [
     'Full Scenes (HIGHLY EXPERIMENTAL)',
     // new SFAWorldSceneDesc('arwing', 'arwing', 58, 'Arwing'),
     // new SFAWorldSceneDesc('arwingtoplanet', 'arwingtoplanet', 58, 'Arwing Flight (Main Planet)'),
-    // new SFAWorldSceneDesc('galleonship', 'shipbattle', null, "General Scales' Galleon"),
+    new SFAWorldSceneDesc('galleonship', 'shipbattle', null, "General Scales' Galleon"),
     // new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
     // new SFAWorldSceneDesc('swapstore', 'shop', 51, 'ThornTail Shop'),
     // new SFAWorldSceneDesc('gamefront', 'gamefront', 63, 'Great Fox'),

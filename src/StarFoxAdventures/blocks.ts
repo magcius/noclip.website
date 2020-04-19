@@ -375,11 +375,13 @@ export class AncientBlockRenderer implements BlockRenderer {
                         texGenSrc++;
                     }
 
+                    const gxMat = mb.finish();
+                    const texture = makeMaterialTexture(texFetcher.getTexture(device, shader.layers[0].texId!, true));
                     const material: SFAMaterial = {
                         factory: new MaterialFactory(device),
                         shader,
-                        gxMaterial: mb.finish(),
-                        textures: [makeMaterialTexture(texFetcher.getTexture(device, shader.layers[0].texId!, true))],
+                        getGXMaterial: () => gxMat,
+                        getTexture: () => texture,
                         setupMaterialParams: () => {},
                         rebuild: () => {},
                     }
