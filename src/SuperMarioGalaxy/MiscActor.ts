@@ -37,7 +37,7 @@ import { getFirstPolyOnLineToMap, calcMapGround, Triangle } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis, drawWorldSpaceVector } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -7195,7 +7195,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
 
         // Rotate randomly around the gravity vector.
         const angle = getRandomFloat(-Math.PI, Math.PI);
-        mat4.rotate(scratchMatrix, scratchMatrix, angle, this.gravityVector);
+        mat4.rotateY(scratchMatrix, scratchMatrix, angle);
 
         computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
     }
