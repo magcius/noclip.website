@@ -1466,6 +1466,10 @@ class RemovableTurtle {
             this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'KouraShiny', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
         } else {
             this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'Koura', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+
+            // TODO(jstpierre): Where is this done?
+            startBrk(this.partsModel, 'Koura');
+            setBrkFrameAndStop(this.partsModel, 0);
         }
 
         // this.partsModel.isAttached = true;
@@ -8057,6 +8061,9 @@ export class BrightSun extends LiveActor {
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (sceneObjHolder.lensFlareDirector === null)
+            return;
+
         getCamPos(scratchVec3, viewerInput.camera);
 
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, this.rotation[0], this.rotation[1], this.rotation[2], scratchVec3[0], scratchVec3[1], scratchVec3[2]);
