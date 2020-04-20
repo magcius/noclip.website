@@ -706,7 +706,9 @@ export class ModelCache {
     }
 
     private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {
-        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath);
+        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath, DataFetcherFlags.NONE, () => {
+            this.archivePromiseCache.delete(archivePath);
+        });
 
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
             buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);
@@ -1118,7 +1120,7 @@ const sceneDescs = [
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
     new SceneDesc("sea_T", "sea_T", [0, 44]),
     new SceneDesc("sea_E", "sea_E"),
-    new SceneDesc("I_SubAN", "I_SubAN"),
+    new SceneDesc("I_SubAN", "I_SubAN", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("ITest61", "ITest61"),
     new SceneDesc("ITest62", "ITest62"),
     new SceneDesc("E3ROOP", "E3ROOP"),
@@ -1134,6 +1136,8 @@ const sceneDescs = [
     new SceneDesc("K_Testc", "K_Testc"),
     new SceneDesc("K_Testd", "K_Testd"),
     new SceneDesc("K_Teste", "K_Teste"),
+    new SceneDesc("DmSpot0", "DmSpot0"),
+    new SceneDesc("Amos_T", "Amos_T"),
 ];
 
 const id = "zww";
