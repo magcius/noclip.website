@@ -514,6 +514,9 @@ export const Vec3One   = vec3.fromValues(1, 1, 1);
 export const Vec3UnitX = vec3.fromValues(1, 0, 0);
 export const Vec3UnitY = vec3.fromValues(0, 1, 0);
 export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
+export const Vec3NegX = vec3.fromValues(-1, 0, 0);
+export const Vec3NegY = vec3.fromValues(0, -1, 0);
+export const Vec3NegZ = vec3.fromValues(0, 0, -1);
 
 const baseBuffer = new ArrayBuffer(4);
 const asFloat32 = new Float32Array(baseBuffer);

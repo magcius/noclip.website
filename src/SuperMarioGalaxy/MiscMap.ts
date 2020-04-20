@@ -11,6 +11,7 @@ import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMa
 import { ZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
 import { fallback } from "../util";
+import { OceanSphere } from "./OceanSphere";
 
 export class WaterArea extends AreaObj {
     public getManagerName(): string {
@@ -29,6 +30,7 @@ export class WaterAreaHolder extends NameObj {
     public cameraInWater: boolean = false;
     public oceanBowl: OceanBowl[] = [];
     public oceanRing: OceanRing[] = [];
+    public oceanSphere: OceanSphere[] = [];
     private useBloom: boolean = false;
 
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -48,6 +50,10 @@ export class WaterAreaHolder extends NameObj {
 
     public entryOceanRing(oceanRing: OceanRing): void {
         this.oceanRing.push(oceanRing);
+    }
+
+    public entryOceanSphere(oceanSphere: OceanSphere): void {
+        this.oceanSphere.push(oceanSphere);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -99,6 +105,10 @@ export function getWaterAreaObj(sceneObjHolder: SceneObjHolder, position: vec3):
 
         for (let i = 0; i < waterAreas.oceanRing.length; i++)
             if (waterAreas.oceanRing[i].isInWater(sceneObjHolder, position))
+                return true;
+
+        for (let i = 0; i < waterAreas.oceanSphere.length; i++)
+            if (waterAreas.oceanSphere[i].isInWater(position))
                 return true;
     }
 

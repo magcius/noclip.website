@@ -13,6 +13,7 @@ import { SwitchSynchronizer } from './Switch';
 import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, createSwitchCube, createSwitchSphere, createSwitchCylinder } from './MiscMap';
 import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
 import { createLensFlareArea, requestLensFlareArchives } from './LensFlare';
+import { OceanSphere } from './OceanSphere';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -166,6 +167,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("OceanHexagonFloater",            OceanWaveFloater),
     _("OceanRing",                      OceanRing),
     _("OceanRingAndFlag",               OceanRing),
+    _("OceanSphere",                    OceanSphere),
     _("PalmIsland",                     PalmIsland),
     _("PhantomBonfire",                 PhantomTorch),
     _("PhantomTorch",                   PhantomTorch),

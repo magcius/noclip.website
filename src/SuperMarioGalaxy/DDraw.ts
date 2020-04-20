@@ -188,6 +188,17 @@ export class TDDraw extends TDDrawVtxSpec {
         this.position3f32(v[0], v[1], v[2]);
     }
 
+    public normal3f32(x: number, y: number, z: number): void {
+        const offs = this.getOffs(this.currentVertex, GX.Attr.NRM);
+        this.writeFloat32(offs + 0x00, x);
+        this.writeFloat32(offs + 0x04, y);
+        this.writeFloat32(offs + 0x08, z);
+    }
+
+    public normal3vec3(v: vec3): void {
+        this.normal3f32(v[0], v[1], v[2]);
+    }
+
     public texCoord2f32(attr: GX.Attr, s: number, t: number): void {
         const offs = this.getOffs(this.currentVertex, attr);
         this.writeFloat32(offs + 0x00, s);
