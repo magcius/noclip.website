@@ -3605,8 +3605,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
             // Nothing.
         } else if (currentNerve === AirBubbleNrv.Move) {
             if (isFirstStep(this)) {
-                // Calc gravity.
-                vec3.set(this.gravityVector, 0, -1, 0);
+                calcGravity(sceneObjHolder, this);
 
                 vec3.negate(scratchVec3, this.gravityVector);
                 vec3.scale(this.velocity, scratchVec3, 7.0);
