@@ -1239,7 +1239,7 @@ float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
 void main() {
     vec3 t_Position = ${this.generateMulPos()};
     v_Position = t_Position;
-    vec3 t_Normal = ${this.generateMulNrm()};
+    vec3 t_Normal = normalize(${this.generateMulNrm()});
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
