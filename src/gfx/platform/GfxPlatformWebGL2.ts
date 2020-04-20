@@ -574,9 +574,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentUniformBufferByteOffsets: number[] = [];
     private _currentUniformBufferByteSizes: number[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];
-    private _resolveAttachmentsChanged: boolean = false;
-    private _resolveReadFramebuffer: WebGLFramebuffer;
-    private _resolveDrawFramebuffer: WebGLFramebuffer;
+    private _resolveColorAttachmentsChanged: boolean = false;
+    private _resolveColorReadFramebuffer: WebGLFramebuffer;
+    private _resolveColorDrawFramebuffer: WebGLFramebuffer;
+    private _resolveDepthStencilAttachmentsChanged: boolean = false;
+    private _resolveDepthStencilReadFramebuffer: WebGLFramebuffer;
+    private _resolveDepthStencilDrawFramebuffer: WebGLFramebuffer;
     private _renderPassDrawFramebuffer: WebGLFramebuffer;
     private _readbackFramebuffer: WebGLFramebuffer;
     private _blackTexture!: WebGLTexture;
@@ -619,8 +622,10 @@ void main() {
         const fullscreenProgramDescriptor = preprocessProgram_GLSL(this.queryVendorInfo(), fullscreenVS, fullscreenFS);
         this._fullscreenCopyProgram = this._createProgram(fullscreenProgramDescriptor);
 
-        this._resolveReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
-        this._resolveDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
+        this._resolveColorReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
+        this._resolveColorDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
+        this._resolveDepthStencilReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
+        this._resolveDepthStencilDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._renderPassDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._readbackFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
 
@@ -1675,28 +1680,28 @@ void main() {
             if (this._currentColorAttachments[i] !== colorAttachment) {
                 this._currentColorAttachments[i] = colorAttachment;
                 this._bindFramebufferAttachment(gl.COLOR_ATTACHMENT0 + i, colorAttachment);
-                this._resolveAttachmentsChanged = true;
+                this._resolveColorAttachmentsChanged = true;
             }
 
             if (this._currentColorResolveTos[i] !== colorResolveTo) {
                 this._currentColorResolveTos[i] = colorResolveTo;
 
                 if (colorResolveTo !== null)
-                    this._resolveAttachmentsChanged = true;
+                    this._resolveColorAttachmentsChanged = true;
             }
         }
 
         if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
             this._currentDepthStencilAttachment = depthStencilAttachment as GfxAttachmentP_GL;
             this._bindFramebufferAttachment(gl.DEPTH_STENCIL_ATTACHMENT, this._currentDepthStencilAttachment);
-            this._resolveAttachmentsChanged = true;
+            this._resolveDepthStencilAttachmentsChanged = true;
         }
 
         if (this._currentDepthStencilResolveTo !== depthStencilResolveTo) {
             this._currentDepthStencilResolveTo = depthStencilResolveTo as GfxTextureP_GL;
 
             if (depthStencilResolveTo !== null)
-                this._resolveAttachmentsChanged = true;
+                this._resolveDepthStencilAttachmentsChanged = true;
         }
 
         gl.disable(gl.SCISSOR_TEST);
@@ -1897,6 +1902,9 @@ void main() {
 
     private endPass(): void {
         const gl = this.gl;
+
+        let didUnbind = false;
+
         for (let i = 0; i < this._currentColorAttachments.length; i++) {
             const colorResolveFrom = this._currentColorAttachments[i];
             const colorResolveTo = this._currentColorResolveTos[i];
@@ -1906,10 +1914,10 @@ void main() {
                 assert(colorResolveFrom.gl_renderbuffer !== null);
 
                 gl.disable(gl.SCISSOR_TEST);
-                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
-                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
+                gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
+                gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
 
-                if (this._resolveAttachmentsChanged) {
+                if (this._resolveColorAttachmentsChanged) {
                     gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorResolveFrom.gl_renderbuffer);
                     gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorResolveTo.gl_texture, 0);
                 }
@@ -1918,8 +1926,11 @@ void main() {
 
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
                 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+                didUnbind = true;
             }
         }
+
+        this._resolveColorAttachmentsChanged = false;
 
         const depthStencilResolveFrom = this._currentDepthStencilAttachment;
         const depthStencilResolveTo = this._currentDepthStencilResolveTo;
@@ -1929,10 +1940,10 @@ void main() {
             assert(depthStencilResolveFrom.gl_renderbuffer !== null);
 
             gl.disable(gl.SCISSOR_TEST);
-            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
-            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDepthStencilDrawFramebuffer);
 
-            if (this._resolveAttachmentsChanged) {
+            if (this._resolveDepthStencilAttachmentsChanged) {
                 gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveFrom.pixelFormat), gl.RENDERBUFFER, depthStencilResolveFrom.gl_renderbuffer);
                 gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveTo.pixelFormat), gl.TEXTURE_2D, depthStencilResolveTo.gl_texture, 0);
             }
@@ -1941,11 +1952,15 @@ void main() {
 
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+            didUnbind = true;
         }
 
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        this._resolveDepthStencilAttachmentsChanged = false;
 
-        this._resolveAttachmentsChanged = false;
+        if (!didUnbind) {
+            // If we did not unbind from a resolve, then we need to unbind our render pass draw FBO here.
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        }
     }
 
     private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number, byteSize: number): void {
