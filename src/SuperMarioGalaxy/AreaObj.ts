@@ -58,8 +58,10 @@ class AreaFormCube implements AreaFormBase {
         this.aabb.maxY =  0.5 * scratchVec3a[1] * 1000;
         this.aabb.maxZ =  0.5 * scratchVec3a[2] * 1000;
 
-        if (type === AreaFormType.CubeGround)
+        if (type === AreaFormType.CubeGround) {
             this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
+            this.aabb.maxY += 0.5 * scratchVec3a[1] * 1000;
+        }
     }
 
     public debugDraw(sceneObjHolder: SceneObjHolder): void {
