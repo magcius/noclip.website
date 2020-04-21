@@ -12,6 +12,19 @@ import { mat4 } from "gl-matrix";
 import { assert } from "../util";
 
 export const enum MovementType {
+    ScreenEffect                   = 0x03,
+    AreaObj                        = 0x0D,
+    Model3DFor2D                   = 0x0E,
+    Planet                         = 0x1D,
+    CollisionMapObj                = 0x1E,
+    CollisionEnemy                 = 0x1F,
+    Environment                    = 0x21,
+    MapObj                         = 0x22,
+    MapObjDecoration               = 0x23,
+    Sky                            = 0x24,
+    NPC                            = 0x28,
+    Enemy                          = 0x2A,
+    Item                           = 0x2C,
 }
 
 export const enum CalcAnimType {

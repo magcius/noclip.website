@@ -417,7 +417,7 @@ export class RailRider {
     public startPos = vec3.create();
     public endPos = vec3.create();
 
-    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, actorIter: JMapInfoIter) {
+    constructor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter) {
         assert(isConnectedWithRail(actorIter));
         this.bezierRail = getBezierRailForActor(sceneObjHolder, actorIter);
 

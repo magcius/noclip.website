@@ -28,6 +28,7 @@ export class J3DFrameCtrl {
 
     public init(endFrame: number): void {
         this.loopMode = LoopMode.REPEAT;
+        this.updateFlags = 0;
         this.startFrame = 0;
         this.endFrame = endFrame;
         this.repeatStartFrame = 0;

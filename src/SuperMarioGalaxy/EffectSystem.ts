@@ -15,7 +15,7 @@ import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
 import { getJointMtxByName } from './ActorUtil';
-import { Viewer, Texture } from '../viewer';
+import { Texture } from '../viewer';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -625,7 +625,7 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
 }
 
 function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | null): boolean {
-    return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName.toLowerCase()) : false;
+    return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName) : false;
 }
 
 function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: number): boolean {
@@ -638,7 +638,8 @@ function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: n
 }
 
 function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean, deltaTimeFrames: number): boolean {
-    if (isRegisteredBck(multiEmitter, currentBckName)) {
+    const registered = isRegisteredBck(multiEmitter, currentBckName);
+    if (registered) {
         if (loopMode === EmitterLoopMode.Forever)
             return true;
 
@@ -957,7 +958,7 @@ export class EffectSystem {
     }
 }
 
-export function deleteParticleEmitter(emitter: ParticleEmitter): void {
+function deleteParticleEmitter(emitter: ParticleEmitter): void {
     const baseEmitter = assertExists(emitter.baseEmitter);
     baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_EMIT_PARTICLES;
     baseEmitter.maxFrame = 1;

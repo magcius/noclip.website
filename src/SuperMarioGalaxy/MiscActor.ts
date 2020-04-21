@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -6945,6 +6945,7 @@ export class FluffWind extends LiveActor {
             calcRailPosAtCoord(scratchVec3a, this, coord);
             calcRailDirectionAtCoord(scratchVec3b, this, coord);
             effect.initEffectInfo(sceneObjHolder, scratchVec3a, scratchVec3b, Vec3UnitY, 'FluffWind');
+            this.effects.push(effect);
         }
     }
 
@@ -7536,7 +7537,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
                 this.calcGravityFlag = false;
 
             this.updatePose(sceneObjHolder);
-            this.updatePoseInner(sceneObjHolder);
+            this.updatePoseInner(sceneObjHolder, deltaTimeFrames);
 
             const step = this.getTimeToNextPoint(sceneObjHolder);
             if (isGreaterEqualStep(this, step)) {
@@ -7553,7 +7554,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
 
             const normal = this.getNextPointNormal();
             const gravityScalar = this.getGravityScalar(sceneObjHolder);
-            vec3.scaleAndAdd(this.velocity, this.velocity, normal, -1.0 * gravityScalar);
+            vec3.scaleAndAdd(this.velocity, this.velocity, normal, -1.0 * gravityScalar * deltaTimeFrames);
 
             const step = this.getTimeToNextPoint(sceneObjHolder);
             if (isGreaterEqualStep(this, step)) {
@@ -7658,7 +7659,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
     protected abstract collectRailPointInfo(sceneObjHolder: SceneObjHolder): void;
     protected abstract incrementNextPoint(sceneObjHolder: SceneObjHolder): void;
     protected abstract startMoveInner(sceneObjHolder: SceneObjHolder): void;
-    protected abstract updatePoseInner(sceneObjHolder: SceneObjHolder): void;
+    protected abstract updatePoseInner(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void;
     protected abstract getLastPointNormal(): vec3;
     protected abstract getNextPointNormal(): vec3;
     protected abstract getNextPointNo(): number;
@@ -7715,16 +7716,13 @@ export class OnimasuJump extends Onimasu {
         return this.normals[this.nextPointNo];
     }
 
-    protected updatePoseInner(sceneObjHolder: SceneObjHolder): void {
+    protected updatePoseInner(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
         this.calcGravityDir(scratchVec3);
-        const gravityScalar = this.getGravityScalar(sceneObjHolder);
-        vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3, gravityScalar);
+        vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3, deltaTimeFrames);
     }
 
     protected startMoveInner(sceneObjHolder: SceneObjHolder): void {
         calcRailPointPos(scratchVec3, this, this.nextPointNo);
-        this.calcGravityFlag = true;
-        calcGravity(sceneObjHolder, this);
 
         const distance = vec3.distance(scratchVec3, this.translation);
         const timeToNextPoint = this.getTimeToNextPoint(sceneObjHolder);
@@ -7732,8 +7730,7 @@ export class OnimasuJump extends Onimasu {
         normToLength(scratchVec3a, distance / timeToNextPoint);
 
         this.calcGravityDir(scratchVec3b);
-        const gravityScalar = this.getGravityScalar(sceneObjHolder);
-        vec3.scale(scratchVec3b, scratchVec3b, -0.5 * gravityScalar * timeToNextPoint);
+        vec3.scale(scratchVec3b, scratchVec3b, -0.5 * timeToNextPoint);
 
         vec3.add(this.velocity, scratchVec3a, scratchVec3b);
     }
@@ -8305,5 +8302,374 @@ export class CoconutTree extends LiveActor {
         // initCollisionParts
         // setClippingTypeSphere(this, 2000.0);
         this.makeActorAppeared(sceneObjHolder);
+    }
+}
+
+const enum MogucchiNrv { Stroll, Scatter, Die }
+
+export class Mogucchi extends LiveActor<MogucchiNrv> {
+    private maxStrollSpeed: number;
+    private strollSpeed: number;
+    private gravityStrikeVec = vec3.create();
+    private isOnGround: boolean = false;
+    private referenceMtx = mat4.create();
+
+    private hole: ModelObj;
+    private hill: MogucchiHill;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Mogucchi');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.maxStrollSpeed = fallback(getJMapInfoArg0(infoIter), 5.0);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Mogucchi');
+        connectToSceneEnemy(sceneObjHolder, this);
+        // this.initSensor();
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        // addEffect(this, 'PointerTouchManual'); and related jazz
+        // initSound();
+        this.initRailRider(sceneObjHolder, infoIter);
+        // declareCoin(this, 1);
+        this.initNerve(MogucchiNrv.Stroll);
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        // initStarPointerTargetAtJoint
+
+        this.createMogucchiHill(zoneAndLayer, sceneObjHolder);
+        this.createHole(zoneAndLayer, sceneObjHolder);
+
+        startBck(this, 'Walk');
+        startBtp(this, 'EyeOpen');
+        // this.calcAnim(sceneObjHolder, viewerInput);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (this.getCurrentNerve() !== MogucchiNrv.Scatter && this.getCurrentNerve() !== MogucchiNrv.Die)
+            this.updateReferenceMtx();
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MogucchiNrv.Stroll) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Walk');
+                startBtp(this, 'EyeOpen');
+                startBck(this.hole, 'Walk');
+                this.hill.start(sceneObjHolder);
+
+                this.strollSpeed = this.maxStrollSpeed;
+            }
+
+            this.strollSpeed = Math.min(this.strollSpeed + 0.1, this.maxStrollSpeed);
+            moveCoord(this, this.strollSpeed * deltaTimeFrames);
+
+            getRailPos(scratchVec3, this);
+            calcGravityVector(sceneObjHolder, this, scratchVec3, this.gravityStrikeVec, null);
+            this.updatePosition(sceneObjHolder);
+            this.makeEulerRotation();
+
+            // if (checkHipDrop()) ...
+        }
+    }
+
+    private makeEulerRotation(): void {
+        getRailDirection(scratchVec3a, this);
+        vec3.negate(scratchVec3b, this.gravityStrikeVec);
+        makeMtxUpFront(scratchMatrix, scratchVec3b, scratchVec3a);
+        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        showModel(this);
+        this.setNerve(MogucchiNrv.Stroll);
+        this.hole.makeActorAppeared(sceneObjHolder);
+        showModel(this.hole);
+        // validateClipping(this);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+
+        this.setNerve(MogucchiNrv.Die);
+
+        if (!isDead(this.hole))
+           this.hole.makeActorDead(sceneObjHolder);
+    }
+
+    private createMogucchiHill(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
+        const pieceCount = Math.min(getRailTotalLength(this), 20);
+        this.hill = new MogucchiHill(zoneAndLayer, sceneObjHolder, this, pieceCount);
+
+        if (pieceCount > 5)
+            this.hill.appearNum = pieceCount - 5;
+
+        this.hill.reserveAppearDist = 80.0;
+        this.hill.reserveSaveDist = 100.0;
+    }
+
+    private createHole(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
+        this.hole = new ModelObj(zoneAndLayer, sceneObjHolder, 'MogucchiHole', 'MogucchiHole', this.referenceMtx, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -2, -2);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        moveCoordToNearestPos(this);
+        getRailPos(scratchVec3, this);
+        calcGravityVector(sceneObjHolder, this, scratchVec3, this.gravityStrikeVec);
+        this.updatePosition(sceneObjHolder);
+        this.updateReferenceMtx();
+    }
+
+    private updatePosition(sceneObjHolder: SceneObjHolder): void {
+        getRailPos(scratchVec3a, this);
+        vec3.scale(scratchVec3b, this.gravityStrikeVec, 1000.0);
+
+        this.isOnGround = getFirstPolyOnLineToMap(sceneObjHolder, this.translation, null, scratchVec3a, scratchVec3b);
+
+        if (!this.isOnGround)
+            vec3.copy(this.translation, scratchVec3a);
+    }
+
+    private updateReferenceMtx(): void {
+        makeMtxTRFromActor(this.referenceMtx, this);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('MogucchiHole');
+        MogucchiHill.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum MogucchiHillNrv { Wait, Move }
+
+class MogucchiHill extends LiveActor<MogucchiHillNrv> {
+    private static pieceModelNames: string[] = [
+        'MogucchiHillA',
+        'MogucchiHillB',
+        'MogucchiHillC',
+    ];
+    private pieceJointName: string = 'MogucchiHill';
+    private pieceEffectName: string = 'MogucchiHill';
+    private pieceUseLightCtrl: boolean = false;
+
+    private pieces: MogucchiHillPiece[] = [];
+    private pieceCanAppear: boolean = false;
+    private nextAppearPiece: number = 0;
+    private mode: number = 0;
+    private pieceScaleTimer: number = 0;
+
+    private reserveMtx = mat4.create();
+    public appearNum: number = 0;
+    public reserveAppearDist: number = 100.0;
+    public reserveSaveDist: number = 150.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private parentActor: LiveActor, private pieceCount: number) {
+        super(zoneAndLayer, sceneObjHolder, 'MogucchiHill');
+
+        this.pieceCount = Math.min(this.pieceCount, 100);
+        this.appearNum = this.pieceCount;
+
+        connectToSceneEnemyMovement(sceneObjHolder, this);
+        this.initNerve(MogucchiHillNrv.Move);
+        this.createPieces(zoneAndLayer, sceneObjHolder);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiHillNrv, deltaTimeFrames: number): void {
+        if (currentNerve === MogucchiHillNrv.Move) {
+            if (isFirstStep(this))
+                this.reserveCurrentMtx();
+
+            const distance = this.getDistanceFromReserveMtx();
+            if (this.pieceCanAppear && distance >= this.reserveAppearDist)
+                this.appearPiece(sceneObjHolder);
+            if (distance >= this.reserveSaveDist)
+                this.reserveCurrentMtx();
+        }
+    }
+
+    private appearPiece(sceneObjHolder: SceneObjHolder): void {
+        this.killPieceOverAppear(sceneObjHolder);
+        this.killPieceIfAlive(sceneObjHolder);
+
+        if (this.mode === 1) {
+            this.pieceScaleTimer++;
+
+            if (this.pieceScaleTimer > 2) {
+                this.pieceScaleTimer = 3;
+                this.mode = 0;
+            }
+        } else if (this.mode === 2) {
+            this.pieceScaleTimer--;
+            if (this.pieceScaleTimer < 1) {
+                this.pieceScaleTimer = 0;
+                this.mode = 0;
+                return;
+            }
+        }
+
+        if (this.pieceScaleTimer !== 0) {
+            const piece = this.pieces[this.nextAppearPiece];
+            const scale = this.scale[0] * (0.6 + 0.4 * ((this.pieceScaleTimer - 1) * 0.5));
+            piece.setSize(scale);
+
+            mat4.copy(piece.baseMtx, this.reserveMtx);
+            getMatrixTranslation(piece.translation, piece.baseMtx);
+            piece.makeActorAppeared(sceneObjHolder);
+            this.pieceCanAppear = false;
+
+            this.nextAppearPiece = (this.nextAppearPiece + 1) % this.pieceCount;
+        }
+    }
+
+    public start(sceneObjHolder: SceneObjHolder): void {
+        if (isDead(this))
+            this.makeActorAppeared(sceneObjHolder);
+
+        this.setNerve(MogucchiHillNrv.Move);
+        this.pieceScaleTimer = 3;
+    }
+
+    public startNaturally(sceneObjHolder: SceneObjHolder): void {
+        this.mode = 1;
+        this.start(sceneObjHolder);
+    }
+
+    public end(sceneObjHolder: SceneObjHolder): void {
+        this.setNerve(MogucchiHillNrv.Wait);
+    }
+
+    public endNaturally(sceneObjHolder: SceneObjHolder): void {
+        this.mode = 2;
+        this.end(sceneObjHolder);
+    }
+
+    private killPieceOverAppear(sceneObjHolder: SceneObjHolder): void {
+        const idx = (this.nextAppearPiece + this.pieceCount - this.appearNum) % this.pieceCount;
+        this.pieces[idx].crumble(sceneObjHolder);
+    }
+
+    private killPieceIfAlive(sceneObjHolder: SceneObjHolder): void {
+        const nextPiece = this.pieces[this.nextAppearPiece];
+        if (!isDead(nextPiece))
+            nextPiece.makeActorDead(sceneObjHolder);
+    }
+
+    private getDistanceFromReserveMtx(): number {
+        getMatrixTranslation(scratchVec3, this.reserveMtx);
+        return vec3.distance(this.parentActor.translation, scratchVec3);
+    }
+
+    private reserveCurrentMtx(): void {
+        mat4.copy(this.reserveMtx, this.parentActor.getBaseMtx()!);
+        this.pieceCanAppear = true;
+    }
+
+    private createPieces(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
+        const pieceModelNames = MogucchiHill.pieceModelNames;
+
+        for (let i = 0; i < this.pieceCount; i++) {
+            const idx = getRandomInt(0, pieceModelNames.length - 1);
+            const pieceModelName = pieceModelNames[idx];
+
+            const piece = new MogucchiHillPiece(zoneAndLayer, sceneObjHolder, pieceModelName, this.pieceJointName, this.pieceEffectName, this.pieceUseLightCtrl);
+            this.pieces.push(piece);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.pieceModelNames.length; i++)
+            sceneObjHolder.modelCache.requestObjectData(this.pieceModelNames[i]);
+    }
+}
+
+const enum MogucchiHillPieceNrv { Wait, Appear, Crumble }
+
+class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
+    public baseMtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, modelName: string, jointName: string, effectName: string | null, useLightCtrl: boolean) {
+        super(zoneAndLayer, sceneObjHolder, 'MogucchiHillPiece');
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
+        // this.initHitSensor();
+        // addHitSensorAtJointMapObj
+
+        if (effectName !== null)
+            this.initEffectKeeper(sceneObjHolder, effectName);
+
+        if (useLightCtrl)
+            this.initLightCtrl(sceneObjHolder);
+
+        // initSound
+        this.initNerve(MogucchiHillPieceNrv.Wait);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MogucchiHillPieceNrv, deltaTimeFrames: number): void {
+        if (currentNerve === MogucchiHillPieceNrv.Wait) {
+            // Nothing.
+        } else if (currentNerve === MogucchiHillPieceNrv.Appear) {
+            if (isFirstStep(this)) {
+                showModel(this);
+                startBck(this, 'Lead');
+                startBrk(this, 'Normal');
+                // startSound
+            }
+
+            if (isBckStopped(this))
+                this.setNerve(MogucchiHillPieceNrv.Wait);
+        } else if (currentNerve === MogucchiHillPieceNrv.Crumble) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Fade');
+                startBrk(this, 'Fade');
+            }
+
+            if (isBckStopped(this))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public crumble(sceneObjHolder: SceneObjHolder): void {
+        if (isDead(this))
+            return;
+
+        // TODO(jstpierre): If clipped, immediately destroy
+        // if (isClipped(this)) {
+        //    this.makeActorDead(sceneObjHolder);
+        //    return;
+        // }
+
+        if (this.getCurrentNerve() !== MogucchiHillPieceNrv.Crumble)
+            this.setNerve(MogucchiHillPieceNrv.Crumble);
+    }
+
+    public destroyHillPiece(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Break');
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public setSize(size: number): void {
+        vec3.set(this.scale, size, size, size);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        mat4.copy(this.modelInstance!.modelMatrix, this.baseMtx);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.setNerve(MogucchiHillPieceNrv.Appear);
+        hideModel(this);
     }
 }

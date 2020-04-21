@@ -10,6 +10,7 @@ import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Red, Green } from "../Color";
+import { RailRider } from "./RailRider";
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -137,11 +138,20 @@ abstract class PlanetGravity {
         }
     }
 
+    protected isInRangeSquared(squaredDistance: number): boolean {
+        if (this.range < 0.0)
+            return true;
+
+        const range = this.range + this.distant;
+        return (squaredDistance) < (range ** 2.0);
+    }
+
     protected isInRangeDistance(distance: number): boolean {
         if (this.range < 0.0)
             return true;
 
-        return (distance - this.distant) < this.range;
+        const range = this.range + this.distant;
+        return distance < range;
     }
 
     protected abstract calcOwnGravityVector(dst: vec3, coord: vec3): number;
@@ -1098,6 +1108,42 @@ class ConeGravity extends PlanetGravity {
     }
 }
 
+class WireGravity extends PlanetGravity {
+    public points: vec3[] = [];
+
+    public addPoint(point: vec3): void {
+        this.points.push(vec3.clone(point));
+    }
+
+    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+        if (this.points.length === 0)
+            return -1;
+
+        let bestSquaredDist = Infinity;
+
+        for (let i = 0; i < this.points.length - 1; i++) {
+            calcPerpendicFootToLineInside(scratchVec3a, coord, this.points[i], this.points[i + 1]);
+
+            const squaredDist = vec3.squaredDistance(scratchVec3a, coord);
+            if (squaredDist < bestSquaredDist) {
+                vec3.copy(scratchVec3b, scratchVec3a);
+                bestSquaredDist = squaredDist;
+            }
+        }
+
+        if (bestSquaredDist === Infinity || !this.isInRangeSquared(bestSquaredDist))
+            return -1;
+
+        vec3.sub(dst, scratchVec3b, coord);
+        const dist = vec3.length(dst);
+        vec3.normalize(dst, dst);
+        return dist;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+    }
+}
+
 export class GlobalGravityObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1386,6 +1432,29 @@ export function createGlobalConeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
 
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     gravity.setTopCutRate(arg1 / 1000.0);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalWireGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new WireGravity();
+
+    // ConeGravityCreator::settingFromJMapOtherParam
+    const railRider = new RailRider(sceneObjHolder, infoIter);
+
+    const segmentCount = fallback(getJMapInfoArg0(infoIter), 20);
+
+    const speed = railRider.getTotalLength() / (segmentCount + 1);
+    railRider.setCoord(0.0);
+    railRider.setSpeed(speed);
+    for (let i = 0; i < segmentCount + 1; i++) {
+        gravity.addPoint(railRider.currentPos);
+        railRider.move();
+    }
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

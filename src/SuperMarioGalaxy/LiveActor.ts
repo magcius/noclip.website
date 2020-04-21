@@ -554,7 +554,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        this.railRider = new RailRider(sceneObjHolder, this, infoIter);
+        this.railRider = new RailRider(sceneObjHolder, infoIter);
     }
 
     public initHitSensor(): void {
@@ -676,6 +676,13 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
+
+        // Don't do anything.
+        if (!this.visibleScenario)
+            return;
+
         if (this.calcGravityFlag)
             calcGravity(sceneObjHolder, this);
 
@@ -709,10 +716,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.updateBinder(sceneObjHolder, deltaTimeFrames);
 
         // EffectKeeper::update()
-        if (this.effectKeeper !== null) {
+        if (this.effectKeeper !== null)
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
-            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-        }
 
         // ActorPadAndCameraCtrl::update()
 
