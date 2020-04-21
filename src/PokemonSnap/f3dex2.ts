@@ -524,7 +524,15 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             } break;
 
             case F3DEX2_GBI.G_POPMTX: {
-                // state.gSPPopMatrix();
+                // assumes we were at 0
+                state.gSPResetMatrixStackDepth(1);
+            } break;
+
+            case F3DEX2_GBI.G_MTX: {
+                // special logic for banjo-tooie
+                assert(w1 >>> 24 === 5);
+                const matrixIndex = (w1 & 0xFFFFFF) >>> 6;
+                state.gSPResetMatrixStackDepth(matrixIndex);
             } break;
 
             case F3DEX2_GBI.G_SETPRIMCOLOR: {
@@ -580,7 +588,6 @@ export function runDL_F3DEX2(state: RSPState, addr: number, subDLHandler: dlRunn
             case F3DEX2_GBI.G_RDPTILESYNC:
             case F3DEX2_GBI.G_RDPPIPESYNC:
             case F3DEX2_GBI.G_RDPLOADSYNC:
-            case F3DEX2_GBI.G_MTX:
                 // Implementation not necessary.
                 break;
 

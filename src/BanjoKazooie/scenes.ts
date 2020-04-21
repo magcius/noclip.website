@@ -223,7 +223,7 @@ function setLevelGeoSelector(geo: GeometryRenderer, id: number) {
         geo.selectorState.values[valueList[i][0]] = valueList[i][1];
 }
 
-function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
+export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
     const view = buffer.createDataView();
 
     const startFrame = view.getUint16(0x00);
@@ -236,7 +236,7 @@ function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
     for (let i = 0; i < trackCount; i++) {
         const w = view.getUint16(trackTableIdx + 0x00);
         const boneID = (w >>> 4);
-        const trackType: AnimationTrackType = (w & 0x0F);
+        const trackType: AnimationTrackType = (w & 0x0F) % 9; // tooie uses higher values for angles sometimes
         const keyframeCount = view.getUint16(trackTableIdx + 0x02);
 
         trackTableIdx += 0x04;

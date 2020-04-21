@@ -4,11 +4,11 @@ import * as UI from '../ui';
 import * as Geo from '../BanjoKazooie/geo';
 import * as BYML from '../byml';
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBufferUsage } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, RenderData, GeometryData, BKLayer } from '../BanjoKazooie/render';
-import { GeometryRenderer } from './render';
-import { opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
+import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render';
+import { depthClearRenderPassDescriptor, BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -18,7 +18,9 @@ import { CameraController } from '../Camera';
 import { hexzero, assertExists } from '../util';
 import { DataFetcher, AbortedCallback, DataFetcherFlags } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT } from '../MathHelpers';
-import { mat4, vec3 } from 'gl-matrix';
+import { vec3, mat4, vec4 } from 'gl-matrix';
+import { parseAnimationFile } from '../BanjoKazooie/scenes';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 const pathBase = `BanjoTooie`;
 
@@ -29,7 +31,7 @@ class BTRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public modelCache: ModelCache) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public modelCache: ModelCache, public id: string) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -148,11 +150,22 @@ function parseCamera(view: DataView, offs: number): number {
     return offs;
 }
 
+interface AnimationSpec{
+    duration: number;
+    id: number;
+    flags: number;
+}
+
 interface ActorArchive {
     Name: string;
     Definition: ArrayBufferSlice;
     Files: CRG1File[];
     IsFlipbook: boolean;
+    Animations: AnimationSpec[];
+    FirstAnimation: number;
+    PairedIDs: number[];
+    Variants?: number[];
+    Palettes?: number[];
 }
 
 interface StaticArchive {
@@ -162,13 +175,18 @@ interface StaticArchive {
 }
 
 class ModelCache {
-    public archivePromiseCache = new Map<number, Promise<ActorArchive | StaticArchive | null>>();
-    public archiveCache = new Map<number, ActorArchive | StaticArchive | null>();
+    public archivePromiseCache = new Map<string, Promise<ActorArchive | StaticArchive | CRG1File | null>>();
+    public archiveCache = new Map<string, ActorArchive | StaticArchive | CRG1File | null>();
     public archiveDataHolder = new Map<number, GeometryData>();
     public cache = new GfxRenderCache();
 
-    public static staticGeometryFlag = 0x10000;
-    public static staticFlipbookMask = 0x20000;
+    public static staticGeometryFlag = 0x1000;
+    public static staticFlipbookFlag = 0x2000;
+    public static fileIDFlag         = 0x4000;
+
+    private static actorPath(id: number): string {
+        return `actor/${hexzero(id, 3).toUpperCase()}_arc.crg1`;
+    }
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
@@ -178,62 +196,124 @@ class ModelCache {
         return Promise.all(v) as Promise<any>;
     }
 
-    private async requestActorArchiveInternal(id: number, abortedCallback: AbortedCallback): Promise<ActorArchive | null> {
-        const archiveName = id >= 0 ? `actor/${hexzero(id, 3).toUpperCase()}_arc.crg1` : 'static_arc.crg1';
-        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archiveName}`, DataFetcherFlags.ALLOW_404, abortedCallback);
+    private async requestArchiveInternal(path: string, abortedCallback: AbortedCallback): Promise<ActorArchive | null> {
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, DataFetcherFlags.ALLOW_404, abortedCallback);
 
         if (buffer.byteLength === 0) {
-            console.warn(`Could not fetch archive ${archiveName}`);
+            // console.warn(`Could not fetch archive ${path}`);
             return null;
         }
 
         const arc = BYML.parse(buffer, BYML.FileType.CRG1) as ActorArchive;
-        this.archiveCache.set(id, arc);
+        this.archiveCache.set(path, arc);
         return arc;
     }
 
-    public async requestActorArchive(id: number): Promise<ActorArchive | StaticArchive | null> {
-        if (this.archivePromiseCache.has(id))
-            return this.archivePromiseCache.get(id)!;
+    public async requestArchive(path: string): Promise<ActorArchive | StaticArchive | CRG1File | null> {
+        if (this.archivePromiseCache.has(path))
+            return this.archivePromiseCache.get(path)!;
 
-        const p = this.requestActorArchiveInternal(id, () => {
-            this.archivePromiseCache.delete(id);
+        const p = this.requestArchiveInternal(path, () => {
+            this.archivePromiseCache.delete(path);
         });
-        this.archivePromiseCache.set(id, p);
+        this.archivePromiseCache.set(path, p);
         return p;
     }
 
-    public hasArchive(id: number): boolean {
-        return this.archiveCache.has(id) && this.archiveCache.get(id) !== null;
+    public async requestActorArchive(id: number): Promise<ActorArchive | null> {
+        return this.requestArchive(ModelCache.actorPath(id)) as Promise<ActorArchive | null>;
     }
 
-    public getArchive(id: number): ActorArchive {
-        return assertExists(this.archiveCache.get(id)) as ActorArchive;
+    public async requestFileArchive(id: number): Promise<CRG1File | null> {
+        return this.requestArchive(`file/${hexzero(id, 3).toUpperCase()}_arc.crg1`) as Promise<CRG1File | null>;
+    }
+
+    public async requestStaticArchive(): Promise<StaticArchive | null> {
+        return this.requestArchive(`static_arc.crg1`) as Promise<StaticArchive | null>;
+    }
+
+    public hasArchive(path: string): boolean {
+        return this.archiveCache.has(path) && this.archiveCache.get(path) !== null;
+    }
+
+    public hasActorArchive(id: number): boolean {
+        return this.archiveCache.has(ModelCache.actorPath(id)) && this.archiveCache.get(ModelCache.actorPath(id)) !== null;
+    }
+
+    public getActorArchive(id: number): ActorArchive {
+        return assertExists(this.archiveCache.get(ModelCache.actorPath(id))) as ActorArchive;
+    }
+
+    public getFile(id: number): CRG1File {
+        return assertExists(this.archiveCache.get(`file/${hexzero(id, 3).toUpperCase()}_arc.crg1`)) as CRG1File;
     }
 
     public getActorData(id: number): GeometryData | null {
         if (this.archiveDataHolder.has(id))
             return this.archiveDataHolder.get(id)!;
 
-        const arc = this.getArchive(id);
+        const arc = this.getActorArchive(id);
         if (arc.Files.length === 0 || arc.IsFlipbook)
             return null;
 
-        const geo = Geo.parseBT(arc.Files[0].Data, Geo.RenderZMode.OPA, arc.Files[1]?.Data);
+        const defView = arc.Definition.createDataView();
+        const lowFlags = defView.getUint32(0x24);
+
+        const geo = Geo.parseBT(
+            arc.Files[0].Data,
+            Geo.RenderZMode.OPA,
+            undefined, // actors don't have external textures
+            !!(lowFlags & (LowObjectFlags.AltVerts | LowObjectFlags.AltVerts2)), // only used for jinjos right now
+        );
         const data = new GeometryData(this.device, this.cache, geo, id);
         this.archiveDataHolder.set(id, data);
         return data;
+    }
 
+    public getActorVariantData(id: number, variant: number): GeometryData | null {
+        const variantID = id | variant << 16;
+        if (this.archiveDataHolder.has(variantID))
+            return this.archiveDataHolder.get(variantID)!;
+
+        const baseData = this.getActorData(id);
+        if (baseData === null)
+            return null;
+
+        let data: GeometryData;
+        const arc = this.getActorArchive(id);
+        if (arc.Variants) {
+            const geo = Geo.parseBT(findFileByID(arc, arc.Variants[variant])!.Data, Geo.RenderZMode.OPA);
+            data = new GeometryData(this.device, this.cache, geo, id);
+        } else if (arc.Palettes) {
+            // make a new copy, though we could reuse index buffer
+            data = new GeometryData(this.device, this.cache, baseData.geo, id);
+            applyPaletteSwap(this.device, this.cache, data, findFileByID(arc, arc.Palettes![variant])!.Data);
+        } else
+            throw `bad variant ${hexzero(id, 3)}:${variant}`;
+
+        this.archiveDataHolder.set(variantID, data);
+        return data;
+    }
+
+    public getFileData(id: number): GeometryData | null {
+        if (this.archiveDataHolder.has(id | ModelCache.fileIDFlag))
+            return this.archiveDataHolder.get(id | ModelCache.fileIDFlag)!;
+
+        const arc = this.getFile(id);
+        const geo = Geo.parseBT(arc.Data, Geo.RenderZMode.OPA);
+        const data = new GeometryData(this.device, this.cache, geo, id);
+        this.archiveDataHolder.set(id | ModelCache.fileIDFlag, data);
+        return data;
     }
 
     public getStaticData(id: number, isGeometry: boolean): GeometryData | null {
         if (!isGeometry)
             return null;
-        const flag = isGeometry ? ModelCache.staticGeometryFlag : ModelCache.staticFlipbookMask;
+        const flag = isGeometry ? ModelCache.staticGeometryFlag : ModelCache.staticFlipbookFlag;
         if (this.archiveDataHolder.has(id | flag))
             return this.archiveDataHolder.get(id | flag)!;
 
-        const arc = assertExists(this.archiveCache.get(-1)) as StaticArchive;
+        const arc = assertExists(this.archiveCache.get("static_arc.crg1")) as StaticArchive;
         const modelID = arc.Models.createDataView().getUint16(2*id);
         if (!modelID)
             return null;
@@ -251,6 +331,67 @@ class ModelCache {
     }
 }
 
+function applyPaletteSwap(device: GfxDevice, cache: GfxRenderCache, base: GeometryData, palette: ArrayBufferSlice): void {
+    const view = palette.createDataView();
+    const verts = base.renderData.vertexBufferData;
+
+    const color = vec4.create();
+    const mapping = assertExists(base.geo.colorMapping);
+    for (let i = 0; i < mapping.length; i++) {
+        if (mapping[i] === undefined)
+            continue;
+        vec4.set(color,
+            view.getUint8(4 * i + 3) / 0xFF,
+            view.getUint8(4 * i + 2) / 0xFF,
+            view.getUint8(4 * i + 1) / 0xFF,
+            view.getUint8(4 * i + 0) / 0xFF,
+        );
+        for (let j = 0; j < mapping[i].length; j++) {
+            const offs = mapping[i][j] * 10;
+            verts[offs + 6] *= color[0];
+            verts[offs + 7] *= color[1];
+            verts[offs + 8] *= color[2];
+            verts[offs + 9] *= color[3];
+        }
+    }
+
+    device.destroyBuffer(base.renderData.vertexBuffer);
+    device.destroyInputState(base.renderData.inputState);
+
+    base.renderData.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, base.renderData.vertexBufferData.buffer);
+    base.renderData.inputState = device.createInputState(base.renderData.inputLayout, [
+        { buffer: base.renderData.vertexBuffer, byteOffset: 0, },
+    ], { buffer: base.renderData.indexBuffer, byteOffset: 0 });
+}
+
+const collectibleLookup = new Map<number, number>([
+    [0x1F5, 0x1F4],
+    [0x1F6, 0x21F],
+    [0x1F7, 0x220],
+    [0x1F8, 0x21B],
+    [0x201, 0x136],
+    [0x29D, 0x4E5],
+    [0x4E6, 0x3C6],
+]);
+
+const nestLookup = new Map<number, number>([
+    [0x1CE, 2],
+    [0x1C5, 2], // overwrites to 1CE
+    [0x1CF, 1],
+    [0x1D1, 5],
+    [0x1D0, 3],
+    [0x1D2, 7],
+    [0x1D5, 2],
+    [0x1C6, 2], // overwrites to 1D5
+    [0x1D6, 1],
+    [0x1D4, 4],
+    [0x1D3, 8],
+    [0x1D9, 0],
+    [0x1DA, 0],
+]);
+
+const jinjoHouses: string[] = ['14E', '14B', '147', '14A', '145', '14D', '148', '14C', '146'];
+
 async function addObjects(view: DataView, offs: number, renderer: BTRenderer): Promise<number> {
     let actorCount = -1;
     let actorStart = -1;
@@ -263,7 +404,8 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
         actorStart = offs;
         for (let i = 0; i < actorCount; i++) {
             const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
-            const id = view.getUint16(offs + 0x08);
+            let rawID = view.getUint16(offs + 0x08);
+            const id = collectibleLookup.has(rawID) ? collectibleLookup.get(rawID)! : rawID;
             if (category === 6)
                 renderer.modelCache.requestActorArchive(id);
             offs += 0x14;
@@ -273,33 +415,83 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
     if (block === 0x08) {
         staticCount = view.getUint32(offs + 1);
         offs += 5;
-        renderer.modelCache.requestActorArchive(-1);
+        renderer.modelCache.requestStaticArchive();
     }
 
     await renderer.modelCache.waitForLoad();
 
     for (let i = 0; i < actorCount; i++) {
-        const actorOffs = actorStart + i*0x14;
+        const actorOffs = actorStart + i * 0x14;
+        const category = (view.getUint8(actorOffs + 0x07) >>> 1) & 0x3F;
+        const rawID = view.getUint16(actorOffs + 0x08);
+
+        const id = collectibleLookup.has(rawID) ? collectibleLookup.get(rawID)! : rawID;
+        if (category !== 6 || !renderer.modelCache.hasActorArchive(id))
+            continue;
+
         const pos = vec3.fromValues(
             view.getInt16(actorOffs + 0x00),
             view.getInt16(actorOffs + 0x02),
             view.getInt16(actorOffs + 0x04),
         );
-        const category = (view.getUint8(actorOffs + 0x07) >>> 1) & 0x3F;
-        const id = view.getUint16(actorOffs + 0x08);
         const yaw = view.getUint16(actorOffs + 0x0C) >>> 7;
+        let scale = (view.getUint32(actorOffs + 0x0C) & 0x7FFFFF) / 100;
+        if (scale === 0)
+            scale = 1;
 
-        if (category !== 6 || !renderer.modelCache.hasArchive(id))
-            continue;
-        const data = renderer.modelCache.getActorData(id);
+        const arc = renderer.modelCache.getActorArchive(id);
+        const defView = arc.Definition.createDataView();
+        const lowFlags = defView.getUint32(0x24);
+        const highFlags = defView.getUint32(0x3C);
+
+        let variant = -1;
+        if (arc.Name === "chjinjo" || arc.Name === "chbadjinjo") {
+            if (id === 0x48F)
+                variant = jinjoHouses.indexOf(renderer.id); // palette based on map
+            else
+                variant = Math.floor(Math.random() * 9); // randomized by save file, not sure actual logic
+        } else if (id === 0x438 && renderer.id === '19B')
+            variant = 1; // zombie jingaling, actually based on game progress
+
+        const data = variant >= 0 ? renderer.modelCache.getActorVariantData(id, variant) : renderer.modelCache.getActorData(id);
         if (data === null)
             continue;
 
         const actor = new GeometryRenderer(renderer.modelCache.device, data);
-        mat4.fromTranslation(actor.modelMatrix, pos);
-        mat4.rotateY(actor.modelMatrix, actor.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
-        actor.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
+        computeModelMatrixSRT(actor.modelMatrix,
+            scale, scale, scale,
+            0, yaw * MathConstants.DEG_TO_RAD, 0,
+            pos[0], pos[1], pos[2]
+        );
+        actor.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + layerFromFlags(lowFlags, highFlags));
+        actor.objectFlags = lowFlags;
+
+        if (arc.Animations.length > arc.FirstAnimation && arc.Animations[arc.FirstAnimation].id > 0) {
+            const anim = parseAnimationFile(findFileByID(arc, arc.Animations[arc.FirstAnimation].id)!.Data);
+            actor.boneAnimators.push(new BoneAnimator(anim, arc.Animations[arc.FirstAnimation].duration));
+            actor.changeAnimation(0, AnimationMode.Loop);
+        }
         renderer.geoRenderers.push(actor);
+
+        for (let pair of arc.PairedIDs) {
+            await renderer.modelCache.requestFileArchive(pair);
+            const pairData = renderer.modelCache.getFileData(pair);
+            const pairActor = new GeometryRenderer(renderer.modelCache.device, pairData!);
+            mat4.copy(pairActor.modelMatrix, actor.modelMatrix);
+            pairActor.sortKeyBase = actor.sortKeyBase;
+            renderer.geoRenderers.push(pairActor);
+        }
+
+        // put this in actors later
+        if (arc.Name === "chnests") {
+            for (let j = 0; j <= 8; j++)
+                actor.selectorState.values[j] = 0;
+            actor.selectorState.values[nestLookup.get(defView.getUint16(0))!] = 1;
+        } else if (id === 0x438 && variant === 1) { // zombie jingaling walk animation
+            const newAnimation = findFileByID(arc, arc.Animations[6].id)!;
+            actor.boneAnimators.push(new BoneAnimator(parseAnimationFile(newAnimation.Data), arc.Animations[6].duration));
+            actor.changeAnimation(1, AnimationMode.Loop);
+        }
     }
 
     for (let i = 0; i < staticCount; i++) {
@@ -325,7 +517,7 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
             0, yaw * MathConstants.DEG_TO_RAD, roll * MathConstants.DEG_TO_RAD,
             pos[0], pos[1], pos[2]
         );
-        obj.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
+        obj.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BTLayer.Opaque);
         renderer.geoRenderers.push(obj);
     }
 
@@ -359,6 +551,13 @@ async function parseSetup(setupFile: ArrayBufferSlice, renderer: BTRenderer): Pr
     }
 }
 
+interface MapSection {
+    OpaID: number;
+    XluID: number;
+    Textures: number;
+    Position: number[];
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -379,11 +578,11 @@ class SceneDesc implements Viewer.SceneDesc {
             return new ModelCache(device, pathBase, context.dataFetcher);
         });
 
-        const obj: any = BYML.parse(await context.dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`)!, BYML.FileType.CRG1);
+        const obj: any = BYML.parse(await context.dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=1`)!, BYML.FileType.CRG1);
 
         const viewerTextures: Viewer.Texture[] = [];
         const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-        const sceneRenderer = new BTRenderer(device, fakeTextureHolder, modelCache);
+        const sceneRenderer = new BTRenderer(device, fakeTextureHolder, modelCache, this.id);
         const cache = sceneRenderer.renderHelper.getCache();
         const opaFile = findFileByID(obj, obj.OpaGeoFileID);
         if (opaFile !== null) {
@@ -398,7 +597,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const textures = obj.Files[obj.XluGeoTextures];
             const geo = Geo.parseBT(xluFile.Data, Geo.RenderZMode.XLU, textures?.Data);
             const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-            xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
+            xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BTLayer.LevelXLU);
         }
 
         const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileID);
@@ -415,6 +614,36 @@ class SceneDesc implements Viewer.SceneDesc {
             const geo = Geo.parseBT(xluSkybox.Data, Geo.RenderZMode.XLU, textures?.Data);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
+        }
+
+        if (obj.Sections) {
+            const sections: MapSection[] = obj.Sections;
+            for (let i = 0; i < sections.length; i++) {
+                console.log(hexzero(sections[i].OpaID, 4));
+                const opaFile = findFileByID(obj, sections[i].OpaID)!;
+                const geo = Geo.parseBT(opaFile.Data, Geo.RenderZMode.OPA, findFileByID(obj, 0x8000 | sections[i].OpaID)?.Data);
+                const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+                opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+                opa.modelMatrix[12] = sections[i].Position[0];
+                opa.modelMatrix[13] = sections[i].Position[1];
+                opa.modelMatrix[14] = sections[i].Position[2];
+                if (sections[i].OpaID === 0x731) {
+                    // TODO: find logic for locker names
+                    const start = Math.floor(Math.random() * 15);
+                    for (let j = 0; j < 10; j++)
+                        opa.selectorState.values[12 + 2 * j] = 1 + ((j + start) % 15);
+                }
+
+                if (sections[i].XluID === 0)
+                    continue;
+                const xluFile = findFileByID(obj, sections[i].XluID)!;
+                const xluGeo = Geo.parseBT(xluFile.Data, Geo.RenderZMode.XLU, findFileByID(obj, 0x8000 | sections[i].XluID)?.Data);
+                const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, xluGeo);
+                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BTLayer.LevelXLU);
+                xlu.modelMatrix[12] = sections[i].Position[0];
+                xlu.modelMatrix[13] = sections[i].Position[1];
+                xlu.modelMatrix[14] = sections[i].Position[2];
+            }
         }
 
         await parseSetup(findFileByID(obj, obj.SetupFileID)!.Data, sceneRenderer);
@@ -546,20 +775,20 @@ const sceneDescs = [
     new SceneDesc('E9', "Wumba's Wigwam"),
     new SceneDesc('EC', "Train Station (Witchyworld)"),
     "Jolly Roger's Lagoon",
+    new SceneDesc('1A7', "Jolly Roger's Lagoon"),
     new SceneDesc('ED', "Jolly's"),
     new SceneDesc('EE', "Pawno's Emporium"),
+    new SceneDesc('FF', "Blubber's Waveracer Hire"),
     new SceneDesc('F1', "Inside the UFO"),
+    new SceneDesc('1A6', "Smugglers' Cavern"),
+    new SceneDesc('1A8', "Atlantis"),
     new SceneDesc('F4', "Ancient Swimming Baths"),
     new SceneDesc('F6', "Electric Eels' Lair"),
     new SceneDesc('F7', "Seaweed Sanctum"),
     new SceneDesc('F8', "Inside the Big Fish"),
     new SceneDesc('FA', "Temple of the Fishes"),
+    new SceneDesc('1A9', "Sea Bottom"),
     new SceneDesc('FC', "Davy Jones' Locker"),
-    new SceneDesc('FF', "Blubber's Waveracer Hire"),
-    new SceneDesc('1A7', "Jolly Roger's Lagoon"),
-    // new SceneDesc('1A6', "Smugglers' Cavern"), // full names are JRL:
-    // new SceneDesc('1A8', "Atlantis"),
-    // new SceneDesc('1A9', "Sea Bottom"),
     new SceneDesc('181', "Sea Bottom Cavern"),
     // new SceneDesc('182', "Mini - Sub Shootout"),
 

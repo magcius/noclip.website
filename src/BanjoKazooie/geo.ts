@@ -48,6 +48,7 @@ export interface ModelPoint {
 export const enum GeoFlags {
     RGBA16Mipmaps   = 0x002,
     ComputeLookAt   = 0x004,
+    ExtraSegments   = 0x040,
     CI8Mipmaps      = 0x080,
     CI4Mipmaps      = 0x100,
 }
@@ -63,6 +64,7 @@ export interface Geometry<N extends GeoNode> {
 
     normals?: vec3[];
     softwareLighting?: SoftwareLightingEffect[];
+    colorMapping?: number[][];
 }
 
 export const enum VertexEffectType {
@@ -615,8 +617,10 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
                 node.runDL((7 << 24) | (2-wrapMode)*0x60);
         } else if (cmd === 0x16 || cmd === 0x18) {
             runDL(context, 0x09000000 + view.getUint16(geoIdx + 0x08) * 0x08);
+            const node = peekGeoNode(context);
             let idx = 0x0A;
             while (true) {
+                node.rspState.gSPResetMatrixStackDepth(0);
                 const segmentStart = view.getUint16(geoIdx + idx);
                 if (segmentStart === 0) // 0 after the first indicates the end
                     break;
@@ -747,8 +751,8 @@ function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boole
         const textureSetupSize = view.getUint32(textureSetupOffs + 0x00);
         const textureCount = view.getUint8(textureSetupOffs + 0x05);
         const entrySize = isTooie ? 8 : 16;
-        const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * entrySize);
-        textureData = buffer.subarray(textureDataOffs, textureSetupSize);
+        const textureHeaderSize = textureSetupOffs + 0x08 + (textureCount * entrySize);
+        textureData = buffer.subarray(textureSetupOffs + textureHeaderSize, Math.max(textureSetupSize - textureHeaderSize, 0));
     }
 
     const segmentBuffers: ArrayBufferSlice[] = [];
@@ -827,7 +831,7 @@ export function parseBK(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bo
     return parse<BKGeoNode>(buffer, context);
 }
 
-export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureData?: ArrayBufferSlice): Geometry<BTGeoNode> {
+export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureData?: ArrayBufferSlice, trackColor = false): Geometry<BTGeoNode> {
     const context = commonSetup(buffer, true, btBuilder, zMode, textureData);
 
     const view = buffer.createDataView();
@@ -841,22 +845,21 @@ export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureDat
         for (let i = 0; i < tableCount; i++) {
             const boneID = view.getInt16(tableOffs + 0x00);
             const posCount = view.getInt16(tableOffs + 0x02);
-            const normCount = view.getInt16(tableOffs + 0x04);
+            const vertexCount = view.getInt16(tableOffs + 0x04);
             tableOffs += 0x06;
 
             let currPos = tableOffs;
             tableOffs += 0x06 * posCount;
+            // ignoring normals for now
             if (hasNorms)
-                tableOffs += 0x04 * normCount;
+                tableOffs += 0x04 * vertexCount;
             let entryStart = tableOffs;
 
-            let position = vec3.create();
             while (true) {
                 const idx = view.getInt16(tableOffs);
                 if (idx < 0) {
                     const vertexIDs = buffer.createTypedArray(Uint16Array, entryStart, (tableOffs - entryStart) / 2, Endianness.BIG_ENDIAN);
-                    vec3.set(position, view.getInt16(currPos), view.getInt16(currPos + 2), view.getInt16(currPos + 4));
-                    // ignoring normals for now
+                    const position = vec3.fromValues(view.getInt16(currPos), view.getInt16(currPos + 2), view.getInt16(currPos + 4));
                     if (boneID !== -1)
                         vertexBoneEntries.push({ position, boneID, vertexIDs });
                     currPos += 0x06;
@@ -902,6 +905,19 @@ export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureDat
             geo.normals.push(n);
         }
     }
+
+    if (trackColor) {
+        const colorMap: number[][] = [];
+        const vertexView = context.segmentBuffers[1].createDataView();
+        for (let offs = 0; offs < vertexView.byteLength; offs += 0x10) {
+            const colorIndex = vertexView.getUint16(offs + 0x06) & 0x1FF;
+            if (colorMap[colorIndex] === undefined)
+                colorMap[colorIndex] = [];
+            colorMap[colorIndex].push(offs >>> 4);
+        }
+        geo.colorMapping = colorMap;
+    }
+
     return geo;
 }
 

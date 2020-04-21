@@ -801,7 +801,7 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     const lastFrame = anim.endFrame - anim.startFrame;
     switch (mode) {
     case AnimationMode.Loop:
-        while (frame > lastFrame)
+        while (frame > lastFrame && lastFrame > 0)
             frame -= lastFrame;
         break;
     case AnimationMode.Once:

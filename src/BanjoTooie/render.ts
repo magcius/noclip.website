@@ -4,17 +4,17 @@ import * as F3DEX2 from '../PokemonSnap/f3dex2';
 
 import { DeviceProgram } from "../Program";
 import { Vertex, DrawCall } from "../BanjoKazooie/f3dex";
-import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxInputState, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxInputState, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
 import { nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderer';
-import { VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength } from '../MathHelpers';
+import { VertexAnimationEffect, VertexEffectType, GeoNode, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1 } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { RenderData, F3DEX_Program, GeometryData } from '../BanjoKazooie/render';
+import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
 import { randomRange } from '../BanjoKazooie/particles';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
@@ -213,14 +213,13 @@ class DrawCallInstance {
                 this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
             }
         }
-
         this.megaStateFlags = F3DEX2.translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
         this.createProgram();
     }
 
     private createProgram(): void {
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
-        program.defines.set('BONE_MATRIX_COUNT', '2');
+        program.defines.set('BONE_MATRIX_COUNT', this.drawMatrix.length.toString());
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -300,7 +299,7 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * 2 + 8 * 2);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 * this.drawMatrix.length + 8 * 2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         if (isSkybox)
@@ -308,11 +307,10 @@ class DrawCallInstance {
         else
             computeViewMatrix(viewMatrixScratch, viewerInput.camera);
 
-        mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrix[0]);
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
-
-        mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrix[1]);
-        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
+        for (let i = 0; i < this.drawMatrix.length; i++) {
+            mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrix[i]);
+            offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
+        }
 
         this.computeTextureMatrix(texMatrixScratch, 0);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
@@ -377,77 +375,6 @@ function sampleAnimationTrackLinear(track: AnimationTrack, frame: number): numbe
     return lerp(k0.value, k1.value, t);
 }
 
-const scratchVec3 = vec3.create();
-const scratchMatrix = mat4.create();
-export class BoneAnimator {
-    constructor(private animFile: AnimationFile, public duration: number) {
-    }
-
-    public getPhase(frame: number, mode: AnimationMode): number {
-        return getAnimFrame(this.animFile, frame, mode) / (this.animFile.endFrame - this.animFile.startFrame);
-    }
-
-    public fps(): number {
-        return (this.animFile.endFrame - this.animFile.startFrame) / this.duration;
-    }
-
-    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
-        timeInFrames = getAnimFrame(this.animFile, timeInFrames, mode);
-
-        let rotX = 0, rotY = 0, rotZ = 0;
-        let scaleX = 1, scaleY = 1, scaleZ = 1;
-        let transX = 0, transY = 0, transZ = 0;
-        for (let i = 0; i < this.animFile.tracks.length; i++) {
-            const track = this.animFile.tracks[i];
-            if (track.boneID !== bone.boneAnimID)
-                continue;
-
-            const value = sampleAnimationTrackLinear(track, timeInFrames);
-
-            if (track.trackType === AnimationTrackType.RotationX)
-                rotX = value * MathConstants.DEG_TO_RAD;
-            else if (track.trackType === AnimationTrackType.RotationY)
-                rotY = value * MathConstants.DEG_TO_RAD;
-            else if (track.trackType === AnimationTrackType.RotationZ)
-                rotZ = value * MathConstants.DEG_TO_RAD;
-            else if (track.trackType === AnimationTrackType.ScaleX)
-                scaleX = value;
-            else if (track.trackType === AnimationTrackType.ScaleY)
-                scaleY = value;
-            else if (track.trackType === AnimationTrackType.ScaleZ)
-                scaleZ = value;
-            else if (track.trackType === AnimationTrackType.TranslationX)
-                transX = value * translationScale;
-            else if (track.trackType === AnimationTrackType.TranslationY)
-                transY = value * translationScale;
-            else if (track.trackType === AnimationTrackType.TranslationZ)
-                transZ = value * translationScale;
-        }
-
-        // transMatrix * +offsetMatrix * rotationMatrix * scaleMatrix * -offsetMatrix;
-
-        vec3.set(scratchVec3, transX, transY, transZ);
-        mat4.fromTranslation(dst, scratchVec3);
-
-        mat4.translate(dst, dst, bone.offset);
-
-        mat4.identity(scratchMatrix);
-        if (rotZ !== 0)
-            mat4.rotateZ(scratchMatrix, scratchMatrix, rotZ);
-        if (rotY !== 0)
-            mat4.rotateY(scratchMatrix, scratchMatrix, rotY);
-        if (rotX !== 0)
-            mat4.rotateX(scratchMatrix, scratchMatrix, rotX);
-        mat4.mul(dst, dst, scratchMatrix);
-
-        vec3.set(scratchVec3, scaleX, scaleY, scaleZ);
-        mat4.scale(dst, dst, scratchVec3);
-
-        vec3.negate(scratchVec3, bone.offset);
-        mat4.translate(dst, dst, scratchVec3);
-    }
-}
-
 export const enum BKPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
@@ -456,23 +383,6 @@ export const enum BKPass {
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
-
-function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): number {
-    const lastFrame = anim.endFrame - anim.startFrame;
-    switch (mode) {
-        case AnimationMode.Loop:
-            while (frame > lastFrame)
-                frame -= lastFrame;
-            break;
-        case AnimationMode.Once:
-            if (frame > lastFrame)
-                frame = lastFrame;
-            break;
-        case AnimationMode.None:
-            return anim.startFrame;
-    }
-    return frame + anim.startFrame;
-}
 
 // an animation controller that makes it easier to change fps
 // and preserve control over the new phase
@@ -535,11 +445,14 @@ const geoNodeScratch = vec3.create();
 class GeoNodeRenderer {
     public drawCallInstances: DrawCallInstance[] = [];
     public children: GeoNodeRenderer[] = [];
+    private visible = true;
 
     constructor(private node: GeoNode) {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, sortState: XLUSortState, childIndex: number = 0): void {
+        if (!this.visible)
+            return;
         const node = this.node;
 
         // terminate early if this node wasn't selected and we have a selector
@@ -609,32 +522,43 @@ class GeoNodeRenderer {
     }
 }
 
-const enum ObjectFlags {
-    FinalLayer   = 0x00400000,
+export const enum LowObjectFlags {
+    ExtraFinal   = 0x00400000,
     Translucent  = 0x00020000,
-    EarlyOpaque  = 0x00000400,
+    EarlyOpaque  = 0x00000800,
 
-    AltAnimation = 0x00000800, // see extractor
+    AltVerts2    = 0x00800000,
     Blink        = 0x00000100,
+    AltVerts     = 0x00000008,
 }
 
-export const enum BKLayer {
+const enum HighObjectFlags {
+    Final        = 0x00008000,
+}
+
+export const enum BTLayer {
     Early,
     Opaque,
+    AfterPlayers,
     LevelXLU,
+    EarlyTranslucent,
     Translucent,
     Particles,
+    Final,
+    ExtraFinal,
 }
 
 // multiple flags can be set, so order is important
-export function layerFromFlags(flags: number): BKLayer {
-    if (flags & ObjectFlags.FinalLayer) // unused in our current data
-        return BKLayer.Particles;
-    if (flags & ObjectFlags.Translucent)
-        return BKLayer.Translucent;
-    if (flags & ObjectFlags.EarlyOpaque)
-        return BKLayer.Early;
-    return BKLayer.Opaque;
+export function layerFromFlags(low: number, high: number): BTLayer {
+    if (low & LowObjectFlags.Translucent)
+        return BTLayer.Translucent;
+    if (low & LowObjectFlags.ExtraFinal) // unused in our current data
+        return BTLayer.ExtraFinal;
+    if (low & LowObjectFlags.EarlyOpaque)
+        return BTLayer.Early;
+    if (high & HighObjectFlags.Final)
+        return BTLayer.Final;
+    return BTLayer.AfterPlayers;
 }
 
 const enum BlinkState {
@@ -646,7 +570,7 @@ const enum BlinkState {
 interface SelectorState {
     // we leave unknown entries undefined, so everything gets rendered
     values: (number | undefined)[];
-    lastFrame: number;
+    sinceUpdate: number;
     blinkState: BlinkState;
 }
 
@@ -695,12 +619,6 @@ class TextureAnimator {
         mapping.gfxTexture = frameList[frameIndex];
         return true;
     }
-}
-
-export const enum AnimationMode {
-    None,
-    Once,
-    Loop,
 }
 
 interface XLUSortState {
@@ -766,7 +684,6 @@ export class GeometryRenderer {
             this.boneToModelMatrixArray = nArray(boneToModelMatrixArrayCount, () => mat4.create());
         }
 
-
         if (this.geometryData.dynamic) {
             // there are vertex effects, so the vertex buffer data will change
             // make a copy for this renderer
@@ -799,9 +716,9 @@ export class GeometryRenderer {
         this.modelPointArray = nArray(geo.modelPoints.length, () => vec3.create());
 
         this.selectorState = {
-            lastFrame: 0,
+            sinceUpdate: 0,
             blinkState: 0,
-            values: [],
+            values: [undefined, 1, 0], // default selector values
         };
 
         // Traverse the node tree.
@@ -812,18 +729,24 @@ export class GeometryRenderer {
         const geoNodeRenderer = new GeoNodeRenderer(node);
 
         if (node.rspOutput !== null) {
-            const drawMatrix = [
-                this.boneToWorldMatrixArray[node.boneIndex],
-                this.boneToWorldMatrixArray[node.boneIndex],
-            ];
+            let drawMatrix: mat4[] = [];
+            if (this.geometryData.geo.geoFlags & GeoFlags.ExtraSegments)
+                // chnest objects use arbitrary joints, but we don't have the animations yet
+                drawMatrix = [this.modelMatrix, ...this.boneToWorldMatrixArray];
+            else {
+                drawMatrix = [
+                    this.boneToWorldMatrixArray[node.boneIndex],
+                    this.boneToWorldMatrixArray[node.boneIndex],
+                ];
 
-            // Skinned meshes need the parent bone as the second draw matrix.
-            const animationSetup = this.animationSetup;
-            if (animationSetup !== null) {
-                if (node.parentIndex === -1) {
-                    // The root bone won't have a skinned DL section, so doing nothing is fine.
-                } else {
-                    drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[node.parentIndex]);
+                // Skinned meshes need the parent bone as the second draw matrix.
+                const animationSetup = this.animationSetup;
+                if (animationSetup !== null) {
+                    if (node.parentIndex === -1) {
+                        // The root bone won't have a skinned DL section, so doing nothing is fine.
+                    } else {
+                        drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[node.parentIndex]);
+                    }
                 }
             }
 
@@ -935,12 +858,12 @@ export class GeometryRenderer {
         }
     }
 
-    private calcSelectorState(): void {
-        const currFrame = Math.floor(this.animationController.getTimeInFrames());
-        if (currFrame === this.selectorState.lastFrame)
+    private calcSelectorState(deltaSeconds: number): void {
+        this.selectorState.sinceUpdate += deltaSeconds;
+        if (this.selectorState.sinceUpdate < 1/30)
             return; // too soon to update
-        this.selectorState.lastFrame = currFrame;
-        if (this.objectFlags & ObjectFlags.Blink) {
+        this.selectorState.sinceUpdate = 0;
+        if (this.objectFlags & LowObjectFlags.Blink) {
             let eyePos = this.selectorState.values[1];
             if (eyePos === undefined)
                 eyePos = 1;
@@ -978,7 +901,7 @@ export class GeometryRenderer {
         this.calcAnim();
         this.calcBoneToWorld();
         this.calcModelPoints();
-        this.calcSelectorState();
+        this.calcSelectorState(viewerInput.deltaTime/1000);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -1007,9 +930,6 @@ export class GeometryRenderer {
             offs += fillVec4(mappedF32, offs, modelViewScratch[4], modelViewScratch[5], modelViewScratch[6]);
         }
 
-        // TODO: make sure the underlying vertex data gets modified only once per frame
-
-        // hope these are mutually exclusive
         if (this.vertexEffects.length > 0) {
             for (let i = 0; i < this.vertexEffects.length; i++) {
                 const effect = this.vertexEffects[i];
@@ -1028,23 +948,20 @@ export class GeometryRenderer {
             applySoftwareLighting(this.geometryData.geo.softwareLighting, this.vertexBufferData, this.geometryData.geo.normals!, this.boneToWorldMatrixArray, modelViewScratch);
         }
 
-        // disabled until we have animations
-        // if (this.geometryData.geo.vertexBoneTable !== null) {
-        //     this.calcBoneToModel();
-        //     const boneEntries = this.geometryData.geo.vertexBoneTable.vertexBoneEntries;
-        //     for (let i = 0; i < boneEntries.length; i++) {
-        //         // transformVec3Mat4w1(boneTransformScratch, this.boneToModelMatrixArray[boneEntries[i].boneID], boneEntries[i].position);
-        //         // vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
-        //         vec3.random(boneTransformScratch);
-        //         vec3.scale(boneTransformScratch, boneTransformScratch, 200)
-        //         for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
-        //             const vertexID = boneEntries[i].vertexIDs[j];
-        //             this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
-        //             this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
-        //             this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
-        //         }
-        //     }
-        // }
+        if (this.geometryData.geo.vertexBoneTable !== null) {
+            this.calcBoneToModel();
+            const boneEntries = this.geometryData.geo.vertexBoneTable.vertexBoneEntries;
+            for (let i = 0; i < boneEntries.length; i++) {
+                transformVec3Mat4w1(boneTransformScratch, this.boneToModelMatrixArray[boneEntries[i].boneID], boneEntries[i].position);
+                for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
+                    const vertexID = boneEntries[i].vertexIDs[j];
+                    this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+                    this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+                    this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                }
+            }
+        }
+
         if (this.geometryData.dynamic) {
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));

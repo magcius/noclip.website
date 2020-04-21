@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "fs";
 import { assert, hexzero, align, readString } from "../../util";
 import * as Pako from 'pako';
 import * as BYML from "../../byml";
-import { TextDecoder, print } from "util";
+import { TextDecoder } from "util";
 import { Endianness } from "../../endian";
 
 function fetchDataSync(path: string): ArrayBufferSlice {
@@ -12,7 +12,7 @@ function fetchDataSync(path: string): ArrayBufferSlice {
     return new ArrayBufferSlice(b.buffer as ArrayBuffer);
 }
 
-const pathBaseIn  = `../../../data/BanjoTooie_Raw`;
+const pathBaseIn = `../../../data/BanjoTooie_Raw`;
 const pathBaseOut = `../../../data/BanjoTooie`;
 
 interface FSFile {
@@ -53,7 +53,10 @@ function extractFileAndAppend(fileTable: CRG1File[], fs: FS, fileID: number): nu
     const index = fileTable.findIndex((file) => file.FileID === fileID);
     if (index >= 0)
         return index;
-    fileTable.push(extractFile(fs, fileID));
+    const newFile = extractFile(fs, fileID);
+    if (newFile === null)
+        return -1;
+    fileTable.push(newFile);
     return fileTable.length - 1;
 }
 
@@ -73,7 +76,7 @@ function decryptSetup(index: number, buffer: ArrayBufferSlice): void {
     const source = (index - setupOffset) * 0x10001;
     for (let i = 0; i < 14; i += 2) {
         keyBuffer[i] = (source >>> i) & 0xFF;
-        keyBuffer[i+1] = 0;
+        keyBuffer[i + 1] = 0;
     }
     cicResponse(keyBuffer);
 
@@ -88,17 +91,17 @@ function decryptSetup(index: number, buffer: ArrayBufferSlice): void {
 function cicResponse(buffer: Uint8Array): void {
     let acc = 5;
     let carry = true;
-    for (let i = 0; i < 2*buffer.length; i++) {
+    for (let i = 0; i < 2 * buffer.length; i++) {
         // get input nibble
         const byte = buffer[i >>> 1];
         let mem = i & 1 ? byte & 0xF : byte >>> 4;
 
         if (!(acc & 2))
             acc += 4;
-        acc = (acc + 9*mem + 8) & 0xF;
+        acc = (acc + 9 * mem + 8) & 0xF;
         mem = acc;
 
-        acc = (3*mem + (carry ? 1 : 7)) & 0xF;
+        acc = (3 * mem + (carry ? 1 : 7)) & 0xF;
         carry = carry ? acc <= mem : acc < mem;
         acc = (~acc) & 0xF;
 
@@ -129,13 +132,13 @@ function extractAndAppendTextures(fileTable: CRG1File[], fs: FS, modelIndex: num
     const bytes = new Uint8Array(buffer);
     let offs = 0;
     for (let i = 0; i < texCount; i++) {
-        const index = modelView.getUint32(texOffset + 8*(i+1));
-        const tex = extractFile(fs, index + textureFilesStart);
+        const index = modelView.getUint32(texOffset + 8 * (i + 1));
+        const tex = extractFile(fs, index + textureFilesStart)!;
         const texData = tex.Data.createTypedArray(Uint8Array);
         bytes.set(texData, offs);
         offs += tex.Data.byteLength;
     }
-    fileTable.push({FileID: modelIndex | 0x8000, Data: new ArrayBufferSlice(buffer)});
+    fileTable.push({ FileID: model.FileID | 0x8000, Data: new ArrayBufferSlice(buffer) });
     return fileTable.length - 1;
 }
 
@@ -144,6 +147,37 @@ function appendModelWithTextures(fileTable: CRG1File[], fs: FS, id: number): num
     if (modelIndex >= 0 && fs.files[id].flags === 0x10 && hasExternalTextures(fileTable[modelIndex]))
         return extractAndAppendTextures(fileTable, fs, modelIndex);
     return -1;
+}
+
+interface MapSection {
+    OpaID: number;
+    XluID: number;
+    Position: number[];
+}
+
+function extractMapSections(fs: FS, fileTable: CRG1File[], dllIndex: number, start: number): MapSection[] {
+    const dll = extractDLL(fs.buffer, dllIndex);
+    const view = dll.data.createDataView(start);
+    const out: MapSection[] = [];
+
+    let offs = 0;
+    while (true) {
+        const Position: number[] = [];
+        Position.push(view.getFloat32(offs + 0x00));
+        Position.push(view.getFloat32(offs + 0x04));
+        Position.push(view.getFloat32(offs + 0x08));
+        if (Math.abs(Position[0]) < 1)
+            break;
+        const OpaID = view.getUint16(offs + 0x26);
+        const XluID = view.getUint16(offs + 0x28);
+        offs += 0x2C;
+
+        appendModelWithTextures(fileTable, fs, OpaID);
+        appendModelWithTextures(fileTable, fs, XluID);
+
+        out.push({ OpaID, XluID, Position });
+    }
+    return out;
 }
 
 function extractMap(fs: FS, name: string, sceneID: number, opaID: number, xluID = -1, opaSky = -1, xluSky = -1): void {
@@ -170,13 +204,31 @@ function extractMap(fs: FS, name: string, sceneID: number, opaID: number, xluID 
 
     extractFileAndAppend(fileTable, fs, crg1.SetupFileID);
 
-    crg1.OpaGeoTextures = appendModelWithTextures(fileTable, fs, opaID)
-    crg1.XluGeoTextures = appendModelWithTextures(fileTable, fs, xluID)
-    crg1.OpaSkyboxTextures = appendModelWithTextures(fileTable, fs, opaSky)
-    crg1.XluSkyboxTextures = appendModelWithTextures(fileTable, fs, xluSky)
+    crg1.OpaGeoTextures = appendModelWithTextures(fileTable, fs, opaID);
+    crg1.XluGeoTextures = appendModelWithTextures(fileTable, fs, xluID);
+    crg1.OpaSkyboxTextures = appendModelWithTextures(fileTable, fs, opaSky);
+    crg1.XluSkyboxTextures = appendModelWithTextures(fileTable, fs, xluSky);
+
+
+    let sections: MapSection[] = [];
+    if (sceneID === 0x1A7)
+        sections = extractMapSections(fs, fileTable, 0x296, 0x6D0);
+    else if (sceneID === 0x1A8)
+        sections = extractMapSections(fs, fileTable, 0x297, 0x2A0);
+    else if (sceneID === 0x1A9)
+        sections = extractMapSections(fs, fileTable, 0x298, 0x2A0);
+
+    if (sections.length > 0)
+        (crg1 as any).Sections = sections;
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));
+}
+
+interface Animation {
+    duration: number;
+    id: number;
+    flags: number;
 }
 
 function extractActor(fs: FS, id: number, actorDLL: DLLData, chosenFunc: number): void {
@@ -203,20 +255,55 @@ function extractActor(fs: FS, id: number, actorDLL: DLLData, chosenFunc: number)
     if (modelIndex >= 0)
         appendModelWithTextures(fileTable, fs, modelIndex);
 
+    const FirstAnimation = view.getInt16(defStart + 0x06);
+    const animationTable = view.getUint32(defStart + 0x08) + actorOffs;
+    const Animations: Animation[] = [];
+    if (animationTable > 0 && animationTable < defStart) {
+        for (let offs = animationTable; offs < defStart; offs += 8) {
+            const duration = view.getFloat32(offs + 0x00);
+            // TODO: find animation table length
+            if (duration !== 0 && duration < .01)
+                break;
+            const id = view.getUint16(offs + 0x04);
+            const flags = view.getUint16(offs + 0x06);
+            extractFileAndAppend(fileTable, fs, id);
+            Animations.push({ duration, id, flags });
+        }
+    }
+    const PairedIDs: number[] = [];
 
     const actor = {
         Name: actorDLL.name,
-        Definition: actorDLL.data.slice(defStart),
+        Definition: actorDLL.data.subarray(defStart, 0x44),
         Files: fileTable,
-        IsFlipbook: modelIndex >= 0 && fs.files[modelIndex].flags !== 0x10,
+        IsFlipbook: modelIndex < 0 || fs.files[modelIndex].flags !== 0x10,
+        Animations,
+        FirstAnimation,
+        PairedIDs,
     };
+
+    // this is actually several actors
+    if (actorDLL.name === "chnests")
+        PairedIDs.push(0x85C);
+    else if (actorDLL.name === "chjinjo" || actorDLL.name === "chbadjinjo") {
+        const ps: number[] = [];
+        for (let p = 0xC31; p <= 0xC39; p++) {
+            ps.push(p);
+            extractFileAndAppend(fileTable, fs, p);
+        }
+        (actor as any).Palettes = ps;
+    } else if (id === 0x438) { // king jingaling
+        extractFileAndAppend(fileTable, fs, modelIndex + 1);
+        (actor as any).Variants = [modelIndex, modelIndex + 1];
+    }
+
     const data = BYML.write(actor, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/actor/${hexzero(id, 3).toUpperCase()}_arc.crg1`, Buffer.from(data));
 }
 
 function dumpNames(fs: FS, rom: ArrayBufferSlice): Map<number, string> {
     const stringTables = new Map<number, ArrayBufferSlice>();
-    const names = new Map<number,string>();
+    const names = new Map<number, string>();
     const dec = new TextDecoder();
 
     const introText = extractDLL(rom, 0x29E);
@@ -228,8 +315,8 @@ function dumpNames(fs: FS, rom: ArrayBufferSlice): Map<number, string> {
         const tableIndex = (entry >> 6) & 0xFFFF;
         const index = entry & 0x3F;
         if (!stringTables.has(tableIndex))
-            stringTables.set(tableIndex, extractFile(fs, tableIndex).Data);
-        const table = stringTables.get(tableIndex);
+            stringTables.set(tableIndex, extractFile(fs, tableIndex)!.Data);
+        const table = stringTables.get(tableIndex)!;
         const txtView = table.createDataView();
         const nameCount = txtView.getUint16(0x02);
         let txtOffs = 4;
@@ -237,8 +324,7 @@ function dumpNames(fs: FS, rom: ArrayBufferSlice): Map<number, string> {
             const x = txtView.getUint8(txtOffs + 0x00) & 0x7F;
             const length = txtView.getUint8(txtOffs + 0x01);
             if (x == index) {
-                const strArray = table.createTypedArray(Uint8Array, txtOffs + 2, length - 1);
-                names.set(level, dec.decode(strArray));
+                names.set(level, readString(table, txtOffs + 2, length - 1));
                 break;
             } else {
                 txtOffs += length + 2;
@@ -358,6 +444,11 @@ function main() {
     const data = BYML.write(crg, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/static_arc.crg1`, Buffer.from(data));
 
+    for (let id of [0x85C]) {
+        const file = extractFile(fs, id)!;
+        const data = BYML.write(file, BYML.FileType.CRG1);
+        writeFileSync(`${pathBaseOut}/file/${hexzero(id, 3).toUpperCase()}_arc.crg1`, Buffer.from(data));
+    }
 }
 
 main();
