@@ -1,19 +1,12 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxBugQuirks, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
 
-import { assert, assertExists, leftPad } from '../../util';
+import { gfxColorEqual, gfxColorCopy, range, assert, assertExists, leftPad } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
-import { IS_DEVELOPMENT } from '../../BuildVersion';
-import { colorEqual, colorCopy } from '../../Color';
-import { range } from '../../MathHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
-import { NormalizedViewportCoords, IdentityViewportCoords } from '../helpers/RenderTargetHelpers';
-
-const SHADER_DEBUG = IS_DEVELOPMENT;
-
-const TRACK_RESOURCES = IS_DEVELOPMENT;
+import { IdentityViewportCoords } from '../helpers/RenderTargetHelpers';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
@@ -433,9 +426,9 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     assert(newMegaState.attachmentsState.length === 1);
     applyAttachmentState(gl, 0, currentMegaState.attachmentsState![0], newMegaState.attachmentsState[0]);
 
-    if (!colorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
+    if (!gfxColorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
         gl.blendColor(newMegaState.blendConstant.r, newMegaState.blendConstant.g, newMegaState.blendConstant.b, newMegaState.blendConstant.a);
-        colorCopy(currentMegaState.blendConstant, newMegaState.blendConstant);
+        gfxColorCopy(currentMegaState.blendConstant, newMegaState.blendConstant);
     }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
@@ -537,12 +530,22 @@ function prependLineNo(str: string, lineStart: number = 1) {
     return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
 }
 
+export class GfxPlatformWebGL2Config {
+    public trackResources: boolean = false;
+    public shaderDebug: boolean = false;
+}
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
+    // Configuration
+    private _shaderDebug = false;
+
+    // GL extension
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
     private _uniformBufferMaxPageByteSize: number;
 
+    // Object pools
     private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
     private _renderPassPool: GfxRenderPassP_GL[] = [];
 
@@ -592,7 +595,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public separateSamplerTextures = false;
     public clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
 
-    constructor(public gl: WebGL2RenderingContext) {
+    constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
@@ -642,7 +645,10 @@ void main() {
 
         this._checkForBugQuirks();
 
-        if (TRACK_RESOURCES)
+        if (configuration.shaderDebug)
+            this._shaderDebug = true;
+
+        if (configuration.trackResources)
             this._resourceCreationTracker = new ResourceCreationTracker();
     }
 
@@ -733,7 +739,7 @@ void main() {
         return this._scTexture!;
     }
 
-    public present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void {
+    public present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: GfxNormalizedViewportCoords): void {
         if (platformFramebuffer !== undefined) {
             const gl = this.gl;
             // TODO(jstpierre): Find a way to copy the depth buffer to WebXR.
@@ -745,7 +751,7 @@ void main() {
         }
     }
 
-    private blitFullscreenTexture(texture: GfxTexture, viewport: NormalizedViewportCoords | null = null): void {
+    private blitFullscreenTexture(texture: GfxTexture, viewport: GfxNormalizedViewportCoords | null = null): void {
         const gl = this.gl;
         this._setMegaState(this._fullscreenCopyMegaState);
         this._setActiveTexture(gl.TEXTURE0);
@@ -1406,7 +1412,7 @@ void main() {
         }
 
         // Check for errors.
-        if (pipeline.ready && SHADER_DEBUG)
+        if (pipeline.ready && this._shaderDebug)
             this._checkProgramCompilationForErrors(pipeline.program);
 
         return pipeline.ready;
@@ -1991,8 +1997,8 @@ void main() {
     //#endregion
 }
 
-export function createSwapChainForWebGL2(gl: WebGL2RenderingContext): GfxSwapChain {
-    return new GfxImplP_GL(gl);
+export function createSwapChainForWebGL2(gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config): GfxSwapChain {
+    return new GfxImplP_GL(gl, configuration);
 }
 
 export function gfxDeviceGetImpl_GL(gfxDevice: GfxDevice): GfxImplP_GL {

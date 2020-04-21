@@ -1,6 +1,6 @@
 
-import { assert } from "../../util";
 import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice } from "../platform/GfxPlatform";
+import { assert } from "../platform/GfxPlatformUtil";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 

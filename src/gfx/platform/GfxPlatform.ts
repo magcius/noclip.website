@@ -5,7 +5,6 @@
 
 import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { NormalizedViewportCoords } from "../helpers/RenderTargetHelpers";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -279,13 +278,21 @@ export interface GfxVendorInfo {
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
 
+// Viewport in normalized coordinate space, from 0 to 1.
+export interface GfxNormalizedViewportCoords {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
 export interface GfxSwapChain {
     configureSwapChain(width: number, height: number): void;
     getDevice(): GfxDevice;
     getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void;
+    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: GfxNormalizedViewportCoords): void;
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 

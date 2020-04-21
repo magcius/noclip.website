@@ -6,7 +6,7 @@ import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
@@ -14,6 +14,7 @@ import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescripto
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
+import { IS_DEVELOPMENT } from './BuildVersion';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -368,7 +369,11 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
     }
 
-    const gfxSwapChain = createSwapChainForWebGL2(gl);
+    const config = new GfxPlatformWebGL2Config();
+    config.trackResources = IS_DEVELOPMENT;
+    config.shaderDebug = IS_DEVELOPMENT;
+
+    const gfxSwapChain = createSwapChainForWebGL2(gl, config);
     out.viewer = new Viewer(gfxSwapChain, canvas);
 
     return InitErrorCode.SUCCESS;

@@ -104,7 +104,6 @@ export function makeEmptyRenderPassDescriptor(): GfxRenderPassDescriptor {
     return makeClearRenderPassDescriptor(false, TransparentBlack);
 }
 
-// Normalized viewport coordinates
 export interface NormalizedViewportCoords {
     x: number;
     y: number;
