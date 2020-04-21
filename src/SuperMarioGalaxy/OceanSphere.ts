@@ -618,6 +618,8 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
     public destroy(device: GfxDevice): void {
         this.oceanSphereTex.destroy(device);
         this.oceanSphereEnvRefTex.destroy(device);
+        this.ddrawFace.destroy(device);
+        this.ddrawBack.destroy(device);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
