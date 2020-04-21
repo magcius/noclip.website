@@ -551,7 +551,12 @@ export class RailRider {
     public getNextPointNo(): number {
         const delta = (this.direction === RailDirection.TOWARDS_END) ? 1 : -1;
         const numParts = this.bezierRail.railParts.length;
-        return (this.currentPointId + delta + numParts) % numParts;
+        const nextPointNo = this.currentPointId + delta;
+        if (this.bezierRail.isClosed) {
+            return (nextPointNo + numParts) % numParts;
+        } else {
+            return clamp(nextPointNo, 0, numParts - 1);
+        }
     }
 
     public getNextPointCoord(): number {

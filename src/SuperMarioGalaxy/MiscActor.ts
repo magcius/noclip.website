@@ -6023,7 +6023,7 @@ export class Flag extends LiveActor {
                 this.swingPointCount = 6;
                 this.flyPerPoint = 160.0 / 6;
                 // this.minDistAlpha = 200.0;
-                // this.maxDistALpha = 500.0;
+                // this.maxDistAlpha = 500.0;
                 this.hoistPerPoint = 145.0 / 4;
                 this.vertical = true;
                 this.affectGravity = 0.5;
@@ -6043,7 +6043,7 @@ export class Flag extends LiveActor {
                 this.swingPointCount = 5;
                 this.flyPerPoint = 500.0 / 5;
                 this.hoistPerPoint = 400.0 / 4;
-            } else if (flagName === 'FlagRaceA' || flagName === 'FlagTamakoro') {
+            } else if (flagName === 'FlagRaceA' || flagName === 'FlagTamakoro' || flagName === 'Flag') {
                 // Nothing to do.
             } else {
                 throw "whoops";
@@ -8287,5 +8287,23 @@ export class TimerSwitch extends LiveActor {
                 this.makeActorDead(sceneObjHolder);
             }
         }
+    }
+
+    public static requestArchives(): void {
+    }
+}
+
+export class CoconutTree extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'CoconutTree');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'CoconutTree');
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initHitSensor();
+        // addBodyMessageSensorMapObj
+        // initCollisionParts
+        // setClippingTypeSphere(this, 2000.0);
+        this.makeActorAppeared(sceneObjHolder);
     }
 }

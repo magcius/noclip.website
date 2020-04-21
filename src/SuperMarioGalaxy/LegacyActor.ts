@@ -207,10 +207,7 @@ export class NoclipLegacyActorSpawner {
             case 'Plant':
             case 'Creeper':
             case 'TrampleStar':
-            case 'Flag':
             case 'FlagKoopaC':
-            case 'FlagRaceA':
-            case 'FlagTamakoro':
             case 'WoodLogBridge':
             case 'SandBird':
             case 'RingBeamerAreaObj':
