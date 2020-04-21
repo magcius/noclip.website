@@ -619,7 +619,6 @@ class SceneDesc implements Viewer.SceneDesc {
         if (obj.Sections) {
             const sections: MapSection[] = obj.Sections;
             for (let i = 0; i < sections.length; i++) {
-                console.log(hexzero(sections[i].OpaID, 4));
                 const opaFile = findFileByID(obj, sections[i].OpaID)!;
                 const geo = Geo.parseBT(opaFile.Data, Geo.RenderZMode.OPA, findFileByID(obj, 0x8000 | sections[i].OpaID)?.Data);
                 const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
