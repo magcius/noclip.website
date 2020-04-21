@@ -1,6 +1,7 @@
 
 import { vec3, mat4 } from "gl-matrix";
 import { nArray } from "./util";
+import { transformVec3Mat4w1 } from "./MathHelpers";
 
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
@@ -233,7 +234,7 @@ export enum IntersectionState {
 }
 
 export class Frustum {
-    private static scratchPlaneVec3 = nArray(9, () => vec3.create());
+    private static scratchPlaneVec3 = nArray(8, () => vec3.create());
 
     // View-space configuration.
     public left: number;
@@ -278,19 +279,18 @@ export class Frustum {
         vec3.set(scratch[5], fn * this.right, fn * this.top, this.far);
         vec3.set(scratch[6], fn * this.right, fn * this.bottom, this.far);
         vec3.set(scratch[7], fn * this.left, fn * this.bottom, this.far);
-        vec3.set(scratch[8], 0, 0, 0);
 
-        for (let i = 0; i < 9; i++)
-            vec3.transformMat4(scratch[i], scratch[i], worldMatrix);
+        for (let i = 0; i < 8; i++)
+            transformVec3Mat4w1(scratch[i], worldMatrix, scratch[i]);
 
         this.aabb.setFromPoints(scratch);
 
-        this.planes[0].set(scratch[8], scratch[0], scratch[3]); // left plane
-        this.planes[1].set(scratch[8], scratch[2], scratch[1]); // right plane
+        this.planes[0].set(scratch[0], scratch[4], scratch[7]); // left plane
+        this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
         this.planes[2].set(scratch[0], scratch[2], scratch[1]); // near plane
         this.planes[3].set(scratch[4], scratch[6], scratch[7]); // far plane
-        this.planes[4].set(scratch[8], scratch[1], scratch[0]); // top plane
-        this.planes[5].set(scratch[8], scratch[3], scratch[2]); // bottom plane
+        this.planes[4].set(scratch[2], scratch[6], scratch[5]); // top plane
+        this.planes[5].set(scratch[3], scratch[7], scratch[6]); // bottom plane
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
@@ -306,7 +306,7 @@ export class Frustum {
             ctx.beginPath();
             for (let i = 0; i < 4; i++) {
                 const p = scratch[i];
-                vec3.transformMat4(p, p, worldMatrix);
+                transformVec3Mat4w1(p, worldMatrix, p);
                 const x = this.visualizer.dsx(p[0]);
                 const y = this.visualizer.dsy(p[2]);
                 ctx.lineTo(x, y);
