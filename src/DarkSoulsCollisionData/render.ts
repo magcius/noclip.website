@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -214,6 +214,7 @@ export class Scene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(offs);
