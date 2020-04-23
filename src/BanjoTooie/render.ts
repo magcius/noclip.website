@@ -923,7 +923,7 @@ export class GeometryRenderer {
 
         if (computeLookAt) {
             // compute lookat X and Y in view space, since that's the transform the shader will have
-            transformVec3Mat4w0(lookatScratch[0], viewerInput.camera.viewMatrix, lookatScratch[0]);
+            transformVec3Mat4w1(lookatScratch[0], viewerInput.camera.viewMatrix, lookatScratch[0]);
 
             mat4.targetTo(modelViewScratch, Vec3Zero, lookatScratch[0], Vec3UnitY);
             offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[1], modelViewScratch[2]);
