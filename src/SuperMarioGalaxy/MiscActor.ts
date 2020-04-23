@@ -8840,10 +8840,10 @@ export class MiniatureGalaxyHolder extends NameObj {
                 continue;
 
             // Koopa Galaxies get sorted at the end.
-            if (otherGalaxy.galaxyType === MiniatureGalaxyType.Koopa)
+            if (otherGalaxy.galaxyType === MiniatureGalaxyType.Boss)
                 continue;
 
-            if (galaxy.galaxyType === MiniatureGalaxyType.Koopa) {
+            if (galaxy.galaxyType === MiniatureGalaxyType.Boss) {
                 index++;
                 continue;
             }
@@ -9015,7 +9015,7 @@ class AstroDomeOrbit extends LiveActor {
 
 const enum MiniatureGalaxyNrv { Wait }
 
-const enum MiniatureGalaxyType { Normal, ExGalaxy, Koopa }
+const enum MiniatureGalaxyType { Normal, ExGalaxy, Boss }
 
 export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
     public galaxyType: MiniatureGalaxyType;
@@ -9074,7 +9074,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         startBtk(this.shadowModel, 'MiniatureGalaxyShadow');
         this.orbit.makeActorAppeared(sceneObjHolder);
 
-        if (this.galaxyType === MiniatureGalaxyType.Koopa)
+        if (this.galaxyType === MiniatureGalaxyType.Boss)
             emitEffect(sceneObjHolder, this, 'EyeLight');
     }
 
@@ -9113,7 +9113,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         const galaxyType: MiniatureGalaxyType = fallback(getJMapInfoArg0(infoIter), -1);
 
         let modelName = getObjectName(infoIter);
-        if (galaxyType === MiniatureGalaxyType.Koopa)
+        if (galaxyType === MiniatureGalaxyType.Boss && modelName.includes('KoopaBattleVs'))
             modelName = 'MiniKoopaGalaxy';
 
         return modelName;
