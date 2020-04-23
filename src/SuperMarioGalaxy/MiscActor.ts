@@ -6368,6 +6368,13 @@ interface ElectricRailBase extends LiveActor {
     drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput): void;
 }
 
+function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
+    const adaptor = new NameObjAdaptor(sceneObjHolder, name);
+    adaptor.drawCallback = drawCallback;
+    connectToScene(sceneObjHolder, adaptor, -1, -1, -1, DrawType.BLOOM_MODEL);
+    return adaptor;
+}
+
 // This is originally a LiveActor, but I think it can just be a NameObj without loss of functionality...
 export class ElectricRailHolder extends NameObj {
     private models: (ModelObj | null)[] = nArray(ElectricRailType.Count, () => null);
@@ -6377,7 +6384,7 @@ export class ElectricRailHolder extends NameObj {
         super(sceneObjHolder, 'ElectricRailHolder');
         connectToScene(sceneObjHolder, this, 0x23, 5, -1, DrawType.ELECTRIC_RAIL_HOLDER);
 
-        // TODO(jstpierre): createAdaptorAndConnectToDrawBloomModel()
+        createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, 'ElectricRailHolder Bloom', this.draw.bind(this));
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -8863,13 +8870,6 @@ export class MiniatureGalaxyHolder extends NameObj {
     }
 }
 
-function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
-    const adaptor = new NameObjAdaptor(sceneObjHolder, name);
-    adaptor.drawCallback = drawCallback;
-    connectToScene(sceneObjHolder, adaptor, -1, -1, -1, DrawType.BLOOM_MODEL);
-    return adaptor;
-}
-
 class AstroDomeOrbit extends LiveActor {
     private radius: number = 5000.0;
     private curCoord: number = 0;
@@ -8882,7 +8882,7 @@ class AstroDomeOrbit extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, 'AstroDomeOrbit');
         connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.ASTRO_DOME_ORBIT);
 
-        createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, name, this.drawBloom.bind(this));
+        createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, 'AstroDomeOrbit Bloom', this.drawBloom.bind(this));
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
