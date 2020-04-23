@@ -583,6 +583,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("MiniOceanPhantomCaveGalaxy",     MiniatureGalaxy),
     _("MiniFloaterOtaKingGalaxy",       MiniatureGalaxy),
     _("MiniSkullSharkGalaxy",           MiniatureGalaxy),
+    _("MiniFactoryGalaxy",              MiniatureGalaxy),
     _("MiniOceanRingGalaxy",            MiniatureGalaxy),
     _("MiniReverseKingdomGalaxy",       MiniatureGalaxy),
     _("MiniKoopaBattleVs2Galaxy",       MiniatureGalaxy),
