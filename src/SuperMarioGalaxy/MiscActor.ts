@@ -8887,6 +8887,9 @@ class AstroDomeOrbit extends LiveActor {
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
+        this.ddrawBloom.setVtxDesc(GX.Attr.POS, true);
+        this.ddrawBloom.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
         const mb = new GXMaterialBuilder('AstroDomeOrbit');
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
@@ -8902,14 +8905,14 @@ class AstroDomeOrbit extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    private drawOrbitPath(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, width: number, height: number, color: number): void {
+    private drawOrbitPath(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, ddraw: TDDraw, width: number, height: number, color: number): void {
         const device = sceneObjHolder.modelCache.device;
-        this.ddraw.beginDraw();
-        this.drawCeiling(this.ddraw, width, true, height);
-        this.drawCeiling(this.ddraw, width, false, height);
-        this.drawSide(this.ddraw, width, true, height);
-        this.drawSide(this.ddraw, width, false, height);
-        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+        ddraw.beginDraw();
+        this.drawCeiling(ddraw, width, true, height);
+        this.drawCeiling(ddraw, width, false, height);
+        this.drawSide(ddraw, width, true, height);
+        this.drawSide(ddraw, width, false, height);
+        const renderInst = ddraw.endDraw(device, renderInstManager);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
@@ -8929,14 +8932,14 @@ class AstroDomeOrbit extends LiveActor {
         if (!isValidDraw(this))
             return;
 
-        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, 100.0, 50.0, 0x13B1FFFF);
+        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, this.ddraw, 100.0, 50.0, 0x13B1FFFF);
     }
 
     private drawBloom(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!isValidDraw(this))
             return;
 
-        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, 131.0, 60.0, 0x00B464FF);
+        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, this.ddrawBloom, 131.0, 60.0, 0x00B464FF);
     }
 
     private drawCeiling(ddraw: TDDraw, width: number, top: boolean, height: number): void {
@@ -8946,7 +8949,7 @@ class AstroDomeOrbit extends LiveActor {
 
         const y = top ? bottomY : topY;
 
-        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         for (let i = 0; i <= 64; i++) {
             const theta = MathConstants.TAU * (i / 64);
             const sin = Math.sin(theta), cos = Math.cos(theta);
@@ -8962,7 +8965,7 @@ class AstroDomeOrbit extends LiveActor {
                 ddraw.position3vec3(scratchVec3a);
             }
         }
-        this.ddraw.end();
+        ddraw.end();
     }
 
     private drawSide(ddraw: TDDraw, width: number, outer: boolean, height: number): void {
@@ -8972,7 +8975,7 @@ class AstroDomeOrbit extends LiveActor {
 
         const radius = outer ? outerRadius : innerRadius;
 
-        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
         for (let i = 0; i <= 64; i++) {
             const theta = MathConstants.TAU * (i / 64);
             const sin = Math.sin(theta), cos = Math.cos(theta);
@@ -8988,7 +8991,7 @@ class AstroDomeOrbit extends LiveActor {
                 ddraw.position3vec3(scratchVec3b);
             }
         }
-        this.ddraw.end();
+        ddraw.end();
     }
 
     public setup(sceneObjHolder: SceneObjHolder, layerId: number, idx: number): void {
