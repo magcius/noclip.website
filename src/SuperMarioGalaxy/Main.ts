@@ -422,6 +422,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
             this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
+            this.execute(objPassRenderer, DrawType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template3D, bloomParameterBufferOffs);

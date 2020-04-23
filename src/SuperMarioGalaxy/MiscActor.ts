@@ -11,7 +11,7 @@ import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_Materi
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
+import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj, NameObjAdaptor } from './NameObj';
 import { assertExists, leftPad, fallback, nArray, assert } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isGreaterEqualStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
@@ -8863,18 +8863,26 @@ export class MiniatureGalaxyHolder extends NameObj {
     }
 }
 
+function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
+    const adaptor = new NameObjAdaptor(sceneObjHolder, name);
+    adaptor.drawCallback = drawCallback;
+    connectToScene(sceneObjHolder, adaptor, -1, -1, -1, DrawType.BLOOM_MODEL);
+    return adaptor;
+}
+
 class AstroDomeOrbit extends LiveActor {
     private radius: number = 5000.0;
     private curCoord: number = 0;
 
     private materialHelper: GXMaterialHelperGfx;
     private ddraw = new TDDraw();
+    private ddrawBloom = new TDDraw();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'AstroDomeOrbit');
         connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.ASTRO_DOME_ORBIT);
 
-        // TODO(jstpierre): createAdaptorAndConnectToDrawBloomModel
+        createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, name, this.drawBloom.bind(this));
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -8894,19 +8902,16 @@ class AstroDomeOrbit extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!isValidDraw(this))
-            return;
-
+    private drawOrbitPath(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, width: number, height: number, color: number): void {
         const device = sceneObjHolder.modelCache.device;
         this.ddraw.beginDraw();
-        this.drawCeiling(this.ddraw, 100.0, true, 50.0);
-        this.drawCeiling(this.ddraw, 100.0, false, 50.0);
-        this.drawSide(this.ddraw, 100.0, true, 50.0);
-        this.drawSide(this.ddraw, 100.0, false, 50.0);
+        this.drawCeiling(this.ddraw, width, true, height);
+        this.drawCeiling(this.ddraw, width, false, height);
+        this.drawSide(this.ddraw, width, true, height);
+        this.drawSide(this.ddraw, width, false, height);
         const renderInst = this.ddraw.endDraw(device, renderInstManager);
 
-        colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], 0x13B1FFFF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
         const materialHelper = this.materialHelper;
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
@@ -8918,6 +8923,20 @@ class AstroDomeOrbit extends LiveActor {
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isValidDraw(this))
+            return;
+
+        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, 100.0, 50.0, 0x13B1FFFF);
+    }
+
+    private drawBloom(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isValidDraw(this))
+            return;
+
+        this.drawOrbitPath(sceneObjHolder, renderInstManager, viewerInput, 131.0, 60.0, 0x00B464FF);
     }
 
     private drawCeiling(ddraw: TDDraw, width: number, top: boolean, height: number): void {
@@ -8962,11 +8981,11 @@ class AstroDomeOrbit extends LiveActor {
             vec3.set(scratchVec3b, cos * radius, bottomY, sin * radius);
 
             if (outer) {
-                ddraw.position3vec3(scratchVec3a);
                 ddraw.position3vec3(scratchVec3b);
+                ddraw.position3vec3(scratchVec3a);
             } else {
-                ddraw.position3vec3(scratchVec3b);
                 ddraw.position3vec3(scratchVec3a);
+                ddraw.position3vec3(scratchVec3b);
             }
         }
         this.ddraw.end();
@@ -9006,6 +9025,11 @@ class AstroDomeOrbit extends LiveActor {
 
     public moveCoord(deltaTimeFrames: number): void {
         this.curCoord += (-0.05) * deltaTimeFrames;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+        this.ddrawBloom.destroy(device);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {

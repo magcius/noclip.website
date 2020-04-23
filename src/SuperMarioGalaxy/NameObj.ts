@@ -44,6 +44,7 @@ export const enum DrawType {
     ASTRO_DOME_SKY_CLEAR           = 0x1E,
     ASTRO_DOME_ORBIT               = 0x1F,
     OCEAN_BOWL_BLOOM_DRAWER        = 0x21,
+    BLOOM_MODEL                    = 0x36,
     BRIGHT_SUN                     = 0x39,
     WATER_CAMERA_FILTER            = 0x3A,
 
@@ -301,5 +302,32 @@ export class SceneNameObjListExecutor {
                 actor.setIndirectTextureOverride(sceneTexture);
             }
         }
+    }
+}
+
+export class NameObjAdaptor extends NameObj {
+    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
+    public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        if (this.calcAnimCallback !== null)
+            this.calcAnimCallback(sceneObjHolder, viewerInput);
+    }
+
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
+        if (this.calcViewAndEntryCallback !== null)
+            this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        if (this.movementCallback !== null)
+            this.movementCallback(sceneObjHolder, viewerInput);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.drawCallback !== null)
+            this.drawCallback(sceneObjHolder, renderInstManager, viewerInput);
     }
 }
