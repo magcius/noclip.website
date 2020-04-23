@@ -108,6 +108,10 @@ export function connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHol
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT, -1);
 }
 
+export function connectToSceneNoShadowedMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
+}
+
 export function connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
@@ -1003,7 +1007,7 @@ export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
 }
 
 export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
-    return actor.resourceHolder.arc.findFileData(`${name}.kcl`) !== null;
+    return actor.resourceHolder.arc.findFileData(`${name.toLowerCase()}.kcl`) !== null;
 }
 
 export function useStageSwitchSleep(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {

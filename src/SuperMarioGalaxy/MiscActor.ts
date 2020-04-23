@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -420,7 +420,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.initNerve !== null)
             this.initNerve(initInfo.initNerve as TNerve);
 
-        if (isExistCollisionResource(this, this.name)) {
+        if (isExistCollisionResource(this, this.objName)) {
             if (!initInfo.initHitSensor) {
                 this.initHitSensor();
                 addBodyMessageSensorMapObj(sceneObjHolder, this);
@@ -430,7 +430,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             // TODO(jstpierre): Follow joint
 
             const bodySensor = this.getSensor('body')!;
-            initCollisionParts(sceneObjHolder, this, this.name, bodySensor, hostMtx);
+            initCollisionParts(sceneObjHolder, this, this.objName, bodySensor, hostMtx);
             // TODO(jstpierre): MoveLimit
         }
 
@@ -2454,7 +2454,26 @@ export class Sky extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneSky(sceneObjHolder, this);
 
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+        useStageSwitchReadAppear(sceneObjHolder, this, infoIter);
+
+        if (this.name === 'SummerSky') {
+            // TODO(jstpierre): SpaceInner
+        }
+
+        // TODO(jstpierre): MirrorReflectionModel
+
         tryStartAllAnim(this, this.name);
+        // registerDemoSimpleCastAll
+        // initNerve
+
+        if (isValidSwitchAppear(this)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2681,6 +2700,16 @@ export class AstroMapObj extends MapObjActor {
                 'AstroStarPlateBedRoom',
                 'AstroStarPlateMachine',
                 'AstroStarPlateTower',
+            ];
+            return table[domeId - 1];
+        } else if (objName === 'AstroDome') {
+            const table = [
+                'AstroDomeObservatory',
+                'AstroDomeWell',
+                'AstroDomeKitchen',
+                'AstroDomeBedRoom',
+                'AstroDomeMachine',
+                'AstroDomeTower',
             ];
             return table[domeId - 1];
         } else {
@@ -8671,5 +8700,428 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
         super.makeActorAppeared(sceneObjHolder);
         this.setNerve(MogucchiHillPieceNrv.Appear);
         hideModel(this);
+    }
+}
+
+const enum AstroDomeSkyNrv { Wait }
+
+export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
+    private static skyNames: string[] = [
+        'AstroDomeSkyA',
+        'AstroDomeSkyB',
+        'AstroDomeSkyC',
+        'AstroDomeSkyA',
+        'AstroDomeSkyB',
+        'AstroDomeSkyC',
+    ];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'AstroDomeSky');
+
+        const whichSky = assertExists(getJMapInfoArg0(infoIter)) - 1;
+        this.initModelManagerWithAnm(sceneObjHolder, AstroDomeSky.skyNames[whichSky]);
+        startBtk(this, AstroDomeSky.skyNames[whichSky]);
+        connectToScene(sceneObjHolder, this, MovementType.Sky, 0x05, DrawBufferType.ASTRO_DOME_SKY, DrawType.ASTRO_DOME_SKY_CLEAR);
+        // invalidateClipping();
+
+        // Original code uses Hide to wait for the player to pull on the handle, we just show the sky immediately.
+        this.initNerve(AstroDomeSkyNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        // calcHandledRotateMtx
+
+        getCamPos(scratchVec3, viewerInput.camera);
+        mat4.identity(this.modelInstance!.modelMatrix);
+        setMatrixTranslation(this.modelInstance!.modelMatrix, scratchVec3);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const whichSky = assertExists(getJMapInfoArg0(infoIter)) - 1;
+        sceneObjHolder.modelCache.requestObjectData(AstroDomeSky.skyNames[whichSky]);
+    }
+}
+
+const enum AstroDomeNrv { Wait }
+
+export class AstroDome extends MapObjActor<AstroDomeNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const domeId = assertExists(getJMapInfoArg0(infoIter));
+        const domeModelName = AstroMapObj.getModelName('AstroDome', domeId);
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupModelName(domeModelName);
+        initInfo.setupNerve(AstroDomeNrv.Wait);
+        setupInitInfoSimpleMapObj(initInfo);
+        // setupNoAppearRiddleSE
+
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        // invalidateClipping
+        // registerTarget
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AstroDomeNrv, deltaTimeFrames: number): void {
+        if (currentNerve === AstroDomeNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBrk(this, 'Appear');
+                setBrkFrameAndStop(this, getBrkFrameMax(this));
+            }
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const domeId = assertExists(getJMapInfoArg0(infoIter));
+        const domeModelName = AstroMapObj.getModelName('AstroDome', domeId);
+        sceneObjHolder.modelCache.requestObjectData(domeModelName);
+    }
+}
+
+export class GalaxyNameSortTable {
+    private infoIter: JMapInfoIter;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        const buffer = sceneObjHolder.modelCache.getExtraData(`ExtraNoclipData/GalaxyNameSortTable.bcsv`);
+        this.infoIter = createCsvParser(buffer);
+    }
+
+    public getPowerStarNumToOpenGalaxy(name: string): number {
+        assert(this.infoIter.findRecord((record) => record.getValueString('name') === name));
+        return assertExists(this.infoIter.getValueNumber('PowerStarNum'));
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder) {
+        // This is normally embedded in the binary itself.
+        sceneObjHolder.modelCache.requestExtraData(`ExtraNoclipData/GalaxyNameSortTable.bcsv`);
+    }
+}
+
+export class MiniatureGalaxyHolder extends NameObj {
+    public group: LiveActorGroup<MiniatureGalaxy>;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'MiniatureGalaxyHolder');
+        this.group = new LiveActorGroup<MiniatureGalaxy>(sceneObjHolder, 'MiniatureGalaxyHolderGroup', 64);
+    }
+
+    public registerActor(galaxy: MiniatureGalaxy): void {
+        this.group.registerActor(galaxy);
+        // DemoCast
+    }
+
+    public getMiniatureGalaxyNum(layerId: number): number {
+        // Count the number of galaxies in our scenario.
+        let count = 0;
+        for (let i = 0; i < this.group.objArray.length; i++) {
+            if (this.group.objArray[i].zoneAndLayer.layerId === layerId)
+                count++;
+        }
+        return count;
+    }
+
+    public calcIndex(sceneObjHolder: SceneObjHolder, galaxy: MiniatureGalaxy): number {
+        if (sceneObjHolder.galaxyNameSortTable === null)
+            sceneObjHolder.galaxyNameSortTable = new GalaxyNameSortTable(sceneObjHolder);
+
+        const galaxyNameSortTable = sceneObjHolder.galaxyNameSortTable!;
+        const powerStarNum = galaxyNameSortTable.getPowerStarNumToOpenGalaxy(galaxy.galaxyName);
+
+        let index = 0;
+        for (let i = 0; i < this.group.objArray.length; i++) {
+            const otherGalaxy = this.group.objArray[i];
+
+            if (otherGalaxy.zoneAndLayer.layerId !== galaxy.zoneAndLayer.layerId) {
+                // Skip galaxies not in our scenario.
+                continue;
+            }
+
+            if (galaxy === otherGalaxy)
+                continue;
+
+            // Koopa Galaxies get sorted at the end.
+            if (otherGalaxy.galaxyType === MiniatureGalaxyType.Koopa)
+                continue;
+
+            if (galaxy.galaxyType === MiniatureGalaxyType.Koopa) {
+                index++;
+                continue;
+            }
+
+            const otherPowerStarNum = galaxyNameSortTable.getPowerStarNumToOpenGalaxy(otherGalaxy.galaxyName);
+            if (powerStarNum > otherPowerStarNum) {
+                index++;
+                continue;
+            }
+        }
+
+        return index;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        GalaxyNameSortTable.requestArchives(sceneObjHolder);
+    }
+}
+
+class AstroDomeOrbit extends LiveActor {
+    private radius: number = 5000.0;
+    private curCoord: number = 0;
+
+    private materialHelper: GXMaterialHelperGfx;
+    private ddraw = new TDDraw();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'AstroDomeOrbit');
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.ASTRO_DOME_ORBIT);
+
+        // TODO(jstpierre): createAdaptorAndConnectToDrawBloomModel
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        const mb = new GXMaterialBuilder('AstroDomeOrbit');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        // GX_PASSCLR
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, 0, GX.AlphaOp.OR);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.BACK);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isValidDraw(this))
+            return;
+
+        const device = sceneObjHolder.modelCache.device;
+        this.ddraw.beginDraw();
+        this.drawCeiling(this.ddraw, 100.0, true, 50.0);
+        this.drawCeiling(this.ddraw, 100.0, false, 50.0);
+        this.drawSide(this.ddraw, 100.0, true, 50.0);
+        this.drawSide(this.ddraw, 100.0, false, 50.0);
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], 0x13B1FFFF);
+
+        const materialHelper = this.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        computeModelMatrixR(packetParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    private drawCeiling(ddraw: TDDraw, width: number, top: boolean, height: number): void {
+        const baseY = 0;
+        const bottomY = baseY + 0.5 * height, topY = baseY - 0.5 * height;
+        const outerRadius = this.radius + 0.5 * width, innerRadius = this.radius - 0.5 * width;
+
+        const y = top ? bottomY : topY;
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i <= 64; i++) {
+            const theta = MathConstants.TAU * (i / 64);
+            const sin = Math.sin(theta), cos = Math.cos(theta);
+
+            vec3.set(scratchVec3a, cos * innerRadius, y, sin * innerRadius);
+            vec3.set(scratchVec3b, cos * outerRadius, y, sin * outerRadius);
+
+            if (top) {
+                ddraw.position3vec3(scratchVec3a);
+                ddraw.position3vec3(scratchVec3b);
+            } else {
+                ddraw.position3vec3(scratchVec3b);
+                ddraw.position3vec3(scratchVec3a);
+            }
+        }
+        this.ddraw.end();
+    }
+
+    private drawSide(ddraw: TDDraw, width: number, outer: boolean, height: number): void {
+        const baseY = 0;
+        const bottomY = baseY + 0.5 * height, topY = baseY - 0.5 * height;
+        const outerRadius = this.radius + 0.5 * width, innerRadius = this.radius - 0.5 * width;
+
+        const radius = outer ? outerRadius : innerRadius;
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i <= 64; i++) {
+            const theta = MathConstants.TAU * (i / 64);
+            const sin = Math.sin(theta), cos = Math.cos(theta);
+
+            vec3.set(scratchVec3a, cos * radius, topY, sin * radius);
+            vec3.set(scratchVec3b, cos * radius, bottomY, sin * radius);
+
+            if (outer) {
+                ddraw.position3vec3(scratchVec3a);
+                ddraw.position3vec3(scratchVec3b);
+            } else {
+                ddraw.position3vec3(scratchVec3b);
+                ddraw.position3vec3(scratchVec3a);
+            }
+        }
+        this.ddraw.end();
+    }
+
+    public setup(sceneObjHolder: SceneObjHolder, layerId: number, idx: number): void {
+        // Count the number of MiniatureGalaxy objects in this scenario...
+        const count = sceneObjHolder.miniatureGalaxyHolder!.getMiniatureGalaxyNum(layerId);
+
+        if (count === 4) {
+            // last dome
+            const radiusTable = [4000.0, 6700.0, 9100.0, 11800.0];
+            this.radius = radiusTable[idx];
+        } else {
+            const radiusTable = [4000.0, 6200.0, 8100.0, 10300.0, 12000.0];
+            this.radius = radiusTable[idx];
+        }
+
+        this.curCoord = idx * 230.0;
+
+        if (idx > 3) {
+            // Tilt rotation for outermost (Koopa) ring
+            this.rotation[0] = 20.0 * MathConstants.DEG_TO_RAD;
+            this.rotation[1] = 45.0 * MathConstants.DEG_TO_RAD;
+            this.rotation[2] =  0.0 * MathConstants.DEG_TO_RAD;
+        }
+    }
+
+    public calcGalaxyPos(dst: vec3): void {
+        const theta = MathConstants.DEG_TO_RAD * (this.curCoord % 360.0);
+        const sin = Math.sin(theta), cos = Math.cos(theta);
+
+        vec3.set(dst, this.radius * cos, 0, this.radius * sin);
+        computeModelMatrixR(scratchMatrix, this.rotation[0], this.rotation[1], this.rotation[2]);
+        transformVec3Mat4w0(dst, scratchMatrix, dst);
+    }
+
+    public moveCoord(deltaTimeFrames: number): void {
+        this.curCoord += (-0.05) * deltaTimeFrames;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        MiniatureGalaxyHolder.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum MiniatureGalaxyNrv { Wait }
+
+const enum MiniatureGalaxyType { Normal, ExGalaxy, Koopa }
+
+export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
+    public galaxyType: MiniatureGalaxyType;
+
+    private originalTranslation = vec3.create();
+    private shadowModel: ModelObj;
+    private shadowMtx = mat4.create();
+    private orbit: AstroDomeOrbit;
+
+    public galaxyName: string;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        // Chop off "Mini"
+        this.galaxyName = getObjectName(infoIter).slice(4);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.originalTranslation, this.translation);
+
+        this.galaxyType = fallback(getJMapInfoArg0(infoIter), -1);
+
+        const modelName = MiniatureGalaxy.getModelName(infoIter);
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        this.initEffectKeeper(sceneObjHolder, null);
+        connectToSceneNoShadowedMapObj(sceneObjHolder, this);
+        // initStarPointerTarget
+        // invalidateClipping
+        this.initPartsModel(zoneAndLayer, sceneObjHolder);
+        this.initNerve(MiniatureGalaxyNrv.Wait);
+        // registerDemoCast
+        // registerTarget
+
+        sceneObjHolder.create(SceneObj.MiniatureGalaxyHolder);
+        sceneObjHolder.miniatureGalaxyHolder!.registerActor(this);
+
+        this.orbit = new AstroDomeOrbit(zoneAndLayer, sceneObjHolder);
+        // namePlate
+        this.makeActorAppeared(sceneObjHolder);
+
+        vec3.set(this.scale, 0.65, 0.65, 0.65);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        const idx = sceneObjHolder.miniatureGalaxyHolder!.calcIndex(sceneObjHolder, this);
+        this.orbit.setup(sceneObjHolder, this.zoneAndLayer.layerId, idx);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        tryStartAllAnim(this, this.name);
+        this.shadowModel.makeActorAppeared(sceneObjHolder);
+        startBtk(this.shadowModel, 'MiniatureGalaxyShadow');
+        this.orbit.makeActorAppeared(sceneObjHolder);
+
+        if (this.galaxyType === MiniatureGalaxyType.Koopa)
+            emitEffect(sceneObjHolder, this, 'EyeLight');
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+
+        vec3.scaleAndAdd(scratchVec3, this.translation, Vec3UnitY, -7000.0);
+        setMatrixTranslation(this.shadowMtx, scratchVec3);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        this.orbit.calcGalaxyPos(this.translation);
+        this.rotation[1] += 0.4 * MathConstants.DEG_TO_RAD * getDeltaTimeFrames(viewerInput);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MiniatureGalaxyNrv, deltaTimeFrames: number): void {
+        if (currentNerve === MiniatureGalaxyNrv.Wait) {
+            if (isFirstStep(this)) {
+                // Choose model to show (already done)
+            }
+
+            this.orbit.moveCoord(deltaTimeFrames);
+        }
+    }
+
+    private initPartsModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
+        // "Unknown" model for when you haven't unlocked
+        this.shadowModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'MiniatureGalaxyShadow', 'MiniatureGalaxyShadow', this.shadowMtx, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -2, -2);
+        // Select model
+        // Star Number number
+    }
+
+    private static getModelName(infoIter: JMapInfoIter): string {
+        const galaxyType: MiniatureGalaxyType = fallback(getJMapInfoArg0(infoIter), -1);
+
+        let modelName = getObjectName(infoIter);
+        if (galaxyType === MiniatureGalaxyType.Koopa)
+            modelName = 'MiniKoopaGalaxy';
+
+        return modelName;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(MiniatureGalaxy.getModelName(infoIter));
+        sceneObjHolder.modelCache.requestObjectData('MiniatureGalaxyShadow');
+        AstroDomeOrbit.requestArchives(sceneObjHolder);
     }
 }

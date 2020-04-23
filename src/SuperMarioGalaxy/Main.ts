@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate, fillSceneParamsData, fillSceneParamsOnTemplate, SceneParams, fillSceneParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, fillSceneParamsOnTemplate, SceneParams, fillSceneParams } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -29,7 +29,7 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
 import { setTextureMappingIndirect, ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -76,7 +76,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private mainRenderTarget = new BasicRenderTarget();
     private sceneTexture = new ColorTexture();
     private currentScenarioIndex: number = -1;
-    private scenarioSelect: UI.SingleSelect;
+    private scenarioSelect: UI.SingleSelect | null;
 
     private scenarioNoToIndex: number[] = [];
 
@@ -88,6 +88,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
+
+        if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
+            this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
 
         this.applyCurrentScenario();
     }
@@ -117,11 +120,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.currentScenarioIndex = index;
         this.applyCurrentScenario();
         const strIndex = this.scenarioNoToIndex.indexOf(index) - 1;
-        this.scenarioSelect.setHighlighted(strIndex);
+        if (this.scenarioSelect !== null)
+            this.scenarioSelect.setHighlighted(strIndex);
         this.onstatechanged();
     }
 
-    public createPanels(): UI.Panel[] {
+    private createScenarioPanel(): UI.Panel {
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
@@ -157,8 +161,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.scenarioSelect.selectItem(0);
 
         scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
+        return scenarioPanel;
+    }
 
-        return [scenarioPanel];
+    public createPanels(): UI.Panel[] {
+        const panels: UI.Panel[] = [];
+
+        if (this.sceneObjHolder.sceneDesc.scenarioOverride === null)
+            panels.push(this.createScenarioPanel());
+
+        return panels;
     }
 
     private drawAllEffects(viewerInput: Viewer.ViewerRenderInput): void {
@@ -272,7 +284,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // XXX(jstpierre): This doesn't jive with the cleared depth buffer, so I'm moving it to right after we draw the prior airs...
         // are prior airs just incompatible with crystals?
         // drawOpa(0x20); drawXlu(0x20);
-        // drawOpa(0x23); drawXlu(0x23);
+
+        this.drawOpa(passRenderer, DrawBufferType.ASTRO_DOME_SKY);
+        this.drawXlu(passRenderer, DrawBufferType.ASTRO_DOME_SKY);
 
         if (isExistPriorDrawAir(this.sceneObjHolder)) {
             this.drawOpa(passRenderer, DrawBufferType.SKY);
@@ -338,6 +352,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.TRAPEZE);
         this.execute(passRenderer, DrawType.WARP_POD_PATH);
         this.execute(passRenderer, DrawType.WATER_PLANT);
+        this.execute(passRenderer, DrawType.ASTRO_DOME_ORBIT);
         this.execute(passRenderer, DrawType.OCEAN_SPHERE);
         this.execute(passRenderer, DrawType.FLAG);
 
@@ -717,6 +732,8 @@ export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.JKRArchive | null>>();
     public archiveCache = new Map<string, RARC.JKRArchive | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
+    public extraDataPromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
+    public extraDataCache = new Map<string, ArrayBufferSlice>();
     public cache = new GfxRenderCache();
     public textureListHolder = new TextureListHolder();
 
@@ -724,7 +741,7 @@ export class ModelCache {
     }
 
     public waitForLoad(): Promise<void> {
-        const v: Promise<any>[] = [... this.archivePromiseCache.values()];
+        const v: Promise<any>[] = [... this.archivePromiseCache.values(), ... this.extraDataPromiseCache.values()];
         return Promise.all(v) as Promise<any>;
     }
 
@@ -743,7 +760,7 @@ export class ModelCache {
         return rarc;
     }
 
-    public async requestArchiveData(archivePath: string): Promise<RARC.JKRArchive | null> {
+    public requestArchiveData(archivePath: string): Promise<RARC.JKRArchive | null> {
         if (this.archivePromiseCache.has(archivePath))
             return this.archivePromiseCache.get(archivePath)!;
 
@@ -770,6 +787,31 @@ export class ModelCache {
         return this.isArchiveExist(`ObjectData/${objectName}.arc`);
     }
 
+    public getObjectData(objectName: string): RARC.JKRArchive {
+        return assertExists(this.getArchive(`ObjectData/${objectName}.arc`));
+    }
+
+    private async requestExtraDataInternal(path: string, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, DataFetcherFlags.NONE, abortedCallback);
+        this.extraDataCache.set(path, buffer);
+        return buffer;
+    }
+
+    public requestExtraData(path: string): Promise<ArrayBufferSlice> {
+        if (this.extraDataPromiseCache.has(path))
+            return this.extraDataPromiseCache.get(path)!;
+
+        const p = this.requestExtraDataInternal(path, () => {
+            this.extraDataPromiseCache.delete(path);
+        });
+        this.extraDataPromiseCache.set(path, p);
+        return p;
+    }
+
+    public getExtraData(path: string): ArrayBufferSlice {
+        return assertExists(this.extraDataCache.get(path));
+    }
+
     public getResourceHolder(objectName: string): ResourceHolder {
         if (this.archiveResourceHolder.has(objectName))
             return this.archiveResourceHolder.get(objectName)!;
@@ -779,10 +821,6 @@ export class ModelCache {
         this.textureListHolder.addTextures(resourceHolder.viewerTextures);
         this.archiveResourceHolder.set(objectName, resourceHolder);
         return resourceHolder;
-    }
-
-    public getObjectData(objectName: string): RARC.JKRArchive {
-        return assertExists(this.getArchive(`ObjectData/${objectName}.arc`));
     }
 
     public destroy(device: GfxDevice): void {
@@ -865,6 +903,7 @@ export const enum SceneObj {
     ElectricRailHolder      = 0x59,
     WaterAreaHolder         = 0x62,
     WaterPlantDrawInit      = 0x63,
+    MiniatureGalaxyHolder   = 0x73,
     PriorDrawAirHolder      = 0x75,
 }
 
@@ -897,15 +936,17 @@ export class SceneObjHolder {
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
+    public electricRailHolder: ElectricRailHolder | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
-    public electricRailHolder: ElectricRailHolder | null = null;
+    public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     public captureSceneDirector = new CaptureSceneDirector();
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
+    public galaxyNameSortTable: GalaxyNameSortTable | null = null;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
@@ -952,12 +993,14 @@ export class SceneObjHolder {
             return this.trapezeRopeDrawInit;
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
             return this.mapPartsRailGuideHolder;
+        else if (sceneObj === SceneObj.ElectricRailHolder)
+            return this.electricRailHolder;
         else if (sceneObj === SceneObj.WaterAreaHolder)
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
-        else if (sceneObj === SceneObj.ElectricRailHolder)
-            return this.electricRailHolder;
+        else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
+            return this.miniatureGalaxyHolder;
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
             return this.priorDrawAirHolder;
         return null;
@@ -996,12 +1039,14 @@ export class SceneObjHolder {
             this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
             this.mapPartsRailGuideHolder = new MapPartsRailGuideHolder(this);
+        else if (sceneObj === SceneObj.ElectricRailHolder)
+            this.electricRailHolder = new ElectricRailHolder(this);
         else if (sceneObj === SceneObj.WaterAreaHolder)
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
-        else if (sceneObj === SceneObj.ElectricRailHolder)
-            this.electricRailHolder = new ElectricRailHolder(this);
+        else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
+            this.miniatureGalaxyHolder = new MiniatureGalaxyHolder(this);
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
             this.priorDrawAirHolder = new PriorDrawAirHolder(this);
     }
@@ -1402,9 +1447,18 @@ class MessageDataHolder {
 }
 
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
+    public id: string;
     public pathBase: string;
 
-    constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
+    constructor(public name: string, public galaxyName: string, public scenarioOverride: number | null = null, id: string | null = null) {
+        if (id !== null) {
+            this.id = id;
+        } else {
+            if (this.scenarioOverride !== null)
+                this.id = `${this.galaxyName}${this.scenarioOverride}`;
+            else
+                this.id = this.galaxyName;
+        }
     }
 
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
