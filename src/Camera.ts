@@ -328,14 +328,14 @@ export class FPSCameraController implements CameraController {
     private mouseLookDragFast = 0;
     private mouseLookDragSlow = 0;
 
-    public sceneKeySpeedMult = 1;
+    public sceneMoveSpeedMult = 1;
 
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
 
     public setSceneMoveSpeedMult(v: number): void {
-        this.sceneKeySpeedMult = v;
+        this.sceneMoveSpeedMult = v;
     }
 
     public setKeyMoveSpeed(speed: number): void {
@@ -414,7 +414,7 @@ export class FPSCameraController implements CameraController {
             const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
-            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
+            vec3.scale(finalMovement, finalMovement, this.sceneMoveSpeedMult);
             vec3.copy(camera.linearVelocity, finalMovement);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
@@ -603,6 +603,8 @@ export class OrbitCameraController implements CameraController {
     public tyVel: number = 0;
     public shouldOrbit: boolean = true;
 
+    public sceneMoveSpeedMult = 1;
+
     constructor() {
     }
 
@@ -613,6 +615,7 @@ export class OrbitCameraController implements CameraController {
     }
 
     public setSceneMoveSpeedMult(v: number): void {
+        this.sceneMoveSpeedMult = v;
     }
 
     public setKeyMoveSpeed(speed: number): void {
@@ -656,7 +659,7 @@ export class OrbitCameraController implements CameraController {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
                 this.xVel += this.orbitSpeed * 1/50;
         }
-        this.zVel += inputManager.dz;
+        this.zVel += inputManager.dz * 5;
         let keyVelX = 0, keyVelY = 0;
         if (inputManager.isKeyDown('KeyA'))
             keyVelX += 0.02;
@@ -693,7 +696,7 @@ export class OrbitCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 4 * Math.sign(this.zVel);
+            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 5 * Math.sign(this.zVel) * this.sceneMoveSpeedMult;
             if (inputManager.dz === 0)
                 this.zVel *= 0.85;
             if (this.z > -10) {
