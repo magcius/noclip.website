@@ -396,6 +396,8 @@ export const enum MessageType {
     MapPartsRailMover_Vanish                 = 0xCF,
     SphereSelector_SelectStart               = 0xE0,
     SphereSelector_SelectEnd                 = 0xE1,
+
+    NoclipButton_Click                       = 0x200,
 }
 
 const scratchVec3a = vec3.create();

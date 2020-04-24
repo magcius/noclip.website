@@ -8125,7 +8125,7 @@ export class BrightSun extends LiveActor {
         getCamPos(scratchVec3, viewerInput.camera);
 
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, this.rotation[0], this.rotation[1], this.rotation[2], scratchVec3[0], scratchVec3[1], scratchVec3[2]);
-        vec3.set(scratchVec3, 0, 0, -100000.0);
+        vec3.set(scratchVec3, 0.0, 0.0, 100000.0);
         mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
         getMatrixTranslation(this.translation, scratchMatrix);
 
@@ -8136,7 +8136,7 @@ export class BrightSun extends LiveActor {
 
     private controlSunModel(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         vec3.copy(this.sun.translation, this.translation);
-        vec3.set(this.sun.scale, 100.0, 100.0, 100.0);
+        vec3.set(this.sun.scale, -100.0, 100.0, 100.0);
 
         getCamPos(scratchVec3, viewerInput.camera);
         vec3.sub(scratchVec3, scratchVec3, this.translation);
@@ -8145,7 +8145,7 @@ export class BrightSun extends LiveActor {
         quatSetRotate(scratchQuat, Vec3UnitZ, scratchVec3);
         mat4.fromQuat(scratchMatrix, scratchQuat);
 
-        computeEulerAngleRotationFromSRTMatrix(this.rotation, scratchMatrix);
+        computeEulerAngleRotationFromSRTMatrix(this.sun.rotation, scratchMatrix);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -9268,34 +9268,80 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
     }
 }
 
-function elemSetWorldPosition(elem: HTMLElement, camera: Camera, v: vec3, radius: number, visible: boolean): void {
-    // View-space point
-    transformVec3Mat4w1(scratchVec3b, camera.viewMatrix, v);
+class Button {
+    private elem: HTMLElement;
+    public offset = vec3.create();
+    public valid: boolean = true;
 
-    vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
-    const screenX = (scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth;
-    const screenY = (scratchVec3c[1] * -0.5 + 0.5) * window.innerHeight;
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private actor: LiveActor, offset: vec3, private radius: number, private maxDistance: number = -1) {
+        vec3.copy(this.offset, offset);
 
-    scratchVec3b[0] += radius;
-    vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
-    const screenRadius = ((scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth) - screenX;
+        this.elem = document.createElement('div');
+        this.elem.style.position = 'absolute';
+        this.elem.style.pointerEvents = 'auto';
+        this.elem.style.cursor = 'pointer';
+        this.elem.onclick = () => {
+            this.actor.receiveMessage(sceneObjHolder, MessageType.NoclipButton_Click, null, null);
+        };
+        sceneObjHolder.uiContainer.appendChild(this.elem);
+    }
 
-    if (visible && scratchVec3c[2] <= 1.0) {
-        elem.style.left = `${screenX - screenRadius}px`;
-        elem.style.top = `${screenY - screenRadius}px`;
-        elem.style.width = `${screenRadius * 2}px`;
-        elem.style.height = `${screenRadius * 2}px`;
-        elem.style.display = 'block';
-        elem.style.borderRadius = `99999px`;
-    } else {
-        elem.style.display = 'none';
+    public validate(): void {
+        this.valid = true;
+    }
+
+    public invalidate(): void {
+        this.valid = false;
+    }
+
+    public move(sceneObjHolder: SceneObjHolder): void {
+        let visible = this.valid && isValidDraw(this.actor);
+
+        if (visible && this.maxDistance >= 0) {
+            if (calcDistToCamera(this.actor, sceneObjHolder.viewerInput.camera) >= this.maxDistance)
+                visible = false;
+        }
+
+        let screenX = -1, screenY = -1, screenRadius = -1;
+        if (visible) {
+            const camera = sceneObjHolder.viewerInput.camera;
+
+            // View-space point
+            vec3.add(scratchVec3, this.actor.translation, this.offset);
+            transformVec3Mat4w1(scratchVec3b, camera.viewMatrix, scratchVec3);
+
+            vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
+            screenX = (scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth;
+            screenY = (scratchVec3c[1] * -0.5 + 0.5) * window.innerHeight;
+            if (scratchVec3c[2] > 1.0)
+                visible = false;
+
+            if (visible) {
+                scratchVec3b[0] += this.radius;
+                vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
+                screenRadius = ((scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth) - screenX;
+            }
+        }
+
+        const elem = this.elem;
+
+        if (visible) {
+            elem.style.left = `${screenX - screenRadius}px`;
+            elem.style.top = `${screenY - screenRadius}px`;
+            elem.style.width = `${screenRadius * 2}px`;
+            elem.style.height = `${screenRadius * 2}px`;
+            elem.style.display = 'block';
+            elem.style.borderRadius = `99999px`;
+        } else {
+            elem.style.display = 'none';
+        }
     }
 }
 
 const enum ScrewSwitchReverseNrv { Wait, Screw }
 
 export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
-    private button: HTMLElement;
+    private button: Button;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ScrewSwitchReverse');
@@ -9320,29 +9366,30 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.initNerve(ScrewSwitchReverseNrv.Wait);
         this.makeActorAppeared(sceneObjHolder);
 
-        this.button = document.createElement('div');
-        this.button.style.position = 'absolute';
-        this.button.style.pointerEvents = 'auto';
-        this.button.style.cursor = 'pointer';
-        this.button.onclick = () => {
-            this.setNerve(ScrewSwitchReverseNrv.Screw);
-        };
-        sceneObjHolder.uiContainer.appendChild(this.button);
+        vec3.set(scratchVec3, 0, 100, 0);
+        this.button = new Button(zoneAndLayer, sceneObjHolder, this, scratchVec3, 120.0, 5000.0);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const visible = !isDead(this) && calcDistToCamera(this, viewerInput.camera) < 5000.0;
-        vec3.copy(scratchVec3, this.translation);
-        scratchVec3[1] += 100.0;
-        elemSetWorldPosition(this.button, viewerInput.camera, scratchVec3, 125.0, visible);
+        this.button.move(sceneObjHolder);
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.NoclipButton_Click) {
+            this.setNerve(ScrewSwitchReverseNrv.Screw);
+            return true;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
+        }
     }
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
         if (currentNerve === ScrewSwitchReverseNrv.Screw) {
             if (isFirstStep(this)) {
                 startBck(this, 'ScrewSwitchReverseOn');
+                this.button.invalidate();
             }
 
             if (isBckStopped(this)) {
