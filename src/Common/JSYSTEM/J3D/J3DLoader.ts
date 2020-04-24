@@ -1337,7 +1337,7 @@ function findKeyframe(frames: AnimationKeyframe[], time: number): number {
     return -1;
 }
 
-export function sampleAnimationData(track: AnimationTrack, frame: number) {
+export function sampleAnimationData(track: AnimationTrack, frame: number, fakeResetTangents: boolean = true): number {
     const frames = track.frames;
 
     // Find the first frame.
@@ -1355,7 +1355,7 @@ export function sampleAnimationData(track: AnimationTrack, frame: number) {
     // which aren't supposed to be visible. They are visible for us because
     // "frame" can have a non-zero fractional component. In this case, pick
     // a value completely.
-    if ((k1.time - k0.time) === 1)
+    if (fakeResetTangents && ((k1.time - k0.time) === 1))
         return k0.value;
 
     const t = (frame - k0.time) / (k1.time - k0.time);

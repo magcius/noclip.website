@@ -548,7 +548,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railGuideDrawer.start(sceneObjHolder);
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         if (this.rotator !== null)
@@ -716,7 +716,7 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         return true;
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RailMoveObjNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RailMoveObjNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === RailMoveObjNrv.Move) {
@@ -1216,7 +1216,7 @@ export class PeachCastleGardenPlanet extends MapObjActor<PeachCastleGardenPlanet
         this.setNerve(PeachCastleGardenPlanetNrv.Damage);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachCastleGardenPlanetNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PeachCastleGardenPlanetNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PeachCastleGardenPlanetNrv.Wait) {
@@ -2533,7 +2533,7 @@ export class Air extends LiveActor<AirNrv> {
         return !isDead(this) && !isHiddenModel(this);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         const distanceToPlayer = calcSqDistanceToPlayer(this, sceneObjHolder.viewerInput.camera);
@@ -2614,7 +2614,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         startBpk(this, 'ShootingStar');
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShootingStarNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         const SPEED = 10 * MathConstants.DEG_TO_RAD;
@@ -2863,7 +2863,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaSteamNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaSteamNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === LavaSteamNrv.Wait) {
@@ -3053,12 +3053,12 @@ export class OceanWaveFloater extends MapObjActor {
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
 
         this.waveForce.update(getDeltaTimeFrames(viewerInput));
 
-        // Check for ripple effect.
+        // controlEffect
         const sinkDepth = this.getCurrentSinkDepth();
         if (sinkDepth <= this.rippleStopThreshold || !this.isRippling) {
             if (sinkDepth < this.rippleStartThreshold && !this.isRippling) {
@@ -3099,7 +3099,7 @@ class Fish extends LiveActor<FishNrv> {
         connectToSceneEnvironment(sceneObjHolder, this);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FishNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FishNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === FishNrv.Approach) {
@@ -3143,7 +3143,7 @@ class Fish extends LiveActor<FishNrv> {
         }
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         vec3.scale(this.velocity, this.velocity, 0.95);
@@ -3339,7 +3339,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
             drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, Red, 10);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === SeaGullNrv.HoverFront) {
@@ -3401,7 +3401,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     }
 
     private debug = false;
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.dryBirdCam) {
             this.camera();
 
@@ -3647,7 +3647,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         this.lifetime = lifetime;
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === AirBubbleNrv.Wait) {
@@ -3726,7 +3726,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         this.lifetime = fallback(getJMapInfoArg1(infoIter), -1);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleGeneratorNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirBubbleGeneratorNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === AirBubbleGeneratorNrv.Wait) {
@@ -3787,7 +3787,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
         }
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureBoxNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TreasureBoxNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TreasureBoxNrv.Wait) {
@@ -3924,7 +3924,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return false;
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TicoRailNrv.Wait) {
@@ -4097,7 +4097,7 @@ export class PalmIsland extends LiveActor<PalmIslandNrv> {
         vec3.negate(this.gravityVector, this.gravityVector);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PalmIslandNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PalmIslandNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PalmIslandNrv.Wait) {
@@ -4757,7 +4757,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.item.makeActorAppeared(sceneObjHolder);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShellfishNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ShellfishNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === ShellfishNrv.Wait) {
@@ -7157,7 +7157,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         moveCoordToNearestPos(this);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === TsukidashikunNrv.MoveForward || currentNerve === TsukidashikunNrv.MoveBack) {
@@ -7497,7 +7497,7 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
         this.calcAndSetBaseMtxBase();
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterLeakPipeNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterLeakPipeNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === WaterLeakPipeNrv.Wait) {
@@ -7571,7 +7571,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         }
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OnimasuNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OnimasuNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === OnimasuNrv.Wait || currentNerve === OnimasuNrv.WaitForStamp) {
@@ -7817,7 +7817,7 @@ export class DriftWood extends MapObjActor<DriftWoodNrv> {
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.front);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: DriftWoodNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: DriftWoodNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === DriftWoodNrv.Wait) {
@@ -7876,7 +7876,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         // Bloom
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UFOBaseNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UFOBaseNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === UFOBaseNrv.Wait) {
@@ -7892,7 +7892,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         }
     }
 
-    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
         // this.moveLimitParts.setMtx();
@@ -7970,7 +7970,7 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
         // StarPointerTarget / AnimScaleController / WalkerStateBindStarPointer
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SideSpikeMoveStepNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SideSpikeMoveStepNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === SideSpikeMoveStepNrv.Wait) {
@@ -8795,7 +8795,7 @@ export class AstroDome extends MapObjActor<AstroDomeNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AstroDomeNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AstroDomeNrv, deltaTimeFrames: number): void {
         if (currentNerve === AstroDomeNrv.Wait) {
             if (isFirstStep(this)) {
                 startBrk(this, 'Appear');
@@ -9385,7 +9385,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         }
     }
 
-    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
         if (currentNerve === ScrewSwitchReverseNrv.Screw) {
             if (isFirstStep(this)) {
                 startBck(this, 'ScrewSwitchReverseOn');
@@ -9599,6 +9599,7 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
             if (isGreaterEqualStep(this, (119 - 75))) {
                 this.attackCount++;
                 this.tryAttack(sceneObjHolder);
+                startBck(this, 'Sign');
                 if (this.attackCount === 3)
                     this.setNerve(BallBeamerNrv.Inter);
                 else

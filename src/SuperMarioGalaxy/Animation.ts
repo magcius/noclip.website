@@ -6,7 +6,7 @@ import { quatFromEulerRadians } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 import { J3DModelInstance, J3DModelData, JointMatrixCalc } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode, JNT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
@@ -235,15 +235,15 @@ export class XanimeCore implements JointMatrixCalc {
         if (this.ank1 !== null) {
             const entry = this.ank1.jointAnimationEntries[i];
             const animFrame = this.curAnmTime * this.ank1.duration;
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame, false);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame, false);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame, false);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame, false) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame, false) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame, false) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame, false);
+            const translationY = sampleAnimationData(entry.translationY, animFrame, false);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame, false);
 
             const anmScale = scratchVec3a;
             const anmTrans = scratchVec3b;

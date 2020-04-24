@@ -129,10 +129,10 @@ export class J3DTexRegAnm {
     public calcColor(dst: Color): void {
         const animFrame = this.frameCtrl.currentTimeInFrames;
 
-        dst.r = sampleAnimationData(this.animationEntry.r, animFrame);
-        dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
-        dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
-        dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
+        dst.r = sampleAnimationData(this.animationEntry.r, animFrame, false);
+        dst.g = sampleAnimationData(this.animationEntry.g, animFrame, false);
+        dst.b = sampleAnimationData(this.animationEntry.b, animFrame, false);
+        dst.a = sampleAnimationData(this.animationEntry.a, animFrame, false);
     }
 }
 
@@ -179,11 +179,11 @@ export class J3DTexMtxAnm {
     public calcTexMtx(dst: mat4): void {
         const animFrame = this.frameCtrl.currentTimeInFrames;
 
-        const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame);
-        const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame);
-        const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
-        const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
-        const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
+        const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame, false);
+        const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame, false);
+        const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame, false);
+        const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame, false);
+        const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame, false);
 
         if (this.ttk1.isMaya) {
             calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
@@ -268,15 +268,15 @@ export class J3DJointMatrixAnm {
         const entry = this.ank1.jointAnimationEntries[i];
 
         if (entry !== undefined) {
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame, false);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame, false);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame, false);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame, false) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame, false) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame, false) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame, false);
+            const translationY = sampleAnimationData(entry.translationY, animFrame, false);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame, false);
             computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         } else {
             const scaleX = jnt1.scaleX;
