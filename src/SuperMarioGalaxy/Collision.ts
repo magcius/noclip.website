@@ -73,7 +73,7 @@ export class TriangleFilterBase {
 }
 
 export class CollisionPartsFilterBase {
-    public isInvalidParts(triangle: CollisionParts): boolean {
+    public isInvalidParts(parts: CollisionParts): boolean {
         return false;
     }
 }
@@ -418,6 +418,20 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
 
 export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
+}
+
+class CollisionPartsFilterActor extends CollisionPartsFilterBase {
+    public actor: LiveActor | null = null;
+
+    public isInvalidParts(parts: CollisionParts): boolean {
+        return parts.hitSensor.actor === this.actor;
+    }
+}
+
+export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
+    const partsFilter = new CollisionPartsFilterActor();
+    partsFilter.actor = actor;
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, Category.Map);
 }
 
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {

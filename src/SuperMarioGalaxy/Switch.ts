@@ -124,6 +124,11 @@ function createSwitchIdInfo(sceneObjHolder: SceneObjHolder, fieldName: string, i
 
 export function onSwitchBySwitchIdInfo(sceneObjHolder: SceneObjHolder, idInfo: SwitchIdInfo): void {
     const zoneSwitch = sceneObjHolder.stageSwitchContainer!.getZoneSwitch(idInfo);
+
+    if (!zoneSwitch.bitMap.getBit(idInfo.getSwitchNo())) {
+        console.log('on switch', idInfo.zoneId, idInfo.switchId);
+    }
+
     zoneSwitch.bitMap.setBit(idInfo.getSwitchNo(), true);
 }
 

@@ -160,6 +160,10 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, -1, -1, -1);
 }
 
+export function connectToSceneIndirectEnemy(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, 0x08, DrawBufferType.INDIRECT_ENEMY, -1);
+}
+
 export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionEnemy, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }

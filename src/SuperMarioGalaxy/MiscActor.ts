@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -33,7 +33,7 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
@@ -169,6 +169,10 @@ export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch
 
 export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
     return calcDistToCamera(actor, camera, scratch);
+}
+
+export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
+    return calcDistanceToPlayer(actor, sceneObjHolder.viewerInput.camera) <= radius;
 }
 
 export function getJointNum(actor: LiveActor): number {
@@ -1229,7 +1233,9 @@ export class PeachCastleGardenPlanet extends MapObjActor<PeachCastleGardenPlanet
     }
 }
 
-export class HatchWaterPlanet extends LiveActor {
+const enum HatchWaterPlanetNrv { Wait, Open }
+
+export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
@@ -1238,8 +1244,22 @@ export class HatchWaterPlanet extends LiveActor {
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        tryStartAllAnim(this, 'HatchWaterPlanet');
-        setLoopMode(this, LoopMode.ONCE);
+        this.initNerve(HatchWaterPlanetNrv.Wait);
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HatchWaterPlanetNrv, deltaTimeFrames: number): void {
+        if (currentNerve === HatchWaterPlanetNrv.Open) {
+            if (isFirstStep(this)) {
+                startBck(this, 'HatchWaterPlanet');
+                startBtk(this, 'HatchWaterPlanet');
+            }
+        }
+    }
+
+    public open(): void {
+        this.setNerve(HatchWaterPlanetNrv.Open);
     }
 }
 
@@ -8092,6 +8112,12 @@ export class BrightSun extends LiveActor {
         addBrightObj(sceneObjHolder, this.brightObj);
     }
 
+    protected offScenario(sceneObjHolder: SceneObjHolder): void {
+        // Force the bright object to turn off.
+        super.offScenario(sceneObjHolder);
+        this.brightObj.isFullyHidden = true;
+    }
+
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (sceneObjHolder.lensFlareDirector === null)
             return;
@@ -9150,5 +9176,400 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         sceneObjHolder.modelCache.requestObjectData(MiniatureGalaxy.getModelName(infoIter));
         sceneObjHolder.modelCache.requestObjectData('MiniatureGalaxyShadow');
         AstroDomeOrbit.requestArchives(sceneObjHolder);
+    }
+}
+
+class MapObjConnector {
+    public mtx = mat4.create();
+    public collisionParts: CollisionParts | null = null;
+    private triangle = new Triangle();
+
+    constructor(private actor: LiveActor) {
+    }
+
+    public attach(sceneObjHolder: SceneObjHolder, v: vec3): boolean {
+        vec3.scaleAndAdd(scratchVec3b, this.actor.translation, v, 50.0);
+        vec3.scale(scratchVec3c, v, -500.0);
+        if (!getFirstPolyOnLineToMapExceptActor(sceneObjHolder, scratchVec3, this.triangle, scratchVec3b, scratchVec3c, this.actor))
+            return false;
+        this.collisionParts = this.triangle.collisionParts!;
+        mat4.mul(this.mtx, this.collisionParts.invWorldMtx, this.actor.getBaseMtx()!);
+        return true;
+    }
+
+    public attachToBack(sceneObjHolder: SceneObjHolder): boolean {
+        calcFrontVec(scratchVec3, this.actor);
+        return this.attach(sceneObjHolder, scratchVec3);
+    }
+
+    public attachToUnder(sceneObjHolder: SceneObjHolder): boolean {
+        calcUpVec(scratchVec3, this.actor);
+        return this.attach(sceneObjHolder, scratchVec3);
+    }
+
+    public connect(actor: LiveActor = this.actor): void {
+        if (this.collisionParts !== null) {
+            const dstMtx = actor.modelInstance!.modelMatrix;
+            mat4.mul(dstMtx, this.collisionParts.worldMtx, this.mtx);
+            getMatrixTranslation(actor.translation, dstMtx);
+        }
+    }
+}
+
+const enum ScrewSwitchNrv { Wait, End }
+
+export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
+    private mapObjConnector: MapObjConnector;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'ScrewSwitch');
+
+        this.mapObjConnector = new MapObjConnector(this);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitch');
+        connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+        // addHitSensorAtJoint(this, 'binder', 'Screw');
+        // initCollisionParts(sceneObjHolder, this, 'ScrewCol', )
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(ScrewSwitchNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        this.mapObjConnector.attachToUnder(sceneObjHolder);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+        this.mapObjConnector.connect();
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchNrv, deltaTimeFrames: number): void {
+        if (currentNerve === ScrewSwitchNrv.Wait) {
+            // Screw the switch in.
+            this.setNerve(ScrewSwitchNrv.End);
+        } else if (currentNerve === ScrewSwitchNrv.End) {
+            if (isFirstStep(this)) {
+                this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+                startBck(this, 'ScrewSwitchOn');
+                setBckFrameAndStop(this, getBckFrameMax(this));
+                startBrk(this, 'ScrewSwitchOn');
+                setBrkFrameAndStop(this, getBrkFrameMax(this));
+            }
+        }
+    }
+}
+
+const enum ScrewSwitchReverseNrv { Wait, Screw }
+
+export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'ScrewSwitchReverse');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitchReverse');
+        connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+        // addHitSensorAtJoint(this, 'binder', 'Screw');
+        // initCollisionParts(sceneObjHolder, this, 'ScrewCol', )
+
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        // arg7 = shadow
+        // arg0 = force jump
+
+        this.initNerve(ScrewSwitchReverseNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
+        if (currentNerve === ScrewSwitchReverseNrv.Screw) {
+            if (isFirstStep(this)) {
+                startBck(this, 'ScrewSwitchReverseOn');
+            }
+
+            if (isBckStopped(this)) {
+                this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+                this.makeActorDead(sceneObjHolder);
+            }
+        }
+    }
+}
+
+// Fake dumb hacky thing for noclip.
+export class DemoGroupFake extends LiveActor {
+    private sheetName: string;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'DemoExecutor');
+
+        this.sheetName = assertExists(infoIter.getValueString('TimeSheetName'));
+
+        this.initStageSwitch(sceneObjHolder, infoIter);
+        if (isValidSwitchAppear(this)) {
+            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.switchOn.bind(this), this.switchOff.bind(this));
+        }
+    }
+
+    private switchOn(sceneObjHolder: SceneObjHolder): void {
+        if (this.sheetName === 'HatchWaterPlanetOpen') {
+            const cast = sceneObjHolder.nameObjHolder.nameObjs.find((obj) => obj.name === 'HatchWaterPlanet') as HatchWaterPlanet | undefined;
+            if (cast !== undefined)
+                cast.open();
+        }
+    }
+
+    private switchOff(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+const enum RingBeamNrv { Spread }
+
+class RingBeam extends LiveActor<RingBeamNrv> {
+    private axisZ = vec3.create();
+    private farPointPos = vec3.create();
+    private farPointAxisY = vec3.create();
+    private bloomModel: ModelObj;
+    private speed: number = 20.0;
+    private life: number = 100;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private parentActor: LiveActor, private useFancyPosCalc: boolean) {
+        super(zoneAndLayer, sceneObjHolder, 'RingBeam');
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'JumpBeamerBeam');
+        connectToSceneIndirectEnemy(sceneObjHolder, this);
+        // initHitSensor
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.initNerve(RingBeamNrv.Spread);
+        this.initPos(this);
+        const baseMtx = this.getBaseMtx()!;
+        getMatrixAxisZ(this.axisZ, baseMtx);
+        getMatrixTranslation(this.farPointPos, baseMtx);
+        // shadow
+        this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, 'JumpBeamerBeamBloom', 'JumpBeamerBeamBloom', this.getBaseMtx()!);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public setSpeed(speed: number): void {
+        this.speed = speed;
+    }
+
+    public setLife(life: number): void {
+        this.life = life;
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RingBeamNrv, deltaTimeFrames: number): void {
+        if (currentNerve === RingBeamNrv.Spread) {
+            if (isFirstStep(this)) {
+                startBckNoInterpole(this, 'Spread');
+                startBckNoInterpole(this.bloomModel, 'Spread');
+
+                startBrk(this, 'Erase');
+                setBrkFrameAndStop(this, 0);
+
+                const baseMtx = this.parentActor.getBaseMtx()!;
+                getMatrixAxisZ(this.axisZ, baseMtx);
+                getMatrixAxisY(scratchVec3, baseMtx);
+                vec3.scaleAndAdd(this.farPointPos, this.parentActor.translation, scratchVec3, 75.0);
+            }
+
+            if (this.useFancyPosCalc) {
+                vec3.scaleAndAdd(scratchVec3, this.farPointPos, this.axisZ, this.speed * deltaTimeFrames);
+                calcGravityVector(sceneObjHolder, this, scratchVec3, this.farPointAxisY);
+                vec3.negate(this.farPointAxisY, this.farPointAxisY);
+                makeMtxUpFront(scratchMatrix, this.farPointAxisY, this.axisZ);
+                getMatrixAxisZ(this.axisZ, scratchMatrix);
+                const baseMtx = this.parentActor.getBaseMtx()!;
+                getMatrixAxisY(scratchVec3, baseMtx);
+                vec3.scaleAndAdd(scratchVec3a, this.parentActor.translation, scratchVec3, 1.0);
+                vec3.scaleAndAdd(scratchVec3b, this.parentActor.translation, scratchVec3, -1.0);
+                calcPerpendicFootToLine(this.translation, this.farPointPos, scratchVec3a, scratchVec3b);
+            }
+
+            vec3.scaleAndAdd(this.farPointPos, this.farPointPos, this.axisZ, this.speed * deltaTimeFrames);
+            this.setRadius(vec3.distance(this.farPointPos, this.translation));
+
+            // transSound
+
+            if (isGreaterEqualStep(this, this.life - getBrkFrameMax(this))) {
+                startBrk(this, 'Erase');
+            }
+
+            if (isGreaterEqualStep(this, this.life))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.bloomModel.makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        this.setNerve(RingBeamNrv.Spread);
+        this.initPos(this.parentActor);
+        this.setRadius(0);
+        super.makeActorDead(sceneObjHolder);
+        this.bloomModel.makeActorDead(sceneObjHolder);
+    }
+
+    private initPos(actor: LiveActor): void {
+        const baseMtx = actor.getBaseMtx()!;
+        getMatrixAxisY(scratchVec3, baseMtx);
+        vec3.scaleAndAdd(this.translation, actor.translation, scratchVec3, 50.0);
+    }
+
+    private setRadius(radius: number): void {
+        radius = Math.min(radius, 2000.0);
+        startBckNoInterpole(this, 'Spread');
+        startBckNoInterpole(this.bloomModel, 'Spread');
+        const frame = (radius / 2000.0) * getBckFrameMax(this);
+        setBckFrameAndStop(this, frame);
+        setBckFrameAndStop(this.bloomModel, frame);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('JumpBeamerBeam');
+        sceneObjHolder.modelCache.requestObjectData('JumpBeamerBeamBloom');
+    }
+}
+
+const enum BallBeamerNrv { Wait, AttackChargeWait, AttackCharging, Inter }
+
+export class BallBeamer extends LiveActor<BallBeamerNrv> {
+    private switchOnA: boolean = false;
+    private ringBeams: RingBeam[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'BallBeamer');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'BallBeamer');
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.translation[1] -= 50.0;
+        connectToSceneEnemy(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initHitSensor();
+        // addHitSensorPush
+        // initShadowVolumeSphere
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(BallBeamerNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+
+        if (useStageSwitchWriteA(sceneObjHolder, this, infoIter))
+            listenStageSwitchOnOffA(sceneObjHolder, this, this.syncSwitchOnA.bind(this), this.syncSwitchOffA.bind(this));
+
+        if (useStageSwitchWriteB(sceneObjHolder, this, infoIter))
+            listenStageSwitchOnOffB(sceneObjHolder, this, this.syncSwitchOnB.bind(this), this.syncSwitchOffB.bind(this));
+
+        const speed = fallback(getJMapInfoArg0(infoIter), 12.0);
+        const life = fallback(getJMapInfoArg1(infoIter), 530);
+        const useStaticShadow = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+        for (let i = 0; i < 12; i++) {
+            const ringBeam = new RingBeam(zoneAndLayer, sceneObjHolder, infoIter, this, true);
+            ringBeam.setSpeed(speed);
+            ringBeam.setLife(life);
+            this.ringBeams.push(ringBeam);
+        }
+    }
+
+    private attackCount: number = 0;
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: BallBeamerNrv, deltaTimeFrames: number): void {
+        if (currentNerve === BallBeamerNrv.Wait) {
+            if (isFirstStep(this))
+                startAction(this, 'Wait');
+
+            if (isNearPlayer(sceneObjHolder, this, 3000.0))
+                this.setupAttack(sceneObjHolder);
+        } else if (currentNerve === BallBeamerNrv.AttackChargeWait) {
+            // Original code charges on step 75, and fires on step 119, all mod 120, in the Attack state. We have
+            // separate nerves for this.
+            if (isGreaterEqualStep(this, 75)) {
+                emitEffect(sceneObjHolder, this, 'Charge');
+                this.setNerve(BallBeamerNrv.AttackCharging);
+            }
+        } else if (currentNerve === BallBeamerNrv.AttackCharging) {
+            if (isGreaterEqualStep(this, (119 - 75))) {
+                this.attackCount++;
+                this.tryAttack(sceneObjHolder);
+                if (this.attackCount === 3)
+                    this.setNerve(BallBeamerNrv.Inter);
+                else
+                    this.setNerve(BallBeamerNrv.AttackChargeWait);
+            }
+        } else if (currentNerve === BallBeamerNrv.Inter) {
+            if (isGreaterEqualStep(this, 120)) {
+                if (this.switchOnA) {
+                    this.attackCount = 0;
+                    this.setNerve(BallBeamerNrv.AttackChargeWait);
+                } else {
+                    this.setNerve(BallBeamerNrv.Wait);
+                }
+            }
+        }
+    }
+
+    private tryAttack(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.ringBeams.length; i++) {
+            if (isDead(this.ringBeams[i])) {
+                this.ringBeams[i].makeActorAppeared(sceneObjHolder);
+                return;
+            }
+        }
+    }
+
+    private setupAttack(sceneObjHolder: SceneObjHolder): void {
+        if (isValidSwitchA(this) && !isOnSwitchA(sceneObjHolder, this))
+            return;
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve !== BallBeamerNrv.AttackChargeWait && currentNerve !== BallBeamerNrv.AttackCharging) {
+            this.attackCount = 0;
+            this.setNerve(BallBeamerNrv.AttackChargeWait);
+        }
+    }
+
+    private syncSwitchOffA(sceneObjHolder: SceneObjHolder): void {
+        this.switchOnA = false;
+    }
+
+    private syncSwitchOnA(sceneObjHolder: SceneObjHolder): void {
+        this.switchOnA = true;
+        this.setupAttack(sceneObjHolder);
+    }
+
+    private syncSwitchOffB(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    private syncSwitchOnB(sceneObjHolder: SceneObjHolder): void {
+        console.log('got switch B');
+
+        deleteEffect(sceneObjHolder, this, 'Charge');
+        emitEffect(sceneObjHolder, this, 'Vanish');
+        this.makeActorDead(sceneObjHolder);
+
+        for (let i = 0; i < this.ringBeams.length; i++)
+            this.ringBeams[i].makeActorDead(sceneObjHolder);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        RingBeam.requestArchives(sceneObjHolder);
     }
 }

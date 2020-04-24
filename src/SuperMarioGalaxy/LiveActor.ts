@@ -493,7 +493,30 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
-        this.visibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+        const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+        if (this.visibleScenario === newVisibleScenario)
+            return;
+
+        if (newVisibleScenario)
+            this.onScenario(sceneObjHolder);
+        else
+            this.offScenario(sceneObjHolder);
+    }
+
+    // noclip hook for scenario changing. This should probably be makeActorAppeared/makeActorDead by default.
+
+    protected onScenario(sceneObjHolder: SceneObjHolder): void {
+        // this.makeActorAppeared(sceneObjHolder);
+
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setVisibleScenario(true);
+    }
+
+    protected offScenario(sceneObjHolder: SceneObjHolder): void {
+        // this.makeActorDead(sceneObjHolder);
+
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setVisibleScenario(false);
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
@@ -676,10 +699,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.effectKeeper !== null)
-            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-
-        // Don't do anything.
+        // Don't do anything. All cleanup should have happened at offScenario time.
         if (!this.visibleScenario)
             return;
 

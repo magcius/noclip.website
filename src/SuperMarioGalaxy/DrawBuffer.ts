@@ -48,6 +48,7 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
     { DrawBufferType: 0x19,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT,       LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.INDIRECT_NPC,                        LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.INDIRECT_ENEMY,                      LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: 0x28,                                               LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.RIDE,                                LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.NO_SHADOWED_MAP_OBJ,                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
