@@ -505,6 +505,7 @@ export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => n
 
 export class GfxRenderInstList {
     public renderInsts: GfxRenderInst[] = [];
+    private usePostSort: boolean = false;
 
     constructor(
         public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
@@ -513,16 +514,28 @@ export class GfxRenderInstList {
     }
 
     /**
+     * Determine whether to use post-sorting, based on some heuristics.
+     */
+    public checkUsePostSort(): void {
+        // Over a certain threshold, it's faster to push and then sort than insort directly...
+        this.usePostSort = this.renderInsts.length >= 500;
+    }
+
+    /**
      * Insert a render inst to the list. This directly inserts the render inst to
      * the position specified by the compare function, so the render inst must be
      * fully constructed at this point.
      */
     public insertSorted(renderInst: GfxRenderInst): void {
-        if (this.compareFunction !== null) {
-            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
-        } else {
+        if (this.compareFunction === null) {
             this.renderInsts.push(renderInst);
+        } else if (this.usePostSort) {
+            this.renderInsts.push(renderInst);
+        } else {
+            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
         }
+
+        this.checkUsePostSort();
     }
 
     /**
@@ -533,6 +546,11 @@ export class GfxRenderInstList {
     public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.renderInsts.length === 0)
             return;
+
+        if (this.usePostSort) {
+            this.renderInsts.sort(this.compareFunction!);
+            this.usePostSort = false;
+        }
 
         // TODO(jstpierre): Remove this?
         if (state === null) {
@@ -707,6 +725,8 @@ export class GfxRenderInstManager {
      */
     public setVisibleByFilterKeyExact(filterKey: number): void {
         const list = assertExists(this.simpleRenderInstList);
+        // Guess whether we should speed things up with a post-sort by the previous contents of the list...
+        list.checkUsePostSort();
         list.renderInsts.length = 0;
 
         for (let i = 0; i < this.instPool.allocCount; i++)

@@ -580,7 +580,7 @@ class BatchInstance {
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
-    constructor(device: GfxDevice, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
         const program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
@@ -661,7 +661,8 @@ class BatchInstance {
                 vec4.set(this.texScroll[i], param[0], param[1], 0, 0);
         }
 
-        this.gfxProgram = device.createProgram(program);
+        program.ensurePreprocessed(device.queryVendorInfo());
+        this.gfxProgram = cache.createProgram(device, program);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer, 0);
@@ -731,7 +732,7 @@ export class FLVERInstance {
     public visible = true;
     public name: string;
 
-    constructor(device: GfxDevice, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
             const batchData = this.flverData.batchData[i];
             const batch = batchData.batch;
@@ -741,7 +742,7 @@ export class FLVERInstance {
             const mtdName = mtdFilePath.split('\\').pop()!;
             const mtd = materialDataHolder.getMaterial(mtdName);
 
-            this.batchInstances.push(new BatchInstance(device, flverData, batchData, textureHolder, material, mtd));
+            this.batchInstances.push(new BatchInstance(device, cache, flverData, batchData, textureHolder, material, mtd));
         }
     }
 
@@ -791,7 +792,7 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
 export class MSBRenderer {
     public flverInstances: FLVERInstance[] = [];
 
-    constructor(device: GfxDevice, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
         for (let i = 0; i < msb.parts.length; i++) {
             const part = msb.parts[i];
             if (part.type === 0) {
@@ -799,7 +800,7 @@ export class MSBRenderer {
                 if (flverData === undefined)
                     continue;
 
-                const instance = new FLVERInstance(device, this.textureHolder, this.materialDataHolder, flverData);
+                const instance = new FLVERInstance(device, cache, this.textureHolder, this.materialDataHolder, flverData);
                 instance.visible = !isLODModel(part.name);
                 instance.name = part.name;
                 modelMatrixFromPart(instance.modelMatrix, part);

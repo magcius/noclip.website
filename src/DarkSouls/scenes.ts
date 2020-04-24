@@ -217,7 +217,8 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
         this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
-        const msbRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
+        const cache = renderer.getCache();
+        const msbRenderer = new MSBRenderer(device, cache, textureHolder, modelHolder, materialDataHolder, msb);
         renderer.msbRenderers.push(msbRenderer);
         return renderer;
     }
@@ -320,7 +321,7 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
             this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
             this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
-            const msbRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
+            const msbRenderer = new MSBRenderer(device, cache, textureHolder, modelHolder, materialDataHolder, msb);
             renderer.msbRenderers.push(msbRenderer);
         }
 
