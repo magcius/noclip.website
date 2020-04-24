@@ -5,7 +5,7 @@ import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT } from '../MathHelpers';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT, transformVec3Mat4w1 } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Green, Yellow, OpaqueBlack, Red } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -13,7 +13,7 @@ import * as Viewer from '../viewer';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj, NameObjAdaptor } from './NameObj';
 import { assertExists, leftPad, fallback, nArray, assert } from '../util';
-import { Camera } from '../Camera';
+import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../Camera';
 import { isGreaterStep, isGreaterEqualStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType, isDead, MsgSharedGroup } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
@@ -9268,9 +9268,35 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
     }
 }
 
+function elemSetWorldPosition(elem: HTMLElement, camera: Camera, v: vec3, radius: number, visible: boolean): void {
+    // View-space point
+    transformVec3Mat4w1(scratchVec3b, camera.viewMatrix, v);
+
+    vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
+    const screenX = (scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth;
+    const screenY = (scratchVec3c[1] * -0.5 + 0.5) * window.innerHeight;
+
+    scratchVec3b[0] += radius;
+    vec3.transformMat4(scratchVec3c, scratchVec3b, camera.projectionMatrix);
+    const screenRadius = ((scratchVec3c[0] * 0.5 + 0.5) * window.innerWidth) - screenX;
+
+    if (visible && scratchVec3c[2] <= 1.0) {
+        elem.style.left = `${screenX - screenRadius}px`;
+        elem.style.top = `${screenY - screenRadius}px`;
+        elem.style.width = `${screenRadius * 2}px`;
+        elem.style.height = `${screenRadius * 2}px`;
+        elem.style.display = 'block';
+        elem.style.borderRadius = `99999px`;
+    } else {
+        elem.style.display = 'none';
+    }
+}
+
 const enum ScrewSwitchReverseNrv { Wait, Screw }
 
 export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
+    private button: HTMLElement;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'ScrewSwitchReverse');
 
@@ -9293,6 +9319,24 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         this.initNerve(ScrewSwitchReverseNrv.Wait);
         this.makeActorAppeared(sceneObjHolder);
+
+        this.button = document.createElement('div');
+        this.button.style.position = 'absolute';
+        this.button.style.pointerEvents = 'auto';
+        this.button.style.cursor = 'pointer';
+        this.button.onclick = () => {
+            this.setNerve(ScrewSwitchReverseNrv.Screw);
+        };
+        sceneObjHolder.uiContainer.appendChild(this.button);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const visible = !isDead(this) && calcDistToCamera(this, viewerInput.camera) < 5000.0;
+        vec3.copy(scratchVec3, this.translation);
+        scratchVec3[1] += 100.0;
+        elemSetWorldPosition(this.button, viewerInput.camera, scratchVec3, 125.0, visible);
     }
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ScrewSwitchReverseNrv, deltaTimeFrames: number): void {
@@ -9558,8 +9602,6 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
     }
 
     private syncSwitchOnB(sceneObjHolder: SceneObjHolder): void {
-        console.log('got switch B');
-
         deleteEffect(sceneObjHolder, this, 'Charge');
         emitEffect(sceneObjHolder, this, 'Vanish');
         this.makeActorDead(sceneObjHolder);

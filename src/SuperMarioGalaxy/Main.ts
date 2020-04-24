@@ -955,6 +955,7 @@ export class SceneObjHolder {
     public nameObjHolder = new NameObjHolder();
 
     public viewerInput: Viewer.ViewerRenderInput;
+    public uiContainer: HTMLElement;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1496,6 +1497,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
+        sceneObjHolder.uiContainer = context.uiContainer;
         context.destroyablePool.push(sceneObjHolder);
 
         await modelCache.waitForLoad();
