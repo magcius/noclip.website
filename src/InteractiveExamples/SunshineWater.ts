@@ -20,9 +20,9 @@ import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout,
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { computeViewMatrix } from '../Camera';
+import { computeViewMatrix, OrbitCameraController } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext } from '../SceneBase';
+import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase';
 import { assertExists } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 
@@ -115,7 +115,7 @@ class PlaneShape {
 }
 
 const packetParams = new PacketParams();
-class SeaPlaneScene {
+class SunshineWaterModel {
     private seaMaterialInstance: MaterialInstance;
     private shapeInstanceState = new ShapeInstanceState();
     private materialInstanceState = new MaterialInstanceState();
@@ -215,35 +215,54 @@ class SeaPlaneScene {
 }
 
 class SeaRenderer extends SunshineRenderer {
-    public seaPlaneScene: SeaPlaneScene;
+    public sunshineWaterModel: SunshineWaterModel;
+
+    public createCameraController() {
+        return new OrbitCameraController(true);
+    }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        this.seaPlaneScene.prepareToRender(device, this.renderHelper, viewerInput);
+        this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         super.prepareToRender(device, hostAccessPass, viewerInput);
     }
 }
 
-export function createScene(context: SceneContext, name: string): Promise<SceneGfx> {
-    const device = context.device;
-    const dataFetcher = context.dataFetcher;
+export class SunshineWaterSceneDesc implements SceneDesc {
+    constructor(public id: string, public name: string = id) {
+    }
 
-    return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
-        return Yaz0.decompress(buffer);
-    }).then((buffer: ArrayBufferSlice) => {
-        const rarc = RARC.parse(buffer);
-
-        const renderer = new SeaRenderer(device, rarc);
-        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        const skyScene = assertExists(SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true));
-        renderer.modelInstances.push(skyScene);
-
-        const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
-        const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
-
-        const seaScene = new SeaPlaneScene(device, cache, bmd, btk, name);
-        renderer.seaPlaneScene = seaScene;
-        return renderer;
-    });
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+    
+        return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+            return Yaz0.decompress(buffer);
+        }).then((buffer: ArrayBufferSlice) => {
+            const rarc = RARC.parse(buffer);
+    
+            const renderer = new SeaRenderer(device, rarc);
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+            const skyScene = assertExists(SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true));
+            renderer.modelInstances.push(skyScene);
+    
+            const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
+            const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
+    
+            const seaScene = new SunshineWaterModel(device, cache, bmd, btk, this.id);
+            renderer.sunshineWaterModel = seaScene;
+            return renderer;
+        });
+    }
 }
+
+const id = 'sunshine_water';
+const name = 'Sunshine Water';
+const sceneDescs = [
+    new SunshineWaterSceneDesc('full'),
+    new SunshineWaterSceneDesc('opaque-layer0-nomip-noalpha-noblend'),
+    new SunshineWaterSceneDesc('opaque-both-nomip-noalpha-noblend'),
+    new SunshineWaterSceneDesc('nomip-noalpha'),
+    new SunshineWaterSceneDesc('texture-noalpha'),
+];
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

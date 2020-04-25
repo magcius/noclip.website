@@ -1,7 +1,6 @@
 
 import * as Viewer from "./viewer";
 import { GfxDevice, GfxRenderPass } from "./gfx/platform/GfxPlatform";
-import { IS_DEVELOPMENT } from "./BuildVersion";
 import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
@@ -78,5 +77,5 @@ const sceneDescs = [
 ];
 
 export const sceneGroup: Viewer.SceneGroup = {
-    id, name, sceneDescs, hidden: !IS_DEVELOPMENT,
+    id, name, sceneDescs, hidden: true,
 };

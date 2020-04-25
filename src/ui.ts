@@ -5,7 +5,7 @@ import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
 import { Color, colorToCSS, objIsColor } from './Color';
-import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
+import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
@@ -1097,7 +1097,9 @@ class SceneSelect extends Panel {
                 let visible = false;
                 let explicitlyInvisible = false;
 
-                explicitlyInvisible = item.sceneDescs.length <= 0 || !!item.hidden;
+                const isHidden = (!!item.hidden) && !IS_DEVELOPMENT;
+                explicitlyInvisible = item.sceneDescs.length <= 0 || isHidden;
+
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
                     if (!visible == lastGroupHeaderVisible)
@@ -2168,6 +2170,10 @@ class CameraSpeedIndicator implements BottomBarWidget {
         this.elem.style.lineHeight = '32px';
     }
 
+    public setVisible(v: boolean): void {
+        this.elem.style.display = v ? 'block' : 'none';
+    }
+
     public setArea(): void {
     }
 
@@ -2216,6 +2222,7 @@ function setAreaAnchor(elem: HTMLElement, area: BottomBarArea) {
 interface BottomBarWidget {
     elem: HTMLElement;
     setArea(area: BottomBarArea): void;
+    setVisible(v: boolean): void;
     isAnyPanelExpanded(): boolean;
 }
 
@@ -2335,6 +2342,10 @@ abstract class SingleIconButton implements BottomBarWidget {
 
     public setArea(area: BottomBarArea): void {
         setAreaAnchor(this.tooltipElem, area);
+    }
+
+    public setVisible(v: boolean): void {
+        this.elem.style.display = v ? 'block' : 'none';
     }
 
     public isAnyPanelExpanded(): boolean {
@@ -2588,6 +2599,9 @@ export class UI {
     private lastMouseActiveTime: number = -1;
 
     public isPlaying: boolean = true;
+
+    public isEmbedMode: boolean = false;
+    public isVisible: boolean = false;
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
@@ -2870,12 +2884,32 @@ export class UI {
         this.bindSlidersRecurse(obj, panel, '');
     }
 
-    public toggleUI(visible: boolean | undefined): void {
-        if (visible === undefined)
-            visible = this.panelToplevel.style.display === 'none';
+    private syncVisibilityState(): void {
+        const panelsVisible = !this.isEmbedMode && this.isVisible;
+        this.panelToplevel.style.display = panelsVisible ? '' : 'none';
 
-        this.panelToplevel.style.display = visible ? '' : 'none';
-        this.bottomBar.elem.style.display = visible ? 'grid' : 'none';
+        const bottomBarVisible = this.isVisible;
+        this.bottomBar.setVisible(bottomBarVisible);
+
+        const extraButtonsVisible = !this.isEmbedMode;
+        this.cameraSpeedIndicator.setVisible(extraButtonsVisible);
+        this.shareButton.setVisible(extraButtonsVisible);
+    }
+
+    public setEmbedMode(v: boolean): void {
+        if (this.isEmbedMode === v)
+            return;
+
+        this.isEmbedMode = v;
+        this.syncVisibilityState();
+    }
+
+    public toggleUI(v: boolean = !this.isVisible): void {
+        if (this.isVisible === v)
+            return;
+
+        this.isVisible = v;
+        this.syncVisibilityState();
     }
 }
 

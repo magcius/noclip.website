@@ -6,7 +6,6 @@ import { EmptyScene } from "../Scenes_Test";
 import Pako from "pako";
 import { assert, readString, hexzero, nArray } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { IS_DEVELOPMENT } from "../BuildVersion";
 import { vec3 } from "gl-matrix";
 import { CombineParams, decodeCombineParams } from "../Common/N64/RDP";
 import { loadVertexFromView } from "../Common/N64/RSP";
@@ -635,5 +634,5 @@ const id = 'GoldenEye007';
 const name = 'GoldenEye: 007';
 
 export const sceneGroup: SceneGroup = {
-    id, name, sceneDescs, hidden: !IS_DEVELOPMENT,
+    id, name, sceneDescs, hidden: true,
 };

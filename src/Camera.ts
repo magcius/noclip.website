@@ -586,11 +586,10 @@ export class OrbitCameraController implements CameraController {
     public translation = vec3.create();
     public txVel: number = 0;
     public tyVel: number = 0;
-    public shouldOrbit: boolean = true;
 
     public sceneMoveSpeedMult = 1;
 
-    constructor() {
+    constructor(public shouldOrbit: boolean = false) {
     }
 
     public cameraUpdateForced(): void {

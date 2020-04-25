@@ -58,6 +58,7 @@ import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
+import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -148,6 +149,7 @@ const sceneGroups = [
     Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
+    Scenes_SunshineWater.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
@@ -224,12 +226,15 @@ class Main {
     private webXRContext: WebXRContext;
 
     public sceneTimeScale = 1.0;
+    public isEmbedMode = false;
 
     constructor() {
         this.init();
     }
 
     public async init() {
+        this.isEmbedMode = window.location.pathname === '/embed.html';
+
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
 
@@ -764,6 +769,7 @@ class Main {
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
+        this.ui.setEmbedMode(this.isEmbedMode);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);

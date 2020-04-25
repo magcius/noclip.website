@@ -163,4 +163,4 @@ const sceneDescs = [
     new WiiUTransferToolSceneDesc("WiiUTransferTool", "Wii U Transfer Tool"),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

@@ -9,7 +9,6 @@ const webpack = require('webpack');
 module.exports = {
   entry: {
     main: './src/main.ts',
-    embed: './src/embeds/embeds_main.ts',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -60,9 +59,9 @@ module.exports = {
       template: './src/index.html',
     }),
     new HtmlWebpackPlugin({
-      chunks: ['embed'],
+      chunks: ['main'],
       filename: 'embed.html',
-      template: './src/embed.html',
+      template: './src/index.html',
     }),
     new CopyPlugin([
       // All .wasm files are currently expected to be at the root
