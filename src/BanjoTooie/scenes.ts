@@ -792,7 +792,7 @@ const sceneDescs = [
     // new SceneDesc('182', "Mini - Sub Shootout"),
 
     new SceneDesc('EF', "Mumbo's Skull"),
-    new SceneDesc('120', "Humba's Wigwam"),
+    new SceneDesc('120', "Wumba's Wigwam"),
     "Grunty Industries",
     new SceneDesc('100', "Grunty Industries"),
     new SceneDesc('101', "Floor 1"),
@@ -817,7 +817,7 @@ const sceneDescs = [
     new SceneDesc('111', "Basement: Waste Disposal Plant"),
     new SceneDesc('125', "Water Supply Pipe (Grunty Industries)"),
 
-    new SceneDesc('11F', "Humba's Wigwam"),
+    new SceneDesc('11F', "Wumba's Wigwam"),
     new SceneDesc('102', "Train Station (Grunty Industries)"),
     "Terrydactyland",
     new SceneDesc('112', "Terrydactyland"),

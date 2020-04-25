@@ -878,7 +878,7 @@ export class GeometryData {
     // forget any game specific data in the geometry, for now
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput);
-        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0);
+        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0) || !!geo.morphs;
     }
 }
 const geoNodeScratch = vec3.create();
@@ -1172,10 +1172,8 @@ export class GeometryRenderer {
         const geoNodeRenderer = new GeoNodeRenderer(node);
 
         if (node.rspOutput !== null) {
-            const drawMatrix = [
-                this.boneToWorldMatrixArray[node.boneIndex],
-                this.boneToWorldMatrixArray[node.boneIndex],
-            ];
+            const baseMat = node.boneIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[node.boneIndex];
+            const drawMatrix = [baseMat, baseMat];
 
             // Skinned meshes need the parent bone as the second draw matrix.
             const animationSetup = this.animationSetup;

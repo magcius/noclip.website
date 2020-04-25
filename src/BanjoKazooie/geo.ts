@@ -4,7 +4,7 @@ import * as F3DEX2 from "../PokemonSnap/f3dex2";
 import * as RDP from "../Common/N64/RDP";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, nArray } from "../util";
+import { assert, hexzero, assertExists, nArray, align } from "../util";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
 import { ImageFormat, ImageSize, TexCM } from "../Common/N64/Image";
@@ -32,6 +32,18 @@ export interface VertexBoneEntry {
 
 export interface VertexBoneTable {
     vertexBoneEntries: VertexBoneEntry[];
+}
+
+interface MorphEntry {
+    vertices: F3DEX.Vertex[];
+    indexLists: Uint16Array[];
+}
+
+export interface Morph {
+    id: number;
+    boneIndex: number;
+    entries: MorphEntry[];
+    affected: Uint16Array;
 }
 
 export interface TextureAnimationSetup {
@@ -65,6 +77,7 @@ export interface Geometry<N extends GeoNode> {
     normals?: vec3[];
     softwareLighting?: SoftwareLightingEffect[];
     colorMapping?: number[][];
+    morphs?: Morph[];
 }
 
 export const enum VertexEffectType {
@@ -631,7 +644,6 @@ function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number
         if (cmd > 0x10) {
             const node = peekGeoNode(context);
             assert(node instanceof BTGeoNode);
-            assert(node.boneIndex >= 0 && (node.parentIndex >= 0 || cmd === 0x11))
             switch (cmd) {
                 case 0x11: {
                     if (!(view.getUint16(geoIdx + 0x0E) & 1))
@@ -847,20 +859,22 @@ export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureDat
             const posCount = view.getInt16(tableOffs + 0x02);
             const vertexCount = view.getInt16(tableOffs + 0x04);
             tableOffs += 0x06;
-
             let currPos = tableOffs;
             tableOffs += 0x06 * posCount;
             // ignoring normals for now
             if (hasNorms)
                 tableOffs += 0x04 * vertexCount;
             let entryStart = tableOffs;
-
+            if (boneID === -1) {
+                tableOffs += 2 * (vertexCount + posCount);
+                continue;
+            }
             while (true) {
                 const idx = view.getInt16(tableOffs);
                 if (idx < 0) {
                     const vertexIDs = buffer.createTypedArray(Uint16Array, entryStart, (tableOffs - entryStart) / 2, Endianness.BIG_ENDIAN);
                     const position = vec3.fromValues(view.getInt16(currPos), view.getInt16(currPos + 2), view.getInt16(currPos + 4));
-                    if (boneID !== -1)
+                    if (vertexIDs.length > 0)
                         vertexBoneEntries.push({ position, boneID, vertexIDs });
                     currPos += 0x06;
                     entryStart = tableOffs + 2;
@@ -918,6 +932,69 @@ export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureDat
         geo.colorMapping = colorMap;
     }
 
+    const morphDataOffset = view.getUint32(0x40);
+    if (morphDataOffset !== 0) {
+        assert(context.animationSetup !== null);
+        const morphs: Morph[] = [];
+
+        const morphCount = view.getInt16(morphDataOffset + 0x00);
+        let morphOffs = morphDataOffset + 0x04;
+        for (let i = 0; i < morphCount; i++) {
+            const boneIndex = view.getInt16(morphOffs + 0x00);
+            const id = view.getUint8(morphOffs + 0x02);
+            const entryCount = view.getUint8(morphOffs + 0x03);
+            const firstVertex = view.getUint16(morphOffs + 0x04);
+            const affectedCount = view.getUint16(morphOffs + 0x06);
+            const dataLength = view.getUint32(morphOffs + 0x08);
+            const next = morphOffs + dataLength;
+            morphOffs += 0x0C;
+
+            const affected = new Uint16Array(affectedCount);
+            const entries: MorphEntry[] = [];
+
+            // check vertex flags to find which vertices are affected by this morph
+            let found = 0;
+            const vtxView = context.segmentBuffers[1].createDataView();
+            for (let j = firstVertex; found < affectedCount; j++)
+                if (vtxView.getUint16(j * 0x10 + 0x06) & 0x4000)
+                    affected[found++] = j;
+
+            // load extra vertex data for skinning
+            for (let j = 0; j < entryCount; j++) {
+                const vertexCount = view.getUint16(morphOffs + 0x00);
+                morphOffs += 4;
+
+                const vertices: F3DEX.Vertex[] = [];
+                for (let k = 0; k < vertexCount; k++) {
+                    const vtx = new F3DEX.StagingVertex();
+                    vtx.setFromView(view, morphOffs);
+                    vertices.push(vtx);
+                    morphOffs += 0x10;
+                }
+
+                let listStart = morphOffs;
+                const indexLists: Uint16Array[] = [];
+                while (true) {
+                    const idx = view.getInt16(morphOffs);
+                    if (idx < 0) {
+                        const indices = buffer.createTypedArray(Uint16Array, listStart, (morphOffs - listStart) / 2, Endianness.BIG_ENDIAN);
+                        indexLists.push(indices);
+                        listStart = morphOffs + 2;
+                    }
+                    morphOffs += 2;
+                    if (idx === -2)
+                        break;
+                }
+
+                entries.push({ vertices, indexLists });
+                morphOffs = align(morphOffs, 4);
+            }
+            morphs.push({ id, boneIndex, entries, affected });
+            assert(morphOffs === next);
+        }
+        geo.morphs = morphs;
+    }
+
     return geo;
 }
 
@@ -928,7 +1005,7 @@ export function parse<N extends GeoNode>(buffer: ArrayBufferSlice, geoContext: G
 
     const sharedOutput = geoContext.sharedOutput;
 
-    const rootNode = pushGeoNode<N>(geoContext, 0);
+    const rootNode = pushGeoNode<N>(geoContext, -1);
     runGeoLayout<N>(geoContext, geoOffs);
     const rootNode2 = popGeoNode<N>(geoContext);
     assert(rootNode === rootNode2);

@@ -169,9 +169,9 @@ function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32A
 const lightingScratch = mat4.create();
 const lightingX = vec3.create();
 const lightingY = vec3.create();
-function applySoftwareLighting(effects: SoftwareLightingEffect[], vertexBuffer: Float32Array, normals: vec3[], joints: mat4[], lookAt: mat4): void {
+function applySoftwareLighting(effects: SoftwareLightingEffect[], vertexBuffer: Float32Array, normals: vec3[], modelMatrix: mat4, joints: mat4[], lookAt: mat4): void {
     for (let i = 0; i < effects.length; i++) {
-        mat4.transpose(lightingScratch, joints[effects[i].bone]);
+        mat4.transpose(lightingScratch, effects[i].bone === -1 ?  modelMatrix : joints[effects[i].bone]);
 
         getMatrixAxisX(lightingX, lookAt);
         transformVec3Mat4w0(lightingX, lightingScratch, lightingX);
@@ -679,7 +679,7 @@ export class GeometryRenderer {
         for (let setup of geo.textureAnimationSetup)
             this.textureAnimators.push(new TextureAnimator(setup, geometryData.renderData.textures));
 
-        if (geo.vertexBoneTable !== null) {
+        if (geo.vertexBoneTable !== null || geo.morphs !== undefined) {
             const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
             this.boneToModelMatrixArray = nArray(boneToModelMatrixArrayCount, () => mat4.create());
         }
@@ -734,10 +734,8 @@ export class GeometryRenderer {
                 // chnest objects use arbitrary joints, but we don't have the animations yet
                 drawMatrix = [this.modelMatrix, ...this.boneToWorldMatrixArray];
             else {
-                drawMatrix = [
-                    this.boneToWorldMatrixArray[node.boneIndex],
-                    this.boneToWorldMatrixArray[node.boneIndex],
-                ];
+                const baseMat = node.boneIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[node.boneIndex];
+                drawMatrix = [baseMat, baseMat];
 
                 // Skinned meshes need the parent bone as the second draw matrix.
                 const animationSetup = this.animationSetup;
@@ -945,7 +943,7 @@ export class GeometryRenderer {
             mat4.getTranslation(lookatScratch[0], this.modelMatrix);
             mat4.getTranslation(lookatScratch[1], viewerInput.camera.worldMatrix);
             mat4.targetTo(modelViewScratch, lookatScratch[1], lookatScratch[0], Vec3UnitY);
-            applySoftwareLighting(this.geometryData.geo.softwareLighting, this.vertexBufferData, this.geometryData.geo.normals!, this.boneToWorldMatrixArray, modelViewScratch);
+            applySoftwareLighting(this.geometryData.geo.softwareLighting, this.vertexBufferData, this.geometryData.geo.normals!, this.modelMatrix, this.boneToWorldMatrixArray, modelViewScratch);
         }
 
         if (this.geometryData.geo.vertexBoneTable !== null) {
@@ -958,6 +956,25 @@ export class GeometryRenderer {
                     this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
                     this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
                     this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                }
+            }
+
+            // TODO: figure out where the skinning weights come from
+            // until then, assume that morphs without other skinning (most instances) will look broken, so skip
+            if (this.geometryData.geo.morphs) {
+                // just use first until we understand this better
+                const chosen = this.geometryData.geo.morphs[0];
+                if (chosen.boneIndex !== -1) {
+                    const xform = this.boneToModelMatrixArray[chosen.boneIndex];
+                    for (let i = 0; i < chosen.affected.length; i++) {
+                        const vertexID = chosen.affected[i];
+                        const baseVertex = this.geometryData.renderData.sharedOutput.vertices[vertexID];
+                        vec3.set(boneTransformScratch, baseVertex.x, baseVertex.y, baseVertex.z);
+                        transformVec3Mat4w1(boneTransformScratch, xform, boneTransformScratch);
+                        this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+                        this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+                        this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                    }
                 }
             }
         }
