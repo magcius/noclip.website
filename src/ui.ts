@@ -2277,8 +2277,12 @@ class BottomBar {
         return false;
     }
 
-    public setVisible(active: boolean): void {
+    public setActive(active: boolean): void {
         this.elem.style.opacity = active ? '1' : '0';
+    }
+
+    public setVisible(v: boolean): void {
+        this.elem.style.display = v ? 'grid' : 'none';
     }
 }
 
@@ -2703,7 +2707,7 @@ export class UI {
     }
 
     public update(): void {
-        this.syncBottomRightBarVisibility();
+        this.syncVisibilityState();
     }
 
     public setSaveState(saveState: string) {
@@ -2763,7 +2767,7 @@ export class UI {
         return true;
     }
 
-    private shouldBottomRightBarBeVisible(): boolean {
+    private shouldBottomBarBeFadeIn(): boolean {
         if (this.bottomBar.isAnyPanelExpanded())
             return true;
 
@@ -2778,16 +2782,12 @@ export class UI {
         return true;
     }
 
-    private syncBottomRightBarVisibility(): void {
-        this.bottomBar.setVisible(this.shouldBottomRightBarBeVisible());
-    }
-
     public setIsDragging(isDragging: boolean): void {
         this.isDragging = isDragging;
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
         if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
-        this.syncBottomRightBarVisibility();
+        this.syncVisibilityState();
     }
 
     public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
@@ -2890,6 +2890,7 @@ export class UI {
 
         const bottomBarVisible = this.isVisible;
         this.bottomBar.setVisible(bottomBarVisible);
+        this.bottomBar.setActive(this.shouldBottomBarBeFadeIn());
 
         const extraButtonsVisible = !this.isEmbedMode;
         this.cameraSpeedIndicator.setVisible(extraButtonsVisible);
