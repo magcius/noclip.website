@@ -2605,7 +2605,7 @@ export class UI {
     public isPlaying: boolean = true;
 
     public isEmbedMode: boolean = false;
-    public isVisible: boolean = false;
+    public isVisible: boolean = true;
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
