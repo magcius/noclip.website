@@ -290,7 +290,7 @@ export class Viewer {
         camera.setClipPlanes(5);
 
         if (this.cameraController) {
-            const updated = this.cameraController.update(this.inputManager, dt);
+            const updated = this.cameraController.update(this.inputManager, dt, this.sceneTimeScale);
             if (updated)
                 this.oncamerachanged();
         }

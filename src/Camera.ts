@@ -283,7 +283,7 @@ export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
     cameraUpdateForced(): void;
-    update(inputManager: InputManager, dt: number): boolean;
+    update(inputManager: InputManager, dt: number, sceneTimeScale: number): boolean;
     setSceneMoveSpeedMult(v: number): void;
     getKeyMoveSpeed(): number | null;
     setKeyMoveSpeed(speed: number): void;
@@ -579,6 +579,7 @@ export class OrbitCameraController implements CameraController {
     public y: number = 2;
     public z: number = -150;
     public orbitSpeed: number = -0.05;
+    public orbitXVel: number = 0;
     public xVel: number = 0;
     public yVel: number = 0;
     public zVel: number = 0;
@@ -609,7 +610,7 @@ export class OrbitCameraController implements CameraController {
         return null;
     }
 
-    public update(inputManager: InputManager, dt: number): boolean {
+    public update(inputManager: InputManager, dt: number, sceneTimeScale: number): boolean {
         if (inputManager.isKeyDownEventTriggered('KeyR')) {
             this.shouldOrbit = !this.shouldOrbit;
         }
@@ -641,7 +642,7 @@ export class OrbitCameraController implements CameraController {
             this.yVel += inputManager.dy / -200 * invertYMult;
         } else if (shouldOrbit) {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
-                this.xVel += this.orbitSpeed * 1/50;
+                this.orbitXVel += (this.orbitSpeed * 1/50);
         }
         this.zVel += inputManager.dz * 5;
         let keyVelX = 0, keyVelY = 0;
@@ -663,16 +664,18 @@ export class OrbitCameraController implements CameraController {
             this.tyVel += -keyVelY;
         }
 
+        this.orbitXVel = clampRange(this.orbitXVel, 2);
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.orbitXVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
             const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
 
-            this.x += -this.xVel / 10;
+            this.x += -(this.xVel + (this.orbitXVel * sceneTimeScale)) / 10;
             this.xVel *= drag;
+            this.orbitXVel *= drag;
 
             this.y += -this.yVel / 10;
             this.yVel *= drag;
