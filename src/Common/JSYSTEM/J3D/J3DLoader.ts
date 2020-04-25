@@ -1779,59 +1779,6 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
 
     return { loopMode, duration, jointAnimationEntries };
 }
-
-export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Animator: ANK1Animator | null): void {
-    let scaleX: number;
-    let scaleY: number;
-    let scaleZ: number;
-    let rotationX: number;
-    let rotationY: number;
-    let rotationZ: number;
-    let translationX: number;
-    let translationY: number;
-    let translationZ: number;
-
-    let entry: ANK1JointAnimationEntry | null = null;
-
-    if (ank1Animator !== null)
-        entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;
-
-    if (entry !== null) {
-        const frame = ank1Animator!.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(ank1Animator!.ank1, frame);
-
-        scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-        rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-        rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-        translationX = sampleAnimationData(entry.translationX, animFrame);
-        translationY = sampleAnimationData(entry.translationY, animFrame);
-        translationZ = sampleAnimationData(entry.translationZ, animFrame);
-    } else {
-        const jnt1 = bmd.jnt1.joints[jointIndex];
-        scaleX = jnt1.scaleX;
-        scaleY = jnt1.scaleY;
-        scaleZ = jnt1.scaleZ;
-        rotationX = jnt1.rotationX;
-        rotationY = jnt1.rotationY;
-        rotationZ = jnt1.rotationZ;
-        translationX = jnt1.translationX;
-        translationY = jnt1.translationY;
-        translationZ = jnt1.translationZ;
-    }
-
-    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-}
-
-export class ANK1Animator { 
-    constructor(public animationController: AnimationController, public ank1: ANK1) {}
-}
-
-export function bindANK1Animator(animationController: AnimationController, ank1: ANK1): ANK1Animator {
-    return new ANK1Animator(animationController, ank1);
-}
 //#endregion
 //#region BCK
 export class BCK {
