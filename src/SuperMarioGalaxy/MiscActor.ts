@@ -7025,7 +7025,16 @@ export class OceanFloaterLandParts extends LiveActor {
             // Checks whether the "Rise" flag is done. We assume it is.
             moveCoordToEndPos(this);
             moveTransToCurrentRailPos(this);
+
+            assert(useStageSwitchWriteA(sceneObjHolder, this, infoIter));
         }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (isValidSwitchA(this))
+            this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
     }
 }
 
