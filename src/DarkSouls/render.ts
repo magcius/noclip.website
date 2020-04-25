@@ -561,9 +561,10 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
 
     const textureName = assertExists(lookupTextureParameter(material, name)).toLowerCase();
     if (textureHolder.hasTexture(textureName)) {
-        // TODO(jstpierre): Figure out why textures aren't in the proper archives.
         const texAssign = getTexAssign(mtd, name);
         textureHolder.fillTextureMapping(textureMapping[texAssign], textureName);
+    } else {
+        // TODO(jstpierre): Missing textures?
     }
 }
 

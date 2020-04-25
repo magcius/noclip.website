@@ -1039,8 +1039,8 @@ export class J3DModelInstance {
         this.jointMatrixCalc = new JointMatrixCalcNoAnm();
         this.calcJointAnim();
 
-        // DRW1 seems to specify each envelope twice. Not sure why. J3D actually corrects for this in
-        // J3DModelLoader::readDraw(). TODO(jstpierre): RE more of J3DMtxBuffer.
+        // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
+        // This appears to be a runtime fix for a toolchain bug.
         const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);

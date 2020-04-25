@@ -257,8 +257,8 @@ export function decodeTex_I8(dst: Uint8Array, view: DataView, srcOffs: number, t
     }
 }
 
-// TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
 export function parseTLUT(dst: Uint8Array, view: DataView, idx: number, siz: ImageSize, lutMode: TextureLUT): number {
+    // TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
     assert(lutMode === TextureLUT.G_TT_RGBA16);
 
     const tlutSize = getTLUTSize(siz);

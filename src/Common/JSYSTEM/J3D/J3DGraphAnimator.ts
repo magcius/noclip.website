@@ -143,7 +143,6 @@ function findMaterialInstance(modelInstance: J3DModelInstance, name: string): Ma
     return null;
 }
 
-// TODO(jstpierre): Replace this with something that the J3DTexRegAnm, etc. structs directly.
 export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];

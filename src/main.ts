@@ -246,7 +246,7 @@ class Main {
 
         this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
 
-        // requestPostAnimationFrame breaks WebXR. TODO(jstpierre): Try postMessage hack.
+        // requestPostAnimationFrame breaks WebXR.
         this.postAnimFrameWebXR.webXRContext = this.webXRContext;
         this.postAnimFrameWebXR.useRequestPostAnimationFrame = false;
         this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;

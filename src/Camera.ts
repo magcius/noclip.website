@@ -129,21 +129,6 @@ export function computeViewMatrixSkybox(out: mat4, camera: Camera): void {
     out[14] = 0;
 }
 
-// TODO(jstpierre): Replace, this is garbage.
-export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
-    mat4.identity(out);
-
-    // Right vector
-    out[0] = camera.worldMatrix[0];
-    out[4] = camera.worldMatrix[4];
-    out[8] = camera.worldMatrix[8];
-
-    // Forward vector
-    out[2] = camera.worldMatrix[2];
-    out[6] = camera.worldMatrix[6];
-    out[10] = camera.worldMatrix[10];
-}
-
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
