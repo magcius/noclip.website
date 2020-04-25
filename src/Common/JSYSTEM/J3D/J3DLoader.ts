@@ -1358,7 +1358,7 @@ export function sampleAnimationData(track: AnimationTrack, frame: number): numbe
     return hermiteInterpolate(k0, k1, frame);
 }
 
-function translateAnimationTrack(data: Float32Array | Int16Array, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
+function translateAnimationTrack(data: Float32Array | Int16Array, duration: number, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
     // Special exception.
     if (count === 1) {
         const value = data[index];
@@ -1379,9 +1379,9 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
             }
         }
 
-        // If there's more than one value, then there should be a track with an entry at duration as the last keyframe. This frame
-        // is junk, we should ditch it.
-        const lastFrame = frames.pop();
+        // Check for an unnecessary reset frame at the duration, as it can have messed up tangents.
+        if (frames[frames.length - 2].time === duration - 1 && frames[frames.length - 1].time === duration)
+            frames.pop();
 
         return { frames };
     }
@@ -1445,7 +1445,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, scale, count, index, tangent);
+        return translateAnimationTrack(data, duration, scale, count, index, tangent);
     }
 
     const uvAnimationEntries: TTK1AnimationEntry[] = [];
@@ -1573,7 +1573,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1677,7 +1677,7 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1756,7 +1756,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, scale, count, index, tangent);
+        return translateAnimationTrack(data, duration, scale, count, index, tangent);
     }
 
     const jointAnimationEntries: ANK1JointAnimationEntry[] = [];
