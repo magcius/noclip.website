@@ -235,15 +235,15 @@ export class XanimeCore implements JointMatrixCalc {
         if (this.ank1 !== null) {
             const entry = this.ank1.jointAnimationEntries[i];
             const animFrame = this.curAnmTime * this.ank1.duration;
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame, false);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame, false);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame, false);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame, false) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame, false) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame, false) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame, false);
-            const translationY = sampleAnimationData(entry.translationY, animFrame, false);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame, false);
+            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+            const translationX = sampleAnimationData(entry.translationX, animFrame);
+            const translationY = sampleAnimationData(entry.translationY, animFrame);
+            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
 
             const anmScale = scratchVec3a;
             const anmTrans = scratchVec3b;

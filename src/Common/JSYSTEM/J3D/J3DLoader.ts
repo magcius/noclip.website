@@ -5,7 +5,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
-import { assert, readString } from '../../../util';
+import { assert, readString, assertExists } from '../../../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
@@ -14,7 +14,7 @@ import AnimationController from '../../../AnimationController';
 import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
 import { getPointHermite } from '../../../Spline';
-import { computeModelMatrixSRT } from '../../../MathHelpers';
+import { computeModelMatrixSRT, lerp, lerpAngle } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
@@ -1321,8 +1321,9 @@ export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopM
     return animFrame;
 }
 
-function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
-    const length = k1.time - k0.time;
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
+    const length = (k1.time - k0.time);
+    const t = (frame - k0.time) / length;
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
@@ -1337,8 +1338,11 @@ function findKeyframe(frames: AnimationKeyframe[], time: number): number {
     return -1;
 }
 
-export function sampleAnimationData(track: AnimationTrack, frame: number, fakeResetTangents: boolean = true): number {
+export function sampleAnimationData(track: AnimationTrack, frame: number): number {
     const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
 
     // Find the first frame.
     const idx1 = findKeyframe(frames, frame);
@@ -1351,15 +1355,7 @@ export function sampleAnimationData(track: AnimationTrack, frame: number, fakeRe
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
-    // which aren't supposed to be visible. They are visible for us because
-    // "frame" can have a non-zero fractional component. In this case, pick
-    // a value completely.
-    if (fakeResetTangents && ((k1.time - k0.time) === 1))
-        return k0.value;
-
-    const t = (frame - k0.time) / (k1.time - k0.time);
-    return hermiteInterpolate(k0, k1, t);
+    return hermiteInterpolate(k0, k1, frame);
 }
 
 function translateAnimationTrack(data: Float32Array | Int16Array, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
@@ -1382,6 +1378,10 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
                 frames.push({ time, value, tangentIn, tangentOut });
             }
         }
+
+        // If there's more than one value, then there should be a track with an entry at duration as the last keyframe. This frame
+        // is junk, we should ditch it.
+        const lastFrame = frames.pop();
 
         return { frames };
     }
