@@ -499,6 +499,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.visibleScenario === newVisibleScenario)
             return;
 
+        this.visibleScenario = newVisibleScenario;
         if (newVisibleScenario)
             this.onScenario(sceneObjHolder);
         else
