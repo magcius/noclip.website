@@ -1715,6 +1715,7 @@ void main() {
         if (!!(clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT)) {
             assert(this._currentColorAttachments.length > 0);
             gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
+            gl.colorMask(true, true, true, true);
         }
         if (!!(clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT)) {
             assert(this._currentDepthStencilAttachment !== null);
