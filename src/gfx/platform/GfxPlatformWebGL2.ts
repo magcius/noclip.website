@@ -639,6 +639,7 @@ void main() {
         // Adjust for GL defaults.
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
         this._currentMegaState.depthWrite = false;
+        this._currentMegaState.attachmentsState[0].colorWriteMask = GfxColorWriteMask.ALL;
 
         // We always have depth test enabled.
         gl.enable(gl.DEPTH_TEST);
