@@ -25,6 +25,7 @@ export class GrabManager {
     private grabListener: GrabListener | null = null;
     private grabOptions: GrabOptions | null = null;
     private currentGrabTarget: HTMLElement | null = null;
+    private currentCursor: string = '';
 
     private lastX: number = -1;
     private lastY: number = -1;
@@ -70,6 +71,16 @@ export class GrabManager {
 
     public isGrabbed(): boolean {
         return this.grabListener !== null;
+    }
+
+    public setCursor(cursor: string): void {
+        this.currentCursor = cursor;
+
+        // Grab cursor takes precedence.
+        if (this.grabOptions !== null && this.grabOptions.useGrabbingCursor)
+            return;
+
+        document.body.style.cursor = cursor;
     }
 
     public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
@@ -119,7 +130,7 @@ export class GrabManager {
         }
 
         if (this.grabOptions!.useGrabbingCursor)
-            document.body.style.cursor = '';
+            document.body.style.cursor = this.currentCursor;
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.

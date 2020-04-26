@@ -708,8 +708,9 @@ class Main {
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
+        const inputManager = this.viewer.inputManager;
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
         };
 
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.

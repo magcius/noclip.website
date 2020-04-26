@@ -39,6 +39,8 @@ export default class InputManager {
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
+    public mouseX: number = -1;
+    public mouseY: number = -1;
     public dx: number;
     public dy: number;
     public dz: number;
@@ -80,6 +82,10 @@ export default class InputManager {
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
+        });
+        this.toplevel.addEventListener('mousemove', (e) => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
         });
         this.toplevel.addEventListener('mouseup', (e) => {
             this.buttons = e.buttons;
@@ -279,7 +285,11 @@ export default class InputManager {
         this.dy += dy;
     }
 
-    public onGrabReleased () {
+    public setCursor(cursor: string): void {
+        GlobalGrabManager.setCursor(cursor);
+    }
+
+    public onGrabReleased() {
         this.buttons = 0;
         if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();

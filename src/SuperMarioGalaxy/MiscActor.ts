@@ -994,7 +994,10 @@ function checkPass(old: number, new_: number, thresh: number): boolean {
     return old < thresh && new_ >= thresh;
 }
 
-export class StarPiece extends LiveActor {
+const enum StarPieceNrv { Floating, RailMove }
+
+export class StarPiece extends LiveActor<StarPieceNrv> {
+    private type: number = 0;
     private effectCounter: number = 0;
     private effectPrmColor: Color;
     private effectEnvColor: Color;
@@ -1029,36 +1032,53 @@ export class StarPiece extends LiveActor {
         this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
         this.initEffectKeeper(sceneObjHolder, 'StarPiece');
 
+        if (this.type === 2) {
+            this.initNerve(StarPieceNrv.RailMove);
+        } else {
+            this.initNerve(StarPieceNrv.Floating);
+        }
+
+        this.calcGravityFlag = false;
+
         startBtk(this, 'Gift');
         setBtkFrameAndStop(this, 5);
+
+        if (this.type === 0)
+            this.makeActorAppeared(sceneObjHolder);
+        else
+            this.makeActorDead(sceneObjHolder);
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        const newCounter = this.effectCounter + getDeltaTimeFrames(viewerInput);
+    private tryGotJudge(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        const newCounter = this.effectCounter + deltaTimeFrames;
         if (checkPass(this.effectCounter, newCounter, 20))
-            this.emitGettableEffect(sceneObjHolder, viewerInput, 4.0);
+            this.emitGettableEffect(sceneObjHolder, 4.0);
         this.effectCounter = newCounter % 90;
     }
 
-    private emitGettableEffect(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput, scale: number): void {
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StarPieceNrv, deltaTimeFrames: number): void {
+        if (currentNerve === StarPieceNrv.Floating) {
+            if (isFirstStep(this)) {
+                // offBind
+                // tryCalcGravity
+                // shadow, clipping
+            }
+
+            this.rotation[1] += MathConstants.DEG_TO_RAD * 15.0 * deltaTimeFrames;
+            this.tryGotJudge(sceneObjHolder, deltaTimeFrames);
+        }
+    }
+
+    private emitGettableEffect(sceneObjHolder: SceneObjHolder, scale: number): void {
         // Due to a bug in the original game, effectScale effectively does nothing, so it doesn't
         // really make sense to calculate it.
         // const effectScale = this.calcEffectScale(viewerInput, scale, 0.8, true);
         const effectScale = 1.0;
 
-        if (calcDistToCamera(this, viewerInput.camera) > 200)
+        if (calcDistToCamera(this, sceneObjHolder.viewerInput.camera) > 200)
             emitEffectWithScale(sceneObjHolder, this, 'GetAble', effectScale);
 
         setEffectColor(this, 'GetAble', this.effectPrmColor, this.effectEnvColor);
-    }
-
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        // The star piece rotates around the Y axis at 15 degrees every frame.
-        const SPEED = MathConstants.DEG_TO_RAD * 15;
-        this.rotation[1] += getDeltaTimeFrames(viewerInput) * SPEED;
-        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
     }
 }
 
