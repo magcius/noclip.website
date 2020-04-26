@@ -10,7 +10,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
@@ -78,6 +78,19 @@ export const enum SpecialTextureType {
 
 class SpecialTextureBinder {
     private textureMappings: TextureMapping[][] = nArray(SpecialTextureType.Count, () => []);
+    private mirrorSampler: GfxSampler;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        this.mirrorSampler = cache.createSampler(device, {
+            magFilter: GfxTexFilterMode.BILINEAR,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            maxLOD: 100,
+            minLOD: 0,
+            wrapS: GfxWrapMode.MIRROR,
+            wrapT: GfxWrapMode.MIRROR,
+        });
+    }
 
     public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
         if (this.textureMappings[textureType].includes(m))
@@ -89,6 +102,7 @@ class SpecialTextureBinder {
         const m = this.textureMappings[textureType];
         for (let i = 0; i < m.length; i++) {
             m[i].gfxTexture = gfxTexture;
+            m[i].gfxSampler = this.mirrorSampler;
             m[i].width = EFB_WIDTH;
             m[i].height = EFB_HEIGHT;
             m[i].flipY = true;
@@ -460,10 +474,12 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
-        // this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
-        // Requires a resolve.
-        // device.submitPass(passRenderer);
-        // this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
+        // Resolve for WaterCameraFilter.
+        device.submitPass(passRenderer);
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
+
+        this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, null);
+        this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
 
         // executeDrawImageEffect()
         if (bloomParameterBufferOffs !== -1) {
@@ -985,11 +1001,12 @@ export class SceneObjHolder {
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
-    public specialTextureBinder = new SpecialTextureBinder();
-
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
+
+    // Noclip-specific stuff.
+    public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
 
     // This is technically stored outside the SceneObjHolder, separately
@@ -1541,6 +1558,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
+        sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         context.destroyablePool.push(sceneObjHolder);
 
         await modelCache.waitForLoad();

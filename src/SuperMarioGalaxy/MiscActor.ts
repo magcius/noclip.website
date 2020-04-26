@@ -32,7 +32,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { isInWater } from './MiscMap';
+import { isInWater, WaterAreaHolder } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
@@ -6016,6 +6016,8 @@ export class OceanRing extends LiveActor {
             if (getObjectName(infoIter) === 'OceanRingAndFlag')
                 sceneObjHolder.modelCache.requestObjectData('FlagSurfing');
         }
+
+        WaterAreaHolder.requestArchives(sceneObjHolder);
     }
 
     public destroy(device: GfxDevice): void {

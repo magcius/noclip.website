@@ -10,7 +10,7 @@ import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
 import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj, createGlobalWireGravityObj } from './Gravity';
 import { SwitchSynchronizer } from './Switch';
-import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, createSwitchCube, createSwitchSphere, createSwitchCylinder } from './MiscMap';
+import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, createSwitchCube, createSwitchSphere, createSwitchCylinder, requestArchivesWaterArea } from './MiscMap';
 import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
 import { createLensFlareArea, requestLensFlareArchives } from './LensFlare';
 import { OceanSphere } from './OceanSphere';
@@ -714,9 +714,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("GlobalWireGravity",            createGlobalWireGravityObj),
 
     // Misc. Map Areas
-    E("WaterCube",                    createWaterAreaCube),
-    E("WaterCylinder",                createWaterAreaCylinder),
-    E("WaterSphere",                  createWaterAreaSphere),
+    E("WaterCube",                    createWaterAreaCube,     requestArchivesWaterArea),
+    E("WaterCylinder",                createWaterAreaCylinder, requestArchivesWaterArea),
+    E("WaterSphere",                  createWaterAreaSphere,   requestArchivesWaterArea),
     E("BloomCube",                    createBloomCube),
     E("BloomCylinder",                createBloomCylinder),
     E("BloomSphere",                  createBloomSphere),

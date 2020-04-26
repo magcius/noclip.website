@@ -17,6 +17,7 @@ import { TDDraw } from "./DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../Color';
+import { WaterAreaHolder } from './MiscMap';
 
 class OceanSpherePoint {
     // Center of the sphere (translation of the owning actor).
@@ -624,5 +625,6 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
+        WaterAreaHolder.requestArchives(sceneObjHolder);
     }
 }

@@ -1,32 +1,36 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./OceanBowl";
-import { SceneObjHolder, SpecialTextureType } from "./Main";
-import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData } from "./ActorUtil";
+import { SceneObjHolder, SpecialTextureType, SceneObj, getDeltaTimeFrames } from "./Main";
+import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
-import { vec3 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
 import { OceanRing, isEqualStageName } from "./MiscActor";
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
-import { fallback } from "../util";
+import { fallback, nArray } from "../util";
 import { OceanSphere } from "./OceanSphere";
-import { colorNewFromRGBA8 } from "../Color";
+import { colorNewFromRGBA8, colorCopy } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { TextureMapping } from "../TextureHolder";
-import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, ub_MaterialParams, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
+import { MathConstants, setMatrixTranslation } from "../MathHelpers";
 
 //#region Water
 export class WaterArea extends AreaObj {
     public getManagerName(): string {
         return "Water";
     }
+}
+
+export function requestArchivesWaterArea(sceneObjHolder: SceneObjHolder): void {
+    WaterAreaHolder.requestArchives(sceneObjHolder);
 }
 
 export class WaterAreaMgr extends AreaObjMgr<WaterArea> {
@@ -101,6 +105,10 @@ export class WaterAreaHolder extends NameObj {
             }
         }
     }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        WaterCameraFilter.requestArchives(sceneObjHolder);
+    }
 }
 
 export function getWaterAreaObj(sceneObjHolder: SceneObjHolder, position: vec3): boolean {
@@ -152,15 +160,28 @@ export function createWaterAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder
 
 const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 
+function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: number): void {
+    const sin = Math.sin(theta), cos = Math.cos(theta);
+
+    dst[0] = cos;
+    dst[4] = -sin;
+    dst[12] = x + -x * cos + y * sin;
+
+    dst[1] = sin;
+    dst[2] = cos;
+    dst[13] = y + -x * sin - y * cos;
+}
+
+const packetParams = new PacketParams();
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
     private angle: number = 0;
-    private transition: number = 0;
-    private color = colorNewFromRGBA8(0x32FFFFFF);
-    private textureMapping = new TextureMapping();
+    private fade: number = 0;
+    private color = colorNewFromRGBA8(0x32320000);
+    private materialParams = new MaterialParams();
     private filterTexture: BTIData;
     private materialHelper: GXMaterialHelperGfx;
     private ddraw = new TDDraw();
-
+ 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'WaterCameraFilter');
 
@@ -170,8 +191,8 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
         const arc = sceneObjHolder.modelCache.getObjectData('WaterCameraFilter');
         this.filterTexture = loadBTIData(sceneObjHolder, arc, 'WaterCameraFilter.bti');
-
-        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.ImageEffectTexture1);
+        this.filterTexture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.materialParams.m_TextureMapping[1], SpecialTextureType.ImageEffectTexture1);
 
         this.makeActorAppeared(sceneObjHolder);
 
@@ -184,11 +205,15 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX1, GX.CompCnt.TEX_ST);
 
         const mb = new GXMaterialBuilder('WaterCameraFilter');
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.PNMTX0);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.IDENTITY);
         mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0);
         mb.setTevIndWarp(0, GX.IndTexStageID.STAGE0, true, false, GX.IndTexMtxID._0);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevColorOp(0, GX.TevOp.SUB, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
@@ -196,11 +221,100 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (isCameraInWater(sceneObjHolder)) {
+            this.angle += 0.5 * getDeltaTimeFrames(viewerInput);
+            // TODO(jstpierre): Set color based on water depth.
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterCameraFilterNrv, deltaTimeFrames: number): void {
+        if (currentNerve === WaterCameraFilterNrv.Air) {
+            if (isCameraInWater(sceneObjHolder))
+                this.setNerve(WaterCameraFilterNrv.AirToWater);
+        } else if (currentNerve === WaterCameraFilterNrv.AirToWater) {
+            if (isCameraInWater(sceneObjHolder)) {
+                this.fade += 20.0 * deltaTimeFrames;
+                if (this.fade >= 255.0) {
+                    this.fade = 255.0;
+                    this.setNerve(WaterCameraFilterNrv.Water);
+                }
+            } else {
+                this.setNerve(WaterCameraFilterNrv.WaterToAir);
+            }
+        } else if (currentNerve === WaterCameraFilterNrv.Water) {
+            if (!isCameraInWater(sceneObjHolder))
+                this.setNerve(WaterCameraFilterNrv.WaterToAir);
+        } else if (currentNerve === WaterCameraFilterNrv.WaterToAir) {
+            if (isCameraInWater(sceneObjHolder)) {
+                this.setNerve(WaterCameraFilterNrv.AirToWater);
+            } else {
+                this.fade -= 20.0 * deltaTimeFrames;
+                if (this.fade <= 0.0) {
+                    this.fade = 0.0;
+                    this.setNerve(WaterCameraFilterNrv.Air);
+                }
+            }
+        }
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (this.getCurrentNerve() === WaterCameraFilterNrv.Air)
             return;
+
+        // Captured already.
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const ddraw = this.ddraw;
+
+        ddraw.beginDraw();
+
+        // getPlayerCenterPos / calcScreenPosition
+        const playerCenterX = 0.5;
+        const playerCenterY = 0.5;
+        const fbWidth = viewerInput.backbufferWidth, fbHeight = viewerInput.backbufferHeight;
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP, 4);
+        ddraw.position3f32(0, 0, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX - 0.5, playerCenterY - 0.5);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, 0.0);
+
+        ddraw.position3f32(fbWidth, 0, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX + 0.5, playerCenterY - 0.5);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, 0.0);
+
+        ddraw.position3f32(0, fbHeight, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX - 0.5, playerCenterY + 0.5);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 0.0, 1.0);
+
+        ddraw.position3f32(fbWidth, fbHeight, 0);
+        ddraw.texCoord2f32(GX.Attr.TEX0, playerCenterX + 0.5, playerCenterY + 0.5);
+        ddraw.texCoord2f32(GX.Attr.TEX1, 1.0, 1.0);
+        ddraw.end();
+
+        const renderInst = ddraw.endDraw(device, renderInstManager);
+
+        const materialParams = this.materialParams;
+        mat4.identity(materialParams.u_TexMtx[0]);
+        mat4.translate(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], [0.5, 0.5, 0]);
+        mat4.rotateZ(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD);
+        mat4.translate(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], [-0.5, -0.5, 0]);
+        // computeRotationZAroundPoint(materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD, 0.5, 0.5);
+        setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.05, null);
+        this.color.a = this.fade / 255.0;
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
+
+        this.materialHelper.setOnRenderInst(device, cache, renderInst);
+        renderInst.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, this.materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        mat4.identity(packetParams.u_PosMtx[0]);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
     }
 
     public destroy(device: GfxDevice): void {

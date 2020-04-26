@@ -22,7 +22,7 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
 import { VertexAttributeInput } from "../gx/gx_displaylist";
-import { isCameraInWater } from "./MiscMap";
+import { isCameraInWater, WaterAreaHolder } from "./MiscMap";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -449,5 +449,6 @@ export class OceanBowl extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
+        WaterAreaHolder.requestArchives(sceneObjHolder);
     }
 }
