@@ -5,7 +5,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
-import { assert, readString, assertExists } from '../../../util';
+import { assert, readString } from '../../../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
@@ -14,7 +14,6 @@ import AnimationController from '../../../AnimationController';
 import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
 import { getPointHermite } from '../../../Spline';
-import { computeModelMatrixSRT, lerp, lerpAngle } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';

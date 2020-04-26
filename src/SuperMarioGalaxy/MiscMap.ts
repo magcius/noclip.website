@@ -12,7 +12,7 @@ import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
 import { fallback, nArray } from "../util";
 import { OceanSphere } from "./OceanSphere";
-import { colorNewFromRGBA8, colorCopy } from "../Color";
+import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -20,7 +20,7 @@ import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, ub_Mater
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
-import { MathConstants, setMatrixTranslation } from "../MathHelpers";
+import { MathConstants, Vec3UnitZ, saturate, lerp, Vec3NegY } from "../MathHelpers";
 
 //#region Water
 export class WaterArea extends AreaObj {
@@ -39,9 +39,19 @@ export class WaterAreaMgr extends AreaObjMgr<WaterArea> {
     }
 }
 
+export class WaterInfo {
+    public depth: number = 0;
+
+    public areaObj: AreaObj | null = null;
+    public oceanBowl: OceanBowl | null = null;
+    public oceanRing: OceanRing | null = null;
+    public oceanSphere: OceanSphere | null = null;
+}
+
 const scratchVec3 = vec3.create();
 export class WaterAreaHolder extends NameObj {
     public cameraInWater: boolean = false;
+    public cameraWaterInfo = new WaterInfo();
     public oceanBowl: OceanBowl[] = [];
     public oceanRing: OceanRing[] = [];
     public oceanSphere: OceanSphere[] = [];
@@ -73,12 +83,24 @@ export class WaterAreaHolder extends NameObj {
         this.oceanSphere.push(oceanSphere);
     }
 
+    public getWaterAreaInfo(info: WaterInfo, pos: vec3, gravity: vec3): void {
+        if (info.oceanBowl !== null) {
+            info.oceanBowl.calcWaterInfo(info, pos, gravity);
+        } else if (info.oceanSphere !== null) {
+            info.oceanSphere.calcWaterInfo(info, pos, gravity);
+        } else if (info.oceanRing !== null) {
+            info.oceanRing.calcWaterInfo(info, pos, gravity);
+        } else if (info.areaObj !== null) {
+            // TODO(jstpierre)
+        }
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         getCamPos(scratchVec3, viewerInput.camera);
 
-        const inWater = getWaterAreaObj(sceneObjHolder, scratchVec3);
+        const inWater = getWaterAreaObj(this.cameraWaterInfo, sceneObjHolder, scratchVec3);
         if (inWater) {
             if (!this.cameraInWater) {
                 this.cameraInWater = true;
@@ -93,6 +115,7 @@ export class WaterAreaHolder extends NameObj {
                 }
             }
 
+            this.getWaterAreaInfo(this.cameraWaterInfo, scratchVec3, Vec3NegY);
             // TODO(jstpierre): WaterInfo
         } else {
             if (this.cameraInWater) {
@@ -111,33 +134,49 @@ export class WaterAreaHolder extends NameObj {
     }
 }
 
-export function getWaterAreaObj(sceneObjHolder: SceneObjHolder, position: vec3): boolean {
+function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: vec3): boolean {
     if (sceneObjHolder.areaObjContainer !== null) {
         const areaObj = sceneObjHolder.areaObjContainer.getAreaObj("Water", position);
-        if (areaObj !== null)
+        if (areaObj !== null) {
+            if (dst !== null)
+                dst.areaObj = areaObj;
             return true;
+        }
     }
 
+    // tryInOceanArea
     if (sceneObjHolder.waterAreaHolder !== null) {
         const waterAreas = sceneObjHolder.waterAreaHolder;
-        for (let i = 0; i < waterAreas.oceanBowl.length; i++)
-            if (waterAreas.oceanBowl[i].isInWater(position))
+        for (let i = 0; i < waterAreas.oceanBowl.length; i++) {
+            if (waterAreas.oceanBowl[i].isInWater(position)) {
+                if (dst !== null)
+                    dst.oceanBowl = waterAreas.oceanBowl[i];
                 return true;
+            }
+        }
 
-        for (let i = 0; i < waterAreas.oceanRing.length; i++)
-            if (waterAreas.oceanRing[i].isInWater(sceneObjHolder, position))
+        for (let i = 0; i < waterAreas.oceanRing.length; i++) {
+            if (waterAreas.oceanRing[i].isInWater(sceneObjHolder, position)) {
+                if (dst !== null)
+                    dst.oceanRing = waterAreas.oceanRing[i];
                 return true;
+            }
+        }
 
-        for (let i = 0; i < waterAreas.oceanSphere.length; i++)
-            if (waterAreas.oceanSphere[i].isInWater(position))
+        for (let i = 0; i < waterAreas.oceanSphere.length; i++) {
+            if (waterAreas.oceanSphere[i].isInWater(position)) {
+                if (dst !== null)
+                    dst.oceanSphere = waterAreas.oceanSphere[i];
                 return true;
+            }
+        }
     }
 
     return false;
 }
 
 export function isInWater(sceneObjHolder: SceneObjHolder, position: vec3): boolean {
-    return getWaterAreaObj(sceneObjHolder, position);
+    return getWaterAreaObj(null, sceneObjHolder, position);
 }
 
 export function isCameraInWater(sceneObjHolder: SceneObjHolder): boolean {
@@ -168,7 +207,7 @@ function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: num
     dst[12] = x + -x * cos + y * sin;
 
     dst[1] = sin;
-    dst[2] = cos;
+    dst[5] = cos;
     dst[13] = y + -x * sin - y * cos;
 }
 
@@ -176,7 +215,9 @@ const packetParams = new PacketParams();
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
     private angle: number = 0;
     private fade: number = 0;
-    private color = colorNewFromRGBA8(0x32320000);
+    private colorShallow = colorNewFromRGBA8(0x32320000);
+    private colorDeep = colorNewFromRGBA8(0x32000000);
+    private color = colorNewFromRGBA8(0x00000000);
     private materialParams = new MaterialParams();
     private filterTexture: BTIData;
     private materialHelper: GXMaterialHelperGfx;
@@ -226,7 +267,9 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
         if (isCameraInWater(sceneObjHolder)) {
             this.angle += 0.5 * getDeltaTimeFrames(viewerInput);
-            // TODO(jstpierre): Set color based on water depth.
+
+            const cameraDepth = saturate(sceneObjHolder.waterAreaHolder!.cameraWaterInfo.depth / 3000.0);
+            colorLerp(this.color, this.colorShallow, this.colorDeep, cameraDepth);
         }
     }
 
@@ -297,11 +340,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         const renderInst = ddraw.endDraw(device, renderInstManager);
 
         const materialParams = this.materialParams;
-        mat4.identity(materialParams.u_TexMtx[0]);
-        mat4.translate(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], [0.5, 0.5, 0]);
-        mat4.rotateZ(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD);
-        mat4.translate(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], [-0.5, -0.5, 0]);
-        // computeRotationZAroundPoint(materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD, 0.5, 0.5);
+        computeRotationZAroundPoint(materialParams.u_TexMtx[0], this.angle * MathConstants.DEG_TO_RAD, 0.5, 0.5);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.05, null);
         this.color.a = this.fade / 255.0;
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);

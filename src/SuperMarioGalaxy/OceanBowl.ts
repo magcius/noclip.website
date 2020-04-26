@@ -19,10 +19,10 @@ import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw } from "./ActorUtil";
+import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw, vecKillElement } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
 import { VertexAttributeInput } from "../gx/gx_displaylist";
-import { isCameraInWater, WaterAreaHolder } from "./MiscMap";
+import { isCameraInWater, WaterAreaHolder, WaterInfo } from "./MiscMap";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -113,6 +113,11 @@ export class OceanBowl extends LiveActor {
         sceneObjHolder.waterAreaHolder!.entryOceanBowl(this);
 
         this.bloomDrawer = new OceanBowlBloomDrawer(sceneObjHolder, this);
+    }
+
+    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+        vec3.sub(scratchVec3, pos, this.translation);
+        dst.depth = -vecKillElement(scratchVec3, scratchVec3, this.axisY);
     }
 
     public isInWater(v: vec3): boolean {

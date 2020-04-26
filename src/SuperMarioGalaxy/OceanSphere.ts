@@ -6,7 +6,7 @@ import { assert } from "../util";
 import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ } from "../MathHelpers";
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { JMapInfoIter } from "./JMapInfo";
-import { connectToScene, initDefaultPos, loadBTIData, isValidDraw } from "./ActorUtil";
+import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "./ActorUtil";
 import { DrawType } from "./NameObj";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
@@ -17,7 +17,7 @@ import { TDDraw } from "./DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../Color';
-import { WaterAreaHolder } from './MiscMap';
+import { WaterAreaHolder, WaterInfo } from './MiscMap';
 
 class OceanSpherePoint {
     // Center of the sphere (translation of the owning actor).
@@ -277,6 +277,14 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             return false;
 
         return vec3.distance(position, this.translation) <= this.radius;
+    }
+
+    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+        vec3.sub(scratchVec3a, pos, this.translation);
+        vec3.negate(scratchVec3b, gravity);
+        const projected = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+        const theta = Math.cos((vec3.length(scratchVec3a) / this.radius) * (MathConstants.TAU / 4));
+        dst.depth = (this.radius * theta) - projected;
     }
 
     private initPoints(): void {

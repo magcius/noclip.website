@@ -300,6 +300,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
         }
 
+        // TODO(jstpierre): Fix late binding :/
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
+
         // Prepare all of our NameObjs.
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
@@ -329,8 +333,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         let passRenderer;
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-
-        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
 
         // GameScene::draw3D()
         // drawOpa(0);
@@ -476,9 +478,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // Resolve for WaterCameraFilter.
         device.submitPass(passRenderer);
-        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
 
-        this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, null);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, null);
         this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
 
         // executeDrawImageEffect()

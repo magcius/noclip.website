@@ -32,7 +32,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { isInWater, WaterAreaHolder } from './MiscMap';
+import { isInWater, WaterAreaHolder, WaterInfo } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
@@ -5951,6 +5951,13 @@ export class OceanRing extends LiveActor {
             return false;
 
         return true;
+    }
+
+    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+        this.calcNearestPos(scratchVec3a, scratchVec3b, pos);
+        vec3.sub(scratchVec3a, pos, scratchVec3a);
+        vec3.negate(scratchVec3b, gravity);
+        dst.depth = -vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
