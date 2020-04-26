@@ -35,6 +35,7 @@ import { d_a__RegisterConstructors } from './d_a';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { dBgS } from './d_bg';
+import { dfRange } from '../DebugFloaters';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -260,7 +261,7 @@ export class ZWWExtraTextures {
     public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
     public dynToonTex: DynToonTex;
 
-    @UI.dfRange(1, 15, 0.01)
+    @dfRange(1, 15, 0.01)
     public toonTexPower: number = 15;
 
     constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {

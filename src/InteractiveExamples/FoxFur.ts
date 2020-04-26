@@ -16,11 +16,11 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helper
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { dfHide, dfRange, dfShow } from '../ui';
 import { captureScene } from '../CaptureHelpers';
 import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
+import { dfRange, dfHide, dfShow } from '../DebugFloaters';
 
 const pathBase = `FoxFur`;
 

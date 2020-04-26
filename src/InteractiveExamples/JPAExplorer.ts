@@ -11,7 +11,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
 import { assertExists, hexzero, assert } from "../util";
 import { SceneContext } from "../SceneBase";
-import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
+import { LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
@@ -20,6 +20,7 @@ import { fillSceneParamsDataOnTemplate, ub_SceneParams, ub_SceneParamsBufferSize
 import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
+import { FloatingPanel } from "../DebugFloaters";
 
 function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
     m.gfxTexture = sceneTexture;

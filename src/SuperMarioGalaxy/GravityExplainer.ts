@@ -7,7 +7,7 @@ import { TDDraw } from "./DDraw";
 import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, MaterialParams, PacketParams } from "../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorFromHSL } from "../Color";
-import { dfShow } from "../ui";
+import { dfShow } from "../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "./Main";
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector } from './ActorUtil';
