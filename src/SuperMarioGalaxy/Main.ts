@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, fillSceneParamsOnTemplate, SceneParams, fillSceneParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -31,7 +31,7 @@ import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
-import { setTextureMappingIndirect, ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
+import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
@@ -44,6 +44,7 @@ import { MapPartsRailGuideHolder } from './MapParts';
 import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
 import { LensFlareDirector, DrawSyncManager } from './LensFlare';
 import { DrawCameraType } from './DrawBuffer';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -69,12 +70,48 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
         return false;
 }
 
+export const enum SpecialTextureType {
+    OpaqueSceneTexture,
+    ImageEffectTexture1,
+    Count,
+}
+
+class SpecialTextureBinder {
+    private textureMappings: TextureMapping[][] = nArray(SpecialTextureType.Count, () => []);
+
+    public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
+        if (this.textureMappings[textureType].includes(m))
+            return;
+        this.textureMappings[textureType].push(m);
+    }
+
+    public lateBindTexture(textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
+        const m = this.textureMappings[textureType];
+        for (let i = 0; i < m.length; i++) {
+            m[i].gfxTexture = gfxTexture;
+            m[i].width = EFB_WIDTH;
+            m[i].height = EFB_HEIGHT;
+            m[i].flipY = true;
+        }
+    }
+}
+
+class RenderParams {
+    public sceneParamsOffs2D: number = -1;
+    public sceneParamsOffs3D: number = -1;
+}
+
 const sceneParams = new SceneParams();
 export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
 
     private mainRenderTarget = new BasicRenderTarget();
-    private sceneTexture = new ColorTexture();
+
+    // Opaque scene texture for indirect to work on top of.
+    private opaqueSceneTexture = new ColorTexture();
+    // Water camera filter.
+    private imageEffectTexture1 = new ColorTexture();
+
     private currentScenarioIndex: number = -1;
     private scenarioSelect: UI.SingleSelect | null;
 
@@ -182,6 +219,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         for (let drawType = DrawType.EFFECT_DRAW_3D; drawType <= DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForDrawType(drawType);
+            template.setUniformBufferOffset(ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
 
             let texPrjMtx: mat4 | null = null;
             if (drawType === DrawType.EFFECT_DRAW_INDIRECT) {
@@ -217,17 +255,26 @@ export class SMGRenderer implements Viewer.SceneGfx {
         camera.setClipPlanes(100, 800000);
 
         this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.imageEffectTexture1.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.sceneObjHolder.drawSyncManager.beginFrame(device, this.mainRenderTarget.depthStencilAttachment);
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
 
-        this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture!;
-
-        const template3D = this.renderHelper.pushTemplateRenderInst();
+        // Prepare our two scene params buffers.
+        const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
         fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, true);
-        fillSceneParamsOnTemplate(template3D, sceneParams);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs3D, ub_SceneParamsBufferSize), sceneParamsOffs3D, sceneParams);
+        this.sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
+
+        const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
+        computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs2D, ub_SceneParamsBufferSize), sceneParamsOffs2D, sceneParams);
+        this.sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
+
+        const template = this.renderHelper.pushTemplateRenderInst();
 
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
@@ -236,26 +283,21 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
             const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
             if (indDummy !== null)
-                this.sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(indDummy);
+                this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
         }
 
         // Prepare all of our NameObjs.
-        executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture!);
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
         // Draw our render insts.
         this.drawAllEffects(viewerInput);
 
+        const template2 = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+        template2.setUniformBufferOffset(ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_3D);
-
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-
-        const template2D = this.renderHelper.pushTemplateRenderInst();
-        computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
-        fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        fillSceneParamsOnTemplate(template2D, sceneParams);
-
+        template2.setUniformBufferOffset(ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
@@ -274,11 +316,14 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
 
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
+
         // GameScene::draw3D()
         // drawOpa(0);
 
         // SceneFunction::executeDrawBufferListNormalBeforeVolumeShadow()
         // drawOpa(0x21); drawXlu(0x21);
+
         // XXX(jstpierre): Crystal is here? It seems like it uses last frame's indirect texture, which makes sense...
         // but are we sure crystals draw before everything else?
         // XXX(jstpierre): This doesn't jive with the cleared depth buffer, so I'm moving it to right after we draw the prior airs...
@@ -302,7 +347,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // Clear depth buffer.
         device.submitPass(passRenderer);
-        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
 
         this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
         this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
@@ -390,7 +435,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // execute(0x2d);
         device.submitPass(passRenderer);
 
-        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.imageEffectTexture1.gfxTexture);
 
         // executeDrawAfterIndirect()
         this.drawOpa(passRenderer, DrawBufferType.INDIRECT_PLANET);
@@ -415,6 +460,11 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
+        // this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
+        // Requires a resolve.
+        // device.submitPass(passRenderer);
+        // this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
+
         // executeDrawImageEffect()
         if (bloomParameterBufferOffs !== -1) {
             device.submitPass(passRenderer);
@@ -425,7 +475,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             this.execute(objPassRenderer, DrawType.BLOOM_MODEL);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
-            passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template3D, bloomParameterBufferOffs);
+            passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
@@ -462,7 +512,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.mainRenderTarget.destroy(device);
-        this.sceneTexture.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
         this.bloomRenderer.destroy(device);
     }
 }
@@ -850,14 +900,6 @@ class ScenarioData {
     }
 }
 
-class CaptureSceneDirector {
-    public opaqueSceneTexture: GfxTexture;
-
-    public fillTextureMappingOpaqueSceneTexture(m: TextureMapping): void {
-        setTextureMappingIndirect(m, this.opaqueSceneTexture);
-    }
-}
-
 class AreaObjContainer extends NameObj {
     private managers: AreaObjMgr<AreaObj>[] = [];
 
@@ -943,11 +985,12 @@ export class SceneObjHolder {
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
-    public captureSceneDirector = new CaptureSceneDirector();
+    public specialTextureBinder = new SpecialTextureBinder();
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
+    public renderParams = new RenderParams();
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...

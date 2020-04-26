@@ -14,7 +14,7 @@ import { isEqualStageName } from "./MiscActor";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { TDDraw } from "./DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../Color';
 
@@ -444,7 +444,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        template.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
 

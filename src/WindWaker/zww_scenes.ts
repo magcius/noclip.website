@@ -379,7 +379,6 @@ class SimpleEffectSystem {
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.prjMtx = prjMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 

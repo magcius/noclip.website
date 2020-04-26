@@ -3,7 +3,7 @@ import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, VertexAttributeInput, LoadedVertexPacket, compilePartialVtxLoader } from '../gx/gx_displaylist';
-import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from '../gx/gx_render';
 import { Camera, computeViewMatrix } from '../Camera';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
@@ -93,7 +93,7 @@ class MyShapeHelper {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);

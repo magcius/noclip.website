@@ -13,7 +13,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
@@ -99,7 +99,7 @@ class PlaneShape {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6);
 
-        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_PacketParams);
         fillPacketParamsData(d, offs, packetParams);
 

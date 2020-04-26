@@ -2,12 +2,12 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj, SpecialTextureType } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
 import { mat4, vec3, vec2, quat } from 'gl-matrix';
 import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT, transformVec3Mat4w1 } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Green, Yellow, OpaqueBlack, Red } from '../Color';
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
@@ -4232,7 +4232,7 @@ class WarpPodPathDrawer {
 
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        template.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
 
@@ -4632,7 +4632,7 @@ export class WaterPlant extends LiveActor {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -5068,7 +5068,7 @@ export class SwingRope extends LiveActor {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -5307,7 +5307,7 @@ export class Trapeze extends LiveActor {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -5502,7 +5502,7 @@ class OceanRingDrawer {
         loadTexProjectionMtx(materialParams.u_TexMtx[3], viewerInput.camera, viewerInput.viewport);
 
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(materialParams.m_TextureMapping[1]);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x76D7FFFF);
@@ -5511,7 +5511,7 @@ class OceanRingDrawer {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -5609,7 +5609,7 @@ class OceanRingPipeOutside extends LiveActor {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -6282,7 +6282,7 @@ export class Flag extends LiveActor {
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
@@ -6464,7 +6464,7 @@ export class ElectricRailHolder extends NameObj {
 
             const modelInstance = modelObj.modelInstance!;
             mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-            template.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+            template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
             modelInstance.shapeInstances[0].shapeData.shapeHelpers[0].fillPacketParams(packetParams, template);
 
             const materialInstance = modelInstance.materialInstances[0];
@@ -8974,7 +8974,7 @@ class AstroDomeOrbit extends LiveActor {
         const materialHelper = this.materialHelper;
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         computeModelMatrixR(packetParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);

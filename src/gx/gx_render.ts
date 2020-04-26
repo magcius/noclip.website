@@ -66,9 +66,9 @@ export const ub_SceneParams = 0;
 export const ub_MaterialParams = 1;
 export const ub_PacketParams = 2;
 
-export const u_SceneParamsBufferSize = 4*4 + 4;
-export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*8 + 4*2*3 + 4*3*20 + 4*5*8;
-export const u_PacketParamsBufferSize = 4*3*10;
+export const ub_SceneParamsBufferSize = 4*4 + 4;
+export const ub_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*8 + 4*2*3 + 4*3*20 + 4*5*8;
+export const ub_PacketParamsBufferSize = 4*3*10;
 
 export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams: SceneParams): void {
     let offs = bOffs;
@@ -77,7 +77,7 @@ export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams:
     // u_Misc0
     offs += fillVec4(d, offs, sceneParams.u_SceneTextureLODBias);
 
-    assert(offs === bOffs + u_SceneParamsBufferSize);
+    assert(offs === bOffs + ub_SceneParamsBufferSize);
     assert(d.length >= offs);
 }
 
@@ -132,7 +132,7 @@ export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParam
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
 
-    assert(offs === bOffs + u_PacketParamsBufferSize);
+    assert(offs === bOffs + ub_PacketParamsBufferSize);
     assert(d.length >= offs);
 }
 
@@ -488,7 +488,7 @@ export class GXShapeHelperGfx {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
@@ -513,23 +513,19 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8, },
 ];
 
-export function fillSceneParamsOnTemplate(renderInst: GfxRenderInst, sceneParams: SceneParams): void {
-    let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
-    const d = renderInst.mapUniformBufferF32(ub_SceneParams);
-    fillSceneParamsData(d, offs, sceneParams);
-}
-
 const sceneParams = new SceneParams();
 export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, useLODBias: boolean = true, sceneParamsScratch = sceneParams): void {
     fillSceneParams(sceneParamsScratch, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, useLODBias);
-    fillSceneParamsOnTemplate(renderInst, sceneParamsScratch);
+    let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
+    const d = renderInst.mapUniformBufferF32(ub_SceneParams);
+    fillSceneParamsData(d, offs, sceneParams);
 }
 
 export class GXRenderHelperGfx extends GfxRenderHelper {
     public pushTemplateRenderInst(): GfxRenderInst {
         const template = super.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
-        template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+        template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
         return template;
     }
 }

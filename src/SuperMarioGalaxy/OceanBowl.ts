@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj, SpecialTextureType } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { getVertexInputLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
@@ -344,7 +344,7 @@ export class OceanBowl extends LiveActor {
 
         // Fill in our material params.
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(materialParams.m_TextureMapping[1]);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
         this.mask.fillTextureMapping(materialParams.m_TextureMapping[3]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
@@ -394,7 +394,7 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
 
@@ -429,7 +429,7 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
 

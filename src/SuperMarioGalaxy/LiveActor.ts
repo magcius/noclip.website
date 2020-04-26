@@ -4,11 +4,8 @@ import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, getDeltaTimeFrames, ResourceHolder } from "./Main";
-import { GfxTexture } from "../gfx/platform/GfxPlatform";
-import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, ResourceHolder, SpecialTextureType } from "./Main";
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
-import { TextureMapping } from "../TextureHolder";
 import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
@@ -23,19 +20,6 @@ import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk,
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
 import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
-
-function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
-    const m = modelInstance.getTextureMappingReference("IndDummy");
-    if (m !== null)
-        setTextureMappingIndirect(m, sceneTexture);
-}
-
-export function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
-    m.width = EFB_WIDTH;
-    m.height = EFB_HEIGHT;
-    m.flipY = true;
-}
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -522,10 +506,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.effectKeeper.setVisibleScenario(false);
     }
 
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.modelInstance!, sceneTexture);
-    }
-
     public getBaseMtx(): mat4 | null {
         if (this.modelInstance === null)
             return null;
@@ -650,6 +630,11 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.modelInstance.visible = visible;
         if (!visible)
             return;
+
+        // Bind the correct scene texture.
+        const indDummy = this.modelInstance.getTextureMappingReference('IndDummy');
+        if (indDummy !== null)
+            sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
 
         if (this.actorLightCtrl !== null) {
             this.actorLightCtrl.loadLight(this.modelInstance, camera);

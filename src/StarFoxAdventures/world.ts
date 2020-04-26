@@ -7,7 +7,7 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
-import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
+import { ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
@@ -36,7 +36,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     const offs = materialHelper.allocateMaterialParams(renderInst);
     materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams_);
-    renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+    renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
     if (noViewMatrix) {
         mat4.identity(packetParams_.u_PosMtx[0]);
     } else {

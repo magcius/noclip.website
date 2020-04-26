@@ -389,7 +389,7 @@ abstract class ImageEffectBase extends NameObj {
 }
 
 function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    connectToScene(sceneObjHolder, nameObj, -1, 4, -1, -1);
+    connectToScene(sceneObjHolder, nameObj, -1, 0x04, -1, -1);
 }
 
 export class BloomEffect extends ImageEffectBase {
@@ -406,7 +406,7 @@ export class BloomEffect extends ImageEffectBase {
     }
 }
 
-export function getImageEffectDirector(sceneObjHolder: SceneObjHolder): ImageEffectDirector {
+function getImageEffectDirector(sceneObjHolder: SceneObjHolder): ImageEffectDirector {
     return sceneObjHolder.imageEffectSystemHolder!.imageEffectDirector;
 }
 
@@ -517,11 +517,11 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
     }
 
     public setIntensity1Default(): void {
-        this.intensity1Target = 0x2A;
+        this.intensity1Target = 42;
     }
 
     public setIntensity2Default(): void {
-        this.intensity1Target = 0x15;
+        this.intensity1Target = 21;
     }
 }
 

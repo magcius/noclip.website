@@ -10,6 +10,7 @@ import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
 import { assert } from "../util";
+import { ub_SceneParams, ub_SceneParamsBufferSize } from "../gx/gx_render";
 
 export const enum MovementType {
     ScreenEffect                   = 0x03,
@@ -280,6 +281,8 @@ export class SceneNameObjListExecutor {
                 // If this is an execute draw, then set up our filter key correctly...
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
+                // By default, the scene params are 3D.
+                template.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
                 nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
                 renderInstManager.popTemplateRenderInst();
             }
@@ -292,16 +295,6 @@ export class SceneNameObjListExecutor {
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
         return this.drawBufferHolder.drawBufferHasVisible(drawBufferType);
-    }
-
-    // TODO(jstpierre): Workaround.
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
-            if (this.nameObjExecuteInfos[i].drawBufferType !== -1) {
-                const actor = this.nameObjExecuteInfos[i].nameObj as LiveActor;
-                actor.setIndirectTextureOverride(sceneTexture);
-            }
-        }
     }
 }
 

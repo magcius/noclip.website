@@ -18,7 +18,7 @@ import { Camera, divideByW } from "../Camera";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ColorKind, setChanWriteEnabled } from "../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind, setChanWriteEnabled } from "../gx/gx_render";
 import { GfxDevice, GfxCompareMode, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
@@ -164,7 +164,7 @@ function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRender
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
     const offs = materialHelper.allocateMaterialParams(renderInst);
     materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams_);
-    renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+    renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
     mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
     fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
     renderInstManager.submitRenderInst(renderInst);

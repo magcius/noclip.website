@@ -1,7 +1,7 @@
 
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, ub_SceneParams, u_SceneParamsBufferSize } from "../gx/gx_render";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, ub_SceneParams, ub_SceneParamsBufferSize } from "../gx/gx_render";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import * as BRRES from "./brres";
 import AnimationController from "../AnimationController";
@@ -48,7 +48,7 @@ class BgStage {
         this.scn0Animator.calcCameraProjection(viewerInput.camera, 0);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+        template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();

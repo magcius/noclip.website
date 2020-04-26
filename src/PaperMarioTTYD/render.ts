@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -317,7 +317,7 @@ class NodeInstance {
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
-                let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+                let offs = template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 

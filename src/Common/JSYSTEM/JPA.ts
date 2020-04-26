@@ -23,7 +23,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVert
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, ub_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0 } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
@@ -844,7 +844,6 @@ class JPAEmitterWorkData {
 
     public ybbCamMtx = mat4.create();
     public posCamMtx = mat4.create();
-    public prjMtx = mat4.create();
     public texPrjMtx = mat4.create();
     public deltaTime: number = 0;
 
@@ -858,7 +857,6 @@ class JPAEmitterWorkData {
 
 export class JPADrawInfo {
     public posCamMtx: mat4;
-    public prjMtx: mat4;
     public texPrjMtx: mat4 | null;
 }
 
@@ -1023,7 +1021,6 @@ export class JPAEmitterManager {
             return;
 
         mat4.copy(this.workData.posCamMtx, drawInfo.posCamMtx);
-        mat4.copy(this.workData.prjMtx, drawInfo.prjMtx);
         this.calcYBBMtx();
         if (drawInfo.texPrjMtx !== null)
             mat4.copy(this.workData.texPrjMtx, drawInfo.texPrjMtx);
@@ -2117,8 +2114,8 @@ function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderI
 
     // These should be one allocation.
     let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-    let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
+    let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + ub_PacketParamsBufferSize);
 
     // Since this is called quite a *lot*, we have hand-crafted versions of
     // fillMaterialParamsData and fillPacketParamsData for speed here.
