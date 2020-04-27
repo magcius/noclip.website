@@ -36,6 +36,7 @@ import { TextureMapping } from "../../TextureHolder";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
 import { BTIData, BTI } from "./JUTTexture";
 import { VertexAttributeInput } from "../../gx/gx_displaylist";
+import { dfRange, dfShow } from "../../DebugFloaters";
 
 const SORT_PARTICLES = false;
 
@@ -1201,32 +1202,48 @@ export class JPABaseEmitter {
     private drawParticle = true;
     public flags: BaseEmitterFlags;
     public resData: JPAResourceData;
+    @dfRange(-5, 5)
     public emitterScl = vec3.create();
+    @dfRange(-9999, 9999)
     public emitterTrs = vec3.create();
+    @dfRange(-1, 1)
     public emitterDir = vec3.create();
+    @dfRange(-Math.PI, Math.PI, 0.01)
     public emitterRot = vec3.create();
     public maxFrame: number;
     public lifeTime: number;
+    @dfRange(0, 5)
     private rate: number;
+    @dfRange(0, 1000)
     private volumeSize: number;
+    @dfRange(0, MathConstants.TAU, 0.01)
     private volumeMinRad: number;
+    @dfRange(0, 1, 0.01)
     private volumeSweep: number;
     public moment: number;
+    @dfRange(0, 10)
     public initialVelOmni: number;
+    @dfRange(0, 10)
     public initialVelAxis: number;
+    @dfRange(0, 10)
     public initialVelDir: number;
+    @dfRange(0, 10)
     public initialVelRndm: number;
     public spread: number;
-    public waitTime: number;
     public tick: number;
     public scaleOut: number;
-    public texAnmIdx: number;
-    public emitCount: number;
     public random: JPARandom = new_rndm();
-    public rateStepTimer: number;
+    @dfShow()
     public colorPrm: Color = colorNewCopy(White);
+    @dfShow()
     public colorEnv: Color = colorNewCopy(White);
     public userData: any = null;
+
+    // Internal state.
+    private emitCount: number;
+    private texAnmIdx: number;
+    private waitTime: number;
+    private rateStepTimer: number;
 
     public globalColorPrm: Color = colorNewCopy(White);
     public globalColorEnv: Color = colorNewCopy(White);

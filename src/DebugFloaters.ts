@@ -5,6 +5,8 @@ import { objIsColor } from "./Color";
 import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted } from "./ui";
 import { GlobalGrabManager } from "./GrabManager";
 import { assert } from "./util";
+import { invlerp, lerp } from "./MathHelpers";
+import { IS_DEVELOPMENT } from "./BuildVersion";
 
 export class FloatingPanel implements Widget {
     public elem: HTMLElement;
@@ -125,9 +127,13 @@ export class FloatingPanel implements Widget {
 export class DebugFloaterHolder {
     private floatingPanels: FloatingPanel[] = [];
     public elem: HTMLElement;
+    public midiControls = new GlobalMIDIControls();
 
     constructor() {
         this.elem = document.createElement('div');
+
+        if (IS_DEVELOPMENT)
+            this.midiControls.init();
     }
 
     public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
@@ -169,10 +175,71 @@ export class DebugFloaterHolder {
 
         const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
-        slider.onvalue = (newValue: number) => {
+
+        let midiBindButton: HTMLElement | null = null;
+
+        if (this.midiControls.isInitialized()) {
+            const sliderDiv = slider.elem.querySelector('div')!;
+            sliderDiv.style.gridTemplateColumns = '48px 1fr 1fr';
+
+            let bindState: ('unbound' | 'binding' | 'bound') = 'unbound';
+
+            const syncColor = (): void => {
+                if (bindState === 'unbound')
+                    midiBindButton!.style.color = 'white';
+                else if (bindState === 'binding')
+                    midiBindButton!.style.color = 'cyan';
+                else if (bindState === 'bound')
+                    midiBindButton!.style.color = HIGHLIGHT_COLOR;
+            };
+
+            const midiListener: MIDIControlListener = {
+                onbind: (v: number) => {
+                    bindState = 'bound';
+                    syncColor();
+                },
+                onunbind: () => {
+                    bindState = 'unbound';
+                    syncColor();
+                },
+                onvalue: (v: number) => {
+                    const newValue = lerp(min, max, v);
+                    onvalue(newValue);
+                },
+            };
+
+            midiBindButton = document.createElement('span');
+            midiBindButton.textContent = 'B';
+            midiBindButton.style.color = 'white';
+            midiBindButton.style.margin = '0 1em';
+            midiBindButton.style.userSelect = 'none';
+            midiBindButton.style.cursor = 'pointer';
+            midiBindButton.style.fontWeight = 'bold';
+            midiBindButton.onclick = () => {
+                if (bindState === 'unbound') {
+                    bindState = 'binding';
+                    syncColor();
+                    this.midiControls.setNextBindListener(midiListener);
+                } else if (bindState === 'binding') {
+                    bindState = 'unbound';
+                    syncColor();
+                    this.midiControls.setNextBindListener(null);
+                } else if (bindState === 'bound') {
+                    bindState = 'unbound';
+                    syncColor();
+                    midiListener.unbind!();
+                }
+            };
+
+            sliderDiv.insertBefore(midiBindButton, sliderDiv.firstElementChild);
+        }
+
+        const onvalue = (newValue: number): void => {
             obj[paramName] = newValue;
             update();
         };
+
+        slider.onvalue = onvalue;
         update();
 
         function update() {
@@ -245,6 +312,101 @@ function dfShouldShowOwn(obj: any, keyName: string): boolean {
         return true;
 
     return false;
+}
+
+interface MIDIControlListener {
+    onvalue: ((v: number) => void) | null;
+    onbind: ((v: number) => void) | null;
+    onunbind: (() => void) | null;
+    unbind?(): void;
+}
+
+class BoundMIDIControl {
+    public value: number = -1;
+    public listener: MIDIControlListener | null = null;
+
+    constructor(public channel: number, public controlNumber: number) {
+    }
+
+    public bindListener(v: MIDIControlListener | null): void {
+        if (this.listener !== null)
+            this.listener.unbind = undefined;
+        if (this.listener !== null && this.listener.onunbind !== null)
+            this.listener.onunbind();
+        this.listener = v;
+        if (this.listener !== null)
+            this.listener.unbind = () => this.bindListener(null);
+        if (this.listener !== null && this.listener.onbind !== null)
+            this.listener.onbind(this.value);
+    }
+
+    public setValue(v: number): void {
+        if (this.listener !== null && this.listener.onvalue !== null)
+            this.listener.onvalue(v);
+    }
+}
+
+class GlobalMIDIControls {
+    private midiAccess: WebMidi.MIDIAccess | null = null;
+    private boundControls: BoundMIDIControl[] = [];
+
+    public async init() {
+        if (navigator.requestMIDIAccess === undefined)
+            return;
+
+        this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+        this.midiAccess.onstatechange = () => {
+            this.bindInputs();
+        }
+        this.bindInputs();
+    }
+
+    public isInitialized(): boolean {
+        return this.midiAccess !== null;
+    }
+
+    private bindInputs(): void {
+        for (const input of this.midiAccess!.inputs.values())
+            input.onmidimessage = this.onMessage;
+    }
+
+    private nextListener: MIDIControlListener | null = null;
+    public setNextBindListener(v: MIDIControlListener | null): void {
+        if (this.nextListener !== null && this.nextListener.onunbind !== null) {
+            this.nextListener.onunbind();
+            this.nextListener = null;
+        }
+
+        this.nextListener = v;
+    }
+
+    private onControlMessage(channel: number, controlNumber: number, value: number): void {
+        let boundControl = this.boundControls.find((control) => control.channel === channel && control.controlNumber === controlNumber);
+        const normalizedValue = invlerp(0, 127, value);
+
+        if (this.nextListener !== null) {
+            // Transfer to the bind control. Create if needed.
+            if (boundControl === undefined) {
+                boundControl = new BoundMIDIControl(channel, controlNumber);
+                this.boundControls.push(boundControl);
+            }
+
+            boundControl.bindListener(this.nextListener);
+            this.nextListener = null;
+            boundControl.setValue(normalizedValue);
+        } else if (boundControl !== undefined) {
+            boundControl.setValue(normalizedValue);
+        }
+    }
+
+    private onMessage = (e: WebMidi.MIDIMessageEvent): void => {
+        const messageType = e.data[0];
+
+        if (messageType >= 0xB0 && messageType <= 0xBF) {
+            // Control change message
+            this.onControlMessage(e.data[0], e.data[1], e.data[2]);
+        }
+    };
 }
 
 export function dfShow() {

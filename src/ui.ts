@@ -4,7 +4,7 @@
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
-import { Color, colorToCSS, objIsColor } from './Color';
+import { Color, colorToCSS } from './Color';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
@@ -2535,6 +2535,8 @@ export class UI {
         this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
         this.dragHighlight.style.display = 'none';
         this.dragHighlight.style.pointerEvents = 'none';
+
+        this.toplevel.appendChild(this.debugFloaterHolder.elem);
 
         this.toplevel.appendChild(this.recordingBranding.elem);
 
