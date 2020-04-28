@@ -3,8 +3,7 @@ import * as UI from './ui';
 
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
-import { CameraController, Camera, XRCameraController } from './Camera';
-import { TextureHolder } from './TextureHolder';
+import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
@@ -110,7 +109,7 @@ export class Viewer {
 
     public scene: SceneGfx | null = null;
 
-    public oncamerachanged: () => void = (() => {});
+    public oncamerachanged: (force: boolean) => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
     private keyMoveSpeedListeners: Listener[] = [];
@@ -290,9 +289,9 @@ export class Viewer {
         camera.setClipPlanes(5);
 
         if (this.cameraController) {
-            const updated = this.cameraController.update(this.inputManager, dt, this.sceneTimeScale);
-            if (updated)
-                this.oncamerachanged();
+            const result = this.cameraController.update(this.inputManager, dt, this.sceneTimeScale);
+            if (result !== CameraUpdateResult.Unchanged)
+                this.oncamerachanged(result === CameraUpdateResult.ImportantChange);
         }
 
         // TODO(jstpierre): Move this to main

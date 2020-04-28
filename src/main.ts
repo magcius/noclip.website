@@ -275,8 +275,8 @@ class Main {
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
-        this.viewer.oncamerachanged = () => {
-            this._saveState();
+        this.viewer.oncamerachanged = (force: boolean) => {
+            this._saveState(force);
         };
         this.viewer.inputManager.onisdraggingchanged = () => {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
