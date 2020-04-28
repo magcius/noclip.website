@@ -1,7 +1,7 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./OceanBowl";
-import { SceneObjHolder, SpecialTextureType, SceneObj, getDeltaTimeFrames } from "./Main";
+import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
@@ -20,7 +20,7 @@ import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, ub_Mater
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
-import { MathConstants, Vec3UnitZ, saturate, lerp, Vec3NegY } from "../MathHelpers";
+import { MathConstants, saturate, Vec3NegY } from "../MathHelpers";
 
 //#region Water
 export class WaterArea extends AreaObj {
@@ -41,11 +41,18 @@ export class WaterAreaMgr extends AreaObjMgr<WaterArea> {
 
 export class WaterInfo {
     public depth: number = 0;
-
     public areaObj: AreaObj | null = null;
     public oceanBowl: OceanBowl | null = null;
     public oceanRing: OceanRing | null = null;
     public oceanSphere: OceanSphere | null = null;
+
+    public reset(): void {
+        this.depth = 0;
+        this.areaObj = null;
+        this.oceanBowl = null;
+        this.oceanRing = null;
+        this.oceanSphere = null;
+    }
 }
 
 const scratchVec3 = vec3.create();
@@ -135,6 +142,9 @@ export class WaterAreaHolder extends NameObj {
 }
 
 function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: vec3): boolean {
+    if (dst !== null)
+        dst.reset();
+
     if (sceneObjHolder.areaObjContainer !== null) {
         const areaObj = sceneObjHolder.areaObjContainer.getAreaObj("Water", position);
         if (areaObj !== null) {

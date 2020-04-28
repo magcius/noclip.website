@@ -101,7 +101,7 @@ function copyAlphaTest(alphaTest: AlphaTest): AlphaTest {
 }
 
 export class GXMaterialBuilder {
-    private cullMode: GX.CullMode = GX.CullMode.NONE;
+    private cullMode: GX.CullMode;
     private lightChannels: LightChannelControl[] = [];
     private texGens: TexGen[] = [];
     private tevStages: TevStage[] = [];
@@ -111,6 +111,16 @@ export class GXMaterialBuilder {
     private usePnMtxIdx?: boolean;
 
     constructor(private name: string | null = null) {
+        this.reset();
+    }
+
+    public reset(): void {
+        this.cullMode = GX.CullMode.NONE;
+        this.lightChannels.length = 0;
+        this.texGens.length = 0;
+        this.tevStages.length = 0;
+        this.indTexStages.length = 0;
+
         this.alphaTest = {} as AlphaTest;
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
@@ -119,6 +129,8 @@ export class GXMaterialBuilder {
         this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
+
+        this.usePnMtxIdx = undefined;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {

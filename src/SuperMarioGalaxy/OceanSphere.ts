@@ -3,7 +3,7 @@ import * as GX from '../gx/gx_enum';
 import { LiveActor, ZoneAndLayer, isDead } from "./LiveActor";
 import { vec2, vec3, mat4 } from "gl-matrix";
 import { assert } from "../util";
-import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ } from "../MathHelpers";
+import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { JMapInfoIter } from "./JMapInfo";
 import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "./ActorUtil";
@@ -174,12 +174,13 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
     private texOffs0 = vec2.create();
     private texOffs1 = vec2.create();
 
-    private materialHelperFaceFront: GXMaterialHelperGfx;
-    private materialHelperFaceBack: GXMaterialHelperGfx;
-    private ddrawFace = new TDDraw();
+    private materialHelperXluBack: GXMaterialHelperGfx;
+    private materialHelperXluFront: GXMaterialHelperGfx;
+    private ddrawXlu = new TDDraw();
 
-    private materialHelperBack: GXMaterialHelperGfx;
-    private ddrawBack = new TDDraw();
+    private materialHelperEnvBack: GXMaterialHelperGfx;
+    private materialHelperEnvFront: GXMaterialHelperGfx;
+    private ddrawEnv = new TDDraw();
 
     private tevReg1Front = colorNewFromRGBA8(0x0051706F);
     private tevReg1Back = colorNewFromRGBA8(0x0051706F);
@@ -203,6 +204,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.oceanSphereTex = loadBTIData(sceneObjHolder, waterWaveArc, `OceanSphere.bti`);
         this.oceanSphereEnvRefTex = loadBTIData(sceneObjHolder, waterWaveArc, `OceanSphereEnvRef.bti`);
 
+        // Xlu / loadMaterialFace
         const mb = new GXMaterialBuilder();
         mb.setUsePnMtxIdx(false);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
@@ -239,26 +241,49 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
 
         mb.setCullMode(GX.CullMode.BACK);
-        this.materialHelperFaceFront = new GXMaterialHelperGfx(mb.finish('OceanSphere Face Front'));
+        this.materialHelperXluFront = new GXMaterialHelperGfx(mb.finish('OceanSphere Xlu Front'));
 
         mb.setCullMode(GX.CullMode.FRONT);
-        this.materialHelperFaceBack = new GXMaterialHelperGfx(mb.finish('OceanSphere Face Back'));
+        this.materialHelperXluBack = new GXMaterialHelperGfx(mb.finish('OceanSphere Xlu Back'));
 
-        this.ddrawFace.setVtxDesc(GX.Attr.POS, true);
-        this.ddrawFace.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddrawFace.setVtxDesc(GX.Attr.TEX1, true);
-        this.ddrawFace.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddrawFace.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
-        this.ddrawFace.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX1, GX.CompCnt.TEX_ST);
+        this.ddrawXlu.setVtxDesc(GX.Attr.POS, true);
+        this.ddrawXlu.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddrawXlu.setVtxDesc(GX.Attr.TEX1, true);
+        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.ddrawXlu.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX1, GX.CompCnt.TEX_ST);
 
-        this.ddrawBack.setVtxDesc(GX.Attr.POS, true);
-        this.ddrawBack.setVtxDesc(GX.Attr.NRM, true);
-        this.ddrawBack.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddrawBack.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
+        // Env / loadMaterialBack
+        mb.reset();
+        mb.setUsePnMtxIdx(false);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.NRM, GX.TexGenMatrix.TEXMTX0);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+
+        mb.setCullMode(GX.CullMode.BACK);
+        this.materialHelperEnvFront = new GXMaterialHelperGfx(mb.finish('OceanSphere Env Front'));
+
+        mb.setCullMode(GX.CullMode.FRONT);
+        this.materialHelperEnvBack = new GXMaterialHelperGfx(mb.finish('OceanSphere Env Back'));
+
+        this.ddrawEnv.setVtxDesc(GX.Attr.POS, true);
+        this.ddrawEnv.setVtxDesc(GX.Attr.NRM, true);
+        this.ddrawEnv.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddrawEnv.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
 
         this.initNerve(OceanSphereNrv.Wait);
 
         if (isEqualStageName(sceneObjHolder, 'SkullSharkGalaxy')) {
+            this.alwaysUseRealDrawing = true;
         }
 
         if (isEqualStageName(sceneObjHolder, 'TearDropGalaxy')) {
@@ -331,6 +356,9 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.isCameraInside = false;
 
         // TODO(jstpierre): getCameraWaterInfo
+        if (sceneObjHolder.waterAreaHolder!.cameraWaterInfo.oceanSphere === this) {
+            this.isCameraInside = true;
+        }
 
         const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
 
@@ -436,62 +464,70 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
 
         const device = sceneObjHolder.modelCache.device;
 
-        if (this.isStartPosCamera && !this.isCameraInside) {
-            // TODO(jstpierre)
-
-            // loadMaterialBack
-            // this.ddrawBack.beginDraw();
-            // this.drawSphere(this.ddrawBack, true);
-            // const renderInst = this.ddrawBack.endAndUpload(device, renderInstManager);
-        }
-
-        // loadMaterialFace
-
-        this.ddrawFace.beginDraw();
-
-        this.oceanSphereTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
-
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
 
-        if (!this.isStartPosCamera) {
-            // GXSetCullMode(GX_CULL_FRONT);
-            this.drawSphere(this.ddrawFace, false);
-            const renderInstBackFaces = this.ddrawFace.endDraw(device, renderInstManager);
-
-            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x4880BE1C);
-            colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Front);
-            colorFromRGBA8(materialParams.u_Color[ColorKind.C2], 0xFFFFFFFF);
-            colorFromRGBA8(materialParams.u_Color[ColorKind.K0], 0x78FFFF00);
-
-            const materialHelper = this.materialHelperFaceBack;
-            const offs = renderInstBackFaces.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-            materialHelper.fillMaterialParamsDataOnInst(renderInstBackFaces, offs, materialParams);
-            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstBackFaces);
-            renderInstManager.submitRenderInst(renderInstBackFaces);
-
-            if (!this.isCameraInside) {
-                const renderInstFrontFaces = renderInstManager.newRenderInst();
-                renderInstFrontFaces.setFromTemplate(renderInstBackFaces);
-
-                colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Back);
-
-                const materialHelper = this.materialHelperFaceFront;
-                const offs = renderInstFrontFaces.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-                materialHelper.fillMaterialParamsDataOnInst(renderInstFrontFaces, offs, materialParams);
-                materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstFrontFaces);
-                renderInstManager.submitRenderInst(renderInstFrontFaces);
-            }
-        } else {
-            // if (this.isCameraInside)
-            //     GXSetCullMode(GX_CULL_FRONT);
-
-            const materialHelper = this.isCameraInside ? this.materialHelperFaceBack : this.materialHelperFaceFront;
-
+        if (this.isStartPosCamera && !this.isCameraInside) {
             // TODO(jstpierre)
+
+            // loadMaterialBack
+            this.ddrawEnv.beginDraw();
+            this.drawSphere(this.ddrawEnv, true);
+            const renderInstEnvBack = this.ddrawEnv.endDraw(device, renderInstManager);
+
+            this.oceanSphereEnvRefTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+            renderInstEnvBack.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+            computeMatrixWithoutTranslation(materialParams.u_TexMtx[0], viewerInput.camera.viewMatrix);
+            mat4.multiplyScalar(materialParams.u_TexMtx[0], materialParams.u_TexMtx[0], 100/128.0);
+
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x0069B814);
+            colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x000000FF);
+
+            const materialHelper = this.materialHelperEnvBack;
+            const offs = renderInstEnvBack.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+            materialHelper.fillMaterialParamsDataOnInst(renderInstEnvBack, offs, materialParams);
+            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstEnvBack);
+            renderInstManager.submitRenderInst(renderInstEnvBack);
+        }
+
+        // loadMaterialFace
+
+        this.ddrawXlu.beginDraw();
+
+        // GXSetCullMode(GX_CULL_FRONT);
+        this.drawSphere(this.ddrawXlu, false);
+        const renderInstXluBack = this.ddrawXlu.endDraw(device, renderInstManager);
+
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x4880BE1C);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Front);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C2], 0xFFFFFFFF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.K0], 0x78FFFF00);
+
+        // Choose first material helper.
+        const materialHelper = (this.isCameraInside || !this.isStartPosCamera) ? this.materialHelperXluBack : this.materialHelperXluFront;
+
+        this.oceanSphereTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        renderInstXluBack.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        const offs = renderInstXluBack.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInstXluBack, offs, materialParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstXluBack);
+        renderInstManager.submitRenderInst(renderInstXluBack);
+
+        if (!this.isStartPosCamera && !this.isCameraInside) {
+            const renderInstFrontFaces = renderInstManager.newRenderInst();
+            renderInstFrontFaces.setFromTemplate(renderInstXluBack);
+
+            colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Back);
+
+            const materialHelper = this.materialHelperXluFront;
+            const offs = renderInstFrontFaces.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+            materialHelper.fillMaterialParamsDataOnInst(renderInstFrontFaces, offs, materialParams);
+            materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstFrontFaces);
+            renderInstManager.submitRenderInst(renderInstFrontFaces);
         }
     }
 
@@ -627,8 +663,8 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
     public destroy(device: GfxDevice): void {
         this.oceanSphereTex.destroy(device);
         this.oceanSphereEnvRefTex.destroy(device);
-        this.ddrawFace.destroy(device);
-        this.ddrawBack.destroy(device);
+        this.ddrawXlu.destroy(device);
+        this.ddrawEnv.destroy(device);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

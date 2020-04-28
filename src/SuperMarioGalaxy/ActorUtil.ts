@@ -966,6 +966,32 @@ export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, spee
     quat.normalize(dst, dst);
 }
 
+export function turnQuat(dst: quat, q: quat, v0: vec3, v1: vec3, rad: number): void {
+    if (vec3.dot(v0, v1) < 0.0 && isSameDirection(v0, v1, 0.01)) {
+        turnRandomVector(scratchVec3a, v0, 0.001);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+    } else {
+        vec3.normalize(scratchVec3a, v0);
+    }
+
+    vec3.normalize(scratchVec3b, v1);
+
+    let theta = Math.acos(vec3.dot(scratchVec3a, scratchVec3b));
+    if (theta > rad)
+        theta = saturate(theta / rad);
+    else
+        theta = 1.0;
+
+    quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b, theta);
+    quat.mul(dst, scratchQuat, q);
+    quat.normalize(dst, dst);
+}
+
+export function turnQuatYDirRad(dst: quat, q: quat, v: vec3, rad: number): void {
+    quatGetAxisY(scratchVec3, q);
+    turnQuat(dst, q, scratchVec3, v, rad);
+}
+
 // Project pos onto the line created by p0...p1.
 export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): number {
     vec3.sub(scratch, p1, p0);
