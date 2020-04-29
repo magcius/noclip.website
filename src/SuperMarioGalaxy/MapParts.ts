@@ -1,7 +1,7 @@
 
 import { LiveActor, MessageType, isDead } from './LiveActor';
 import { assertExists, fallback } from '../util';
-import { Spine, isFirstStep, getStep, isGreaterStep } from './Spine';
+import { Spine, isFirstStep, getStep, isGreaterStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
@@ -195,15 +195,18 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
     private updateAngle(dt: number): void {
         this.angle = this.angle + this.velocity * dt;
-        while (this.angle > 360.0)
-            this.angle -= 360.0;
-        while (this.angle < 0)
-            this.angle += 360.0;
+        if (isNearZero(this.rotateAngle, 0.001))
+            this.angle = this.angle % 360.0;
     }
 
     private isReachedTargetAngle(): boolean {
-        // TODO(jstpierre)
-        return false;
+        if (isNearZero(this.rotateAngle, 0.001))
+            return false;
+
+        if (this.rotateSpeed >= 0.0)
+            return this.angle >= this.targetAngle;
+        else
+            return this.angle <= this.targetAngle;
     }
 
     private restartAtEnd(): void {
@@ -237,6 +240,9 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
                 else
                     this.updateRotateMtx();
             }
+        } else if (currentNerve === MapPartsRotatorNrv.StopAtEnd) {
+            if (isGreaterEqualStep(this, this.rotateStopTime))
+                this.restartAtEnd();
         }
     }
 }
