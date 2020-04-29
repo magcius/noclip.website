@@ -1,7 +1,7 @@
 
 import { LiveActor, MessageType, isDead } from './LiveActor';
 import { assertExists, fallback } from '../util';
-import { Spine, isFirstStep, getStep, isGreaterStep, isGreaterEqualStep } from './Spine';
+import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
@@ -435,7 +435,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
             if (isFirstStep(this))
                 this.startMoveCoord = getRailCoord(this.actor);
 
-            if (isGreaterStep(this, getMoveStartSignalTime())) {
+            if (isGreaterEqualStep(this, getMoveStartSignalTime())) {
                 setRailCoord(this.actor, this.startMoveCoord);
                 getRailPos(this.actor.translation, this.actor);
                 this.spine.setNerve(MapPartsRailMoverNrv.Move);
@@ -453,7 +453,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
                 setRailCoordSpeed(this.actor, 0);
             }
 
-            if (isGreaterStep(this, this.stopTime)) {
+            if (isGreaterEqualStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate) {
                     if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
@@ -464,7 +464,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
                 }
             }
         } else if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtEndAfterRotate) {
-            if (!this.tryRestartAtEnd() && isGreaterStep(this, this.stopTime)) {
+            if (!this.tryRestartAtEnd() && isGreaterEqualStep(this, this.stopTime)) {
                 if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate) {
                     if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate))
                         this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
