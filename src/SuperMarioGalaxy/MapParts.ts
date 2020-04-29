@@ -502,6 +502,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         this.accel = 0;
         setRailCoordSpeed(this.actor, 0);
         this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
+
         if (this.stopTime < 1) {
             if (sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotate)) {
                 this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
@@ -509,7 +510,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
                 this.restartAtEnd();
             }
         } else {
-            this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointBeforeRotate);
+            this.spine.setNerve(MapPartsRailMoverNrv.StopAtEndBeforeRotate);
         }
     }
 
