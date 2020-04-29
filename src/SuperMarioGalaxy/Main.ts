@@ -817,7 +817,7 @@ export class ModelCache {
         const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404, abortedCallback);
 
         if (buffer.byteLength === 0) {
-            console.warn(`Could not fetch archive ${archivePath}`);
+            // console.warn(`Could not fetch archive ${archivePath}`);
             return null;
         }
 

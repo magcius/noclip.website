@@ -55,7 +55,7 @@ function getMapPartsArgStopTime(actor: LiveActor): number | null {
     return getCurrentRailPointArg5(actor);
 }
 
-const enum SpeedCalcType { DIRECT, TIME }
+const enum SpeedCalcType { Direct, Time }
 
 function getMapPartsArgSpeedCalcType(actor: LiveActor): SpeedCalcType | null {
     return getCurrentRailPointArg7(actor);
@@ -73,7 +73,7 @@ function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
 }
 
 const enum AxisType { X, Y, Z }
-const enum AccelType { NORMAL, REVERSE, TIMED }
+const enum AccelType { Normal, Reverse, Timed }
 
 const scratchVec3 = vec3.create();
 
@@ -120,12 +120,12 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
 
         this.rotateAngle = fallback(infoIter.getValueNumberNoInit('RotateAngle'), 0.0);
         this.rotateAxis = fallback(infoIter.getValueNumberNoInit('RotateAxis'), AxisType.X);
-        this.rotateAccelType = fallback(infoIter.getValueNumberNoInit('RotateAccelType'), AccelType.NORMAL);
+        this.rotateAccelType = fallback(infoIter.getValueNumberNoInit('RotateAccelType'), AccelType.Normal);
         this.rotateStopTime = fallback(infoIter.getValueNumberNoInit('RotateStopTime'), 0);
         this.rotateType = fallback(infoIter.getValueNumberNoInit('RotateType'), 1);
         this.signMotionType = getMapPartsArgSignMotionType(infoIter);
 
-        if (this.rotateAccelType === AccelType.TIMED) {
+        if (this.rotateAccelType === AccelType.Timed) {
             const rotateTime = fallback(infoIter.getValueNumberNoInit('RotateSpeed'), 0.0);
             this.rotateSpeed = this.rotateAngle / rotateTime;
         } else {
@@ -185,7 +185,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     }
 
     private updateVelocity(): void {
-        if (this.rotateAngle !== 0 && this.rotateAccelType === AccelType.REVERSE) {
+        if (this.rotateAngle !== 0 && this.rotateAccelType === AccelType.Reverse) {
             // TODO(jstpierre): Reverse accel type
         }
 
@@ -223,7 +223,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
             this.updateVelocity();
             this.updateAngle(deltaTimeFrames);
 
-            if ((this.rotateAccelType === AccelType.NORMAL || this.rotateAccelType === AccelType.TIMED) && this.isReachedTargetAngle()) {
+            if ((this.rotateAccelType === AccelType.Normal || this.rotateAccelType === AccelType.Timed) && this.isReachedTargetAngle()) {
                 this.angle = this.targetAngle;
                 this.updateRotateMtx();
 
@@ -232,7 +232,7 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
                 else
                     this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
             } else {
-                if (this.rotateAccelType === AccelType.REVERSE && this.velocity === 0)
+                if (this.rotateAccelType === AccelType.Reverse && this.velocity === 0)
                     this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
                 else
                     this.updateRotateMtx();
@@ -350,6 +350,8 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
     public start(): void {
         this.moveToInitPos();
 
+        this.passChecker.start();
+
         if (hasMapPartsMoveStartSignMotion(this.signMotionType))
             this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
         else
@@ -386,8 +388,8 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
     private calcMoveSpeed(): number {
         if (isNearZero(this.accel, 0.0001)) {
-            const speedCalcType = fallback(getMapPartsArgSpeedCalcType(this.actor), SpeedCalcType.DIRECT);
-            if (speedCalcType === SpeedCalcType.TIME)
+            const speedCalcType = fallback(getMapPartsArgSpeedCalcType(this.actor), SpeedCalcType.Direct);
+            if (speedCalcType === SpeedCalcType.Time)
                 return this.calcMoveSpeedTime();
             else
                 return this.calcMoveSpeedDirect();
@@ -430,7 +432,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
             if (isGreaterStep(this, getMoveStartSignalTime())) {
                 setRailCoord(this.actor, this.startMoveCoord);
                 getRailPos(this.actor.translation, this.actor);
-                this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
+                this.spine.setNerve(MapPartsRailMoverNrv.Move);
             } else {
                 const step = getStep(this);
                 const dir = isRailGoingToEnd(this.actor) ? -1 : 1;
@@ -509,7 +511,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         if (this.moveStopType === MoveStopType.Mirror)
             reverseRailDirection(this.actor);
 
-        if (this.moveConditionType === 1)
+        if (this.moveConditionType === MoveConditionType.WaitForPlayerOn)
             this.reachedEndPlayerOn();
         else
             this.setStateStopAtEndBeforeRotate(sceneObjHolder);

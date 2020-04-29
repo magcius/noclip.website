@@ -453,8 +453,8 @@ export class NoclipLegacyActorSpawner {
                 });
             default: {
                 const actor = await spawnGraphNullable(name);
-                if (actor === null)
-                    console.warn(`Unable to spawn ${name}`, zoneAndLayer, infoIter);
+                // if (actor === null)
+                //     console.warn(`Unable to spawn ${name}`, zoneAndLayer, infoIter);
                 break;
             }
         }

@@ -591,7 +591,7 @@ export function calcRailEndPointPos(dst: vec3, actor: LiveActor): void {
 }
 
 export function isRailGoingToEnd(actor: LiveActor): boolean {
-    return actor.railRider!.direction === RailDirection.TOWARDS_END;
+    return actor.railRider!.direction === RailDirection.TowardsEnd;
 }
 
 export function isRailReachedGoal(actor: LiveActor): boolean {
@@ -712,7 +712,7 @@ export function setRailCoord(actor: LiveActor, coord: number): void {
 }
 
 export function setRailDirectionToEnd(actor: LiveActor): void {
-    if (actor.railRider!.direction === RailDirection.TOWARDS_START)
+    if (actor.railRider!.direction === RailDirection.TowardsStart)
         actor.railRider!.reverse();
 }
 
@@ -751,7 +751,7 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
 
     const currPointCoord = railRider.getCurrentPointCoord();
     if (isNearZero(currPointCoord, 0.001)) {
-        if (railRider.direction === RailDirection.TOWARDS_START)
+        if (railRider.direction === RailDirection.TowardsStart)
             dst[0] = railRider.getTotalLength() - currCoord;
         else
             dst[0] = currCoord;
@@ -761,7 +761,7 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
 
     const nextPointCoord = railRider.getNextPointCoord();
     if (isNearZero(nextPointCoord, 0.001)) {
-        if (railRider.direction === RailDirection.TOWARDS_START)
+        if (railRider.direction === RailDirection.TowardsStart)
             dst[1] = currCoord;
         else
             dst[1] = railRider.getTotalLength() - currCoord;
