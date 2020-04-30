@@ -673,6 +673,8 @@ class Main {
         }
     }
 
+    private loadSceneDelta = 1;
+
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
         if (this.currentSceneDesc === sceneDesc) {
             this._loadSceneSaveState(sceneStateStr);
@@ -717,10 +719,9 @@ class Main {
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
         // we increment the age below fore the "new" scene, which is the only proper way to do leak
         // checking. Typically, we allow one old scene's worth of contents.
-        const delta: number = 1;
-        this.dataShare.pruneOldObjects(device, delta);
+        this.dataShare.pruneOldObjects(device, this.loadSceneDelta);
 
-        if (delta === 0)
+        if (this.loadSceneDelta === 0)
             this.viewer.gfxDevice.checkForLeaks();
 
         this.dataShare.loadNewScene();
