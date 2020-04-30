@@ -530,6 +530,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
+        this.imageEffectTexture1.destroy(device);
         this.bloomRenderer.destroy(device);
     }
 }
@@ -1119,6 +1120,8 @@ export class SceneObjHolder {
 
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
+
+        this.drawSyncManager.destroy(device);
     }
 }
 
