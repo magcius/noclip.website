@@ -201,6 +201,11 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
 
         promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
             hostAccessPass.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
+
+            // Neuter the mip chain data.
+            if (mipLevel.paletteData !== undefined)
+                mipLevel.paletteData = undefined;
+            mipLevel.data = null;
         }));
     }
 

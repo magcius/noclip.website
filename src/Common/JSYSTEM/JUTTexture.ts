@@ -29,7 +29,7 @@ export interface BTI_Texture {
     paletteData: ArrayBufferSlice | null;
 }
 
-export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
+export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI_Texture {
     const view = buffer.createDataView();
 
     const format: GX.TexFormat = view.getUint8(0x00);
@@ -52,11 +52,11 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Tex
 
     let data: ArrayBufferSlice | null = null;
     if (dataOffs !== 0)
-        data = buffer.slice(dataOffs);
+        data = buffer.slice(dataOffs, undefined, copyData);
 
     let paletteData: ArrayBufferSlice | null = null;
     if (paletteOffs !== 0)
-        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
+        paletteData = buffer.subarray(paletteOffs, paletteCount * 2, copyData);
 
     return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
 }
@@ -64,9 +64,9 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Tex
 export class BTI {
     public texture: BTI_Texture;
 
-    public static parse(buffer: ArrayBufferSlice, name: string): BTI {
+    public static parse(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI {
         const bti = new BTI();
-        bti.texture = readBTI_Texture(buffer, name);
+        bti.texture = readBTI_Texture(buffer, name, copyData);
         return bti;
     }
 }
