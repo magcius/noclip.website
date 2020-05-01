@@ -406,7 +406,8 @@ async function addObjects(view: DataView, offs: number, renderer: BTRenderer): P
             const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
             let rawID = view.getUint16(offs + 0x08);
             const id = collectibleLookup.has(rawID) ? collectibleLookup.get(rawID)! : rawID;
-            if (category === 6)
+            // skip some entries which clearly aren't objects
+            if (category === 6 && (id === 0x0B7 || id >= 0x10C))
                 renderer.modelCache.requestActorArchive(id);
             offs += 0x14;
         }
