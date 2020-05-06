@@ -113,6 +113,10 @@ export class AnimFile {
     }
 
     public hasAnim(num: number): boolean {
+        if (num < 0 || num * 4 >= this.tab.byteLength) {
+            return false;
+        }
+        
         return (this.tab.getUint32(num * 4) & 0xff000000) === 0x10000000;
     }
 
