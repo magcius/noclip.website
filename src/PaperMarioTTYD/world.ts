@@ -776,7 +776,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             vtxArrays[GX.Attr.NRM] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x04) + 0x04, stride: 0x06 };
 
             const clrCount = view.getUint32(modelVcdTableOffs + 0x08);
-            assert(clrCount === 0x01);
+            assert(clrCount <= 0x01);
 
             vtxArrays[GX.Attr.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x0C) + 0x04, stride: 0x04 };
             // vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x10) + 0x04, stride: 0x04 };
