@@ -343,8 +343,8 @@ class ModelTreeLeafInstance {
 
         dst[0] *= scaleS;
         dst[5] *= scaleT;
-        dst[12] += offsetS;
-        dst[13] += offsetT;
+        dst[12] -= offsetS;
+        dst[13] -= offsetT;
 
         dst[0] *= 1 / image.width;
         dst[5] *= 1 / image.height;
