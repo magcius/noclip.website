@@ -8,8 +8,8 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer } from './render';
-import { BlockRenderer, BlockFetcher, SFABlockFetcher, AncientBlockFetcher } from './blocks';
-import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
+import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './shaders';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
@@ -287,7 +287,7 @@ class MapSceneRenderer extends SFARenderer {
 }
 
 export class SFAMapSceneDesc implements Viewer.SceneDesc {
-    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isEarly: boolean = false, private isAncient: boolean = false) {
+    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -300,6 +300,42 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, false);
         const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
+
+        // Rotate camera 135 degrees to more reliably produce a good view of the map
+        // when it is loaded for the first time.
+        const matrix = mat4.create();
+        mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
+        mapRenderer.setMatrix(matrix);
+
+        return mapRenderer;
+    }
+}
+
+export class SwapcircleSceneDesc implements Viewer.SceneDesc {
+    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFADEMO_GAME_INFO) {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
+
+        const animController = new SFAAnimationController();
+        const materialFactory = new MaterialFactory(device);
+        const mapSceneInfo: MapSceneInfo = {
+            getNumCols() { return 1; },
+            getNumRows() { return 1; },
+            getBlockInfoAt(col: number, row: number): BlockInfo | null {
+                return { mod: 22, sub: 7 };
+            },
+            getOrigin(): number[] {
+                return [0, 0];
+            }
+        };
+
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, true);
+        await texFetcher.loadSubdir('swapcircle', context.dataFetcher);
+        const blockFetcher = await SwapcircleBlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
         await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
